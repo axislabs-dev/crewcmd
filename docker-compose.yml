@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: crewcmd
+      POSTGRES_USER: crewcmd
+      POSTGRES_PASSWORD: crewcmd
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://crewcmd:crewcmd@db:5432/crewcmd
+      AUTH_SECRET: dev-secret-change-me
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

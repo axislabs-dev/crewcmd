@@ -44,6 +44,24 @@ export const approvalStatusEnum = pgEnum("approval_status", [
   "expired",
 ]);
 
+// ─── Heartbeat & Escalation enums ────────────────────────────────────
+
+export const heartbeatExecutionStatusEnum = pgEnum("heartbeat_execution_status", [
+  "running",
+  "completed",
+  "failed",
+  "timed_out",
+  "cancelled",
+]);
+
+export const escalationTriggerEnum = pgEnum("escalation_trigger", [
+  "blocked_task",
+  "budget_exceeded",
+  "heartbeat_failed",
+  "approval_timeout",
+  "agent_offline",
+]);
+
 // ─── Companies ─────────────────────────────────────────────────────────
 
 export const companies = pgTable("companies", {
@@ -423,4 +441,85 @@ export const auditLog = pgTable("audit_log", {
   entityId: text("entity_id").notNull(),
   details: jsonb("details").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Heartbeat Schedules ────────────────────────────────────────────
+
+export const heartbeatSchedules = pgTable("heartbeat_schedules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: text("agent_id").notNull(),
+  schedule: text("schedule").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  timezone: text("timezone").notNull().default("UTC"),
+  lastExecutedAt: timestamp("last_executed_at", { withTimezone: true }),
+  nextExecutionAt: timestamp("next_execution_at", { withTimezone: true }),
+  maxDurationMinutes: integer("max_duration_minutes").notNull().default(30),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Heartbeat Executions ───────────────────────────────────────────
+
+export const heartbeatExecutions = pgTable("heartbeat_executions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scheduleId: uuid("schedule_id")
+    .references(() => heartbeatSchedules.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: text("agent_id").notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  status: heartbeatExecutionStatusEnum("status").notNull().default("running"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  tasksDiscovered: integer("tasks_discovered").notNull().default(0),
+  tasksCompleted: integer("tasks_completed").notNull().default(0),
+  actionsTaken: jsonb("actions_taken").$type<Record<string, unknown>>(),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Escalation Paths ───────────────────────────────────────────────
+
+export const escalationPaths = pgTable("escalation_paths", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  triggerType: escalationTriggerEnum("trigger_type").notNull(),
+  sourceAgentId: text("source_agent_id"),
+  escalateToAgentId: text("escalate_to_agent_id"),
+  escalateToUserId: uuid("escalate_to_user_id").references(() => users.id, { onDelete: "set null" }),
+  timeoutMinutes: integer("timeout_minutes").notNull().default(60),
+  autoEscalate: boolean("auto_escalate").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Routine Templates ──────────────────────────────────────────────
+
+interface TaskTemplate {
+  titlePattern: string;
+  description: string | null;
+  priority: "low" | "medium" | "high" | "critical";
+  assigneeAgentId: string | null;
+  projectId: string | null;
+}
+
+export const routineTemplates = pgTable("routine_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  taskTemplate: jsonb("task_template").$type<TaskTemplate>().notNull(),
+  schedule: text("schedule").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  lastCreatedAt: timestamp("last_created_at", { withTimezone: true }),
+  nextCreateAt: timestamp("next_create_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -35,7 +35,7 @@ async function seed() {
         emoji: "\u26a1",
         color: "#f0ff00",
         status: "working",
-        currentTask: "Building Mission Control dashboard",
+        currentTask: "Building CrewCmd dashboard",
         reportsTo: "Neo",
         soulContent:
           "The Builder. Writes code that ships. Pragmatic, fast, and obsessed with clean architecture.",
@@ -108,9 +108,9 @@ async function seed() {
     .insert(projects)
     .values([
       {
-        name: "Mission Control",
+        name: "CrewCmd",
         description:
-          "The operational command center for the Axislabs multi-agent AI team.",
+          "The agent crew orchestration platform for AI teams.",
         status: "active",
         ownerAgentId: cipher.id,
       },
@@ -147,8 +147,8 @@ async function seed() {
   console.log("Seeding tasks...");
   await db.insert(tasks).values([
     {
-      title: "Build Mission Control Dashboard",
-      description: "Complete build of the tactical command center",
+      title: "Build CrewCmd Dashboard",
+      description: "Complete build of the crew orchestration dashboard",
       status: "in_progress",
       priority: "critical",
       assignedAgentId: cipher.id,
@@ -221,7 +221,7 @@ async function seed() {
     {
       agentId: cipher.id,
       actionType: "deploy",
-      description: "Deployed Mission Control v0.1.0 to staging",
+      description: "Deployed CrewCmd v0.1.0 to staging",
       metadata: { environment: "staging", version: "0.1.0" },
     },
     {
@@ -247,9 +247,9 @@ async function seed() {
   console.log("Seeding docs...");
   await db.insert(docs).values([
     {
-      title: "Mission Control Architecture",
+      title: "CrewCmd Architecture",
       content:
-        "# Mission Control Architecture\n\nOverview of the tactical command center built with Next.js 15, Drizzle ORM, and Neon Postgres.",
+        "# CrewCmd Architecture\n\nOverview of the agent crew orchestration platform built with Next.js 16, Drizzle ORM, and Neon Postgres.",
       category: "Architecture",
       authorAgentId: cipher.id,
       projectId: projMC.id,

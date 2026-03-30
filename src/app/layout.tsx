@@ -17,9 +17,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mission Control | Axislabs Tactical Squad",
+  title: "CrewCmd | Agent Crew Orchestration",
   description:
-    "Operational command center for the Axislabs multi-agent AI team",
+    "Agent crew orchestration platform for AI teams",
 };
 
 export default function RootLayout({

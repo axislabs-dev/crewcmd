@@ -18,8 +18,8 @@ import { db } from "../src/db";
 import * as schema from "../src/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 
-const MISSION_CONTROL_URL = process.env.MISSION_CONTROL_URL || "https://mission-control-blond-sigma.vercel.app";
-const AUTH_TOKEN = process.env.MISSION_CONTROL_AUTH_TOKEN;
+const CREWCMD_URL = process.env.CREWCMD_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const AUTH_TOKEN = process.env.CREWCMD_AUTH_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const OPENCLAW_API = process.env.OPENCLAW_API || "http://localhost:18789";
 const MAX_REVIEW_CYCLES = 3;
@@ -69,7 +69,7 @@ async function reDispatchAgent(
   reviewComments: string
 ): Promise<boolean> {
   if (!AUTH_TOKEN) {
-    console.error("[dispatch-pr-reviews] MISSION_CONTROL_AUTH_TOKEN not set");
+    console.error("[dispatch-pr-reviews] CREWCMD_AUTH_TOKEN not set");
     return false;
   }
   
@@ -142,7 +142,7 @@ async function updateTask(
   taskId: string,
   updates: Partial<typeof schema.tasks.$inferInsert>
 ) {
-  const response = await fetch(`${MISSION_CONTROL_URL}/api/tasks/${taskId}`, {
+  const response = await fetch(`${CREWCMD_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -188,7 +188,7 @@ async function main() {
       console.log(`[dispatch-pr-reviews] Task ${task.shortId} exceeded max review cycles (${MAX_REVIEW_CYCLES}), assigning to human`);
       
       // Assign to human and stop the cycle
-      await fetch(`${MISSION_CONTROL_URL}/api/tasks/${task.id}`, {
+      await fetch(`${CREWCMD_URL}/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -230,7 +230,7 @@ async function main() {
     
     if (dispatched) {
       // Increment cycle count
-      await fetch(`${MISSION_CONTROL_URL}/api/tasks/${task.id}`, {
+      await fetch(`${CREWCMD_URL}/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

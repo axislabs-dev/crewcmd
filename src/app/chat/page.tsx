@@ -71,7 +71,7 @@ export default function ChatPage() {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: "Neo",
         artist: "Axislabs",
-        album: "Mission Control",
+        album: "CrewCmd",
       });
       navigator.mediaSession.setActionHandler("play", () => {
         audioRef.current?.play();

@@ -1,5 +1,5 @@
 /**
- * One-time script to upsert the Thoroughbreds.ai project in Mission Control.
+ * One-time script to upsert the Thoroughbreds.ai project in CrewCmd.
  * Sets up the project with the TAI Context doc reference so agents see it
  * before picking up any TAI-related task.
  *

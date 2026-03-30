@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       expiresAt,
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://mission-control-blond-sigma.vercel.app";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const inviteLink = `${baseUrl}/invite/${inviteToken}`;
 
     return NextResponse.json({ ok: true, inviteLink, inviteToken });

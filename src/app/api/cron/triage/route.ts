@@ -75,8 +75,8 @@ export async function GET() {
       else if (projectName === "ClutchCut") {
         agent = "agent-cipher";
       }
-      // Mission Control project → agent-forge or agent-blitz (round-robin)
-      else if (projectName === "Mission Control") {
+      // CrewCmd project → agent-forge or agent-blitz (round-robin)
+      else if (projectName === "CrewCmd") {
         agent = forgeBlitzRoundRobin % 2 === 0 ? "agent-forge" : "agent-blitz";
         forgeBlitzRoundRobin++;
       }

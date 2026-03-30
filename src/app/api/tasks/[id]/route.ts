@@ -150,7 +150,7 @@ export async function PATCH(
             },
             body: JSON.stringify({
               channel: "U09DM3RM9DX",
-              text: `🔔 *New Task Assigned to You*\n\n*${task.title}*\n${task.description || "No description"}\n\nView in Mission Control: https://mission-control-blond-sigma.vercel.app/tasks`,
+              text: `🔔 *New Task Assigned to You*\n\n*${task.title}*\n${task.description || "No description"}\n\nView in CrewCmd: ${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/tasks`,
             }),
           });
           if (!slackRes.ok) {

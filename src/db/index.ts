@@ -2,17 +2,42 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
-function getDb() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL environment variable is not set");
-  }
-  const sql = neon(process.env.DATABASE_URL, {
+function createNeonDb() {
+  const sql = neon(process.env.DATABASE_URL!, {
     fetchOptions: { cache: "no-store" },
   });
+  console.log("[CrewCmd] Using Neon (remote)");
   return drizzle(sql, { schema });
 }
 
-export const db = process.env.DATABASE_URL ? getDb() : null;
+type NeonDb = ReturnType<typeof createNeonDb>;
+
+/**
+ * Lazily resolves the PGlite db instance set by instrumentation.ts.
+ * Returns null in Edge Runtime or if instrumentation hasn't run yet.
+ */
+function getPgliteDb(): NeonDb | null {
+  return ((globalThis as Record<string, unknown>).__crewcmd_db as NeonDb) ?? null;
+}
+
+function initDb(): NeonDb | null {
+  if (process.env.DATABASE_URL) {
+    return createNeonDb();
+  }
+  // In PGlite mode, return a Proxy that lazily resolves to the PGlite db
+  // set by instrumentation.ts. This avoids importing Node.js-only code
+  // in the Edge Runtime bundle.
+  return new Proxy({} as NeonDb, {
+    get(_, prop) {
+      const resolved = getPgliteDb();
+      if (!resolved) return undefined;
+      const value = (resolved as unknown as Record<string | symbol, unknown>)[prop];
+      return typeof value === "function" ? (value as Function).bind(resolved) : value;
+    },
+  });
+}
+
+export const db = initDb();
 
 /**
  * Retry wrapper for DB queries — handles Neon cold start timeouts.

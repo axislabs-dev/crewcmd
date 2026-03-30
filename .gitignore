@@ -43,3 +43,6 @@ next-env.d.ts
 
 
 .heartbeat-env
+
+# PGlite local data
+.data/

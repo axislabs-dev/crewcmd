@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
+    "@electric-sql/pglite": "^0.4.2",
     "@neondatabase/serverless": "^0.10.4",
     "@vercel/blob": "^2.3.1",
     "clsx": "^2.1.1",

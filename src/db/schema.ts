@@ -27,6 +27,23 @@ export const goalStatusEnum = pgEnum("goal_status", [
   "cancelled",
 ]);
 
+// ─── Governance enums ─────────────────────────────────────────────────
+
+export const gateTypeEnum = pgEnum("gate_type", [
+  "agent_hire",
+  "strategy_change",
+  "budget_increase",
+  "config_change",
+  "task_escalation",
+]);
+
+export const approvalStatusEnum = pgEnum("approval_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "expired",
+]);
+
 // ─── Companies ─────────────────────────────────────────────────────────
 
 export const companies = pgTable("companies", {
@@ -324,5 +341,86 @@ export const costEvents = pgTable("cost_events", {
   tokensOut: integer("tokens_out").notNull(),
   costUsd: numeric("cost_usd", { precision: 12, scale: 4 }).notNull(),
   metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Org Chart Nodes ─────────────────────────────────────────────────
+
+export const orgChartNodes = pgTable("org_chart_nodes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: text("agent_id").notNull(),
+  parentNodeId: uuid("parent_node_id"),
+  positionTitle: text("position_title").notNull(),
+  canDelegate: boolean("can_delegate").notNull().default(true),
+  sortIndex: integer("sort_index").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Approval Gates ──────────────────────────────────────────────────
+
+export const approvalGates = pgTable("approval_gates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  gateType: gateTypeEnum("gate_type").notNull(),
+  requiresHuman: boolean("requires_human").notNull().default(true),
+  approverAgentId: text("approver_agent_id"),
+  approverUserId: uuid("approver_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Approval Requests ───────────────────────────────────────────────
+
+export const approvalRequests = pgTable("approval_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  gateId: uuid("gate_id")
+    .references(() => approvalGates.id, { onDelete: "cascade" })
+    .notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  requestedBy: text("requested_by").notNull(),
+  requestType: text("request_type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  status: approvalStatusEnum("status").notNull().default("pending"),
+  decidedBy: text("decided_by"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Config Versions ─────────────────────────────────────────────────
+
+export const configVersions = pgTable("config_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  version: integer("version").notNull(),
+  configSnapshot: jsonb("config_snapshot").$type<Record<string, unknown>>().notNull(),
+  changedBy: text("changed_by").notNull(),
+  changeDescription: text("change_description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Audit Log (immutable, append-only) ──────────────────────────────
+
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  actor: text("actor").notNull(),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  details: jsonb("details").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

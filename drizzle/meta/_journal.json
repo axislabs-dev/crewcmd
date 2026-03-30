@@ -22,6 +22,13 @@
       "when": 1774895868768,
       "tag": "0002_right_rhodey",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1774898077865,
+      "tag": "0003_cheerful_newton_destine",
+      "breakpoints": true
     }
   ]
 }

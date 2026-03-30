@@ -1,0 +1,16 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/openclaw/health
+  body: none
+  auth: none
+}
+
+docs {
+  Proxies health check to the OpenClaw gateway.
+  Returns { status, source: "live" | "offline" }.
+}

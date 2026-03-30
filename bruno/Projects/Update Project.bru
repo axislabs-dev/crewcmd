@@ -1,0 +1,24 @@
+meta {
+  name: Update Project
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/api/projects/{{project_id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{auth_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Updated Project Name",
+    "description": "Updated description",
+    "status": "active"
+  }
+}

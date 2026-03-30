@@ -1,0 +1,1031 @@
+/* ============================================
+   OFFICE PIXEL ART — CSS Sprites & Animations
+   ============================================ */
+
+.office-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 20px;
+  padding: 20px;
+}
+
+@media (min-width: 640px) {
+  .office-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .office-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1400px) {
+  .office-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Office Zone Card */
+.office-zone {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(15, 15, 25, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.office-zone:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Room viewport */
+.office-room {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  image-rendering: pixelated;
+  background: #0d0d18;
+}
+
+/* Floor */
+.office-room .floor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+}
+
+/* Desk (common) */
+.office-room .desk {
+  position: absolute;
+  bottom: 40px;
+  width: 56px;
+  height: 28px;
+  border-radius: 2px;
+}
+
+/* Monitor (common) */
+.office-room .monitor {
+  position: absolute;
+  width: 20px;
+  height: 16px;
+  border-radius: 1px;
+  border: 2px solid;
+}
+
+/* =====================
+   PIXEL CHARACTER SPRITE
+   Each character = 4px base unit
+   Drawn via box-shadow on a 4x4 div
+   ===================== */
+.pixel-char {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  image-rendering: pixelated;
+}
+
+/* ---- Character sprites per agent ---- */
+
+/* Neo — suit, cyan accents */
+.char-neo {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #00f0ff;
+  box-shadow:
+    /* hair */
+    4px 0 0 #222,   8px 0 0 #222,  12px 0 0 #222,
+    /* head */
+    4px 4px 0 #fdd,  8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* eyes */
+    4px 8px 0 #00f0ff, 12px 8px 0 #00f0ff, 8px 8px 0 #fdd,
+    /* torso */
+    0px 12px 0 #1a1a2e, 4px 12px 0 #1a1a2e, 8px 12px 0 #00f0ff, 12px 12px 0 #1a1a2e, 16px 12px 0 #1a1a2e,
+    4px 16px 0 #1a1a2e, 8px 16px 0 #1a1a2e, 12px 16px 0 #1a1a2e,
+    /* legs */
+    4px 20px 0 #222, 8px 20px 0 #222, 12px 20px 0 #222,
+    4px 24px 0 #333, 12px 24px 0 #333;
+}
+
+/* Cipher — hoodie, yellow glow */
+.char-cipher {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #f0ff00;
+  box-shadow:
+    /* hood */
+    0px 0 0 #2a2a00, 4px 0 0 #2a2a00, 8px 0 0 #2a2a00, 12px 0 0 #2a2a00, 16px 0 0 #2a2a00,
+    /* head */
+    4px 4px 0 #fdd,  8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* eyes — glowing */
+    4px 8px 0 #f0ff00, 12px 8px 0 #f0ff00, 8px 8px 0 #fdd,
+    /* hoodie */
+    0px 12px 0 #2a2a00, 4px 12px 0 #333, 8px 12px 0 #f0ff00, 12px 12px 0 #333, 16px 12px 0 #2a2a00,
+    4px 16px 0 #333, 8px 16px 0 #333, 12px 16px 0 #333,
+    /* legs */
+    4px 20px 0 #222, 8px 20px 0 #222, 12px 20px 0 #222,
+    4px 24px 0 #444, 12px 24px 0 #444;
+}
+
+/* Forge — burly, overalls */
+.char-forge {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #aaaaff;
+  box-shadow:
+    /* hard hat */
+    0px 0 0 #dd0, 4px 0 0 #dd0, 8px 0 0 #dd0, 12px 0 0 #dd0, 16px 0 0 #dd0,
+    /* head */
+    4px 4px 0 #da8, 8px 4px 0 #da8, 12px 4px 0 #da8,
+    /* eyes */
+    4px 8px 0 #aaf, 12px 8px 0 #aaf, 8px 8px 0 #da8,
+    /* overalls */
+    0px 12px 0 #448, 4px 12px 0 #448, 8px 12px 0 #aaf, 12px 12px 0 #448, 16px 12px 0 #448,
+    4px 16px 0 #448, 8px 16px 0 #448, 12px 16px 0 #448,
+    /* legs */
+    4px 20px 0 #336, 8px 20px 0 #336, 12px 20px 0 #336,
+    4px 24px 0 #555, 12px 24px 0 #555;
+}
+
+/* Blitz — messy hair, frantic */
+.char-blitz {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #ffdd00;
+  box-shadow:
+    /* messy hair */
+    0px 0 0 #ffdd00, 8px 0 0 #ffdd00, 16px 0 0 #ffdd00,
+    4px -4px 0 #ffdd00, 12px -4px 0 #ffdd00,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* wide eyes */
+    4px 8px 0 #ffdd00, 12px 8px 0 #ffdd00, 8px 8px 0 #fdd,
+    /* tshirt */
+    0px 12px 0 #aa0, 4px 12px 0 #aa0, 8px 12px 0 #ffdd00, 12px 12px 0 #aa0, 16px 12px 0 #aa0,
+    4px 16px 0 #aa0, 8px 16px 0 #aa0, 12px 16px 0 #aa0,
+    /* legs */
+    4px 20px 0 #444, 8px 20px 0 #444, 12px 20px 0 #444,
+    4px 24px 0 #666, 12px 24px 0 #666;
+}
+
+/* Sentinel — cap, uniform */
+.char-sentinel {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #ff8800;
+  box-shadow:
+    /* cap */
+    0px 0 0 #224, 4px 0 0 #224, 8px 0 0 #224, 12px 0 0 #224, 16px 0 0 #224,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* eyes — alert */
+    4px 8px 0 #f80, 12px 8px 0 #f80, 8px 8px 0 #fdd,
+    /* uniform */
+    0px 12px 0 #224, 4px 12px 0 #224, 8px 12px 0 #f80, 12px 12px 0 #224, 16px 12px 0 #224,
+    4px 16px 0 #224, 8px 16px 0 #224, 12px 16px 0 #224,
+    /* legs */
+    4px 20px 0 #113, 8px 20px 0 #113, 12px 20px 0 #113,
+    4px 24px 0 #222, 12px 24px 0 #222;
+}
+
+/* Maverick — suit, red tie */
+.char-maverick {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #ff4444;
+  box-shadow:
+    /* slick hair */
+    4px 0 0 #111, 8px 0 0 #111, 12px 0 0 #111,
+    0px 0 0 #111,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* smirk */
+    4px 8px 0 #f44, 12px 8px 0 #f44, 8px 8px 0 #fdd,
+    /* suit + red tie */
+    0px 12px 0 #222, 4px 12px 0 #222, 8px 12px 0 #f44, 12px 12px 0 #222, 16px 12px 0 #222,
+    4px 16px 0 #222, 8px 16px 0 #f44, 12px 16px 0 #222,
+    /* legs */
+    4px 20px 0 #111, 8px 20px 0 #111, 12px 20px 0 #111,
+    4px 24px 0 #333, 12px 24px 0 #333;
+}
+
+/* Axiom — lab coat, glasses */
+.char-axiom {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #00ddff;
+  box-shadow:
+    /* neat hair */
+    4px 0 0 #444, 8px 0 0 #444, 12px 0 0 #444,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* glasses */
+    0px 8px 0 #0df, 4px 8px 0 #fdd, 8px 8px 0 #0df, 12px 8px 0 #fdd, 16px 8px 0 #0df,
+    /* lab coat */
+    0px 12px 0 #ddd, 4px 12px 0 #ddd, 8px 12px 0 #0df, 12px 12px 0 #ddd, 16px 12px 0 #ddd,
+    4px 16px 0 #ddd, 8px 16px 0 #ddd, 12px 16px 0 #ddd,
+    /* legs */
+    4px 20px 0 #336, 8px 20px 0 #336, 12px 20px 0 #336,
+    4px 24px 0 #444, 12px 24px 0 #444;
+}
+
+/* Havoc — creative, orange scarf */
+.char-havoc {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #ff6600;
+  box-shadow:
+    /* wild hair */
+    0px -4px 0 #f60, 8px -4px 0 #f60, 16px -4px 0 #f60,
+    4px 0 0 #f60, 8px 0 0 #831, 12px 0 0 #f60,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* eyes */
+    4px 8px 0 #f60, 12px 8px 0 #f60, 8px 8px 0 #fdd,
+    /* jacket + scarf */
+    0px 12px 0 #831, 4px 12px 0 #831, 8px 12px 0 #f60, 12px 12px 0 #831, 16px 12px 0 #831,
+    4px 16px 0 #831, 8px 16px 0 #831, 12px 16px 0 #831,
+    /* legs */
+    4px 20px 0 #222, 8px 20px 0 #222, 12px 20px 0 #222,
+    4px 24px 0 #444, 12px 24px 0 #444;
+}
+
+/* Razor — stylish, magenta */
+.char-razor {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #ff00aa;
+  box-shadow:
+    /* styled hair */
+    4px -4px 0 #f0a, 8px -4px 0 #f0a,
+    0px 0 0 #f0a, 4px 0 0 #f0a, 8px 0 0 #f0a, 12px 0 0 #f0a,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* eyes */
+    4px 8px 0 #f0a, 12px 8px 0 #f0a, 8px 8px 0 #fdd,
+    /* jacket */
+    0px 12px 0 #222, 4px 12px 0 #222, 8px 12px 0 #f0a, 12px 12px 0 #222, 16px 12px 0 #222,
+    4px 16px 0 #222, 8px 16px 0 #222, 12px 16px 0 #222,
+    /* legs */
+    4px 20px 0 #111, 8px 20px 0 #111, 12px 20px 0 #111,
+    4px 24px 0 #333, 12px 24px 0 #333;
+}
+
+/* Ghost — hooded, pale violet */
+.char-ghost {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #aa88ff;
+  box-shadow:
+    /* hood */
+    0px 0 0 #326, 4px 0 0 #326, 8px 0 0 #326, 12px 0 0 #326, 16px 0 0 #326,
+    0px 4px 0 #326,  16px 4px 0 #326,
+    /* shadowed face */
+    4px 4px 0 #cbb, 8px 4px 0 #cbb, 12px 4px 0 #cbb,
+    /* glowing eyes */
+    4px 8px 0 #a8f, 12px 8px 0 #a8f, 8px 8px 0 #cbb,
+    /* cloak */
+    0px 12px 0 #326, 4px 12px 0 #326, 8px 12px 0 #a8f, 12px 12px 0 #326, 16px 12px 0 #326,
+    4px 16px 0 #326, 8px 16px 0 #326, 12px 16px 0 #326,
+    /* legs */
+    4px 20px 0 #214, 8px 20px 0 #214, 12px 20px 0 #214,
+    4px 24px 0 #333, 12px 24px 0 #333;
+}
+
+/* Pulse — trendy, green highlights */
+.char-pulse {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #00ff88;
+  box-shadow:
+    /* trendy hair */
+    4px 0 0 #0f8, 8px 0 0 #0a5, 12px 0 0 #0f8,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* eyes */
+    4px 8px 0 #0f8, 12px 8px 0 #0f8, 8px 8px 0 #fdd,
+    /* tee */
+    0px 12px 0 #0a5, 4px 12px 0 #0a5, 8px 12px 0 #0f8, 12px 12px 0 #0a5, 16px 12px 0 #0a5,
+    4px 16px 0 #0a5, 8px 16px 0 #0a5, 12px 16px 0 #0a5,
+    /* legs */
+    4px 20px 0 #333, 8px 20px 0 #333, 12px 20px 0 #333,
+    4px 24px 0 #555, 12px 24px 0 #555;
+}
+
+/* Viper — slick, green suit */
+.char-viper {
+  bottom: 52px;
+  left: calc(50% - 10px);
+  color: #88ff00;
+  box-shadow:
+    /* slicked hair */
+    4px 0 0 #111, 8px 0 0 #111, 12px 0 0 #111, 16px 0 0 #111,
+    /* head */
+    4px 4px 0 #fdd, 8px 4px 0 #fdd, 12px 4px 0 #fdd,
+    /* sharp eyes */
+    4px 8px 0 #8f0, 12px 8px 0 #8f0, 8px 8px 0 #fdd,
+    /* suit */
+    0px 12px 0 #2a3500, 4px 12px 0 #2a3500, 8px 12px 0 #8f0, 12px 12px 0 #2a3500, 16px 12px 0 #2a3500,
+    4px 16px 0 #2a3500, 8px 16px 0 #2a3500, 12px 16px 0 #2a3500,
+    /* legs */
+    4px 20px 0 #1a2200, 8px 20px 0 #1a2200, 12px 20px 0 #1a2200,
+    4px 24px 0 #333, 12px 24px 0 #333;
+}
+
+/* =====================
+   STATUS ANIMATIONS
+   ===================== */
+
+/* Online — typing bob */
+@keyframes typing-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.status-online .pixel-char {
+  animation: typing-bob 0.8s ease-in-out infinite;
+}
+
+/* Working — lean forward + pulsing */
+@keyframes work-lean {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  50% { transform: translateX(2px) translateY(-1px); }
+}
+
+.status-working .pixel-char {
+  animation: work-lean 1.2s ease-in-out infinite;
+}
+
+/* Idle — subtle sway */
+@keyframes idle-sway {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(-3px) rotate(-2deg); }
+  75% { transform: translateX(3px) rotate(2deg); }
+}
+
+.status-idle .pixel-char {
+  animation: idle-sway 3s ease-in-out infinite;
+}
+
+/* Offline — character hidden */
+.status-offline .pixel-char {
+  display: none;
+}
+
+/* =====================
+   ROOM FURNITURE / PROPS
+   ===================== */
+
+/* Generic chair */
+.office-room .chair {
+  position: absolute;
+  bottom: 36px;
+  width: 20px;
+  height: 24px;
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+/* Window */
+.office-room .window {
+  position: absolute;
+  top: 12px;
+  width: 40px;
+  height: 36px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #1a1a3a 0%, #0d0d28 100%);
+}
+
+/* =====================
+   ROOM THEMES
+   ===================== */
+
+/* Neo — corner office, skyline */
+.room-neo {
+  background: linear-gradient(180deg, #0a0a1a 0%, #0f0f2a 60%, #141428 100%);
+}
+.room-neo .floor {
+  background: linear-gradient(90deg, #1a1a2e, #15152a);
+}
+.room-neo .window {
+  right: 16px;
+  width: 50px;
+  height: 40px;
+  background: linear-gradient(180deg, #0a0a2e 0%, #050518 50%, #0a0a1a 100%);
+  box-shadow: inset 0 -8px 0 #111128, inset -4px -12px 0 2px #0a0a20, inset -12px -16px 0 2px #0f0f28, inset -20px -10px 0 2px #080820;
+}
+.room-neo .neon-sign {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  font-family: monospace;
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #00f0ff;
+  text-shadow: 0 0 6px #00f0ff, 0 0 12px rgba(0, 240, 255, 0.4);
+  animation: neon-flicker 4s infinite;
+}
+.room-neo .desk {
+  left: calc(50% - 32px);
+  background: #ddd;
+  border-top: 2px solid #eee;
+}
+
+/* Cipher — hacker den, green glow */
+.room-cipher {
+  background: linear-gradient(180deg, #040a04 0%, #081008 60%, #0a140a 100%);
+}
+.room-cipher .floor {
+  background: #0a120a;
+}
+.room-cipher .desk {
+  left: calc(50% - 36px);
+  width: 72px;
+  background: #1a1a1a;
+  border-top: 2px solid #333;
+}
+.room-cipher .monitors {
+  position: absolute;
+  bottom: 68px;
+  left: calc(50% - 32px);
+}
+.room-cipher .monitors .mon {
+  position: absolute;
+  width: 14px;
+  height: 11px;
+  background: #001a00;
+  border: 1px solid #0f0;
+  box-shadow: 0 0 4px rgba(0, 255, 0, 0.3);
+}
+.room-cipher .monitors .mon:nth-child(1) { left: 0; top: 0; }
+.room-cipher .monitors .mon:nth-child(2) { left: 16px; top: -2px; }
+.room-cipher .monitors .mon:nth-child(3) { left: 32px; top: 0; }
+.room-cipher .monitors .mon:nth-child(4) { left: 48px; top: -2px; }
+
+/* Matrix rain effect */
+.room-cipher .matrix-rain {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 40px;
+  overflow: hidden;
+  opacity: 0.15;
+  pointer-events: none;
+}
+.matrix-col {
+  position: absolute;
+  top: -20px;
+  font-family: monospace;
+  font-size: 8px;
+  line-height: 8px;
+  color: #0f0;
+  animation: matrix-fall linear infinite;
+  white-space: pre;
+}
+@keyframes matrix-fall {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(200px); }
+}
+
+/* Forge — workshop */
+.room-forge {
+  background: linear-gradient(180deg, #1a1508 0%, #1a1208 60%, #1f1810 100%);
+}
+.room-forge .floor {
+  background: linear-gradient(90deg, #2a2010, #251c0e);
+}
+.room-forge .desk {
+  left: calc(50% - 32px);
+  width: 64px;
+  background: #6a4a2a;
+  border-top: 2px solid #8a6a4a;
+  height: 24px;
+}
+.room-forge .tool-rack {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  width: 24px;
+  height: 40px;
+  border: 1px solid #4a3a2a;
+  background: #2a2010;
+}
+.room-forge .tool-rack::before,
+.room-forge .tool-rack::after {
+  content: '';
+  position: absolute;
+  background: #888;
+  width: 2px;
+  border-radius: 1px;
+}
+.room-forge .tool-rack::before {
+  height: 16px;
+  top: 4px;
+  left: 6px;
+}
+.room-forge .tool-rack::after {
+  height: 12px;
+  top: 8px;
+  left: 14px;
+}
+
+/* Blitz — standing desk chaos */
+.room-blitz {
+  background: linear-gradient(180deg, #1a1a08 0%, #1a1808 60%, #1f1c10 100%);
+}
+.room-blitz .floor {
+  background: #1a1808;
+}
+.room-blitz .desk {
+  left: calc(50% - 24px);
+  width: 48px;
+  height: 36px;
+  background: #444;
+  border-top: 2px solid #666;
+}
+/* Sticky notes */
+.room-blitz .sticky {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+.room-blitz .sticky:nth-child(1) { top: 14px; left: 20px; background: #ff0; }
+.room-blitz .sticky:nth-child(2) { top: 20px; left: 32px; background: #f80; }
+.room-blitz .sticky:nth-child(3) { top: 10px; left: 44px; background: #0ff; }
+.room-blitz .sticky:nth-child(4) { top: 26px; left: 16px; background: #f0f; }
+/* Energy drink cans */
+.room-blitz .can {
+  position: absolute;
+  bottom: 42px;
+  width: 6px;
+  height: 10px;
+  background: #0a0;
+  border-radius: 1px 1px 0 0;
+}
+
+/* Sentinel — security ops */
+.room-sentinel {
+  background: linear-gradient(180deg, #080818 0%, #0a0a22 60%, #0c0c28 100%);
+}
+.room-sentinel .floor {
+  background: #0a0a1e;
+}
+.room-sentinel .desk {
+  left: calc(50% - 28px);
+  background: #222;
+  border-top: 2px solid #444;
+}
+.room-sentinel .cctv-panel {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 18px);
+  gap: 3px;
+}
+.room-sentinel .cctv-screen {
+  width: 18px;
+  height: 14px;
+  background: #0a0a18;
+  border: 1px solid #333;
+  position: relative;
+}
+.room-sentinel .cctv-screen::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f80;
+  box-shadow: 0 0 4px #f80;
+  animation: alert-blink 2s infinite;
+}
+@keyframes alert-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Maverick — trading floor */
+.room-maverick {
+  background: linear-gradient(180deg, #0a0808 0%, #120a0a 60%, #1a0f0f 100%);
+}
+.room-maverick .floor {
+  background: #120a0a;
+}
+.room-maverick .desk {
+  left: calc(50% - 28px);
+  background: #1a1a1a;
+  border-top: 2px solid #333;
+}
+.room-maverick .ticker-bar {
+  position: absolute;
+  top: 10px;
+  left: 8px;
+  right: 8px;
+  height: 12px;
+  background: #0a0808;
+  border: 1px solid #333;
+  overflow: hidden;
+}
+.room-maverick .ticker-tape {
+  display: flex;
+  gap: 12px;
+  font-family: monospace;
+  font-size: 7px;
+  white-space: nowrap;
+  animation: ticker-scroll 8s linear infinite;
+  padding-top: 2px;
+}
+@keyframes ticker-scroll {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-200px); }
+}
+.room-maverick .ticker-tape .up { color: #0f8; }
+.room-maverick .ticker-tape .down { color: #f44; }
+
+/* Axiom — research lab */
+.room-axiom {
+  background: linear-gradient(180deg, #0a1218 0%, #0d1520 60%, #101a28 100%);
+}
+.room-axiom .floor {
+  background: #0d1520;
+}
+.room-axiom .desk {
+  left: calc(50% - 28px);
+  background: #ddd;
+  border-top: 2px solid #eee;
+}
+.room-axiom .whiteboard {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 44px;
+  height: 32px;
+  background: #eee;
+  border: 2px solid #ccc;
+  border-radius: 1px;
+}
+.room-axiom .whiteboard::before {
+  content: 'E=mc²';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 6px;
+  color: #336;
+  font-family: monospace;
+}
+
+/* Havoc — creative agency */
+.room-havoc {
+  background: linear-gradient(180deg, #1a0f08 0%, #1a1008 60%, #201510 100%);
+}
+.room-havoc .floor {
+  background: linear-gradient(90deg, #1a1008, #1f1510);
+}
+.room-havoc .desk {
+  left: calc(50% - 28px);
+  background: #6a4a2a;
+  border-top: 2px solid #8a6a4a;
+}
+.room-havoc .plant {
+  position: absolute;
+  bottom: 40px;
+  width: 8px;
+  height: 16px;
+}
+.room-havoc .plant::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 8px;
+  height: 6px;
+  background: #643;
+  border-radius: 0 0 2px 2px;
+}
+.room-havoc .plant::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 1px;
+  width: 6px;
+  height: 10px;
+  background: #2a2;
+  border-radius: 50% 50% 0 0;
+}
+.room-havoc .mood-board {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  width: 36px;
+  height: 28px;
+  border: 1px solid #4a3a2a;
+  background: #2a1a0a;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+}
+.room-havoc .mood-board span {
+  border-radius: 1px;
+}
+
+/* Razor — video studio */
+.room-razor {
+  background: linear-gradient(180deg, #0a0a12 0%, #0f0f1a 60%, #141420 100%);
+}
+.room-razor .floor {
+  background: #0f0f1a;
+}
+.room-razor .desk {
+  left: calc(50% - 28px);
+  background: #222;
+  border-top: 2px solid #444;
+}
+.room-razor .camera-rig {
+  position: absolute;
+  top: 20px;
+  right: 18px;
+  width: 16px;
+  height: 12px;
+  background: #333;
+  border-radius: 2px;
+}
+.room-razor .camera-rig::before {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 2px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid #333;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.room-razor .camera-rig::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #111;
+  border: 1px solid #f0a;
+  box-shadow: 0 0 4px #f0a;
+}
+.room-razor .softbox {
+  position: absolute;
+  top: 12px;
+  width: 6px;
+  height: 24px;
+  background: #ddd;
+  opacity: 0.3;
+  border-radius: 1px;
+}
+
+/* Ghost — SEO bunker */
+.room-ghost {
+  background: linear-gradient(180deg, #08081a 0%, #0a0a22 60%, #0c0c28 100%);
+}
+.room-ghost .floor {
+  background: #0a0a1e;
+}
+.room-ghost .desk {
+  left: calc(50% - 28px);
+  background: #1a1a2e;
+  border-top: 2px solid #2a2a3e;
+}
+.room-ghost .keyword-cloud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  height: 30px;
+  overflow: hidden;
+  opacity: 0.4;
+}
+.room-ghost .keyword-cloud span {
+  font-family: monospace;
+  font-size: 5px;
+  color: #a8f;
+  position: absolute;
+  white-space: nowrap;
+}
+
+/* Pulse — trendy open space */
+.room-pulse {
+  background: linear-gradient(180deg, #0a1a10 0%, #0d1f14 60%, #10241a 100%);
+}
+.room-pulse .floor {
+  background: #0d1f14;
+}
+.room-pulse .desk {
+  left: calc(50% - 28px);
+  background: #eee;
+  border-top: 2px solid #fff;
+}
+.room-pulse .social-feed {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 24px;
+  background: #0a1a10;
+  border: 1px solid #0f8;
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(0, 255, 136, 0.2);
+}
+
+/* Viper — glass office */
+.room-viper {
+  background: linear-gradient(180deg, #0a1208 0%, #0d160a 60%, #101a0d 100%);
+}
+.room-viper .floor {
+  background: linear-gradient(90deg, #0d160a, #101a0d);
+}
+.room-viper .desk {
+  left: calc(50% - 28px);
+  background: #e0e0e0;
+  border-top: 2px solid #f0f0f0;
+}
+.room-viper .deal-board {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  width: 36px;
+  height: 28px;
+  background: #0a1208;
+  border: 1px solid #4a4;
+  border-radius: 1px;
+}
+.room-viper .deal-board::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: #8f0;
+  box-shadow: 0 6px 0 #8f0, 0 12px 0 #4a0;
+}
+/* Phone */
+.room-viper .phone {
+  position: absolute;
+  bottom: 70px;
+  right: calc(50% - 32px);
+  width: 8px;
+  height: 4px;
+  background: #222;
+  border-radius: 1px;
+}
+
+/* =====================
+   OFFLINE STATE
+   ===================== */
+.status-offline .office-room {
+  filter: brightness(0.3);
+}
+.status-offline .out-sign {
+  display: block !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: bold;
+  color: #f44;
+  text-shadow: 0 0 8px rgba(255, 68, 68, 0.6);
+  z-index: 10;
+  letter-spacing: 3px;
+  border: 1px solid #f44;
+  padding: 2px 8px;
+  background: rgba(10, 10, 15, 0.9);
+}
+
+/* =====================
+   PROGRESS BAR (working)
+   ===================== */
+@keyframes progress-pulse {
+  0%, 100% { opacity: 0.6; width: 60%; }
+  50% { opacity: 1; width: 85%; }
+}
+
+.progress-overhead {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-overhead .bar {
+  height: 100%;
+  border-radius: 2px;
+  animation: progress-pulse 2s ease-in-out infinite;
+}
+
+/* =====================
+   NEON FLICKER
+   ===================== */
+@keyframes neon-flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96% { opacity: 0.4; }
+  97% { opacity: 1; }
+  98% { opacity: 0.6; }
+}
+
+/* =====================
+   STATS PANEL
+   ===================== */
+.stats-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.stat-value {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: bold;
+}
+
+.clearance-bar {
+  width: 48px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.clearance-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+/* =====================
+   INFO PANEL
+   ===================== */
+.office-info {
+  padding: 12px 16px;
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.agent-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.status-badge {
+  font-family: monospace;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.status-msg {
+  font-family: monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+/* Gold star */
+.gold-star {
+  font-size: 12px;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6));
+}

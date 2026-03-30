@@ -1,0 +1,16 @@
+meta {
+  name: Get Node Map
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/config/nodes
+  body: none
+  auth: none
+}
+
+docs {
+  Returns the node-to-agent mapping configuration.
+  Maps compute nodes to their assigned agents.
+}

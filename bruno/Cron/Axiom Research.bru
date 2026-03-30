@@ -1,0 +1,16 @@
+meta {
+  name: Axiom Research
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/cron/axiom-research
+  body: none
+  auth: none
+}
+
+docs {
+  Creates a Quant R&D task assigned to Maverick.
+  Deduplicates: skips if an active quant/research task already exists.
+}

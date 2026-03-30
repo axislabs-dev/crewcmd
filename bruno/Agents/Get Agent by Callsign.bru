@@ -1,0 +1,11 @@
+meta {
+  name: Get Agent by Callsign
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/agents/{{callsign}}
+  body: none
+  auth: none
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Create Comment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/tasks/{{task_id}}/comments
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "content": "This is a comment on the task.",
+    "agentId": "agent-forge"
+  }
+}

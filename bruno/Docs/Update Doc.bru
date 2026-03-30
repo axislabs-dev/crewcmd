@@ -1,0 +1,23 @@
+meta {
+  name: Update Doc
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/api/docs/{{doc_id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Updated Title",
+    "content": "Updated content",
+    "tags": ["updated"]
+  }
+}

@@ -1,0 +1,29 @@
+meta {
+  name: Create Task
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/tasks
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{auth_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "New Task",
+    "description": "Task description",
+    "status": "inbox",
+    "priority": "medium",
+    "projectId": "{{project_id}}",
+    "assignedAgentId": null,
+    "humanAssignee": null,
+    "source": "manual"
+  }
+}

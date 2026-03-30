@@ -1,0 +1,15 @@
+meta {
+  name: List Nodes
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/api/openclaw/nodes
+  body: none
+  auth: none
+}
+
+docs {
+  Returns compute node status (connected/disconnected).
+}

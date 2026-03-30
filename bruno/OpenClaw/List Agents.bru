@@ -1,0 +1,15 @@
+meta {
+  name: List Agents
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/openclaw/agents
+  body: none
+  auth: none
+}
+
+docs {
+  Returns agents with token usage data extracted from heartbeat rawData.
+}

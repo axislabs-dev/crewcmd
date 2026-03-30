@@ -1,0 +1,37 @@
+meta {
+  name: GitHub PR Webhook
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/webhooks/github
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-GitHub-Event: pull_request
+  X-Hub-Signature-256: sha256=computed-hmac-here
+}
+
+body:json {
+  {
+    "action": "opened",
+    "pull_request": {
+      "html_url": "https://github.com/org/repo/pull/1",
+      "title": "feat: add new feature",
+      "body": "PR description",
+      "head": { "ref": "feat/new-feature" },
+      "base": { "repo": { "full_name": "org/repo" } }
+    }
+  }
+}
+
+docs {
+  GitHub webhook endpoint for PR events.
+  Only processes "opened" and "reopened" actions on pull_request events.
+  Auto-creates a Sentinel review task.
+  Requires valid X-Hub-Signature-256 (HMAC-SHA256 with GITHUB_WEBHOOK_SECRET).
+}

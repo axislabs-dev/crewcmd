@@ -1,0 +1,16 @@
+meta {
+  name: List Projects
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/projects
+  body: none
+  auth: none
+}
+
+params:query {
+  ~status: 
+  ~ownerId: 
+}

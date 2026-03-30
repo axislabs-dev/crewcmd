@@ -1,0 +1,30 @@
+meta {
+  name: Agent Heartbeat
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/agents/heartbeat
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "agents": [
+      {
+        "agent_id": "agent-forge",
+        "callsign": "Forge",
+        "status": "online",
+        "current_task": null,
+        "session_count": 1
+      }
+    ]
+  }
+}

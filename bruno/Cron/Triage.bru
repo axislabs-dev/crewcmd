@@ -1,0 +1,19 @@
+meta {
+  name: Triage
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/cron/triage
+  body: none
+  auth: none
+}
+
+docs {
+  Triage cron endpoint. Performs two passes:
+  1. Auto-assignment: assigns unassigned inbox/queued tasks to agents
+     based on project + keyword rules.
+  2. Stale recovery: resets in_progress tasks with no PR for >2h
+     back to queued.
+}

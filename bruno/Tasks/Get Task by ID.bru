@@ -1,0 +1,11 @@
+meta {
+  name: Get Task by ID
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/api/tasks/{{task_id}}
+  body: none
+  auth: none
+}

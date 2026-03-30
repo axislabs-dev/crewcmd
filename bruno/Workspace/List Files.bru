@@ -1,0 +1,15 @@
+meta {
+  name: List Files
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/workspace/files
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{auth_token}}
+}

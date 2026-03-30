@@ -1,0 +1,3 @@
+-- Baseline migration: schema already applied via db:push
+-- This file is intentionally empty. The snapshot in meta/0000_snapshot.json
+-- is the source of truth for diffing future migrations.

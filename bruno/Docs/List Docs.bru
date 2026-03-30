@@ -1,0 +1,19 @@
+meta {
+  name: List Docs
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/docs
+  body: none
+  auth: none
+}
+
+params:query {
+  ~category: 
+  ~authorId: 
+  ~projectId: 
+  ~taskId: 
+  ~search: 
+}

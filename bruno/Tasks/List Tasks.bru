@@ -1,0 +1,20 @@
+meta {
+  name: List Tasks
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/tasks
+  body: none
+  auth: none
+}
+
+params:query {
+  ~status: 
+  ~agentId: 
+  ~priority: 
+  ~unassigned: 
+  ~excludeHumanAssignee: 
+  ~since: 
+}

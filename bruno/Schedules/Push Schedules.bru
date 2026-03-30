@@ -1,0 +1,33 @@
+meta {
+  name: Push Schedules
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/schedules/push
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jobs": [
+      {
+        "id": "example-job",
+        "name": "Example Cron Job",
+        "enabled": true,
+        "schedule": { "kind": "every", "everyMs": 3600000 },
+        "sessionTarget": "isolated",
+        "state": {
+          "lastRunStatus": "ok"
+        }
+      }
+    ]
+  }
+}

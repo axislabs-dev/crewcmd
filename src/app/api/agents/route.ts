@@ -1,0 +1,56 @@
+import { NextResponse } from "next/server";
+import { db, withRetry } from "@/db";
+import * as schema from "@/db/schema";
+import { AGENT_META } from "@/lib/openclaw";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  if (!db) {
+    return NextResponse.json({ agents: [], source: "none" });
+  }
+
+  try {
+    const heartbeats = await withRetry(() =>
+      db!.select().from(schema.agentHeartbeats)
+    );
+
+    if (!heartbeats || heartbeats.length === 0) {
+      return NextResponse.json({ agents: [], source: "none" });
+    }
+
+    const agents = heartbeats.map((hb) => {
+      const meta = AGENT_META[hb.agentId] ?? {
+        callsign: hb.callsign || hb.agentId,
+        name: hb.callsign || hb.agentId,
+        title: "Agent",
+        emoji: "\ud83e\udd16",
+        color: "#888888",
+        reportsTo: null,
+        soulContent: null,
+      };
+
+      return {
+        id: `agent-${meta.callsign.toLowerCase()}`,
+        callsign: meta.callsign,
+        name: meta.name,
+        title: meta.title,
+        emoji: meta.emoji,
+        color: meta.color,
+        status: hb.status || "offline",
+        currentTask: hb.currentTask ?? null,
+        lastActive: hb.lastActive?.toISOString() ?? new Date().toISOString(),
+        reportsTo: meta.reportsTo,
+        soulContent: meta.soulContent,
+      };
+    });
+
+    return NextResponse.json({
+      agents,
+      source: agents.length > 0 ? "live" : "none",
+    });
+  } catch (err) {
+    console.error("[api/agents] Error:", err);
+    return NextResponse.json({ agents: [], source: "none" });
+  }
+}

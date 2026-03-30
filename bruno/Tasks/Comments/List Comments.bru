@@ -1,0 +1,11 @@
+meta {
+  name: List Comments
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/tasks/{{task_id}}/comments
+  body: none
+  auth: none
+}

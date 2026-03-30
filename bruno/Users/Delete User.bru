@@ -1,0 +1,26 @@
+meta {
+  name: Delete User
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{base_url}}/api/users
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "user-uuid-here"
+  }
+}
+
+docs {
+  Requires active session cookie with super_admin role.
+  Cannot delete yourself.
+}

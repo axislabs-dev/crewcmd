@@ -1,0 +1,26 @@
+meta {
+  name: Accept Invite
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/api/users/accept
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "token": "invite-token-uuid-here"
+  }
+}
+
+docs {
+  Requires active session cookie. The logged-in GitHub user
+  must match the invited githubUsername.
+}

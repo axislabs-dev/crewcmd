@@ -1,0 +1,28 @@
+meta {
+  name: Invite User
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/users/invite
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "githubUsername": "octocat",
+    "role": "viewer"
+  }
+}
+
+docs {
+  Requires active session cookie with super_admin role.
+  Valid roles: "admin", "viewer".
+  Returns an invite link valid for 7 days.
+}

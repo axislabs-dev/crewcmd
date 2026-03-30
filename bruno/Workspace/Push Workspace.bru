@@ -1,0 +1,39 @@
+meta {
+  name: Push Workspace
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/api/workspace/push
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  Content-Type: application/json
+}
+
+body:json {
+  [
+    {
+      "name": "docs",
+      "path": "docs",
+      "type": "directory",
+      "children": [
+        {
+          "name": "example.md",
+          "path": "docs/example.md",
+          "type": "file",
+          "content": "# Example\n\nContent here."
+        }
+      ]
+    }
+  ]
+}
+
+docs {
+  Service-to-service endpoint. Pushes the full workspace file tree.
+  Uses HEARTBEAT_SECRET for auth.
+}

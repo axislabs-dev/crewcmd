@@ -1,0 +1,17 @@
+meta {
+  name: List Activity
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/activity
+  body: none
+  auth: none
+}
+
+params:query {
+  ~agentId: 
+  ~actionType: 
+  ~limit: 20
+}

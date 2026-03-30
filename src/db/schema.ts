@@ -8,6 +8,7 @@ import {
   integer,
   boolean,
   serial,
+  numeric,
 } from "drizzle-orm/pg-core";
 
 // ─── Multi-tenancy enums ───────────────────────────────────────────────
@@ -289,4 +290,39 @@ export const workspaceFiles = pgTable("workspace_files", {
   id: uuid("id").primaryKey().defaultRandom(),
   fileTree: jsonb("file_tree").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Agent Budgets ────────────────────────────────────────────────────
+
+export const agentBudgets = pgTable("agent_budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: text("agent_id").notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  monthlyLimit: numeric("monthly_limit", { precision: 12, scale: 4 }).notNull(),
+  currentSpend: numeric("current_spend", { precision: 12, scale: 4 }).notNull().default("0"),
+  periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+  alertThreshold: integer("alert_threshold").notNull().default(80),
+  autoPause: boolean("auto_pause").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Cost Events ──────────────────────────────────────────────────────
+
+export const costEvents = pgTable("cost_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: text("agent_id").notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  tokensIn: integer("tokens_in").notNull(),
+  tokensOut: integer("tokens_out").notNull(),
+  costUsd: numeric("cost_usd", { precision: 12, scale: 4 }).notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -20,22 +20,42 @@ Built for hybrid human+agent teams. Works with any AI agent that can receive a h
 
 ## Quick Start
 
+### Option 1: Zero config (PGlite)
+
+No database setup required — uses embedded Postgres locally.
+
 ```bash
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
-cp .env.example .env.local
-# Fill in your database URL and auth secrets
-npm install
-npm run dev
+pnpm install
+pnpm dev
+# Open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+### Option 2: Docker Compose
+
+```bash
+git clone https://github.com/axislabs-dev/crewcmd.git
+cd crewcmd
+docker compose up
+# Open http://localhost:3000
+```
+
+### Option 3: External Postgres (Neon, Supabase, self-hosted)
+
+```bash
+cp .env.example .env.local
+# Edit .env.local with your DATABASE_URL
+pnpm install
+pnpm db:push
+pnpm dev
+```
 
 ### Requirements
 
-- Node.js 20+
-- PostgreSQL (Neon recommended, any Postgres works)
-- GitHub OAuth app (for auth)
+- Node.js 22+ and pnpm (Options 1 & 3)
+- Docker (Option 2)
+- GitHub OAuth app (optional, for auth — falls back to env allowlist)
 
 ## Stack
 

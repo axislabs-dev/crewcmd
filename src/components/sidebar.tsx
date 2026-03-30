@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
+import { CompanySwitcher } from "@/components/company-switcher";
 
 const navItems = [
   {
@@ -39,6 +40,15 @@ const navItems = [
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/goals",
+    label: "Goals",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
       </svg>
     ),
   },
@@ -218,7 +228,7 @@ export function Sidebar() {
             style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
           />
           <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-            AXISLABS
+            CREWCMD
           </span>
         </div>
         <button
@@ -257,9 +267,10 @@ export function Sidebar() {
             style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
           />
           <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-            AXISLABS
+            CREWCMD
           </span>
         </div>
+        <CompanySwitcher />
         <nav className="flex-1 px-3 py-4">
           <NavList onClick={() => setMobileOpen(false)} />
         </nav>
@@ -267,7 +278,7 @@ export function Sidebar() {
           <UserInfo />
           <SignOutButton />
           <span className="block px-3 pt-2 font-mono text-[9px] tracking-wider text-white/15">
-            MISSION CONTROL v0.2.0
+            CREWCMD v0.3.0
           </span>
         </div>
       </div>
@@ -281,15 +292,17 @@ export function Sidebar() {
           />
           <div className="flex flex-col">
             <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-              AXISLABS
+              CREWCMD
             </span>
             <span className="font-mono text-[8px] tracking-[0.3em] text-white/20">
-              TACTICAL SQUAD
+              YOUR CREW. YOUR COMMAND.
             </span>
           </div>
         </div>
 
         <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+
+        <CompanySwitcher />
 
         <nav className="flex-1 px-3 py-4">
           <NavList />
@@ -299,7 +312,7 @@ export function Sidebar() {
           <UserInfo />
           <SignOutButton />
           <span className="block px-3 pt-2 font-mono text-[9px] tracking-wider text-white/15">
-            MISSION CONTROL v0.2.0
+            CREWCMD v0.3.0
           </span>
         </div>
       </aside>

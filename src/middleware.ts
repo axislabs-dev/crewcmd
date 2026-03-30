@@ -9,6 +9,7 @@ export default auth((req) => {
   const isApi = nextUrl.pathname.startsWith("/api/");
   const isAccessDenied = nextUrl.pathname === "/access-denied";
   const isInvitePage = nextUrl.pathname.startsWith("/invite/");
+  const isOnboarding = nextUrl.pathname === "/onboarding";
 
   // Allow all API routes through — they have their own auth (bearer tokens, sessions)
   if (isApi) return NextResponse.next();

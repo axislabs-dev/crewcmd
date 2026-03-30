@@ -10,6 +10,67 @@ import {
   serial,
 } from "drizzle-orm/pg-core";
 
+// ─── Multi-tenancy enums ───────────────────────────────────────────────
+
+export const companyRoleEnum = pgEnum("company_role", [
+  "owner",
+  "admin",
+  "member",
+  "viewer",
+]);
+
+export const goalStatusEnum = pgEnum("goal_status", [
+  "active",
+  "completed",
+  "paused",
+  "cancelled",
+]);
+
+// ─── Companies ─────────────────────────────────────────────────────────
+
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  mission: text("mission"),
+  logoUrl: text("logo_url"),
+  settings: jsonb("settings").$type<Record<string, unknown>>(),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Company Members ───────────────────────────────────────────────────
+
+export const companyMembers = pgTable("company_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  role: companyRoleEnum("role").notNull().default("member"),
+  invitedBy: text("invited_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Goals ─────────────────────────────────────────────────────────────
+
+export const goals = pgTable("goals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  parentGoalId: uuid("parent_goal_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: goalStatusEnum("status").notNull().default("active"),
+  ownerAgentId: text("owner_agent_id"),
+  sortIndex: integer("sort_index").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const userRoleEnum = pgEnum("user_role", [
   "super_admin",
   "admin",
@@ -84,6 +145,7 @@ export const agents = pgTable("agents", {
   lastActive: timestamp("last_active").defaultNow(),
   reportsTo: text("reports_to"),
   soulContent: text("soul_content"),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
 });
 
 export const projects = pgTable("projects", {
@@ -97,6 +159,8 @@ export const projects = pgTable("projects", {
   context: text("context"),
   contextUpdatedAt: timestamp("context_updated_at", { withTimezone: true }),
   contextUpdatedBy: text("context_updated_by"),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -130,6 +194,8 @@ export const tasks = pgTable("tasks", {
   source: taskSourceEnum("source").notNull().default("manual"),
   errorHash: text("error_hash").unique(),
   createdBy: text("created_by"),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   images: jsonb("images").$type<{ url: string; filename: string; uploadedAt: string }[]>().default([]).notNull(),
@@ -141,6 +207,7 @@ export const activityLog = pgTable("activity_log", {
   actionType: text("action_type").notNull(),
   description: text("description").notNull(),
   metadata: jsonb("metadata"),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -200,6 +267,7 @@ export const docs = pgTable("docs", {
   projectId: uuid("project_id").references(() => projects.id),
   taskId: uuid("task_id").references(() => tasks.id),
   tags: text("tags").array(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

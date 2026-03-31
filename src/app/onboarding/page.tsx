@@ -27,6 +27,8 @@ const ROLES = [
 ];
 
 const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
+const GATEWAY_ADAPTERS = ["openclaw_gateway"];
+const HTTP_ADAPTERS = ["http"];
 
 function nameToCallsign(name: string): string {
   return name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "");
@@ -52,6 +54,12 @@ export default function OnboardingPage() {
   const [agentWorkspacePath, setAgentWorkspacePath] = useState("");
   const [agentEmoji, setAgentEmoji] = useState("\u{1F916}");
   const [agentColor, setAgentColor] = useState("#00f0ff");
+  const [agentGatewayUrl, setAgentGatewayUrl] = useState("");
+  const [agentGatewayToken, setAgentGatewayToken] = useState("");
+  const [agentGatewayTokenVisible, setAgentGatewayTokenVisible] = useState(false);
+  const [agentHttpUrl, setAgentHttpUrl] = useState("");
+  const [agentHttpAuth, setAgentHttpAuth] = useState("");
+  const [agentHttpAuthVisible, setAgentHttpAuthVisible] = useState(false);
 
   // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
@@ -93,6 +101,18 @@ export default function OnboardingPage() {
 
     try {
       const callsign = agentCallsign.trim() || nameToCallsign(agentName);
+      const adapterConfig: Record<string, unknown> = {};
+      if (GATEWAY_ADAPTERS.includes(agentAdapterType)) {
+        if (agentGatewayUrl.trim()) adapterConfig.url = agentGatewayUrl.trim();
+        if (agentGatewayToken.trim()) {
+          adapterConfig.headers = { "x-openclaw-token": agentGatewayToken.trim() };
+        }
+      } else if (HTTP_ADAPTERS.includes(agentAdapterType)) {
+        if (agentHttpUrl.trim()) adapterConfig.url = agentHttpUrl.trim();
+        if (agentHttpAuth.trim()) {
+          adapterConfig.headers = { Authorization: agentHttpAuth.trim() };
+        }
+      }
       await fetch("/api/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,7 +123,7 @@ export default function OnboardingPage() {
           emoji: agentEmoji || "\u{1F916}",
           color: agentColor || "#00f0ff",
           adapterType: agentAdapterType,
-          adapterConfig: {},
+          adapterConfig,
           role: agentRole,
           model: agentModel.trim() || null,
           workspacePath: agentWorkspacePath.trim() || null,
@@ -348,6 +368,77 @@ export default function OnboardingPage() {
                       className={inputClass}
                     />
                   </div>
+                )}
+
+                {GATEWAY_ADAPTERS.includes(agentAdapterType) && (
+                  <>
+                    <div className="col-span-2">
+                      <label className={labelClass}>GATEWAY URL</label>
+                      <input
+                        type="text"
+                        value={agentGatewayUrl}
+                        onChange={(e) => setAgentGatewayUrl(e.target.value)}
+                        placeholder="ws://127.0.0.1:18789"
+                        className={inputClass}
+                      />
+                      <p className="mt-1 font-mono text-[11px] text-white/35">
+                        WebSocket URL of the OpenClaw gateway
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <label className={labelClass}>AUTH TOKEN (OPTIONAL)</label>
+                      <div className="relative mt-1">
+                        <input
+                          type={agentGatewayTokenVisible ? "text" : "password"}
+                          value={agentGatewayToken}
+                          onChange={(e) => setAgentGatewayToken(e.target.value)}
+                          placeholder="OpenClaw gateway token"
+                          className={`${inputClass} mt-0 pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAgentGatewayTokenVisible(!agentGatewayTokenVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
+                        >
+                          {agentGatewayTokenVisible ? "HIDE" : "SHOW"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {HTTP_ADAPTERS.includes(agentAdapterType) && (
+                  <>
+                    <div className="col-span-2">
+                      <label className={labelClass}>API URL</label>
+                      <input
+                        type="text"
+                        value={agentHttpUrl}
+                        onChange={(e) => setAgentHttpUrl(e.target.value)}
+                        placeholder="https://api.example.com/agent"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className={labelClass}>AUTHORIZATION HEADER (OPTIONAL)</label>
+                      <div className="relative mt-1">
+                        <input
+                          type={agentHttpAuthVisible ? "text" : "password"}
+                          value={agentHttpAuth}
+                          onChange={(e) => setAgentHttpAuth(e.target.value)}
+                          placeholder="Bearer sk-..."
+                          className={`${inputClass} mt-0 pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAgentHttpAuthVisible(!agentHttpAuthVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
+                        >
+                          {agentHttpAuthVisible ? "HIDE" : "SHOW"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <div>

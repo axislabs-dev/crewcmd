@@ -26,6 +26,8 @@ const ROLES = [
 ];
 
 const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
+const GATEWAY_ADAPTERS = ["openclaw_gateway"];
+const HTTP_ADAPTERS = ["http"];
 
 function nameToCallsign(name: string): string {
   return name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "");
@@ -51,12 +53,36 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
   const [emoji, setEmoji] = useState("\u{1F916}");
   const [color, setColor] = useState("#00f0ff");
 
+  // OpenClaw Gateway config
+  const [gatewayUrl, setGatewayUrl] = useState("");
+  const [gatewayToken, setGatewayToken] = useState("");
+  const [gatewayTokenVisible, setGatewayTokenVisible] = useState(false);
+
+  // HTTP adapter config
+  const [httpUrl, setHttpUrl] = useState("");
+  const [httpAuthHeader, setHttpAuthHeader] = useState("");
+  const [httpAuthVisible, setHttpAuthVisible] = useState(false);
+
   async function handleSubmit() {
     if (!name.trim()) return;
     setLoading(true);
     setError(null);
 
     try {
+      // Build adapter config based on type
+      const adapterConfig: Record<string, unknown> = {};
+      if (GATEWAY_ADAPTERS.includes(adapterType)) {
+        if (gatewayUrl.trim()) adapterConfig.url = gatewayUrl.trim();
+        if (gatewayToken.trim()) {
+          adapterConfig.headers = { "x-openclaw-token": gatewayToken.trim() };
+        }
+      } else if (HTTP_ADAPTERS.includes(adapterType)) {
+        if (httpUrl.trim()) adapterConfig.url = httpUrl.trim();
+        if (httpAuthHeader.trim()) {
+          adapterConfig.headers = { Authorization: httpAuthHeader.trim() };
+        }
+      }
+
       const res = await fetch("/api/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,7 +93,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
           emoji: emoji || "\u{1F916}",
           color: color || "#00f0ff",
           adapterType,
-          adapterConfig: {},
+          adapterConfig,
           role,
           model: model.trim() || null,
           workspacePath: workspacePath.trim() || null,
@@ -198,6 +224,77 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
                   className={inputClass}
                 />
               </div>
+            )}
+
+            {GATEWAY_ADAPTERS.includes(adapterType) && (
+              <>
+                <div className="col-span-2">
+                  <label className={labelClass}>GATEWAY URL</label>
+                  <input
+                    type="text"
+                    value={gatewayUrl}
+                    onChange={(e) => setGatewayUrl(e.target.value)}
+                    placeholder="ws://127.0.0.1:18789"
+                    className={inputClass}
+                  />
+                  <p className="mt-1 font-mono text-[11px] text-white/35">
+                    WebSocket URL of the OpenClaw gateway
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass}>AUTH TOKEN (OPTIONAL)</label>
+                  <div className="relative mt-1">
+                    <input
+                      type={gatewayTokenVisible ? "text" : "password"}
+                      value={gatewayToken}
+                      onChange={(e) => setGatewayToken(e.target.value)}
+                      placeholder="OpenClaw gateway token"
+                      className={`${inputClass} mt-0 pr-10`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setGatewayTokenVisible(!gatewayTokenVisible)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
+                    >
+                      {gatewayTokenVisible ? "HIDE" : "SHOW"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {HTTP_ADAPTERS.includes(adapterType) && (
+              <>
+                <div className="col-span-2">
+                  <label className={labelClass}>API URL</label>
+                  <input
+                    type="text"
+                    value={httpUrl}
+                    onChange={(e) => setHttpUrl(e.target.value)}
+                    placeholder="https://api.example.com/agent"
+                    className={inputClass}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass}>AUTHORIZATION HEADER (OPTIONAL)</label>
+                  <div className="relative mt-1">
+                    <input
+                      type={httpAuthVisible ? "text" : "password"}
+                      value={httpAuthHeader}
+                      onChange={(e) => setHttpAuthHeader(e.target.value)}
+                      placeholder="Bearer sk-..."
+                      className={`${inputClass} mt-0 pr-10`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setHttpAuthVisible(!httpAuthVisible)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
+                    >
+                      {httpAuthVisible ? "HIDE" : "SHOW"}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
 
             <div>

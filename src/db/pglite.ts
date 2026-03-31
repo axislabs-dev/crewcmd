@@ -72,6 +72,75 @@ async function applySchema() {
     }
   }
 
+  // Team Blueprints table
+  const blueprintTables = [
+    `CREATE TABLE IF NOT EXISTS team_blueprints (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      agent_count INTEGER NOT NULL,
+      is_built_in BOOLEAN NOT NULL DEFAULT false,
+      company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+      template JSONB NOT NULL,
+      popularity INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+  ];
+  for (const stmt of blueprintTables) {
+    try {
+      await client.exec(stmt);
+    } catch {
+      // Safe to ignore — table may already exist
+    }
+  }
+
+  // Inbox Messages table
+  try {
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS inbox_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        from_agent_id TEXT NOT NULL,
+        to_user_id UUID,
+        to_agent_id TEXT,
+        type TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        context JSONB,
+        actions JSONB,
+        status TEXT NOT NULL DEFAULT 'unread',
+        actioned_by TEXT,
+        actioned_at TIMESTAMPTZ,
+        action_result TEXT,
+        snooze_until TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+  } catch { /* table may already exist */ }
+
+  // Agent Access Grants table
+  try {
+    await client.exec(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'team'`);
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS agent_access_grants (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        granted_by TEXT NOT NULL,
+        can_interact BOOLEAN NOT NULL DEFAULT true,
+        can_configure BOOLEAN NOT NULL DEFAULT false,
+        can_view_logs BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+  } catch { /* tables may already exist */ }
+
   if (existsSync(markerFile)) {
     console.log("[CrewCmd] Using PGlite (local) — data at .data/pglite");
     return;

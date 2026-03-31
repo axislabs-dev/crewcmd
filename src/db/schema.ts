@@ -190,6 +190,7 @@ export const agents = pgTable("agents", {
   model: text("model"),
   workspacePath: text("workspace_path"),
   runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().default({}),
+  visibility: text("visibility").notNull().default("team"), // private | assigned | team
 });
 
 export const projects = pgTable("projects", {
@@ -543,6 +544,110 @@ export const agentSkills = pgTable("agent_skills", {
 });
 
 // ─── Routine Templates ──────────────────────────────────────────────
+
+// ─── Blueprint Types ───────────────────────────────────────────────
+
+/** Template for a single agent within a blueprint */
+export interface BlueprintAgentTemplate {
+  callsign: string;
+  name: string;
+  title: string;
+  emoji: string;
+  color: string;
+  role: string;
+  adapterType: string;
+  model?: string;
+  reportsTo?: string;
+  promptTemplate?: string;
+  skills?: string[];
+}
+
+/** Full blueprint template containing agents, hierarchy, and metadata */
+export interface BlueprintTemplate {
+  agents: BlueprintAgentTemplate[];
+  hierarchy: { callsign: string; children: string[] }[];
+  description: string;
+  useCases: string[];
+}
+
+// ─── Team Blueprints ───────────────────────────────────────────────
+
+export const teamBlueprints = pgTable("team_blueprints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description").notNull(),
+  category: text("category").notNull(),
+  icon: text("icon").notNull(),
+  agentCount: integer("agent_count").notNull(),
+  isBuiltIn: boolean("is_built_in").notNull().default(false),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  template: jsonb("template").$type<BlueprintTemplate>().notNull(),
+  popularity: integer("popularity").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Inbox Messages ────────────────────────────────────────────────
+
+/** Action button rendered on an inbox message */
+export interface InboxAction {
+  id: string;
+  label: string;
+  style: "primary" | "danger" | "ghost";
+  action: "approve" | "reject" | "reassign" | "snooze" | "dismiss" | "custom";
+  payload?: Record<string, unknown>;
+}
+
+/** Context linking an inbox message to other entities */
+export interface InboxMessageContext {
+  taskId?: string;
+  projectId?: string;
+  relatedAgents?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export const inboxMessages = pgTable("inbox_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  fromAgentId: text("from_agent_id").notNull(),
+  toUserId: uuid("to_user_id"),
+  toAgentId: text("to_agent_id"),
+  type: text("type").notNull(), // decision | blocker | completed | question | escalation | update | approval
+  priority: text("priority").notNull().default("normal"), // critical | high | normal | low
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  context: jsonb("context").$type<InboxMessageContext>(),
+  actions: jsonb("actions").$type<InboxAction[]>(),
+  status: text("status").notNull().default("unread"), // unread | read | actioned | snoozed | dismissed
+  actionedBy: text("actioned_by"),
+  actionedAt: timestamp("actioned_at", { withTimezone: true }),
+  actionResult: text("action_result"),
+  snoozeUntil: timestamp("snooze_until", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Agent Access Grants ───────────────────────────────────────────
+
+export const agentAccessGrants = pgTable("agent_access_grants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" })
+    .notNull(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  grantedBy: text("granted_by").notNull(),
+  canInteract: boolean("can_interact").notNull().default(true),
+  canConfigure: boolean("can_configure").notNull().default(false),
+  canViewLogs: boolean("can_view_logs").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Routine Template Types ────────────────────────────────────────
 
 interface TaskTemplate {
   titlePattern: string;

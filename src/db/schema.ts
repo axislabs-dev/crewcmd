@@ -186,6 +186,7 @@ export const agents = pgTable("agents", {
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   adapterType: text("adapter_type").notNull().default("openclaw_gateway"),
   adapterConfig: jsonb("adapter_config").$type<Record<string, unknown>>().default({}),
+  provider: text("provider"), // "anthropic" | "openai" | "google" | "openrouter" | null
   role: text("role").default("engineer"),
   model: text("model"),
   workspacePath: text("workspace_path"),
@@ -541,6 +542,20 @@ export const agentSkills = pgTable("agent_skills", {
   enabled: boolean("enabled").notNull().default(true),
   config: jsonb("config").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Company Provider Keys ──────────────────────────────────────────
+
+export const companyProviderKeys = pgTable("company_provider_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  provider: text("provider").notNull(), // "anthropic" | "openai" | "google" | "openrouter"
+  apiKey: text("api_key").notNull(),
+  label: text("label"), // optional human-friendly label
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ─── Routine Templates ──────────────────────────────────────────────

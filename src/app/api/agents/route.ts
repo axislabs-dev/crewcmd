@@ -90,6 +90,8 @@ export async function POST(request: NextRequest) {
       gatewayToken,
       httpUrl,
       httpAuthHeader,
+      openrouterApiKey,
+      openrouterBaseUrl,
       heartbeatEnabled,
       heartbeatIntervalSec,
       wakeOnDemand,
@@ -117,6 +119,10 @@ export async function POST(request: NextRequest) {
     // HTTP-specific
     if (httpUrl) finalAdapterConfig.url = httpUrl;
     if (httpAuthHeader) finalAdapterConfig.headers = { ...(finalAdapterConfig.headers as Record<string, string> || {}), Authorization: httpAuthHeader };
+    // OpenRouter-specific
+    if (openrouterApiKey) finalAdapterConfig.apiKey = openrouterApiKey;
+    if (openrouterBaseUrl) finalAdapterConfig.baseUrl = openrouterBaseUrl;
+    else if (adapterType === "openrouter") finalAdapterConfig.baseUrl = "https://openrouter.ai/api/v1";
 
     // Build runtime config
     const finalRuntimeConfig: Record<string, unknown> = { ...(runtimeConfig || {}) };

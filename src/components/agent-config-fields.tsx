@@ -12,6 +12,7 @@ export const ADAPTER_TYPES = [
   { value: "cursor", label: "Cursor (Local)" },
   { value: "pi_local", label: "Pi (Local)" },
   { value: "openclaw_gateway", label: "OpenClaw Gateway" },
+  { value: "openrouter", label: "OpenRouter" },
   { value: "process", label: "Process" },
   { value: "http", label: "HTTP" },
 ];
@@ -30,12 +31,23 @@ export const ROLES = [
 export const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
 export const GATEWAY_ADAPTERS = ["openclaw_gateway"];
 export const HTTP_ADAPTERS = ["http"];
+export const OPENROUTER_ADAPTERS = ["openrouter"];
 
 const MODELS_BY_ADAPTER: Record<string, string[]> = {
   claude_local: ["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
   codex_local: ["o4-mini", "o3", "gpt-4.1"],
   gemini_local: ["gemini-2.5-pro", "gemini-2.5-flash"],
   cursor: ["claude-sonnet-4-20250514", "gpt-4.1"],
+  openrouter: [
+    "anthropic/claude-sonnet-4-20250514",
+    "anthropic/claude-opus-4-20250514",
+    "openai/gpt-4.1",
+    "openai/o4-mini",
+    "google/gemini-2.5-pro",
+    "google/gemini-2.5-flash",
+    "deepseek/deepseek-r1",
+    "meta-llama/llama-4-maverick",
+  ],
 };
 
 const COMMAND_PLACEHOLDERS: Record<string, string> = {
@@ -83,6 +95,8 @@ export interface AgentConfigValues {
   gatewayToken: string;
   httpUrl: string;
   httpAuthHeader: string;
+  openrouterApiKey: string;
+  openrouterBaseUrl: string;
 }
 
 export function defaultAgentConfigValues(): AgentConfigValues {
@@ -113,6 +127,8 @@ export function defaultAgentConfigValues(): AgentConfigValues {
     gatewayToken: "",
     httpUrl: "",
     httpAuthHeader: "",
+    openrouterApiKey: "",
+    openrouterBaseUrl: "",
   };
 }
 
@@ -484,6 +500,7 @@ export function AgentConfigFields({ values, onChange, existingAgents }: AgentCon
   const isLocal = LOCAL_ADAPTERS.includes(values.adapterType);
   const isGateway = GATEWAY_ADAPTERS.includes(values.adapterType);
   const isHttp = HTTP_ADAPTERS.includes(values.adapterType);
+  const isOpenRouter = OPENROUTER_ADAPTERS.includes(values.adapterType);
   const showModel = values.adapterType !== "http";
   const showThinkingEffort = values.adapterType !== "gemini_local" && values.adapterType !== "http";
 
@@ -692,6 +709,37 @@ export function AgentConfigFields({ values, onChange, existingAgents }: AgentCon
                   placeholder="Bearer sk-..."
                 />
               </div>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* ── OPENROUTER CONFIG ── */}
+      {isOpenRouter && (
+        <Section title="OpenRouter Config" defaultOpen collapsible={false}>
+          <div className="space-y-3">
+            <div>
+              <label className={labelClass}>API KEY</label>
+              <div className="mt-1">
+                <PasswordInput
+                  value={values.openrouterApiKey}
+                  onChange={(v) => onChange({ openrouterApiKey: v })}
+                  placeholder="sk-or-v1-..."
+                />
+              </div>
+              <p className="mt-1 font-mono text-[11px] text-white/35">
+                Get your key at openrouter.ai/keys
+              </p>
+            </div>
+            <div>
+              <label className={labelClass}>BASE URL (OPTIONAL)</label>
+              <input
+                type="text"
+                value={values.openrouterBaseUrl}
+                onChange={(e) => onChange({ openrouterBaseUrl: e.target.value })}
+                placeholder="https://openrouter.ai/api/v1"
+                className={`mt-1 ${inputClass}`}
+              />
             </div>
           </div>
         </Section>

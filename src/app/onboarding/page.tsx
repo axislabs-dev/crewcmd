@@ -1,38 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-
-const ADAPTER_TYPES = [
-  { value: "claude_local", label: "Claude Code (Local)" },
-  { value: "codex_local", label: "Codex (Local)" },
-  { value: "gemini_local", label: "Gemini CLI (Local)" },
-  { value: "opencode_local", label: "OpenCode (Local)" },
-  { value: "openclaw_gateway", label: "OpenClaw Gateway" },
-  { value: "cursor", label: "Cursor (Local)" },
-  { value: "pi_local", label: "Pi (Local)" },
-  { value: "process", label: "Process" },
-  { value: "http", label: "HTTP" },
-];
-
-const ROLES = [
-  { value: "ceo", label: "CEO" },
-  { value: "cto", label: "CTO" },
-  { value: "engineer", label: "Engineer" },
-  { value: "designer", label: "Designer" },
-  { value: "qa", label: "QA" },
-  { value: "devops", label: "DevOps" },
-  { value: "researcher", label: "Researcher" },
-  { value: "custom", label: "Custom" },
-];
-
-const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
-const GATEWAY_ADAPTERS = ["openclaw_gateway"];
-const HTTP_ADAPTERS = ["http"];
-
-function nameToCallsign(name: string): string {
-  return name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "");
-}
+import {
+  AgentConfigFields,
+  AgentConfigValues,
+  defaultAgentConfigValues,
+  nameToCallsign,
+  ROLES,
+  GATEWAY_ADAPTERS,
+  HTTP_ADAPTERS,
+} from "@/components/agent-config-fields";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -45,21 +23,9 @@ export default function OnboardingPage() {
   const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Step 2: Agent
-  const [agentName, setAgentName] = useState("");
-  const [agentCallsign, setAgentCallsign] = useState("");
-  const [agentCallsignManual, setAgentCallsignManual] = useState(false);
-  const [agentRole, setAgentRole] = useState("engineer");
-  const [agentAdapterType, setAgentAdapterType] = useState("claude_local");
-  const [agentModel, setAgentModel] = useState("");
-  const [agentWorkspacePath, setAgentWorkspacePath] = useState("");
-  const [agentEmoji, setAgentEmoji] = useState("\u{1F916}");
-  const [agentColor, setAgentColor] = useState("#00f0ff");
-  const [agentGatewayUrl, setAgentGatewayUrl] = useState("");
-  const [agentGatewayToken, setAgentGatewayToken] = useState("");
-  const [agentGatewayTokenVisible, setAgentGatewayTokenVisible] = useState(false);
-  const [agentHttpUrl, setAgentHttpUrl] = useState("");
-  const [agentHttpAuth, setAgentHttpAuth] = useState("");
-  const [agentHttpAuthVisible, setAgentHttpAuthVisible] = useState(false);
+  const [agentValues, setAgentValues] = useState<AgentConfigValues>(defaultAgentConfigValues());
+  const [callsignManual, setCallsignManual] = useState(false);
+  const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
 
   // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
@@ -67,6 +33,40 @@ export default function OnboardingPage() {
   // Step 4: Goal
   const [goalTitle, setGoalTitle] = useState("");
   const [goalDescription, setGoalDescription] = useState("");
+
+  // Fetch existing agents when we reach step 2
+  useEffect(() => {
+    if (step === 2) {
+      fetch("/api/agents")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.agents) {
+            setExistingAgents(data.agents.map((a: { id: string; name: string; callsign: string }) => ({
+              id: a.id,
+              name: a.name,
+              callsign: a.callsign,
+            })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [step]);
+
+  const handleAgentChange = useCallback(
+    (patch: Partial<AgentConfigValues>) => {
+      setAgentValues((prev) => {
+        const next = { ...prev, ...patch };
+        if ("name" in patch && !callsignManual) {
+          next.callsign = nameToCallsign(patch.name ?? "");
+        }
+        if ("callsign" in patch && !("name" in patch)) {
+          setCallsignManual(true);
+        }
+        return next;
+      });
+    },
+    [callsignManual]
+  );
 
   async function handleCreateCompany() {
     if (!companyName.trim()) return;
@@ -96,38 +96,53 @@ export default function OnboardingPage() {
   }
 
   async function handleCreateAgent() {
-    if (!agentName.trim() || !companyId) return;
+    if (!agentValues.name.trim() || !companyId) return;
     setLoading(true);
 
     try {
-      const callsign = agentCallsign.trim() || nameToCallsign(agentName);
+      const callsign = agentValues.callsign.trim() || nameToCallsign(agentValues.name);
       const adapterConfig: Record<string, unknown> = {};
-      if (GATEWAY_ADAPTERS.includes(agentAdapterType)) {
-        if (agentGatewayUrl.trim()) adapterConfig.url = agentGatewayUrl.trim();
-        if (agentGatewayToken.trim()) {
-          adapterConfig.headers = { "x-openclaw-token": agentGatewayToken.trim() };
+      if (GATEWAY_ADAPTERS.includes(agentValues.adapterType)) {
+        if (agentValues.gatewayUrl.trim()) adapterConfig.url = agentValues.gatewayUrl.trim();
+        if (agentValues.gatewayToken.trim()) {
+          adapterConfig.headers = { "x-openclaw-token": agentValues.gatewayToken.trim() };
         }
-      } else if (HTTP_ADAPTERS.includes(agentAdapterType)) {
-        if (agentHttpUrl.trim()) adapterConfig.url = agentHttpUrl.trim();
-        if (agentHttpAuth.trim()) {
-          adapterConfig.headers = { Authorization: agentHttpAuth.trim() };
+      } else if (HTTP_ADAPTERS.includes(agentValues.adapterType)) {
+        if (agentValues.httpUrl.trim()) adapterConfig.url = agentValues.httpUrl.trim();
+        if (agentValues.httpAuthHeader.trim()) {
+          adapterConfig.headers = { Authorization: agentValues.httpAuthHeader.trim() };
         }
       }
       await fetch("/api/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: agentName.trim(),
+          name: agentValues.name.trim(),
           callsign,
-          title: ROLES.find((r) => r.value === agentRole)?.label || "Agent",
-          emoji: agentEmoji || "\u{1F916}",
-          color: agentColor || "#00f0ff",
-          adapterType: agentAdapterType,
+          title: ROLES.find((r) => r.value === agentValues.role)?.label || "Agent",
+          emoji: agentValues.emoji || "\u{1F916}",
+          color: agentValues.color || "#00f0ff",
+          adapterType: agentValues.adapterType,
           adapterConfig,
-          role: agentRole,
-          model: agentModel.trim() || null,
-          workspacePath: agentWorkspacePath.trim() || null,
+          role: agentValues.role,
+          model: agentValues.model.trim() || null,
+          workspacePath: agentValues.workspacePath.trim() || null,
+          reportsTo: agentValues.reportsTo || null,
           companyId,
+          // Extended fields
+          command: agentValues.command.trim() || null,
+          thinkingEffort: agentValues.thinkingEffort || null,
+          promptTemplate: agentValues.promptTemplate.trim() || null,
+          instructionsFile: agentValues.instructionsFile.trim() || null,
+          extraArgs: agentValues.extraArgs.trim() || null,
+          envVars: Object.keys(agentValues.envVars).length > 0 ? agentValues.envVars : null,
+          timeoutSec: agentValues.timeoutSec,
+          gracePeriodSec: agentValues.gracePeriodSec,
+          heartbeatEnabled: agentValues.heartbeatEnabled,
+          heartbeatIntervalSec: agentValues.heartbeatIntervalSec,
+          wakeOnDemand: agentValues.wakeOnDemand,
+          cooldownSec: agentValues.cooldownSec,
+          maxConcurrentRuns: agentValues.maxConcurrentRuns,
         }),
       });
     } catch {
@@ -218,8 +233,6 @@ export default function OnboardingPage() {
 
   const inputClass =
     "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50";
-  const selectClass =
-    "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50 appearance-none";
   const labelClass = "block font-mono text-[11px] tracking-wider text-white/40";
 
   return (
@@ -288,188 +301,12 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className={labelClass}>NAME</label>
-                  <input
-                    type="text"
-                    value={agentName}
-                    onChange={(e) => {
-                      setAgentName(e.target.value);
-                      if (!agentCallsignManual) {
-                        setAgentCallsign(nameToCallsign(e.target.value));
-                      }
-                    }}
-                    placeholder="e.g., Neo"
-                    className={inputClass}
-                    autoFocus
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className={labelClass}>CALLSIGN</label>
-                  <input
-                    type="text"
-                    value={agentCallsign}
-                    onChange={(e) => {
-                      setAgentCallsign(e.target.value.toUpperCase());
-                      setAgentCallsignManual(true);
-                    }}
-                    placeholder="AUTO-GENERATED"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>ROLE</label>
-                  <select
-                    value={agentRole}
-                    onChange={(e) => setAgentRole(e.target.value)}
-                    className={selectClass}
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className={labelClass}>ADAPTER TYPE</label>
-                  <select
-                    value={agentAdapterType}
-                    onChange={(e) => setAgentAdapterType(e.target.value)}
-                    className={selectClass}
-                  >
-                    {ADAPTER_TYPES.map((a) => (
-                      <option key={a.value} value={a.value}>{a.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="col-span-2">
-                  <label className={labelClass}>MODEL (OPTIONAL)</label>
-                  <input
-                    type="text"
-                    value={agentModel}
-                    onChange={(e) => setAgentModel(e.target.value)}
-                    placeholder="e.g., claude-sonnet-4-5-20250514"
-                    className={inputClass}
-                  />
-                </div>
-
-                {LOCAL_ADAPTERS.includes(agentAdapterType) && (
-                  <div className="col-span-2">
-                    <label className={labelClass}>WORKSPACE PATH (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      value={agentWorkspacePath}
-                      onChange={(e) => setAgentWorkspacePath(e.target.value)}
-                      placeholder="/path/to/project"
-                      className={inputClass}
-                    />
-                  </div>
-                )}
-
-                {GATEWAY_ADAPTERS.includes(agentAdapterType) && (
-                  <>
-                    <div className="col-span-2">
-                      <label className={labelClass}>GATEWAY URL</label>
-                      <input
-                        type="text"
-                        value={agentGatewayUrl}
-                        onChange={(e) => setAgentGatewayUrl(e.target.value)}
-                        placeholder="ws://127.0.0.1:18789"
-                        className={inputClass}
-                      />
-                      <p className="mt-1 font-mono text-[11px] text-white/35">
-                        WebSocket URL of the OpenClaw gateway
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelClass}>AUTH TOKEN (OPTIONAL)</label>
-                      <div className="relative mt-1">
-                        <input
-                          type={agentGatewayTokenVisible ? "text" : "password"}
-                          value={agentGatewayToken}
-                          onChange={(e) => setAgentGatewayToken(e.target.value)}
-                          placeholder="OpenClaw gateway token"
-                          className={`${inputClass} mt-0 pr-10`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setAgentGatewayTokenVisible(!agentGatewayTokenVisible)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
-                        >
-                          {agentGatewayTokenVisible ? "HIDE" : "SHOW"}
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {HTTP_ADAPTERS.includes(agentAdapterType) && (
-                  <>
-                    <div className="col-span-2">
-                      <label className={labelClass}>API URL</label>
-                      <input
-                        type="text"
-                        value={agentHttpUrl}
-                        onChange={(e) => setAgentHttpUrl(e.target.value)}
-                        placeholder="https://api.example.com/agent"
-                        className={inputClass}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelClass}>AUTHORIZATION HEADER (OPTIONAL)</label>
-                      <div className="relative mt-1">
-                        <input
-                          type={agentHttpAuthVisible ? "text" : "password"}
-                          value={agentHttpAuth}
-                          onChange={(e) => setAgentHttpAuth(e.target.value)}
-                          placeholder="Bearer sk-..."
-                          className={`${inputClass} mt-0 pr-10`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setAgentHttpAuthVisible(!agentHttpAuthVisible)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
-                        >
-                          {agentHttpAuthVisible ? "HIDE" : "SHOW"}
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <div>
-                  <label className={labelClass}>EMOJI</label>
-                  <input
-                    type="text"
-                    value={agentEmoji}
-                    onChange={(e) => setAgentEmoji(e.target.value)}
-                    placeholder="\u{1F916}"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>COLOR</label>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={agentColor}
-                      onChange={(e) => setAgentColor(e.target.value)}
-                      className="h-[42px] w-10 cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.03]"
-                    />
-                    <input
-                      type="text"
-                      value={agentColor}
-                      onChange={(e) => setAgentColor(e.target.value)}
-                      placeholder="#00f0ff"
-                      className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
-                    />
-                  </div>
-                </div>
+              <div className="max-h-[50vh] overflow-y-auto">
+                <AgentConfigFields
+                  values={agentValues}
+                  onChange={handleAgentChange}
+                  existingAgents={existingAgents}
+                />
               </div>
 
               <div className="flex gap-2">
@@ -481,7 +318,7 @@ export default function OnboardingPage() {
                 </button>
                 <button
                   onClick={handleCreateAgent}
-                  disabled={loading || !agentName.trim()}
+                  disabled={loading || !agentValues.name.trim()}
                   className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
                 >
                   {loading ? "CREATING..." : "CREATE AGENT"}

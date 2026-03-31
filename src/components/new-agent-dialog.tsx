@@ -1,37 +1,15 @@
 "use client";
 
-import { useState } from "react";
-
-const ADAPTER_TYPES = [
-  { value: "claude_local", label: "Claude Code (Local)" },
-  { value: "codex_local", label: "Codex (Local)" },
-  { value: "gemini_local", label: "Gemini CLI (Local)" },
-  { value: "opencode_local", label: "OpenCode (Local)" },
-  { value: "openclaw_gateway", label: "OpenClaw Gateway" },
-  { value: "cursor", label: "Cursor (Local)" },
-  { value: "pi_local", label: "Pi (Local)" },
-  { value: "process", label: "Process" },
-  { value: "http", label: "HTTP" },
-];
-
-const ROLES = [
-  { value: "ceo", label: "CEO" },
-  { value: "cto", label: "CTO" },
-  { value: "engineer", label: "Engineer" },
-  { value: "designer", label: "Designer" },
-  { value: "qa", label: "QA" },
-  { value: "devops", label: "DevOps" },
-  { value: "researcher", label: "Researcher" },
-  { value: "custom", label: "Custom" },
-];
-
-const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
-const GATEWAY_ADAPTERS = ["openclaw_gateway"];
-const HTTP_ADAPTERS = ["http"];
-
-function nameToCallsign(name: string): string {
-  return name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "");
-}
+import { useState, useEffect, useCallback } from "react";
+import {
+  AgentConfigFields,
+  AgentConfigValues,
+  defaultAgentConfigValues,
+  nameToCallsign,
+  ROLES,
+  GATEWAY_ADAPTERS,
+  HTTP_ADAPTERS,
+} from "./agent-config-fields";
 
 interface NewAgentDialogProps {
   companyId: string | null;
@@ -42,44 +20,63 @@ interface NewAgentDialogProps {
 export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [name, setName] = useState("");
-  const [callsign, setCallsign] = useState("");
+  const [values, setValues] = useState<AgentConfigValues>(defaultAgentConfigValues());
   const [callsignManual, setCallsignManual] = useState(false);
-  const [role, setRole] = useState("engineer");
-  const [adapterType, setAdapterType] = useState("claude_local");
-  const [model, setModel] = useState("");
-  const [workspacePath, setWorkspacePath] = useState("");
-  const [emoji, setEmoji] = useState("\u{1F916}");
-  const [color, setColor] = useState("#00f0ff");
+  const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
 
-  // OpenClaw Gateway config
-  const [gatewayUrl, setGatewayUrl] = useState("");
-  const [gatewayToken, setGatewayToken] = useState("");
-  const [gatewayTokenVisible, setGatewayTokenVisible] = useState(false);
+  // Fetch existing agents for reports-to picker
+  useEffect(() => {
+    fetch("/api/agents")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.agents) {
+          setExistingAgents(data.agents.map((a: { id: string; name: string; callsign: string }) => ({
+            id: a.id,
+            name: a.name,
+            callsign: a.callsign,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  // HTTP adapter config
-  const [httpUrl, setHttpUrl] = useState("");
-  const [httpAuthHeader, setHttpAuthHeader] = useState("");
-  const [httpAuthVisible, setHttpAuthVisible] = useState(false);
+  const handleChange = useCallback(
+    (patch: Partial<AgentConfigValues>) => {
+      setValues((prev) => {
+        const next = { ...prev, ...patch };
+        // Auto-generate callsign from name when not manually edited
+        if ("name" in patch && !callsignManual) {
+          next.callsign = nameToCallsign(patch.name ?? "");
+        }
+        // Detect manual callsign editing
+        if ("callsign" in patch && !("name" in patch)) {
+          setCallsignManual(true);
+        }
+        return next;
+      });
+    },
+    [callsignManual]
+  );
 
   async function handleSubmit() {
-    if (!name.trim()) return;
+    if (!values.name.trim()) return;
     setLoading(true);
     setError(null);
 
     try {
+      const callsign = (values.callsign.trim() || nameToCallsign(values.name)).toUpperCase();
+
       // Build adapter config based on type
       const adapterConfig: Record<string, unknown> = {};
-      if (GATEWAY_ADAPTERS.includes(adapterType)) {
-        if (gatewayUrl.trim()) adapterConfig.url = gatewayUrl.trim();
-        if (gatewayToken.trim()) {
-          adapterConfig.headers = { "x-openclaw-token": gatewayToken.trim() };
+      if (GATEWAY_ADAPTERS.includes(values.adapterType)) {
+        if (values.gatewayUrl.trim()) adapterConfig.url = values.gatewayUrl.trim();
+        if (values.gatewayToken.trim()) {
+          adapterConfig.headers = { "x-openclaw-token": values.gatewayToken.trim() };
         }
-      } else if (HTTP_ADAPTERS.includes(adapterType)) {
-        if (httpUrl.trim()) adapterConfig.url = httpUrl.trim();
-        if (httpAuthHeader.trim()) {
-          adapterConfig.headers = { Authorization: httpAuthHeader.trim() };
+      } else if (HTTP_ADAPTERS.includes(values.adapterType)) {
+        if (values.httpUrl.trim()) adapterConfig.url = values.httpUrl.trim();
+        if (values.httpAuthHeader.trim()) {
+          adapterConfig.headers = { Authorization: values.httpAuthHeader.trim() };
         }
       }
 
@@ -87,17 +84,32 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          callsign: (callsign.trim() || nameToCallsign(name)).toUpperCase(),
-          title: ROLES.find((r) => r.value === role)?.label || "Agent",
-          emoji: emoji || "\u{1F916}",
-          color: color || "#00f0ff",
-          adapterType,
+          name: values.name.trim(),
+          callsign,
+          title: ROLES.find((r) => r.value === values.role)?.label || "Agent",
+          emoji: values.emoji || "\u{1F916}",
+          color: values.color || "#00f0ff",
+          adapterType: values.adapterType,
           adapterConfig,
-          role,
-          model: model.trim() || null,
-          workspacePath: workspacePath.trim() || null,
+          role: values.role,
+          model: values.model.trim() || null,
+          workspacePath: values.workspacePath.trim() || null,
+          reportsTo: values.reportsTo || null,
           companyId,
+          // Extended fields
+          command: values.command.trim() || null,
+          thinkingEffort: values.thinkingEffort || null,
+          promptTemplate: values.promptTemplate.trim() || null,
+          instructionsFile: values.instructionsFile.trim() || null,
+          extraArgs: values.extraArgs.trim() || null,
+          envVars: Object.keys(values.envVars).length > 0 ? values.envVars : null,
+          timeoutSec: values.timeoutSec,
+          gracePeriodSec: values.gracePeriodSec,
+          heartbeatEnabled: values.heartbeatEnabled,
+          heartbeatIntervalSec: values.heartbeatIntervalSec,
+          wakeOnDemand: values.wakeOnDemand,
+          cooldownSec: values.cooldownSec,
+          maxConcurrentRuns: values.maxConcurrentRuns,
         }),
       });
 
@@ -115,19 +127,13 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
     }
   }
 
-  const inputClass =
-    "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50";
-  const selectClass =
-    "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50 appearance-none";
-  const labelClass = "block font-mono text-[11px] tracking-wider text-white/40";
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-xl border border-white/[0.08] bg-[#0a0a0f] p-6 shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-white/[0.08] bg-[#0a0a0f] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
           <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">NEW AGENT</h2>
           <button
             onClick={onClose}
@@ -137,212 +143,34 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
           </button>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 font-mono text-xs text-red-400">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className={labelClass}>NAME</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (!callsignManual) {
-                    setCallsign(nameToCallsign(e.target.value));
-                  }
-                }}
-                placeholder="e.g., Neo"
-                className={inputClass}
-                autoFocus
-              />
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 font-mono text-xs text-red-400">
+              {error}
             </div>
+          )}
 
-            <div className="col-span-2">
-              <label className={labelClass}>CALLSIGN</label>
-              <input
-                type="text"
-                value={callsign}
-                onChange={(e) => {
-                  setCallsign(e.target.value.toUpperCase());
-                  setCallsignManual(true);
-                }}
-                placeholder="AUTO-GENERATED"
-                className={inputClass}
-              />
-            </div>
+          <AgentConfigFields
+            values={values}
+            onChange={handleChange}
+            existingAgents={existingAgents}
+          />
+        </div>
 
-            <div>
-              <label className={labelClass}>ROLE</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className={selectClass}
-              >
-                {ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className={labelClass}>ADAPTER TYPE</label>
-              <select
-                value={adapterType}
-                onChange={(e) => setAdapterType(e.target.value)}
-                className={selectClass}
-              >
-                {ADAPTER_TYPES.map((a) => (
-                  <option key={a.value} value={a.value}>{a.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-span-2">
-              <label className={labelClass}>MODEL (OPTIONAL)</label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="e.g., claude-sonnet-4-5-20250514"
-                className={inputClass}
-              />
-            </div>
-
-            {LOCAL_ADAPTERS.includes(adapterType) && (
-              <div className="col-span-2">
-                <label className={labelClass}>WORKSPACE PATH (OPTIONAL)</label>
-                <input
-                  type="text"
-                  value={workspacePath}
-                  onChange={(e) => setWorkspacePath(e.target.value)}
-                  placeholder="/path/to/project"
-                  className={inputClass}
-                />
-              </div>
-            )}
-
-            {GATEWAY_ADAPTERS.includes(adapterType) && (
-              <>
-                <div className="col-span-2">
-                  <label className={labelClass}>GATEWAY URL</label>
-                  <input
-                    type="text"
-                    value={gatewayUrl}
-                    onChange={(e) => setGatewayUrl(e.target.value)}
-                    placeholder="ws://127.0.0.1:18789"
-                    className={inputClass}
-                  />
-                  <p className="mt-1 font-mono text-[11px] text-white/35">
-                    WebSocket URL of the OpenClaw gateway
-                  </p>
-                </div>
-                <div className="col-span-2">
-                  <label className={labelClass}>AUTH TOKEN (OPTIONAL)</label>
-                  <div className="relative mt-1">
-                    <input
-                      type={gatewayTokenVisible ? "text" : "password"}
-                      value={gatewayToken}
-                      onChange={(e) => setGatewayToken(e.target.value)}
-                      placeholder="OpenClaw gateway token"
-                      className={`${inputClass} mt-0 pr-10`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setGatewayTokenVisible(!gatewayTokenVisible)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
-                    >
-                      {gatewayTokenVisible ? "HIDE" : "SHOW"}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {HTTP_ADAPTERS.includes(adapterType) && (
-              <>
-                <div className="col-span-2">
-                  <label className={labelClass}>API URL</label>
-                  <input
-                    type="text"
-                    value={httpUrl}
-                    onChange={(e) => setHttpUrl(e.target.value)}
-                    placeholder="https://api.example.com/agent"
-                    className={inputClass}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelClass}>AUTHORIZATION HEADER (OPTIONAL)</label>
-                  <div className="relative mt-1">
-                    <input
-                      type={httpAuthVisible ? "text" : "password"}
-                      value={httpAuthHeader}
-                      onChange={(e) => setHttpAuthHeader(e.target.value)}
-                      placeholder="Bearer sk-..."
-                      className={`${inputClass} mt-0 pr-10`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setHttpAuthVisible(!httpAuthVisible)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
-                    >
-                      {httpAuthVisible ? "HIDE" : "SHOW"}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className={labelClass}>EMOJI</label>
-              <input
-                type="text"
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value)}
-                placeholder="\u{1F916}"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>COLOR</label>
-              <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="h-[42px] w-10 cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.03]"
-                />
-                <input
-                  type="text"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  placeholder="#00f0ff"
-                  className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
-            >
-              CANCEL
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={loading || !name.trim()}
-              className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
-            >
-              {loading ? "CREATING..." : "CREATE AGENT"}
-            </button>
-          </div>
+        <div className="flex gap-2 border-t border-white/[0.06] px-6 py-4">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
+          >
+            CANCEL
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading || !values.name.trim()}
+            className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+          >
+            {loading ? "CREATING..." : "CREATE AGENT"}
+          </button>
         </div>
       </div>
     </div>

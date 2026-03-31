@@ -189,6 +189,7 @@ export const agents = pgTable("agents", {
   role: text("role").default("engineer"),
   model: text("model"),
   workspacePath: text("workspace_path"),
+  runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().default({}),
 });
 
 export const projects = pgTable("projects", {

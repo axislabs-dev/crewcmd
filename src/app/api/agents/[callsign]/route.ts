@@ -52,6 +52,7 @@ export async function GET(
       soulContent: agent.soulContent,
       adapterType: agent.adapterType,
       adapterConfig: agent.adapterConfig ?? {},
+      runtimeConfig: agent.runtimeConfig ?? {},
       role: agent.role ?? "engineer",
       model: agent.model ?? null,
       workspacePath: agent.workspacePath ?? null,
@@ -89,7 +90,7 @@ export async function PATCH(
     // Build update object from allowed fields
     const allowedFields = [
       "name", "callsign", "title", "emoji", "color",
-      "adapterType", "adapterConfig", "role", "model",
+      "adapterType", "adapterConfig", "runtimeConfig", "role", "model",
       "workspacePath", "reportsTo", "companyId", "soulContent", "status",
     ] as const;
 
@@ -100,26 +101,56 @@ export async function PATCH(
       }
     }
 
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    // Handle extended fields that merge into adapterConfig
+    const extendedAdapterFields = [
+      "command", "thinkingEffort", "promptTemplate", "instructionsFile",
+      "extraArgs", "envVars", "timeoutSec", "gracePeriodSec",
+      "gatewayUrl", "gatewayToken", "httpUrl", "httpAuthHeader",
+    ];
+    const hasExtendedAdapter = extendedAdapterFields.some((f) => f in body);
+    if (hasExtendedAdapter) {
+      const existing = (agent.adapterConfig ?? {}) as Record<string, unknown>;
+      const merged = { ...existing, ...(updates.adapterConfig as Record<string, unknown> || {}) };
+      if ("command" in body) merged.command = body.command || undefined;
+      if ("thinkingEffort" in body) merged.thinkingEffort = body.thinkingEffort || undefined;
+      if ("promptTemplate" in body) merged.promptTemplate = body.promptTemplate || undefined;
+      if ("instructionsFile" in body) merged.instructionsFile = body.instructionsFile || undefined;
+      if ("extraArgs" in body) merged.extraArgs = body.extraArgs || undefined;
+      if ("envVars" in body) merged.envVars = body.envVars && Object.keys(body.envVars).length > 0 ? body.envVars : undefined;
+      if ("timeoutSec" in body) merged.timeoutSec = body.timeoutSec;
+      if ("gracePeriodSec" in body) merged.gracePeriodSec = body.gracePeriodSec;
+      if ("gatewayUrl" in body) merged.url = body.gatewayUrl;
+      if ("gatewayToken" in body) {
+        merged.headers = { ...(merged.headers as Record<string, string> || {}), "x-openclaw-token": body.gatewayToken };
+      }
+      if ("httpUrl" in body) merged.url = body.httpUrl;
+      if ("httpAuthHeader" in body) {
+        merged.headers = { ...(merged.headers as Record<string, string> || {}), Authorization: body.httpAuthHeader };
+      }
+      updates.adapterConfig = merged;
     }
 
-    // Map camelCase fields to snake_case for Drizzle
-    const columnMap: Record<string, string> = {
-      adapterType: "adapter_type",
-      adapterConfig: "adapter_config",
-      workspacePath: "workspace_path",
-      reportsTo: "reports_to",
-      companyId: "company_id",
-      soulContent: "soul_content",
-      currentTask: "current_task",
-      lastActive: "last_active",
-    };
+    // Handle extended heartbeat / run policy fields that merge into runtimeConfig
+    const extendedRuntimeFields = [
+      "heartbeatEnabled", "heartbeatIntervalSec", "wakeOnDemand", "cooldownSec", "maxConcurrentRuns",
+    ];
+    const hasExtendedRuntime = extendedRuntimeFields.some((f) => f in body);
+    if (hasExtendedRuntime) {
+      const existing = (agent.runtimeConfig ?? {}) as Record<string, unknown>;
+      const existingHb = (existing.heartbeat ?? {}) as Record<string, unknown>;
+      const merged = { ...existing, ...(updates.runtimeConfig as Record<string, unknown> || {}) };
+      merged.heartbeat = {
+        enabled: "heartbeatEnabled" in body ? body.heartbeatEnabled : existingHb.enabled ?? false,
+        intervalSec: "heartbeatIntervalSec" in body ? body.heartbeatIntervalSec : existingHb.intervalSec ?? 300,
+        wakeOnDemand: "wakeOnDemand" in body ? body.wakeOnDemand : existingHb.wakeOnDemand ?? true,
+        cooldownSec: "cooldownSec" in body ? body.cooldownSec : existingHb.cooldownSec ?? 60,
+        maxConcurrentRuns: "maxConcurrentRuns" in body ? body.maxConcurrentRuns : existingHb.maxConcurrentRuns ?? 1,
+      };
+      updates.runtimeConfig = merged;
+    }
 
-    const drizzleUpdates: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(updates)) {
-      const col = columnMap[key] || key;
-      drizzleUpdates[col] = value;
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
     // Use raw SQL set for dynamic updates via Drizzle

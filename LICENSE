@@ -1,21 +1,47 @@
-MIT License
+# Business Source License 1.1
 
-Copyright (c) 2025 Axislabs (axislabs.dev)
+**License:** Business Source License 1.1  
+**Licensor:** RSCreative Technologies Pty Ltd  
+**Licensed Work:** CrewCMD  
+**Change Date:** March 31, 2030  
+**Change License:** Apache License, Version 2.0  
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+---
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+## Terms
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
+
+### Additional Use Grant
+
+You may make production use of the Licensed Work, provided that you do not use the Licensed Work to offer a commercial hosted or managed service that provides the functionality of the Licensed Work to third parties as a service (a "Competing SaaS Offering").
+
+For purposes of this license, a "Competing SaaS Offering" means making the functionality of the Licensed Work, or a substantial portion thereof, available to third parties over a network as a hosted, managed, or cloud-based service, where such service competes with or substitutes for any hosted service offered by the Licensor.
+
+**The following uses are expressly permitted** and do not constitute a Competing SaaS Offering:
+
+- Self-hosted or on-premises deployments for your own business operations, including commercial use.
+- Internal use within your organisation, whether for profit or not.
+- Use for development, testing, staging, and evaluation purposes.
+- Use by consultants or contractors deploying the Licensed Work on behalf of a single end-user organisation for that organisation's own internal use.
+- Redistribution of the Licensed Work as part of a larger product or platform that is not primarily a substitute for the Licensor's hosted service.
+
+### Change Date and Change License
+
+On the Change Date specified above, or the fourth anniversary of the first publicly available distribution of a specific version of the Licensed Work under this License, whichever comes first, the Licensor hereby grants you rights under the terms of the Change License, and the rights granted under the Business Source License for that version terminate.
+
+If the Licensor specifies a Change Date for each version, each version may have a different Change Date. If the Licensor does not specify a Change Date, the Change Date is four years from the date the Licensed Work is first made publicly available under this License.
+
+### Notices
+
+You must conspicuously display this License on each original or modified copy of the Licensed Work. If you receive the Licensed Work in original or modified form from a third party, the terms and conditions set forth in this License apply to your use of that work.
+
+Any use of the Licensed Work in violation of this License will automatically terminate your rights under this License for the current and all other versions of the Licensed Work.
+
+This License does not grant you any right in any trademark or logo of the Licensor or its affiliates (provided that you may use a trademark or logo of the Licensor as expressly required by this License).
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON AN "AS IS" BASIS. THE LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
+
+---
+
+For commercial licensing enquiries or questions about permitted use, contact: **[hello@axislabs.dev]**

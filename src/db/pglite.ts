@@ -1,10 +1,14 @@
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
+import { mkdirSync } from "fs";
 import path from "path";
 import * as schema from "./schema";
 
 const dataDir = path.join(process.cwd(), ".data", "pglite");
 const migrationsFolder = path.join(process.cwd(), "drizzle");
+
+// Ensure the data directory exists before PGlite tries to use it
+mkdirSync(dataDir, { recursive: true });
 
 const pgliteDb = drizzle({
   connection: { dataDir },

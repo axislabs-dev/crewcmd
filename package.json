@@ -13,6 +13,7 @@
     "url": "https://github.com/axislabs-dev/crewcmd/issues"
   },
   "author": "Axislabs (https://axislabs.dev)",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",

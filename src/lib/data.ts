@@ -17,6 +17,11 @@ export interface Agent {
   lastActive: string;
   reportsTo: string | null;
   soulContent: string | null;
+  adapterType: string;
+  adapterConfig: Record<string, unknown>;
+  role: string;
+  model: string | null;
+  workspacePath: string | null;
   tokenUsage?: {
     totalTokens: number;
     sessionCount: number;

@@ -24,14 +24,14 @@ export async function GET() {
         callsign: hb.callsign || hb.agentId,
         name: hb.callsign || hb.agentId,
         title: "Agent",
-        emoji: "🤖",
+        emoji: "\u{1F916}",
         color: "#888888",
         reportsTo: null,
         soulContent: null,
       };
 
       // Extract tokenUsage from rawData (safe cast)
-      const rawData = hb.rawData as any;
+      const rawData = hb.rawData as Record<string, unknown> | null;
       const tokenUsage = rawData?.tokenUsage ?? null;
 
       return {
@@ -46,6 +46,11 @@ export async function GET() {
         lastActive: hb.lastActive?.toISOString() ?? new Date().toISOString(),
         reportsTo: meta.reportsTo,
         soulContent: meta.soulContent,
+        adapterType: "openclaw_gateway",
+        adapterConfig: {},
+        role: "engineer",
+        model: null,
+        workspacePath: null,
         tokenUsage,
       };
     });

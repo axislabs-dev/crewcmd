@@ -24,6 +24,18 @@ const statusLabels: Record<string, string> = {
   offline: "OFFLINE",
 };
 
+const adapterLabels: Record<string, string> = {
+  claude_local: "CLAUDE",
+  codex_local: "CODEX",
+  gemini_local: "GEMINI",
+  opencode_local: "OPENCODE",
+  openclaw_gateway: "OPENCLAW",
+  cursor: "CURSOR",
+  pi_local: "PI",
+  process: "PROCESS",
+  http: "HTTP",
+};
+
 export function AgentCard({ agent }: AgentCardProps) {
   return (
     <Link
@@ -57,15 +69,32 @@ export function AgentCard({ agent }: AgentCardProps) {
 
           <div className="flex items-center gap-1.5">
             <span className={`status-dot status-dot-${agent.status}`} />
-            <span className="font-mono text-[10px] tracking-wider text-white/50">
+            <span className="font-mono text-[11px] tracking-wider text-white/50">
               {statusLabels[agent.status]}
             </span>
           </div>
         </div>
 
+        {/* Adapter type and role badges */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-white/45">
+            {adapterLabels[agent.adapterType] || agent.adapterType.toUpperCase()}
+          </span>
+          {agent.role && agent.role !== "custom" && (
+            <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-white/45">
+              {agent.role.toUpperCase()}
+            </span>
+          )}
+          {agent.model && (
+            <span className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-white/35">
+              {agent.model}
+            </span>
+          )}
+        </div>
+
         {agent.currentTask && (
           <div className="mb-3 rounded-lg bg-white/[0.03] px-3 py-2">
-            <span className="font-mono text-[10px] tracking-wider text-white/30">
+            <span className="font-mono text-[10px] tracking-wider text-white/35">
               CURRENT TASK
             </span>
             <p className="mt-0.5 text-xs text-white/70 line-clamp-2">
@@ -76,21 +105,21 @@ export function AgentCard({ agent }: AgentCardProps) {
 
         {agent.tokenUsage && agent.tokenUsage.sessionCount > 0 && (
           <div className="mb-3 rounded-lg bg-white/[0.03] px-3 py-2">
-            <span className="font-mono text-[10px] tracking-wider text-white/30">
+            <span className="font-mono text-[10px] tracking-wider text-white/35">
               TOKENS (RECENT)
             </span>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-white/70">
               <span>
                 {agent.tokenUsage.totalTokens.toLocaleString()} tokens
               </span>
-              <span className="opacity-30">•</span>
+              <span className="opacity-30">&bull;</span>
               <span>{agent.tokenUsage.sessionCount} sessions</span>
             </div>
           </div>
         )}
 
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] text-white/25">
+          <span className="font-mono text-[11px] text-white/35">
             {timeAgo(agent.lastActive)}
           </span>
           <span

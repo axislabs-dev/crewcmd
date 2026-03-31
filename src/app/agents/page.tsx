@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AgentCard } from "@/components/agent-card";
+import { NewAgentDialog } from "@/components/new-agent-dialog";
 import type { Agent, AgentStatus } from "@/lib/data";
 
 const statusFilters: { key: AgentStatus | "all"; label: string }[] = [
@@ -12,14 +13,21 @@ const statusFilters: { key: AgentStatus | "all"; label: string }[] = [
   { key: "offline", label: "OFFLINE" },
 ];
 
+function getCompanyId(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)active_company=([^;]*)/);
+  return match ? match[1] : null;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [statusFilter, setStatusFilter] = useState<AgentStatus | "all">("all");
   const [search, setSearch] = useState("");
+  const [showNewAgent, setShowNewAgent] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/openclaw/agents");
+      const res = await fetch("/api/agents");
       if (res.ok) {
         const data = await res.json();
         setAgents(data.agents || []);
@@ -60,7 +68,7 @@ export default function AgentsPage() {
             <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-white/80">
               AGENTS
             </h1>
-            <p className="font-mono text-[10px] tracking-wider text-white/30">
+            <p className="font-mono text-[11px] tracking-wider text-white/35">
               {agents.length > 0
                 ? `${activeCount} OF ${agents.length} ACTIVE`
                 : "NO AGENTS DETECTED"}
@@ -75,6 +83,12 @@ export default function AgentsPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 placeholder-white/20 outline-none transition-colors focus:border-neo/30"
             />
+            <button
+              onClick={() => setShowNewAgent(true)}
+              className="rounded-lg bg-neo/20 px-3 py-2 font-mono text-[11px] tracking-wider text-neo transition-colors hover:bg-neo/30"
+            >
+              + NEW AGENT
+            </button>
           </div>
         </div>
 
@@ -83,10 +97,10 @@ export default function AgentsPage() {
             <button
               key={sf.key}
               onClick={() => setStatusFilter(sf.key)}
-              className={`rounded-lg px-3 py-1.5 font-mono text-[10px] tracking-wider transition-all duration-200 ${
+              className={`rounded-lg px-3 py-1.5 font-mono text-[11px] tracking-wider transition-all duration-200 ${
                 statusFilter === sf.key
                   ? "bg-neo/15 text-neo"
-                  : "border border-white/[0.06] text-white/30 hover:bg-white/[0.04] hover:text-white/50"
+                  : "border border-white/[0.06] text-white/35 hover:bg-white/[0.04] hover:text-white/50"
               }`}
             >
               {sf.label}
@@ -114,15 +128,32 @@ export default function AgentsPage() {
           </div>
         ) : (
           <div className="glass-card flex flex-col items-center justify-center py-16">
-            <p className="font-mono text-sm text-white/30">
+            <p className="font-mono text-sm text-white/35">
               No agents detected
             </p>
-            <p className="mt-1 font-mono text-[10px] text-white/15">
-              Connect OpenClaw to see your team
+            <p className="mt-1 font-mono text-[11px] text-white/20">
+              Create your first agent to get started
             </p>
+            <button
+              onClick={() => setShowNewAgent(true)}
+              className="mt-4 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30"
+            >
+              + NEW AGENT
+            </button>
           </div>
         )}
       </div>
+
+      {showNewAgent && (
+        <NewAgentDialog
+          companyId={getCompanyId()}
+          onCreated={() => {
+            setShowNewAgent(false);
+            refresh();
+          }}
+          onClose={() => setShowNewAgent(false)}
+        />
+      )}
     </div>
   );
 }

@@ -431,6 +431,11 @@ export async function buildLiveAgents(): Promise<{
       lastActive,
       reportsTo: meta.reportsTo,
       soulContent: meta.soulContent,
+      adapterType: "openclaw_gateway",
+      adapterConfig: {},
+      role: "engineer",
+      model: null,
+      workspacePath: null,
     };
   });
 

@@ -3,6 +3,35 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+const ADAPTER_TYPES = [
+  { value: "claude_local", label: "Claude Code (Local)" },
+  { value: "codex_local", label: "Codex (Local)" },
+  { value: "gemini_local", label: "Gemini CLI (Local)" },
+  { value: "opencode_local", label: "OpenCode (Local)" },
+  { value: "openclaw_gateway", label: "OpenClaw Gateway" },
+  { value: "cursor", label: "Cursor (Local)" },
+  { value: "pi_local", label: "Pi (Local)" },
+  { value: "process", label: "Process" },
+  { value: "http", label: "HTTP" },
+];
+
+const ROLES = [
+  { value: "ceo", label: "CEO" },
+  { value: "cto", label: "CTO" },
+  { value: "engineer", label: "Engineer" },
+  { value: "designer", label: "Designer" },
+  { value: "qa", label: "QA" },
+  { value: "devops", label: "DevOps" },
+  { value: "researcher", label: "Researcher" },
+  { value: "custom", label: "Custom" },
+];
+
+const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
+
+function nameToCallsign(name: string): string {
+  return name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "");
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -13,10 +42,21 @@ export default function OnboardingPage() {
   const [companyMission, setCompanyMission] = useState("");
   const [companyId, setCompanyId] = useState<string | null>(null);
 
-  // Step 2: Invite
+  // Step 2: Agent
+  const [agentName, setAgentName] = useState("");
+  const [agentCallsign, setAgentCallsign] = useState("");
+  const [agentCallsignManual, setAgentCallsignManual] = useState(false);
+  const [agentRole, setAgentRole] = useState("engineer");
+  const [agentAdapterType, setAgentAdapterType] = useState("claude_local");
+  const [agentModel, setAgentModel] = useState("");
+  const [agentWorkspacePath, setAgentWorkspacePath] = useState("");
+  const [agentEmoji, setAgentEmoji] = useState("\u{1F916}");
+  const [agentColor, setAgentColor] = useState("#00f0ff");
+
+  // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
 
-  // Step 3: Goal
+  // Step 4: Goal
   const [goalTitle, setGoalTitle] = useState("");
   const [goalDescription, setGoalDescription] = useState("");
 
@@ -37,7 +77,6 @@ export default function OnboardingPage() {
       if (res.ok) {
         const company = await res.json();
         setCompanyId(company.id);
-        // Set active company cookie
         document.cookie = `active_company=${company.id};path=/;max-age=${60 * 60 * 24 * 365}`;
         setStep(2);
       }
@@ -45,6 +84,37 @@ export default function OnboardingPage() {
       // ignore
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateAgent() {
+    if (!agentName.trim() || !companyId) return;
+    setLoading(true);
+
+    try {
+      const callsign = agentCallsign.trim() || nameToCallsign(agentName);
+      await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: agentName.trim(),
+          callsign,
+          title: ROLES.find((r) => r.value === agentRole)?.label || "Agent",
+          emoji: agentEmoji || "\u{1F916}",
+          color: agentColor || "#00f0ff",
+          adapterType: agentAdapterType,
+          adapterConfig: {},
+          role: agentRole,
+          model: agentModel.trim() || null,
+          workspacePath: agentWorkspacePath.trim() || null,
+          companyId,
+        }),
+      });
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+      setStep(3);
     }
   }
 
@@ -67,7 +137,7 @@ export default function OnboardingPage() {
       // ignore failures
     } finally {
       setLoading(false);
-      setStep(3);
+      setStep(4);
     }
   }
 
@@ -95,9 +165,11 @@ export default function OnboardingPage() {
     }
   }
 
+  const totalSteps = 4;
+
   const stepIndicator = (
     <div className="flex items-center justify-center gap-2">
-      {[1, 2, 3].map((s) => (
+      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => (
         <div key={s} className="flex items-center gap-2">
           <div
             className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-xs transition-colors ${
@@ -116,7 +188,7 @@ export default function OnboardingPage() {
               s
             )}
           </div>
-          {s < 3 && (
+          {s < totalSteps && (
             <div className={`h-px w-8 ${s < step ? "bg-emerald-500/30" : "bg-white/[0.06]"}`} />
           )}
         </div>
@@ -124,12 +196,18 @@ export default function OnboardingPage() {
     </div>
   );
 
+  const inputClass =
+    "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50";
+  const selectClass =
+    "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50 appearance-none";
+  const labelClass = "block font-mono text-[11px] tracking-wider text-white/40";
+
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-lg">
         <div className="text-center">
           <h1 className="font-mono text-xl font-bold tracking-wider text-neo">WELCOME TO CREWCMD</h1>
-          <p className="mt-2 font-mono text-xs text-white/30">
+          <p className="mt-2 font-mono text-xs text-white/35">
             Let&apos;s set up your crew in a few quick steps.
           </p>
         </div>
@@ -142,31 +220,31 @@ export default function OnboardingPage() {
             <div className="space-y-4">
               <div>
                 <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">CREATE YOUR COMPANY</h2>
-                <p className="mt-1 font-mono text-[10px] text-white/30">
+                <p className="mt-1 font-mono text-[11px] text-white/35">
                   This is your organization — the home for your agent crew.
                 </p>
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">COMPANY NAME</label>
+                <label className={labelClass}>COMPANY NAME</label>
                 <input
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   placeholder="e.g., Acme Corp"
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className={inputClass}
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">MISSION (OPTIONAL)</label>
+                <label className={labelClass}>MISSION (OPTIONAL)</label>
                 <textarea
                   value={companyMission}
                   onChange={(e) => setCompanyMission(e.target.value)}
                   rows={2}
                   placeholder="What's your crew working towards?"
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className={inputClass}
                 />
               </div>
 
@@ -180,12 +258,153 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 2: Invite Members */}
+          {/* Step 2: Create First Agent */}
           {step === 2 && (
             <div className="space-y-4">
               <div>
+                <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">CREATE YOUR FIRST AGENT</h2>
+                <p className="mt-1 font-mono text-[11px] text-white/35">
+                  Add an AI agent to your crew. You can add more later.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className={labelClass}>NAME</label>
+                  <input
+                    type="text"
+                    value={agentName}
+                    onChange={(e) => {
+                      setAgentName(e.target.value);
+                      if (!agentCallsignManual) {
+                        setAgentCallsign(nameToCallsign(e.target.value));
+                      }
+                    }}
+                    placeholder="e.g., Neo"
+                    className={inputClass}
+                    autoFocus
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className={labelClass}>CALLSIGN</label>
+                  <input
+                    type="text"
+                    value={agentCallsign}
+                    onChange={(e) => {
+                      setAgentCallsign(e.target.value.toUpperCase());
+                      setAgentCallsignManual(true);
+                    }}
+                    placeholder="AUTO-GENERATED"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>ROLE</label>
+                  <select
+                    value={agentRole}
+                    onChange={(e) => setAgentRole(e.target.value)}
+                    className={selectClass}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>ADAPTER TYPE</label>
+                  <select
+                    value={agentAdapterType}
+                    onChange={(e) => setAgentAdapterType(e.target.value)}
+                    className={selectClass}
+                  >
+                    {ADAPTER_TYPES.map((a) => (
+                      <option key={a.value} value={a.value}>{a.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className={labelClass}>MODEL (OPTIONAL)</label>
+                  <input
+                    type="text"
+                    value={agentModel}
+                    onChange={(e) => setAgentModel(e.target.value)}
+                    placeholder="e.g., claude-sonnet-4-5-20250514"
+                    className={inputClass}
+                  />
+                </div>
+
+                {LOCAL_ADAPTERS.includes(agentAdapterType) && (
+                  <div className="col-span-2">
+                    <label className={labelClass}>WORKSPACE PATH (OPTIONAL)</label>
+                    <input
+                      type="text"
+                      value={agentWorkspacePath}
+                      onChange={(e) => setAgentWorkspacePath(e.target.value)}
+                      placeholder="/path/to/project"
+                      className={inputClass}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className={labelClass}>EMOJI</label>
+                  <input
+                    type="text"
+                    value={agentEmoji}
+                    onChange={(e) => setAgentEmoji(e.target.value)}
+                    placeholder="\u{1F916}"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>COLOR</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={agentColor}
+                      onChange={(e) => setAgentColor(e.target.value)}
+                      className="h-[42px] w-10 cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.03]"
+                    />
+                    <input
+                      type="text"
+                      value={agentColor}
+                      onChange={(e) => setAgentColor(e.target.value)}
+                      placeholder="#00f0ff"
+                      className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setStep(3)}
+                  className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
+                >
+                  SKIP
+                </button>
+                <button
+                  onClick={handleCreateAgent}
+                  disabled={loading || !agentName.trim()}
+                  className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                >
+                  {loading ? "CREATING..." : "CREATE AGENT"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Invite Members */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <div>
                 <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">INVITE YOUR TEAM</h2>
-                <p className="mt-1 font-mono text-[10px] text-white/30">
+                <p className="mt-1 font-mono text-[11px] text-white/35">
                   Add team members by their GitHub username. You can skip this step.
                 </p>
               </div>
@@ -207,7 +426,7 @@ export default function OnboardingPage() {
                     {invites.length > 1 && (
                       <button
                         onClick={() => setInvites(invites.filter((_, j) => j !== i))}
-                        className="rounded-lg border border-white/[0.06] px-3 font-mono text-xs text-white/30 hover:text-white/50"
+                        className="rounded-lg border border-white/[0.06] px-3 font-mono text-xs text-white/35 hover:text-white/50"
                       >
                         &times;
                       </button>
@@ -216,7 +435,7 @@ export default function OnboardingPage() {
                 ))}
                 <button
                   onClick={() => setInvites([...invites, ""])}
-                  className="font-mono text-[10px] text-neo/60 transition-colors hover:text-neo"
+                  className="font-mono text-[11px] text-neo/60 transition-colors hover:text-neo"
                 >
                   + ADD ANOTHER
                 </button>
@@ -224,7 +443,7 @@ export default function OnboardingPage() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                   className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
                 >
                   SKIP
@@ -240,36 +459,36 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3: First Goal */}
-          {step === 3 && (
+          {/* Step 4: First Goal */}
+          {step === 4 && (
             <div className="space-y-4">
               <div>
                 <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">DEFINE YOUR FIRST GOAL</h2>
-                <p className="mt-1 font-mono text-[10px] text-white/30">
+                <p className="mt-1 font-mono text-[11px] text-white/35">
                   Goals drive everything — tasks trace back to goals, goals trace back to mission.
                 </p>
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">GOAL TITLE</label>
+                <label className={labelClass}>GOAL TITLE</label>
                 <input
                   type="text"
                   value={goalTitle}
                   onChange={(e) => setGoalTitle(e.target.value)}
                   placeholder="e.g., Launch v1.0 of the platform"
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className={inputClass}
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">DESCRIPTION (OPTIONAL)</label>
+                <label className={labelClass}>DESCRIPTION (OPTIONAL)</label>
                 <textarea
                   value={goalDescription}
                   onChange={(e) => setGoalDescription(e.target.value)}
                   rows={2}
                   placeholder="What does success look like?"
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className={inputClass}
                 />
               </div>
 

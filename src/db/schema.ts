@@ -184,6 +184,11 @@ export const agents = pgTable("agents", {
   reportsTo: text("reports_to"),
   soulContent: text("soul_content"),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  adapterType: text("adapter_type").notNull().default("openclaw_gateway"),
+  adapterConfig: jsonb("adapter_config").$type<Record<string, unknown>>().default({}),
+  role: text("role").default("engineer"),
+  model: text("model"),
+  workspacePath: text("workspace_path"),
 });
 
 export const projects = pgTable("projects", {

@@ -20,6 +20,22 @@ const pgliteDb = drizzle(client, { schema });
  * execute all CREATE statements from schema directly on first run.
  */
 async function applySchema() {
+  // Always run incremental migrations for new columns
+  const incrementalAlters = [
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS adapter_type text NOT NULL DEFAULT 'openclaw_gateway'`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS adapter_config jsonb DEFAULT '{}'`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS role text DEFAULT 'engineer'`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS model text`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS workspace_path text`,
+  ];
+  for (const stmt of incrementalAlters) {
+    try {
+      await client.exec(stmt);
+    } catch {
+      // Safe to ignore — column may already exist
+    }
+  }
+
   if (existsSync(markerFile)) {
     console.log("[CrewCmd] Using PGlite (local) — data at .data/pglite");
     return;

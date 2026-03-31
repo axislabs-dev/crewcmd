@@ -116,12 +116,12 @@ export function AgentControlPanel({ callsign, onStatusChange }: AgentControlPane
             {config.label}
           </span>
           {status?.pid && (
-            <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+            <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
               PID {status.pid}
             </span>
           )}
           {runtimeStatus === "running" && status?.startedAt && (
-            <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+            <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
               {formatUptime(status.startedAt)}
             </span>
           )}

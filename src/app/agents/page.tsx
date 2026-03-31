@@ -136,7 +136,7 @@ export default function AgentsPage() {
                     e.stopPropagation();
                     setTaskAgent(agent);
                   }}
-                  className="absolute left-3 bottom-10 z-10 rounded bg-[var(--accent-soft)] px-2 py-1 text-[10px] tracking-wider text-[var(--accent)] opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-[var(--accent-medium)]"
+                  className="absolute left-3 bottom-10 z-10 rounded bg-[var(--accent-soft)] px-2 py-1 text-[11px] tracking-wider text-[var(--accent)] opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-[var(--accent-medium)]"
                 >
                   ASSIGN TASK
                 </button>

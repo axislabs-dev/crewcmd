@@ -179,17 +179,17 @@ export function AgentOutputViewer({ callsign, maxHeight = 500 }: AgentOutputView
       <div className="flex items-center justify-between bg-[#161b22] px-3 py-2 border-b border-[#2d333b]">
         <div className="flex items-center gap-2">
           <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-[#555]"}`} />
-          <span className="font-mono text-[10px] tracking-wider text-[#8b949e]">
+          <span className="font-mono text-[11px] tracking-wider text-[#8b949e]">
             {connected ? "LIVE" : "POLLING"}
           </span>
-          <span className="font-mono text-[10px] text-[#484f58]">
+          <span className="font-mono text-[11px] text-[#484f58]">
             {lines.length} lines
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAutoScroll(!autoScroll)}
-            className={`rounded px-2 py-1 font-mono text-[10px] tracking-wider transition-colors ${
+            className={`rounded px-2 py-1 font-mono text-[11px] tracking-wider transition-colors ${
               autoScroll
                 ? "bg-[#1f6feb]/20 text-[#58a6ff]"
                 : "text-[#8b949e] hover:text-[#c9d1d9]"
@@ -199,13 +199,13 @@ export function AgentOutputViewer({ callsign, maxHeight = 500 }: AgentOutputView
           </button>
           <button
             onClick={handleCopy}
-            className="rounded px-2 py-1 font-mono text-[10px] tracking-wider text-[#8b949e] transition-colors hover:text-[#c9d1d9]"
+            className="rounded px-2 py-1 font-mono text-[11px] tracking-wider text-[#8b949e] transition-colors hover:text-[#c9d1d9]"
           >
             COPY
           </button>
           <button
             onClick={handleClear}
-            className="rounded px-2 py-1 font-mono text-[10px] tracking-wider text-[#8b949e] transition-colors hover:text-[#c9d1d9]"
+            className="rounded px-2 py-1 font-mono text-[11px] tracking-wider text-[#8b949e] transition-colors hover:text-[#c9d1d9]"
           >
             CLEAR
           </button>
@@ -234,7 +234,7 @@ export function AgentOutputViewer({ callsign, maxHeight = 500 }: AgentOutputView
                   <td className="select-none whitespace-nowrap px-2 py-0 text-right align-top text-[11px] text-[#484f58] w-[1%]">
                     {line.id}
                   </td>
-                  <td className="select-none whitespace-nowrap px-2 py-0 align-top text-[10px] text-[#484f58] w-[1%]">
+                  <td className="select-none whitespace-nowrap px-2 py-0 align-top text-[11px] text-[#484f58] w-[1%]">
                     {formatTime(line.timestamp)}
                   </td>
                   <td

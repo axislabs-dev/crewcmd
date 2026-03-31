@@ -210,17 +210,17 @@ export default function AgentProfilePage() {
                 </h1>
                 <div className="flex items-center gap-1.5">
                   <span className={`status-dot status-dot-${agent.status}`} />
-                  <span className="font-mono text-[10px] tracking-wider text-[var(--text-secondary)]">
+                  <span className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)]">
                     {statusLabels[agent.status]}
                   </span>
                 </div>
                 {/* Adapter badge */}
-                <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[10px] tracking-wider text-[var(--text-tertiary)]">
+                <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[11px] tracking-wider text-[var(--text-tertiary)]">
                   {adapterLabels[agent.adapterType] || agent.adapterType.toUpperCase()}
                 </span>
                 {/* Runtime process badge */}
                 {runtimeLabel && (
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] tracking-wider ${
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] tracking-wider ${
                     runtimeStatus?.status === "running"
                       ? "bg-green-500/15 text-green-500"
                       : runtimeStatus?.status === "error"
@@ -236,7 +236,7 @@ export default function AgentProfilePage() {
 
               {agent.currentTask && (
                 <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[var(--bg-surface-hover)] px-3 py-1.5">
-                  <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                     WORKING ON:
                   </span>
                   <span className="text-xs text-[var(--text-primary)]">
@@ -246,11 +246,11 @@ export default function AgentProfilePage() {
               )}
 
               <div className="flex flex-wrap items-center gap-4">
-                <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                   Last active: {timeAgo(agent.lastActive)}
                 </span>
                 {reportsTo && (
-                  <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                     Reports to:{" "}
                     <Link
                       href={`/agents/${reportsTo.callsign.toLowerCase()}`}
@@ -324,25 +324,25 @@ export default function AgentProfilePage() {
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">Adapter</span>
+                  <span className="text-[11px] tracking-wider text-[var(--text-tertiary)] uppercase">Adapter</span>
                   <p className="mt-0.5 text-sm text-[var(--text-primary)]">
                     {adapterLabels[agent.adapterType] || agent.adapterType}
                   </p>
                 </div>
                 {agent.model && (
                   <div>
-                    <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">Model</span>
+                    <span className="text-[11px] tracking-wider text-[var(--text-tertiary)] uppercase">Model</span>
                     <p className="mt-0.5 font-mono text-sm text-[var(--text-primary)]">{agent.model}</p>
                   </div>
                 )}
                 {agent.workspacePath && (
                   <div>
-                    <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">Workspace</span>
+                    <span className="text-[11px] tracking-wider text-[var(--text-tertiary)] uppercase">Workspace</span>
                     <p className="mt-0.5 font-mono text-xs text-[var(--text-primary)] break-all">{agent.workspacePath}</p>
                   </div>
                 )}
                 <div>
-                  <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">Role</span>
+                  <span className="text-[11px] tracking-wider text-[var(--text-tertiary)] uppercase">Role</span>
                   <p className="mt-0.5 text-sm text-[var(--text-primary)] capitalize">{agent.role}</p>
                 </div>
               </div>
@@ -375,7 +375,7 @@ export default function AgentProfilePage() {
                     >
                       <span className="text-xl">{report.emoji}</span>
                       <span
-                        className="font-mono text-[10px] font-bold tracking-wider"
+                        className="font-mono text-[11px] font-bold tracking-wider"
                         style={{ color: report.color }}
                       >
                         {report.callsign.toUpperCase()}
@@ -545,14 +545,14 @@ export default function AgentProfilePage() {
 
               {agent.soulContent && (
                 <div>
-                  <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">Soul Content</span>
+                  <span className="text-[11px] tracking-wider text-[var(--text-tertiary)] uppercase">Soul Content</span>
                   <p className="mt-1 text-xs text-[var(--text-secondary)] italic leading-relaxed">
                     {agent.soulContent}
                   </p>
                 </div>
               )}
 
-              <p className="text-[10px] text-[var(--text-tertiary)]">
+              <p className="text-[11px] text-[var(--text-tertiary)]">
                 To edit this agent&apos;s configuration, use the agent management API or the edit form.
               </p>
             </div>
@@ -575,7 +575,7 @@ export default function AgentProfilePage() {
 function ConfigItem({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">{label}</span>
+      <span className="text-[11px] tracking-wider text-[var(--text-tertiary)] uppercase">{label}</span>
       <p className={`mt-0.5 text-sm text-[var(--text-primary)] ${mono ? "font-mono text-xs" : ""}`}>
         {value}
       </p>

@@ -91,7 +91,7 @@ export function AgentRuntimeBadge({ callsign, compact = false, onStartStop }: Ag
           e.stopPropagation();
           setShowPopover(!showPopover);
         }}
-        className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px] tracking-wider transition-colors hover:bg-[var(--bg-surface-hover)]"
+        className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] tracking-wider transition-colors hover:bg-[var(--bg-surface-hover)]"
       >
         {runtimeStatus === "running" && (
           <>

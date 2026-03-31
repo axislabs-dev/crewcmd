@@ -28,8 +28,9 @@ async function handleCheck() {
     path?: string;
   }> = {};
 
+  const entries = Object.entries(availability) as [string, { available: boolean; name: string }][];
   await Promise.all(
-    Object.entries(availability).map(async ([type, info]) => {
+    entries.map(async ([type, info]) => {
       detailed[type] = { available: info.available, name: info.name };
 
       const binary = CLI_BINARIES[type];

@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { AgentCard } from "@/components/agent-card";
 import { NewAgentDialog } from "@/components/new-agent-dialog";
+import { AdapterCheck } from "@/components/adapter-check";
+import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
+import { TaskDialog } from "@/components/task-dialog";
 import type { Agent, AgentStatus } from "@/lib/data";
 
 const statusFilters: { key: AgentStatus | "all"; label: string }[] = [
@@ -24,6 +27,7 @@ export default function AgentsPage() {
   const [statusFilter, setStatusFilter] = useState<AgentStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [showNewAgent, setShowNewAgent] = useState(false);
+  const [taskAgent, setTaskAgent] = useState<Agent | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -92,6 +96,9 @@ export default function AgentsPage() {
           </div>
         </div>
 
+        {/* Adapter availability banner */}
+        <AdapterCheck />
+
         <div className="flex flex-wrap gap-2">
           {statusFilters.map((sf) => (
             <button
@@ -116,7 +123,24 @@ export default function AgentsPage() {
         {agents.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filtered.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} />
+              <div key={agent.id} className="group/card relative">
+                <AgentCard agent={agent} />
+                {/* Runtime badge overlay */}
+                <div className="absolute right-3 bottom-10 z-10">
+                  <AgentRuntimeBadge callsign={agent.callsign.toLowerCase()} onStartStop={refresh} />
+                </div>
+                {/* Assign task button on hover */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTaskAgent(agent);
+                  }}
+                  className="absolute left-3 bottom-10 z-10 rounded bg-[var(--accent-soft)] px-2 py-1 text-[10px] tracking-wider text-[var(--accent)] opacity-0 transition-opacity group-hover/card:opacity-100 hover:bg-[var(--accent-medium)]"
+                >
+                  ASSIGN TASK
+                </button>
+              </div>
             ))}
             {filtered.length === 0 && (
               <div className="col-span-full py-12 text-center">
@@ -152,6 +176,13 @@ export default function AgentsPage() {
             refresh();
           }}
           onClose={() => setShowNewAgent(false)}
+        />
+      )}
+
+      {taskAgent && (
+        <TaskDialog
+          agent={taskAgent}
+          onClose={() => setTaskAgent(null)}
         />
       )}
     </div>

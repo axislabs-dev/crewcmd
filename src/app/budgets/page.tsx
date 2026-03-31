@@ -51,7 +51,10 @@ export default function BudgetsPage() {
       ]);
 
       if (budgetsRes.ok) setBudgets(await budgetsRes.json());
-      if (agentsRes.ok) setAgents(await agentsRes.json());
+      if (agentsRes.ok) {
+        const data = await agentsRes.json();
+        setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      }
       if (summaryRes.ok) setCostSummary(await summaryRes.json());
     } catch {
       // ignore

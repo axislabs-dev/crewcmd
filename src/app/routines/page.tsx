@@ -95,7 +95,10 @@ export default function RoutinesPage() {
         fetch("/api/agents"),
       ]);
       if (routinesRes.ok) setRoutines(await routinesRes.json());
-      if (agentsRes.ok) setAgents(await agentsRes.json());
+      if (agentsRes.ok) {
+        const data = await agentsRes.json();
+        setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      }
     } catch {
       // ignore
     } finally {

@@ -91,7 +91,10 @@ export default function EscalationsPage() {
         const all: ApprovalRequest[] = await escalationsRes.json();
         setActiveEscalations(all.filter((r) => r.requestType.startsWith("escalation:")));
       }
-      if (agentsRes.ok) setAgents(await agentsRes.json());
+      if (agentsRes.ok) {
+        const data = await agentsRes.json();
+        setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      }
     } catch {
       // ignore
     } finally {

@@ -105,7 +105,10 @@ export default function HeartbeatsPage() {
       ]);
       if (schedulesRes.ok) setSchedules(await schedulesRes.json());
       if (executionsRes.ok) setExecutions(await executionsRes.json());
-      if (agentsRes.ok) setAgents(await agentsRes.json());
+      if (agentsRes.ok) {
+        const data = await agentsRes.json();
+        setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      }
     } catch {
       // ignore
     } finally {

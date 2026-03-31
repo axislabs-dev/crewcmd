@@ -45,9 +45,11 @@ async function applySchema() {
       .filter(Boolean);
 
     for (const stmt of statements) {
-      if (stmt.startsWith("CREATE")) {
+      // Strip leading SQL comments to detect statement type
+      const stripped = stmt.replace(/^--.*\n?/gm, "").trim();
+      if (stripped.startsWith("CREATE")) {
         createStatements.push(stmt);
-      } else if (stmt.startsWith("ALTER") || stmt.startsWith("DO $$")) {
+      } else if (stripped.startsWith("ALTER") || stripped.startsWith("DO $$")) {
         alterStatements.push(stmt);
       }
     }

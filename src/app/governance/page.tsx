@@ -88,7 +88,10 @@ export default function GovernancePage() {
         const all: ApprovalRequest[] = await historyRes.json();
         setHistoryRequests(all.filter((r) => r.status !== "pending"));
       }
-      if (agentsRes.ok) setAgents(await agentsRes.json());
+      if (agentsRes.ok) {
+        const data = await agentsRes.json();
+        setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      }
     } catch {
       // ignore
     } finally {

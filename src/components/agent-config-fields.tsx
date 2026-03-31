@@ -59,21 +59,15 @@ export const GATEWAY_ADAPTERS = ["openclaw_gateway"];
 export const HTTP_ADAPTERS = ["http"];
 export const OPENROUTER_ADAPTERS = ["openrouter"];
 
-const MODELS_BY_ADAPTER: Record<string, string[]> = {
-  claude_local: ["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
-  codex_local: ["o4-mini", "o3", "gpt-4.1"],
-  gemini_local: ["gemini-2.5-pro", "gemini-2.5-flash"],
-  cursor: ["claude-sonnet-4-20250514", "gpt-4.1"],
-  openrouter: [
-    "anthropic/claude-sonnet-4-20250514",
-    "anthropic/claude-opus-4-20250514",
-    "openai/gpt-4.1",
-    "openai/o4-mini",
-    "google/gemini-2.5-pro",
-    "google/gemini-2.5-flash",
-    "deepseek/deepseek-r1",
-    "meta-llama/llama-4-maverick",
-  ],
+const MODEL_PLACEHOLDERS: Record<string, string> = {
+  claude_local: "e.g. claude-sonnet-4-20250514",
+  codex_local: "e.g. o4-mini",
+  gemini_local: "e.g. gemini-2.5-pro",
+  cursor: "e.g. claude-sonnet-4-20250514",
+  openrouter: "e.g. anthropic/claude-sonnet-4-20250514",
+  openclaw_gateway: "e.g. claude-sonnet-4-20250514",
+  opencode_local: "e.g. claude-sonnet-4-20250514",
+  pi_local: "e.g. claude-sonnet-4-20250514",
 };
 
 const COMMAND_PLACEHOLDERS: Record<string, string> = {
@@ -257,7 +251,7 @@ function Dropdown({
 
 // ─── Model Combo (dropdown + free text) ─────────────────────────────────
 
-function ModelCombo({
+function ModelInput({
   value,
   adapterType,
   onChange,
@@ -266,67 +260,16 @@ function ModelCombo({
   adapterType: string;
   onChange: (val: string) => void;
 }) {
-  const presets = MODELS_BY_ADAPTER[adapterType] ?? [];
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+  const placeholder = MODEL_PLACEHOLDERS[adapterType] ?? "Model name";
 
   return (
-    <div ref={ref} className="relative">
-      <div className="relative">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => presets.length > 0 && setOpen(true)}
-          placeholder={presets.length > 0 ? presets[0] : "Model name"}
-          className={inputClass}
-        />
-        {presets.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
-          >
-            <svg
-              className={`h-3.5 w-3.5 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-            </svg>
-          </button>
-        )}
-      </div>
-      {open && presets.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-[var(--border-medium)] bg-[#0d1117] py-1 shadow-xl">
-          {presets.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                onChange(m);
-                setOpen(false);
-              }}
-              className={`w-full px-3 py-1.5 text-left font-mono text-sm transition-colors hover:bg-[var(--bg-surface-hover)] ${
-                m === value ? "text-[#00f0ff]" : "text-[var(--text-primary)]"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={inputClass}
+    />
   );
 }
 
@@ -551,6 +494,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
   // Reports-to options
   const reportsToOptions = [
     { value: "", label: "None" },
+    { value: "me", label: "Me (you)" },
     ...(existingAgents ?? []).map((a) => ({
       value: a.callsign,
       label: `${a.name} (${a.callsign})`,
@@ -653,7 +597,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
             <div>
               <label className={labelClass}>MODEL</label>
               <div className="mt-1">
-                <ModelCombo
+                <ModelInput
                   value={values.model}
                   adapterType={values.adapterType}
                   onChange={(v) => onChange({ model: v })}

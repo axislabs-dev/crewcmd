@@ -47,6 +47,10 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "settings", label: "SETTINGS" },
 ];
 
+/**
+ * Full agent detail page with tabs for overview, terminal, tasks, and settings.
+ * Displays agent identity, runtime control panel, and tabbed content sections.
+ */
 export default function AgentProfilePage() {
   const params = useParams<{ callsign: string }>();
   const callsign = params.callsign;
@@ -109,7 +113,7 @@ export default function AgentProfilePage() {
           <p className="text-lg text-[var(--text-tertiary)]">AGENT NOT FOUND</p>
           <Link
             href="/agents"
-            className="mt-2 inline-block font-mono text-xs text-[var(--accent)] transition-colors hover:text-neo/80"
+            className="mt-2 inline-block font-mono text-xs text-[var(--accent)] transition-colors hover:text-[var(--accent-hover)]"
           >
             &larr; BACK TO AGENTS
           </Link>
@@ -121,7 +125,12 @@ export default function AgentProfilePage() {
   if (!agent) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-xs text-[var(--text-tertiary)] animate-pulse">LOADING...</p>
+        <div className="w-full max-w-5xl space-y-4 px-6">
+          <div className="glass-card h-40 animate-pulse rounded-xl" />
+          <div className="glass-card h-12 animate-pulse rounded-xl" />
+          <div className="glass-card h-10 animate-pulse rounded-xl" />
+          <div className="glass-card h-64 animate-pulse rounded-xl" />
+        </div>
       </div>
     );
   }
@@ -371,7 +380,7 @@ export default function AgentProfilePage() {
                       >
                         {report.callsign.toUpperCase()}
                       </span>
-                      <span className="text-[9px] text-[var(--text-tertiary)]">
+                      <span className="text-[11px] text-[var(--text-tertiary)]">
                         {report.title}
                       </span>
                       <span className={`status-dot status-dot-${report.status} mt-1`} />
@@ -398,15 +407,15 @@ export default function AgentProfilePage() {
                           <p className="text-xs font-medium text-[var(--text-primary)]">
                             {task.title}
                           </p>
-                          <span className={`priority-${task.priority} ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase`}>
+                          <span className={`priority-${task.priority} ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] uppercase`}>
                             {task.priority}
                           </span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
-                          <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)] uppercase">
+                          <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
                             {task.status.replace("_", " ")}
                           </span>
-                          <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
+                          <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                             {timeAgo(task.updatedAt)}
                           </span>
                         </div>
@@ -437,10 +446,10 @@ export default function AgentProfilePage() {
                         />
                         <div className="ml-2">
                           <div className="mb-0.5 flex items-center gap-2">
-                            <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)] uppercase">
+                            <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
                               {activity.actionType}
                             </span>
-                            <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
+                            <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                               {timeAgo(activity.createdAt)}
                             </span>
                           </div>
@@ -489,7 +498,7 @@ export default function AgentProfilePage() {
                       <p className="text-xs font-medium text-[var(--text-primary)]">
                         {task.title}
                       </p>
-                      <span className={`priority-${task.priority} ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase`}>
+                      <span className={`priority-${task.priority} ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] uppercase`}>
                         {task.priority}
                       </span>
                     </div>
@@ -499,10 +508,10 @@ export default function AgentProfilePage() {
                       </p>
                     )}
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)] uppercase">
+                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
                         {task.status.replace("_", " ")}
                       </span>
-                      <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
+                      <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                         {timeAgo(task.updatedAt)}
                       </span>
                     </div>

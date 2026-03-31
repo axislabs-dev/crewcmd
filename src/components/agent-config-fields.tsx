@@ -18,13 +18,39 @@ export const ADAPTER_TYPES = [
 ];
 
 export const ROLES = [
+  // Leadership
   { value: "ceo", label: "CEO" },
   { value: "cto", label: "CTO" },
+  { value: "cfo", label: "CFO" },
+  { value: "coo", label: "COO" },
+  { value: "cmo", label: "CMO" },
+  { value: "vp", label: "VP" },
+  { value: "manager", label: "Manager" },
+  // Engineering
   { value: "engineer", label: "Engineer" },
-  { value: "designer", label: "Designer" },
-  { value: "qa", label: "QA" },
+  { value: "architect", label: "Architect" },
   { value: "devops", label: "DevOps" },
+  { value: "qa", label: "QA" },
+  // Creative & Content
+  { value: "designer", label: "Designer" },
+  { value: "writer", label: "Writer" },
+  { value: "copywriter", label: "Copywriter" },
+  { value: "content_strategist", label: "Content Strategist" },
+  { value: "social_media", label: "Social Media" },
+  // Business
+  { value: "analyst", label: "Analyst" },
   { value: "researcher", label: "Researcher" },
+  { value: "sales", label: "Sales" },
+  { value: "support", label: "Support" },
+  { value: "recruiter", label: "Recruiter" },
+  { value: "legal", label: "Legal" },
+  { value: "accountant", label: "Accountant" },
+  // Operations
+  { value: "ops", label: "Operations" },
+  { value: "coordinator", label: "Coordinator" },
+  { value: "assistant", label: "Assistant" },
+  // Generic
+  { value: "specialist", label: "Specialist" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -746,29 +772,35 @@ export function AgentConfigFields({ values, onChange, existingAgents }: AgentCon
       )}
 
       {/* ── PROMPT & INSTRUCTIONS ── */}
-      {isLocal && (
-        <Section title="Prompt & Instructions">
-          <div className="space-y-3">
-            <div>
-              <label className={labelClass}>PROMPT TEMPLATE</label>
-              <textarea
-                value={values.promptTemplate}
-                onChange={(e) => onChange({ promptTemplate: e.target.value })}
-                rows={6}
-                placeholder={"You are {{ agent.name }}..."}
-                className={`mt-1 ${inputClass} font-mono`}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>INSTRUCTIONS FILE</label>
-              <input
-                type="text"
-                value={values.instructionsFile}
-                onChange={(e) => onChange({ instructionsFile: e.target.value })}
-                placeholder="/path/to/AGENTS.md"
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
+      <Section title="Prompt & Instructions">
+        <div className="space-y-3">
+          <div>
+            <label className={labelClass}>PROMPT TEMPLATE</label>
+            <textarea
+              value={values.promptTemplate}
+              onChange={(e) => onChange({ promptTemplate: e.target.value })}
+              rows={6}
+              placeholder={"You are {{ agent.name }}. Your role is {{ agent.role }}..."}
+              className={`mt-1 ${inputClass} font-mono`}
+            />
+            <p className="mt-1 font-mono text-[11px] text-white/35">
+              Defines the agent&apos;s personality and behavior. Supports variables like {"{{ agent.name }}"}, {"{{ agent.role }}"}.
+            </p>
+          </div>
+          <div>
+            <label className={labelClass}>INSTRUCTIONS FILE</label>
+            <input
+              type="text"
+              value={values.instructionsFile}
+              onChange={(e) => onChange({ instructionsFile: e.target.value })}
+              placeholder="/path/to/AGENTS.md"
+              className={`mt-1 ${inputClass}`}
+            />
+            <p className="mt-1 font-mono text-[11px] text-white/35">
+              Path to a markdown file injected into the agent&apos;s system prompt at runtime.
+            </p>
+          </div>
+          {isLocal && (
             <div>
               <label className={labelClass}>EXTRA CLI ARGS</label>
               <input
@@ -779,16 +811,19 @@ export function AgentConfigFields({ values, onChange, existingAgents }: AgentCon
                 className={`mt-1 ${inputClass}`}
               />
             </div>
-          </div>
-        </Section>
-      )}
+          )}
+        </div>
+      </Section>
 
       {/* ── ENVIRONMENT VARIABLES ── */}
-      {isLocal && (
-        <Section title="Environment Variables">
-          <EnvVarEditor envVars={values.envVars} onChange={(v) => onChange({ envVars: v })} />
-        </Section>
-      )}
+      <Section title="Environment Variables">
+        <EnvVarEditor envVars={values.envVars} onChange={(v) => onChange({ envVars: v })} />
+        <p className="mt-2 font-mono text-[11px] text-white/35">
+          {isLocal
+            ? "Injected into the agent\u2019s process environment at runtime."
+            : "Passed to the agent as context variables."}
+        </p>
+      </Section>
 
       {/* ── RUN POLICY ── */}
       <Section title="Run Policy">

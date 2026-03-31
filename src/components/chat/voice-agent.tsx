@@ -277,7 +277,7 @@ export function VoiceAgent({
   return (
     <div className="flex flex-col items-center gap-4 py-4">
       {error && (
-        <div className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 font-mono text-[11px] text-red-400">
+        <div className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-400">
           {error}
         </div>
       )}
@@ -310,7 +310,7 @@ export function VoiceAgent({
         <div
           className={`relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition-all duration-300 ${
             state === "idle"
-              ? "border-white/15 bg-white/[0.05] hover:border-white/25 hover:bg-white/[0.08] cursor-pointer"
+              ? "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] cursor-pointer"
               : state === "listening"
                 ? "border-neo bg-neo/15 cursor-pointer"
                 : state === "processing"
@@ -339,7 +339,7 @@ export function VoiceAgent({
           {state === "idle" ? (
             // Power icon
             <svg
-              className="h-8 w-8 text-white/40"
+              className="h-8 w-8 text-[var(--text-tertiary)]"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -406,11 +406,11 @@ export function VoiceAgent({
       {/* State label */}
       <div className="flex flex-col items-center gap-1">
         <span
-          className={`font-mono text-[11px] tracking-[0.2em] font-medium transition-colors duration-300 ${
+          className={`text-[11px] tracking-[0.2em] font-medium transition-colors duration-300 ${
             state === "idle"
-              ? "text-white/30"
+              ? "text-[var(--text-tertiary)]"
               : state === "listening"
-                ? "text-neo"
+                ? "text-[var(--accent)]"
                 : state === "processing"
                   ? "text-amber-400"
                   : "text-violet-400"
@@ -419,7 +419,7 @@ export function VoiceAgent({
           {stateLabel[state]}
         </span>
         {isActive && (
-          <span className="font-mono text-[9px] tracking-wider text-white/20">
+          <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">
             {state === "speaking"
               ? "SPEAK TO INTERRUPT"
               : state === "listening"
@@ -437,10 +437,10 @@ export function VoiceAgent({
               key={i}
               className={`w-[3px] rounded-full transition-all duration-75 ${
                 state === "listening"
-                  ? "bg-neo"
+                  ? "bg-[var(--accent)]"
                   : state === "speaking"
                     ? "bg-violet-400"
-                    : "bg-white/20"
+                    : "bg-[var(--text-tertiary)]"
               }`}
               style={{
                 height: `${Math.max(

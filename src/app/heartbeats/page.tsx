@@ -77,7 +77,7 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-emerald-500/10 text-emerald-400",
   failed: "bg-red-500/10 text-red-400",
   timed_out: "bg-amber-500/10 text-amber-400",
-  cancelled: "bg-white/5 text-white/25",
+  cancelled: "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]",
 };
 
 export default function HeartbeatsPage() {
@@ -211,7 +211,7 @@ export default function HeartbeatsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -220,8 +220,8 @@ export default function HeartbeatsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to manage heartbeat schedules.
           </p>
         </div>
@@ -234,27 +234,27 @@ export default function HeartbeatsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-wider text-neo">HEARTBEATS</h1>
-          <p className="mt-1 font-mono text-xs text-white/30">
+          <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">HEARTBEATS</h1>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Agent wake schedules &amp; execution history
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1 rounded-lg bg-white/[0.02] p-1">
+      <div className="mt-6 flex gap-1 rounded-lg bg-[var(--bg-surface)] p-1">
         <button
           onClick={() => setTab("schedules")}
-          className={`flex-1 rounded-md px-4 py-2 font-mono text-xs tracking-wider transition-colors ${
-            tab === "schedules" ? "bg-neo/10 text-neo" : "text-white/30 hover:text-white/50"
+          className={`flex-1 rounded-md px-4 py-2 text-xs tracking-wider transition-colors ${
+            tab === "schedules" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           SCHEDULES
         </button>
         <button
           onClick={() => setTab("history")}
-          className={`flex-1 rounded-md px-4 py-2 font-mono text-xs tracking-wider transition-colors ${
-            tab === "history" ? "bg-neo/10 text-neo" : "text-white/30 hover:text-white/50"
+          className={`flex-1 rounded-md px-4 py-2 text-xs tracking-wider transition-colors ${
+            tab === "history" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           EXECUTION HISTORY
@@ -270,12 +270,12 @@ export default function HeartbeatsPage() {
       {tab === "schedules" && (
         <div className="mt-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
               AGENT SCHEDULES
             </h2>
             <button
               onClick={openCreate}
-              className="rounded-lg bg-neo/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-neo transition-colors hover:bg-neo/30"
+              className="rounded-lg bg-[var(--accent-soft)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
             >
               + ADD SCHEDULE
             </button>
@@ -283,9 +283,9 @@ export default function HeartbeatsPage() {
 
           <div className="mt-3 space-y-2">
             {schedules.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-white/[0.08] py-12 text-center">
-                <p className="font-mono text-xs text-white/30">No heartbeat schedules configured</p>
-                <p className="mt-1 font-mono text-[10px] text-white/20">
+              <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
+                <p className="text-xs text-[var(--text-tertiary)]">No heartbeat schedules configured</p>
+                <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                   Schedules define when agents wake up to check for work.
                 </p>
               </div>
@@ -297,33 +297,33 @@ export default function HeartbeatsPage() {
                     key={s.id}
                     className={`group flex items-center gap-4 rounded-lg border p-4 transition-colors ${
                       s.enabled
-                        ? "border-white/[0.04] bg-white/[0.01] hover:border-white/[0.08] hover:bg-white/[0.02]"
-                        : "border-white/[0.02] bg-white/[0.005] opacity-60"
+                        ? "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-surface)] opacity-60"
                     }`}
                   >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neo/10">
-                      <svg className="h-4 w-4 text-neo" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
+                      <svg className="h-4 w-4 text-[var(--accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
                       </svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-mono text-xs font-bold text-white/70">
+                      <p className="font-mono text-xs font-bold text-[var(--text-primary)]">
                         {getAgentName(s.agentId)}
                       </p>
-                      <p className="font-mono text-[9px] text-white/25">
+                      <p className="font-mono text-[9px] text-[var(--text-tertiary)]">
                         {cronToHuman(s.schedule)} &middot; {s.timezone} &middot; max {s.maxDurationMinutes}m
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
-                      <span className="font-mono text-[9px] text-white/20">
+                      <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                         {s.lastExecutedAt ? `Last: ${timeAgo(s.lastExecutedAt)}` : "Never run"}
                       </span>
-                      <span className="font-mono text-[9px] text-white/20">
+                      <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                         {s.nextExecutionAt ? `Next: ${timeUntil(s.nextExecutionAt)}` : "—"}
                       </span>
                     </div>
                     {lastExec && (
-                      <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${STATUS_STYLES[lastExec.status] ?? "bg-white/5 text-white/25"}`}>
+                      <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${STATUS_STYLES[lastExec.status] ?? "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"}`}>
                         {lastExec.status.toUpperCase().replace("_", " ")}
                       </span>
                     )}
@@ -331,7 +331,7 @@ export default function HeartbeatsPage() {
                     <button
                       onClick={() => handleToggle(s)}
                       className={`h-5 w-9 rounded-full transition-colors ${
-                        s.enabled ? "bg-neo/40" : "bg-white/[0.08]"
+                        s.enabled ? "bg-neo/40" : "bg-[var(--bg-tertiary)]"
                       }`}
                     >
                       <div
@@ -344,7 +344,7 @@ export default function HeartbeatsPage() {
                       <button
                         onClick={() => handleTrigger(s.id)}
                         title="Trigger Now"
-                        className="rounded p-1 text-neo/50 hover:bg-neo/10 hover:text-neo"
+                        className="rounded p-1 text-[var(--accent)]/50 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
                       >
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
@@ -352,7 +352,7 @@ export default function HeartbeatsPage() {
                       </button>
                       <button
                         onClick={() => openEdit(s)}
-                        className="rounded p-1 text-white/25 hover:bg-white/[0.06] hover:text-white/50"
+                        className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                       >
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
@@ -378,30 +378,30 @@ export default function HeartbeatsPage() {
       {/* History Tab */}
       {tab === "history" && (
         <div className="mt-4">
-          <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
             RECENT EXECUTIONS
           </h2>
           <div className="mt-3 space-y-1">
             {executions.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-white/[0.08] py-8 text-center">
-                <p className="font-mono text-xs text-white/30">No executions yet</p>
+              <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-8 text-center">
+                <p className="text-xs text-[var(--text-tertiary)]">No executions yet</p>
               </div>
             ) : (
               executions.map((exec) => (
                 <div key={exec.id}>
                   <div
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.01] p-3 transition-colors hover:bg-white/[0.02]"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 transition-colors hover:bg-[var(--bg-surface)]"
                     onClick={() => setExpandedExecution(expandedExecution === exec.id ? null : exec.id)}
                   >
-                    <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${STATUS_STYLES[exec.status] ?? "bg-white/5 text-white/25"}`}>
+                    <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${STATUS_STYLES[exec.status] ?? "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"}`}>
                       {exec.status.toUpperCase().replace("_", " ")}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <span className="font-mono text-[10px] text-white/50">
+                      <span className="font-mono text-[10px] text-[var(--text-secondary)]">
                         {getAgentName(exec.agentId)}
                       </span>
                     </div>
-                    <div className="flex gap-4 font-mono text-[9px] text-white/20">
+                    <div className="flex gap-4 font-mono text-[9px] text-[var(--text-tertiary)]">
                       <span>Tasks: {exec.tasksDiscovered} found / {exec.tasksCompleted} done</span>
                       <span>{timeAgo(exec.startedAt)}</span>
                     </div>
@@ -412,12 +412,12 @@ export default function HeartbeatsPage() {
                         <p className="font-mono text-[10px] text-red-400">Error: {exec.error}</p>
                       )}
                       {exec.actionsTaken && (
-                        <pre className="mt-1 max-h-40 overflow-auto font-mono text-[10px] text-white/40">
+                        <pre className="mt-1 max-h-40 overflow-auto font-mono text-[10px] text-[var(--text-tertiary)]">
                           {JSON.stringify(exec.actionsTaken, null, 2)}
                         </pre>
                       )}
                       {!exec.error && !exec.actionsTaken && (
-                        <p className="font-mono text-[10px] text-white/20">No details available</p>
+                        <p className="text-[10px] text-[var(--text-tertiary)]">No details available</p>
                       )}
                     </div>
                   )}
@@ -431,19 +431,19 @@ export default function HeartbeatsPage() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-bg-primary p-6 shadow-2xl">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-6 shadow-2xl">
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
               {editSchedule ? "EDIT SCHEDULE" : "ADD HEARTBEAT SCHEDULE"}
             </h2>
 
             <div className="mt-4 space-y-3">
               {!editSchedule && (
                 <div>
-                  <label className="block font-mono text-[10px] tracking-wider text-white/40">AGENT</label>
+                  <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">AGENT</label>
                   <select
                     value={formAgentId}
                     onChange={(e) => setFormAgentId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                    className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                   >
                     <option value="">Select agent...</option>
                     {agents.map((a) => (
@@ -456,7 +456,7 @@ export default function HeartbeatsPage() {
               )}
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">SCHEDULE</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">SCHEDULE</label>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {Object.entries(CRON_PRESETS).map(([label, cron]) => (
                     <button
@@ -464,8 +464,8 @@ export default function HeartbeatsPage() {
                       onClick={() => setFormCron(cron)}
                       className={`rounded px-2 py-1 font-mono text-[9px] transition-colors ${
                         formCron === cron
-                          ? "bg-neo/20 text-neo"
-                          : "bg-white/[0.04] text-white/30 hover:bg-white/[0.08]"
+                          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                          : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]"
                       }`}
                     >
                       {label}
@@ -477,27 +477,27 @@ export default function HeartbeatsPage() {
                   value={formCron}
                   onChange={(e) => setFormCron(e.target.value)}
                   placeholder="0 */4 * * *"
-                  className="mt-2 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-2 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">TIMEZONE</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">TIMEZONE</label>
                 <input
                   type="text"
                   value={formTimezone}
                   onChange={(e) => setFormTimezone(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">MAX DURATION (MINUTES)</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">MAX DURATION (MINUTES)</label>
                 <input
                   type="number"
                   value={formMaxDuration}
                   onChange={(e) => setFormMaxDuration(parseInt(e.target.value, 10) || 30)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
             </div>
@@ -505,14 +505,14 @@ export default function HeartbeatsPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formCron || (!editSchedule && !formAgentId)}
-                className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : editSchedule ? "UPDATE" : "CREATE"}
               </button>

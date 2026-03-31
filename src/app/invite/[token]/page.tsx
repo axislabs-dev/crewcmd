@@ -45,22 +45,22 @@ export default function InviteAcceptPage() {
       {state === "loading" && (
         <>
           <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
-          <p className="font-mono text-sm text-white/40">Processing invite...</p>
+          <p className="text-sm text-[var(--text-tertiary)]">Processing invite...</p>
         </>
       )}
 
       {state === "login" && (
         <>
           <div className="mb-6 text-5xl">🔑</div>
-          <h1 className="mb-2 font-mono text-xl font-bold tracking-wider text-white/90">
+          <h1 className="mb-2 font-mono text-xl font-bold tracking-wider text-[var(--text-primary)]">
             INVITE LINK
           </h1>
-          <p className="mb-6 max-w-sm font-mono text-sm text-white/40">
+          <p className="mb-6 max-w-sm text-sm text-[var(--text-tertiary)]">
             Sign in with your GitHub account to accept this invite.
           </p>
           <a
             href="/"
-            className="rounded-lg border border-neo/30 bg-neo/10 px-6 py-2.5 font-mono text-xs font-bold tracking-wider text-neo transition hover:bg-neo/20"
+            className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-6 py-2.5 font-mono text-xs font-bold tracking-wider text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
           >
             SIGN IN WITH GITHUB
           </a>
@@ -70,13 +70,13 @@ export default function InviteAcceptPage() {
       {state === "success" && (
         <>
           <div className="mb-6 text-5xl">✅</div>
-          <h1 className="mb-2 font-mono text-xl font-bold tracking-wider text-white/90">
+          <h1 className="mb-2 font-mono text-xl font-bold tracking-wider text-[var(--text-primary)]">
             ACCESS GRANTED
           </h1>
-          <p className="mb-6 font-mono text-sm text-white/40">{message}</p>
+          <p className="mb-6 text-sm text-[var(--text-tertiary)]">{message}</p>
           <a
             href="/dashboard"
-            className="rounded-lg border border-neo/30 bg-neo/10 px-6 py-2.5 font-mono text-xs font-bold tracking-wider text-neo transition hover:bg-neo/20"
+            className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-6 py-2.5 font-mono text-xs font-bold tracking-wider text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
           >
             ENTER COMMAND CENTER
           </a>
@@ -86,13 +86,13 @@ export default function InviteAcceptPage() {
       {state === "error" && (
         <>
           <div className="mb-6 text-5xl">⚠️</div>
-          <h1 className="mb-2 font-mono text-xl font-bold tracking-wider text-white/90">
+          <h1 className="mb-2 font-mono text-xl font-bold tracking-wider text-[var(--text-primary)]">
             INVITE ERROR
           </h1>
           <p className="mb-6 font-mono text-sm text-red-400/70">{message}</p>
           <a
             href="/"
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-6 py-2 font-mono text-xs tracking-wider text-white/50 transition hover:border-white/20 hover:text-white/70"
+            className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-6 py-2 text-xs tracking-wider text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
           >
             ← BACK TO LOGIN
           </a>

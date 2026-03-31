@@ -16,7 +16,7 @@ export default function WorkspacePage() {
   return (
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent-medium)] border-t-neo" />
       </div>
     }>
       <WorkspaceContent />
@@ -121,7 +121,7 @@ function WorkspaceContent() {
               <li key={node.path}>
                 <button
                   onClick={() => toggleDir(node.path)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 font-mono text-[11px] tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/60"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                 >
                   <svg
                     className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -138,7 +138,7 @@ function WorkspaceContent() {
                   <span>{node.name}/</span>
                 </button>
                 {expanded && node.children && (
-                  <div className="ml-3 border-l border-white/[0.06] pl-2">
+                  <div className="ml-3 border-l border-[var(--border-subtle)] pl-2">
                     {renderFileTree(node.children)}
                   </div>
                 )}
@@ -153,8 +153,8 @@ function WorkspaceContent() {
                 onClick={() => loadFile(node.path)}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 font-mono text-[11px] tracking-wider transition-colors ${
                   isSelected
-                    ? "bg-neo/10 text-neo"
-                    : "text-white/50 hover:bg-white/[0.04] hover:text-white/70"
+                    ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -174,10 +174,10 @@ function WorkspaceContent() {
       <div className="flex-1 p-4 sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-white/80">
+            <h1 className="text-lg font-bold tracking-[0.15em] text-[var(--text-primary)]">
               WORKSPACE
             </h1>
-            <p className="font-mono text-[10px] tracking-wider text-white/30">
+            <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
               NEO&apos;S MEMORY FILES
             </p>
           </div>
@@ -185,17 +185,17 @@ function WorkspaceContent() {
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent-medium)] border-t-neo" />
           </div>
         ) : (
           <div className="flex gap-4" style={{ height: "calc(100vh - 140px)" }}>
             {/* Left pane: file tree */}
             <div className="glass-card w-64 shrink-0 overflow-y-auto p-3">
-              <div className="mb-3 font-mono text-[9px] tracking-[0.2em] text-white/25">
+              <div className="mb-3 text-[9px] tracking-[0.2em] text-[var(--text-tertiary)]">
                 FILES
               </div>
               {tree.length === 0 ? (
-                <p className="px-2 font-mono text-[10px] text-white/20">
+                <p className="px-2 font-mono text-[10px] text-[var(--text-tertiary)]">
                   No workspace files found
                 </p>
               ) : (
@@ -208,24 +208,24 @@ function WorkspaceContent() {
               {!selectedFile ? (
                 <div className="flex flex-1 items-center justify-center">
                   <div className="text-center">
-                    <svg className="mx-auto mb-3 h-10 w-10 text-white/10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <svg className="mx-auto mb-3 h-10 w-10 text-[var(--text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                     </svg>
-                    <p className="font-mono text-[11px] text-white/25">
+                    <p className="text-[11px] text-[var(--text-tertiary)]">
                       Select a file to view or edit
                     </p>
                   </div>
                 </div>
               ) : fileLoading ? (
                 <div className="flex flex-1 items-center justify-center">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent-medium)] border-t-neo" />
                 </div>
               ) : (
                 <>
                   {/* Toolbar */}
-                  <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+                  <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-2.5">
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-[11px] tracking-wider text-white/60">
+                      <span className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)]">
                         {selectedFile}
                       </span>
                       {hasChanges && (
@@ -240,13 +240,13 @@ function WorkspaceContent() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="flex overflow-hidden rounded-lg border border-white/[0.08]">
+                      <div className="flex overflow-hidden rounded-lg border border-[var(--border-medium)]">
                         <button
                           onClick={() => setRawMode(false)}
                           className={`px-3 py-1 font-mono text-[10px] tracking-wider transition-colors ${
                             !rawMode
-                              ? "bg-white/[0.08] text-white/70"
-                              : "text-white/30 hover:text-white/50"
+                              ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                              : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                           }`}
                         >
                           RENDER
@@ -255,8 +255,8 @@ function WorkspaceContent() {
                           onClick={() => setRawMode(true)}
                           className={`px-3 py-1 font-mono text-[10px] tracking-wider transition-colors ${
                             rawMode
-                              ? "bg-white/[0.08] text-white/70"
-                              : "text-white/30 hover:text-white/50"
+                              ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                              : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                           }`}
                         >
                           RAW
@@ -265,7 +265,7 @@ function WorkspaceContent() {
                       <button
                         onClick={saveFile}
                         disabled={saving || !hasChanges}
-                        className="rounded-lg bg-neo/20 px-4 py-1.5 font-mono text-[10px] tracking-wider text-neo transition-all duration-200 hover:bg-neo/30 disabled:opacity-30"
+                        className="rounded-lg bg-[var(--accent-soft)] px-4 py-1.5 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-all duration-200 hover:bg-[var(--accent-medium)] disabled:opacity-30"
                       >
                         {saving ? "SAVING..." : "SAVE"}
                       </button>
@@ -278,11 +278,11 @@ function WorkspaceContent() {
                       <textarea
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
-                        className="h-full w-full resize-none bg-transparent p-4 font-mono text-xs leading-relaxed text-white/70 outline-none"
+                        className="h-full w-full resize-none bg-transparent p-4 font-mono text-xs leading-relaxed text-[var(--text-primary)] outline-none"
                         spellCheck={false}
                       />
                     ) : (
-                      <div className="prose prose-invert max-w-none p-4 font-mono text-xs leading-relaxed text-white/60 prose-headings:font-mono prose-headings:tracking-wider prose-headings:text-white/80 prose-h1:text-base prose-h2:text-sm prose-h3:text-xs prose-p:text-white/60 prose-a:text-neo prose-strong:text-white/70 prose-code:rounded prose-code:bg-white/[0.06] prose-code:px-1 prose-code:py-0.5 prose-code:text-neo/80 prose-pre:border prose-pre:border-white/[0.06] prose-pre:bg-white/[0.03] prose-li:text-white/60 prose-hr:border-white/[0.08]">
+                      <div className="prose prose-invert max-w-none p-4 font-mono text-xs leading-relaxed text-[var(--text-secondary)] prose-headings:font-mono prose-headings:tracking-wider prose-headings:text-[var(--text-primary)] prose-h1:text-base prose-h2:text-sm prose-h3:text-xs prose-p:text-[var(--text-secondary)] prose-a:text-[var(--accent)] prose-strong:text-[var(--text-primary)] prose-code:rounded prose-code:bg-[var(--bg-surface-hover)] prose-code:px-1 prose-code:py-0.5 prose-code:text-[var(--accent)]/80 prose-pre:border prose-pre:border-[var(--border-subtle)] prose-pre:bg-[var(--bg-surface)] prose-li:text-[var(--text-secondary)] prose-hr:border-[var(--border-medium)]">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {content}
                         </ReactMarkdown>

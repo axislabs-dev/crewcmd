@@ -104,24 +104,24 @@ export default function TasksPage() {
     <div className="flex min-h-screen flex-col">
       {/* Horizontal scroll container syncs action bar with kanban scroll */}
       <div className={viewMode === "board" ? "overflow-x-auto" : ""}>
-        <nav className={`border-b border-white/[0.06] px-3 py-2 sm:px-6 sm:py-3 ${viewMode === "board" ? "min-w-max" : ""}`}>
+        <nav className={`border-b border-[var(--border-subtle)] px-3 py-2 sm:px-6 sm:py-3 ${viewMode === "board" ? "min-w-max" : ""}`}>
           {/* Mobile: compact single-row layout */}
           <div className="flex items-center justify-between gap-2 sm:hidden">
             <div className="flex items-center gap-2">
-              <Link href="/" className="font-mono text-[10px] text-white/40 hover:text-neo">
+              <Link href="/" className="font-mono text-[10px] text-[var(--text-tertiary)] hover:text-[var(--accent)]">
                 MC
               </Link>
-              <span className="font-mono text-[10px] text-white/20">/</span>
-              <span className="font-mono text-[10px] font-bold text-white/70">TASKS</span>
-              <span className="font-mono text-[10px] text-white/25">({tasks.length})</span>
+              <span className="font-mono text-[10px] text-[var(--text-tertiary)]">/</span>
+              <span className="font-mono text-[10px] font-bold text-[var(--text-primary)]">TASKS</span>
+              <span className="font-mono text-[10px] text-[var(--text-tertiary)]">({tasks.length})</span>
             </div>
             <div className="flex items-center gap-1.5">
               {/* Compact view switcher */}
-              <div className="flex items-center gap-0.5 rounded border border-white/[0.08] bg-white/[0.02] p-0.5">
+              <div className="flex items-center gap-0.5 rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
                 <ViewBtn label="" icon={<svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15M3.75 9h16.5M3.75 15h16.5" /></svg>} active={viewMode === "board"} onClick={() => switchView("board")} />
                 <ViewBtn label="" icon={<svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>} active={viewMode === "table"} onClick={() => switchView("table")} />
               </div>
-              <button onClick={() => setShowCreate(true)} className="flex h-7 w-7 items-center justify-center rounded border border-neo/20 bg-neo/10 text-neo">
+              <button onClick={() => setShowCreate(true)} className="flex h-7 w-7 items-center justify-center rounded border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)]">
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
               </button>
             </div>
@@ -130,21 +130,21 @@ export default function TasksPage() {
           {/* Desktop: full layout */}
           <div className="hidden items-center justify-between gap-4 sm:flex">
             <div className="flex items-center gap-3">
-              <Link href="/" className="font-mono text-xs text-white/40 transition-colors hover:text-neo">
+              <Link href="/" className="font-mono text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--accent)]">
                 COMMAND CENTER
               </Link>
-              <span className="font-mono text-xs text-white/20">/</span>
-              <span className="font-mono text-xs font-bold text-white/70">TASKS</span>
+              <span className="font-mono text-xs text-[var(--text-tertiary)]">/</span>
+              <span className="font-mono text-xs font-bold text-[var(--text-primary)]">TASKS</span>
             </div>
 
             <div className="flex items-center gap-4 flex-wrap">
               {/* View switcher */}
-              <div className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.02] p-0.5">
+              <div className="flex items-center gap-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
                 <ViewBtn label="BOARD" icon={<svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15M3.75 9h16.5M3.75 15h16.5" /></svg>} active={viewMode === "board"} onClick={() => switchView("board")} />
                 <ViewBtn label="TABLE" icon={<svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>} active={viewMode === "table"} onClick={() => switchView("table")} />
               </div>
 
-              <div className="h-4 w-px bg-white/10" />
+              <div className="h-4 w-px bg-[var(--border-medium)]" />
 
               {/* Project filter (only on board view) */}
               {viewMode === "board" && (
@@ -152,7 +152,7 @@ export default function TasksPage() {
                   <select
                     value={projectFilter}
                     onChange={(e) => setProjectFilter(e.target.value)}
-                    className="appearance-none rounded-lg border border-white/[0.08] bg-[#12121a] px-3 py-2 pr-8 font-mono text-[10px] tracking-wider text-neo/70 outline-none transition-all duration-200 focus:border-neo/30 focus:shadow-[0_0_10px_rgba(0,240,255,0.1)]"
+                    className="appearance-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-3 py-2 pr-8 font-mono text-[10px] tracking-wider text-[var(--accent)]/70 outline-none transition-all duration-200 focus:border-neo/30 focus:shadow-[0_0_10px_rgba(0,240,255,0.1)]"
                     style={{
                       backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(0,240,255,0.4)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
                       backgroundRepeat: "no-repeat",
@@ -170,16 +170,16 @@ export default function TasksPage() {
 
               <button
                 onClick={() => setShowCreate(true)}
-                className="flex items-center gap-2 rounded-lg border border-neo/20 bg-neo/10 px-4 py-2 font-mono text-[10px] tracking-wider text-neo transition-all duration-200 hover:bg-neo/20 hover:shadow-[0_0_15px_rgba(0,240,255,0.15)]"
+                className="flex items-center gap-2 rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-all duration-200 hover:bg-[var(--accent-soft)] hover:shadow-[0_0_15px_rgba(0,240,255,0.15)]"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
                 NEW TASK
               </button>
-              <div className="h-4 w-px bg-white/10" />
+              <div className="h-4 w-px bg-[var(--border-medium)]" />
               <TaskStat label="TOTAL" value={tasks.length} />
-              <div className="h-4 w-px bg-white/10" />
+              <div className="h-4 w-px bg-[var(--border-medium)]" />
               <TaskStat label="BACKLOG" value={counts.backlog} color="#555" />
               <TaskStat label="INBOX" value={counts.inbox} color="#666" />
               <TaskStat label="QUEUED" value={counts.queued} color="#00f0ff" />
@@ -194,10 +194,10 @@ export default function TasksPage() {
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
             <div className="glass-card w-full max-w-md space-y-4 p-6" onClick={(e) => e.stopPropagation()}>
-              <h2 className="font-mono text-sm font-bold tracking-[0.15em] text-white/80">NEW TASK</h2>
+              <h2 className="text-sm font-bold tracking-[0.15em] text-[var(--text-primary)]">NEW TASK</h2>
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">TITLE</label>
+                  <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">TITLE</label>
                   <input
                     type="text"
                     value={newTask.title}
@@ -206,12 +206,12 @@ export default function TasksPage() {
                     autoCorrect="on"
                     autoCapitalize="sentences"
                     spellCheck={true}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 placeholder-white/20 outline-none focus:border-neo/30"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
                     autoFocus
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">DESCRIPTION</label>
+                  <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">DESCRIPTION</label>
                   <textarea
                     value={newTask.description}
                     onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
@@ -221,16 +221,16 @@ export default function TasksPage() {
                     autoCapitalize="sentences"
                     spellCheck={true}
                     inputMode="text"
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 placeholder-white/20 outline-none focus:border-neo/30"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">STATUS</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">STATUS</label>
                     <select
                       value={newTask.status}
                       onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="backlog">Backlog</option>
                       <option value="inbox">Inbox</option>
@@ -238,11 +238,11 @@ export default function TasksPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">PRIORITY</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">PRIORITY</label>
                     <select
                       value={newTask.priority}
                       onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -251,11 +251,11 @@ export default function TasksPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">PROJECT</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">PROJECT</label>
                     <select
                       value={newTask.projectId}
                       onChange={(e) => setNewTask({ ...newTask, projectId: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="">No project (standalone)</option>
                       {projects.map((p) => (
@@ -268,7 +268,7 @@ export default function TasksPage() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   onClick={() => setShowCreate(false)}
-                  className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-[10px] tracking-wider text-white/40 transition-colors hover:text-white/60"
+                  className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
                 >
                   CANCEL
                 </button>
@@ -301,7 +301,7 @@ export default function TasksPage() {
                     }
                   }}
                   disabled={creating || !newTask.title.trim()}
-                  className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-[10px] tracking-wider text-neo transition-all duration-200 hover:bg-neo/30 disabled:opacity-30"
+                  className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-all duration-200 hover:bg-[var(--accent-medium)] disabled:opacity-30"
                 >
                   {creating ? "CREATING..." : "CREATE TASK"}
                 </button>
@@ -348,12 +348,12 @@ export default function TasksPage() {
         />
       )}
 
-      <footer className="border-t border-white/[0.04] px-6 py-3">
+      <footer className="border-t border-[var(--border-subtle)] px-6 py-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] tracking-wider text-white/20">
+          <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
             CREWCMD v0.2.0
           </span>
-          <span className="font-mono text-[10px] tracking-wider text-white/20">
+          <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
             crewcmd.dev
           </span>
         </div>
@@ -378,8 +378,8 @@ function ViewBtn({
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[9px] tracking-wider transition-all ${
         active
-          ? "bg-neo/15 text-neo"
-          : "text-white/30 hover:text-white/60"
+          ? "bg-neo/15 text-[var(--accent)]"
+          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
       }`}
     >
       {icon}
@@ -402,7 +402,7 @@ function TaskStat({
       {color && (
         <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
       )}
-      <span className="font-mono text-[10px] tracking-wider text-white/30">{label}</span>
+      <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">{label}</span>
       <span className="font-mono text-sm font-bold" style={{ color: color || "white" }}>
         {value}
       </span>
@@ -482,7 +482,7 @@ function TableTaskModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] tracking-wider text-white/30">
+          <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
             TSK-{String(task.shortId).padStart(4, "0")} · EDIT TASK
           </span>
           <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ function TableTaskModal({
             >
               DELETE
             </button>
-            <button onClick={onClose} className="text-white/30 hover:text-white/60 transition-colors">
+            <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
@@ -502,30 +502,30 @@ function TableTaskModal({
 
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">TITLE</label>
+            <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">TITLE</label>
             <input
               type="text"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
             />
           </div>
           <div>
-            <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">DESCRIPTION</label>
+            <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">DESCRIPTION</label>
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={4}
-              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">STATUS</label>
+              <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">STATUS</label>
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as TaskStatus })}
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
               >
                 {(["backlog","inbox","queued","in_progress","review","done"] as TaskStatus[]).map((s) => (
                   <option key={s} value={s}>{s.replace("_", " ")}</option>
@@ -533,11 +533,11 @@ function TableTaskModal({
               </select>
             </div>
             <div>
-              <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">PRIORITY</label>
+              <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">PRIORITY</label>
               <select
                 value={form.priority}
                 onChange={(e) => setForm({ ...form, priority: e.target.value as TaskPriority })}
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -546,11 +546,11 @@ function TableTaskModal({
               </select>
             </div>
             <div>
-              <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">AGENT</label>
+              <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">AGENT</label>
               <select
                 value={form.assignedAgentId}
                 onChange={(e) => setForm({ ...form, assignedAgentId: e.target.value })}
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
               >
                 <option value="">Unassigned</option>
                 {agents.map((a) => (
@@ -559,22 +559,22 @@ function TableTaskModal({
               </select>
             </div>
             <div>
-              <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">HUMAN</label>
+              <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">HUMAN</label>
               <select
                 value={form.humanAssignee}
                 onChange={(e) => setForm({ ...form, humanAssignee: e.target.value })}
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
               >
                 <option value="">None</option>
                 <option value="roger">👤 Roger</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">PROJECT</label>
+              <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">PROJECT</label>
               <select
                 value={form.projectId}
                 onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
               >
                 <option value="">No project</option>
                 {projects.map((p) => (
@@ -588,14 +588,14 @@ function TableTaskModal({
         <div className="flex justify-end gap-3 pt-2">
           <button
             onClick={onClose}
-            className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-[10px] tracking-wider text-white/40 transition-colors hover:text-white/60"
+            className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
           >
             CANCEL
           </button>
           <button
             onClick={save}
             disabled={saving}
-            className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-[10px] tracking-wider text-neo transition-all hover:bg-neo/30 disabled:opacity-30"
+            className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-medium)] disabled:opacity-30"
           >
             {saving ? "SAVING..." : "SAVE CHANGES"}
           </button>

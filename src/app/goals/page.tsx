@@ -143,28 +143,28 @@ export default function GoalsPage() {
     return (
       <div>
         <div
-          className="group flex items-start gap-3 rounded-lg border border-white/[0.04] bg-white/[0.01] p-3 transition-colors hover:border-white/[0.08] hover:bg-white/[0.02]"
+          className="group flex items-start gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
           style={{ marginLeft: depth * 24 }}
         >
           {/* Connector line for children */}
           {depth > 0 && (
-            <div className="mt-2 h-px w-3 bg-white/[0.08]" />
+            <div className="mt-2 h-px w-3 bg-[var(--bg-tertiary)]" />
           )}
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-white/80">{goal.title}</span>
+              <span className="text-xs text-[var(--text-primary)]">{goal.title}</span>
               <span className={`rounded px-1.5 py-0.5 font-mono text-[8px] tracking-wider ${statusColors[goal.status] || statusColors.active}`}>
                 {goal.status.toUpperCase()}
               </span>
             </div>
             {goal.description && (
-              <p className="mt-1 font-mono text-[10px] text-white/30 line-clamp-2">
+              <p className="mt-1 text-[10px] text-[var(--text-tertiary)] line-clamp-2">
                 {goal.description}
               </p>
             )}
             {goal.ownerAgentId && (
-              <p className="mt-1 font-mono text-[9px] text-white/20">
+              <p className="mt-1 font-mono text-[9px] text-[var(--text-tertiary)]">
                 Owner: {goal.ownerAgentId}
               </p>
             )}
@@ -173,7 +173,7 @@ export default function GoalsPage() {
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <button
               onClick={() => openCreate(goal.id)}
-              className="rounded p-1 font-mono text-[9px] text-neo/60 transition-colors hover:bg-neo/10 hover:text-neo"
+              className="rounded p-1 font-mono text-[9px] text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
               title="Add sub-goal"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -182,7 +182,7 @@ export default function GoalsPage() {
             </button>
             <button
               onClick={() => openEdit(goal)}
-              className="rounded p-1 font-mono text-[9px] text-white/40 transition-colors hover:bg-white/[0.05] hover:text-white/60"
+              className="rounded p-1 font-mono text-[9px] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
               title="Edit"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -215,7 +215,7 @@ export default function GoalsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -224,8 +224,8 @@ export default function GoalsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to view goals.
           </p>
         </div>
@@ -239,14 +239,14 @@ export default function GoalsPage() {
     <div className="mx-auto max-w-4xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-wider text-neo">GOALS</h1>
-          <p className="mt-1 font-mono text-xs text-white/30">
+          <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">GOALS</h1>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Company mission &rarr; Project goals &rarr; Agent goals &rarr; Tasks
           </p>
         </div>
         <button
           onClick={() => openCreate()}
-          className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30"
+          className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
         >
           + NEW GOAL
         </button>
@@ -254,14 +254,14 @@ export default function GoalsPage() {
 
       <div className="mt-6 space-y-2">
         {rootGoals.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-white/[0.08] py-12 text-center">
-            <p className="font-mono text-xs text-white/30">No goals yet</p>
-            <p className="mt-1 font-mono text-[10px] text-white/20">
+          <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
+            <p className="text-xs text-[var(--text-tertiary)]">No goals yet</p>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
               Create your first goal to define your company&apos;s direction.
             </p>
             <button
               onClick={() => openCreate()}
-              className="mt-4 rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30"
+              className="mt-4 rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
             >
               CREATE FIRST GOAL
             </button>
@@ -276,39 +276,39 @@ export default function GoalsPage() {
       {/* Create / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-bg-primary p-6 shadow-2xl">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-6 shadow-2xl">
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
               {editingGoal ? "EDIT GOAL" : "NEW GOAL"}
             </h2>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">TITLE</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">TITLE</label>
                 <input
                   type="text"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">DESCRIPTION</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">DESCRIPTION</label>
                 <textarea
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   rows={3}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">PARENT GOAL</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">PARENT GOAL</label>
                 <select
                   value={formParentId}
                   onChange={(e) => setFormParentId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="">None (root goal)</option>
                   {goals
@@ -322,11 +322,11 @@ export default function GoalsPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">STATUS</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">STATUS</label>
                 <select
                   value={formStatus}
                   onChange={(e) => setFormStatus(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="active">Active</option>
                   <option value="completed">Completed</option>
@@ -339,14 +339,14 @@ export default function GoalsPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formTitle.trim()}
-                className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : editingGoal ? "UPDATE" : "CREATE"}
               </button>

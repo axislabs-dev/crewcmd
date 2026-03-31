@@ -214,7 +214,7 @@ export default function RoutinesPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -223,8 +223,8 @@ export default function RoutinesPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to manage routines.
           </p>
         </div>
@@ -237,14 +237,14 @@ export default function RoutinesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-wider text-neo">ROUTINES</h1>
-          <p className="mt-1 font-mono text-xs text-white/30">
+          <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">ROUTINES</h1>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Recurring task templates &amp; auto-creation schedules
           </p>
         </div>
         <button
           onClick={openCreate}
-          className="rounded-lg bg-neo/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-neo transition-colors hover:bg-neo/30"
+          className="rounded-lg bg-[var(--accent-soft)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
         >
           + ADD ROUTINE
         </button>
@@ -253,9 +253,9 @@ export default function RoutinesPage() {
       {/* Routines List */}
       <div className="mt-6 space-y-2">
         {routines.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-white/[0.08] py-12 text-center">
-            <p className="font-mono text-xs text-white/30">No routines configured</p>
-            <p className="mt-1 font-mono text-[10px] text-white/20">
+          <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
+            <p className="text-xs text-[var(--text-tertiary)]">No routines configured</p>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
               Routines auto-create tasks on a schedule from templates.
             </p>
           </div>
@@ -265,8 +265,8 @@ export default function RoutinesPage() {
               key={r.id}
               className={`group flex items-center gap-4 rounded-lg border p-4 transition-colors ${
                 r.enabled
-                  ? "border-white/[0.04] bg-white/[0.01] hover:border-white/[0.08] hover:bg-white/[0.02]"
-                  : "border-white/[0.02] bg-white/[0.005] opacity-60"
+                  ? "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
+                  : "border-[var(--border-subtle)] bg-[var(--bg-surface)] opacity-60"
               }`}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10">
@@ -275,23 +275,23 @@ export default function RoutinesPage() {
                 </svg>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-mono text-xs font-bold text-white/70">{r.title}</p>
-                <p className="font-mono text-[9px] text-white/25">
+                <p className="text-xs font-bold text-[var(--text-primary)]">{r.title}</p>
+                <p className="font-mono text-[9px] text-[var(--text-tertiary)]">
                   {cronToHuman(r.schedule)}
                   {r.taskTemplate.assigneeAgentId && ` · ${getAgentName(r.taskTemplate.assigneeAgentId)}`}
                 </p>
                 {r.description && (
-                  <p className="mt-0.5 font-mono text-[9px] text-white/15">{r.description}</p>
+                  <p className="mt-0.5 font-mono text-[9px] text-[var(--text-tertiary)]">{r.description}</p>
                 )}
               </div>
-              <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${PRIORITY_COLORS[r.taskTemplate.priority] ?? "bg-white/5 text-white/25"}`}>
+              <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${PRIORITY_COLORS[r.taskTemplate.priority] ?? "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"}`}>
                 {r.taskTemplate.priority.toUpperCase()}
               </span>
               <div className="flex flex-col items-end gap-0.5">
-                <span className="font-mono text-[9px] text-white/20">
+                <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                   {r.lastCreatedAt ? `Last: ${timeAgo(r.lastCreatedAt)}` : "Never run"}
                 </span>
-                <span className="font-mono text-[9px] text-white/20">
+                <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                   {r.nextCreateAt ? `Next: ${timeUntil(r.nextCreateAt)}` : "—"}
                 </span>
               </div>
@@ -299,7 +299,7 @@ export default function RoutinesPage() {
               <button
                 onClick={() => handleToggle(r)}
                 className={`h-5 w-9 rounded-full transition-colors ${
-                  r.enabled ? "bg-neo/40" : "bg-white/[0.08]"
+                  r.enabled ? "bg-neo/40" : "bg-[var(--bg-tertiary)]"
                 }`}
               >
                 <div
@@ -312,7 +312,7 @@ export default function RoutinesPage() {
                 <button
                   onClick={() => handleTrigger(r.id)}
                   title="Create Now"
-                  className="rounded p-1 text-neo/50 hover:bg-neo/10 hover:text-neo"
+                  className="rounded p-1 text-[var(--accent)]/50 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
@@ -320,7 +320,7 @@ export default function RoutinesPage() {
                 </button>
                 <button
                   onClick={() => openEdit(r)}
-                  className="rounded p-1 text-white/25 hover:bg-white/[0.06] hover:text-white/50"
+                  className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
@@ -343,35 +343,35 @@ export default function RoutinesPage() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/[0.08] bg-bg-primary p-6 shadow-2xl">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-6 shadow-2xl">
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
               {editRoutine ? "EDIT ROUTINE" : "ADD ROUTINE"}
             </h2>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">ROUTINE NAME</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">ROUTINE NAME</label>
                 <input
                   type="text"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   placeholder="Daily standup report"
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">DESCRIPTION (OPTIONAL)</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">DESCRIPTION (OPTIONAL)</label>
                 <input
                   type="text"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">SCHEDULE</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">SCHEDULE</label>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {Object.entries(CRON_PRESETS).map(([label, cron]) => (
                     <button
@@ -379,8 +379,8 @@ export default function RoutinesPage() {
                       onClick={() => setFormCron(cron)}
                       className={`rounded px-2 py-1 font-mono text-[9px] transition-colors ${
                         formCron === cron
-                          ? "bg-neo/20 text-neo"
-                          : "bg-white/[0.04] text-white/30 hover:bg-white/[0.08]"
+                          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                          : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]"
                       }`}
                     >
                       {label}
@@ -392,45 +392,45 @@ export default function RoutinesPage() {
                   value={formCron}
                   onChange={(e) => setFormCron(e.target.value)}
                   placeholder="0 9 * * *"
-                  className="mt-2 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-2 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
 
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.01] p-3">
-                <p className="font-mono text-[10px] tracking-wider text-white/40">TASK TEMPLATE</p>
+              <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+                <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">TASK TEMPLATE</p>
 
                 <div className="mt-2 space-y-2">
                   <div>
-                    <label className="block font-mono text-[9px] tracking-wider text-white/30">TITLE PATTERN</label>
+                    <label className="block font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">TITLE PATTERN</label>
                     <input
                       type="text"
                       value={formTitlePattern}
                       onChange={(e) => setFormTitlePattern(e.target.value)}
                       placeholder="Daily report — {{date}}"
-                      className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                      className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                     />
-                    <p className="mt-0.5 font-mono text-[8px] text-white/15">
+                    <p className="mt-0.5 font-mono text-[8px] text-[var(--text-tertiary)]">
                       Use {"{{date}}"} for today&apos;s date
                     </p>
                   </div>
 
                   <div>
-                    <label className="block font-mono text-[9px] tracking-wider text-white/30">TASK DESCRIPTION</label>
+                    <label className="block font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">TASK DESCRIPTION</label>
                     <textarea
                       value={formTaskDescription}
                       onChange={(e) => setFormTaskDescription(e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none resize-none"
+                      className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none resize-none"
                     />
                   </div>
 
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <label className="block font-mono text-[9px] tracking-wider text-white/30">PRIORITY</label>
+                      <label className="block font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">PRIORITY</label>
                       <select
                         value={formPriority}
                         onChange={(e) => setFormPriority(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                        className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                       >
                         {PRIORITIES.map((p) => (
                           <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
@@ -439,11 +439,11 @@ export default function RoutinesPage() {
                     </div>
 
                     <div className="flex-1">
-                      <label className="block font-mono text-[9px] tracking-wider text-white/30">ASSIGNEE</label>
+                      <label className="block font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">ASSIGNEE</label>
                       <select
                         value={formAssignee}
                         onChange={(e) => setFormAssignee(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                        className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                       >
                         <option value="">Unassigned</option>
                         {agents.map((a) => (
@@ -461,14 +461,14 @@ export default function RoutinesPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formTitle || !formCron || !formTitlePattern}
-                className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : editRoutine ? "UPDATE" : "CREATE"}
               </button>

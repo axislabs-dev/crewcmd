@@ -76,7 +76,7 @@ export default function AuditLogPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -85,8 +85,8 @@ export default function AuditLogPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to view the audit log.
           </p>
         </div>
@@ -98,8 +98,8 @@ export default function AuditLogPage() {
     <div className="mx-auto max-w-5xl p-6">
       {/* Header */}
       <div>
-        <h1 className="font-mono text-lg font-bold tracking-wider text-neo">AUDIT LOG</h1>
-        <p className="mt-1 font-mono text-xs text-white/30">
+        <h1 className="text-lg font-bold tracking-wider text-[var(--accent)]">AUDIT LOG</h1>
+        <p className="mt-1 text-xs text-[var(--text-tertiary)]">
           Immutable record of all governance actions
         </p>
       </div>
@@ -109,7 +109,7 @@ export default function AuditLogPage() {
         <select
           value={filterActor}
           onChange={(e) => setFilterActor(e.target.value)}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 font-mono text-[10px] text-white/50 outline-none"
+          className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] text-[var(--text-secondary)] outline-none"
         >
           <option value="">All actors</option>
           {uniqueActors.map((a) => (
@@ -120,7 +120,7 @@ export default function AuditLogPage() {
         <select
           value={filterAction}
           onChange={(e) => setFilterAction(e.target.value)}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 font-mono text-[10px] text-white/50 outline-none"
+          className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] text-[var(--text-secondary)] outline-none"
         >
           <option value="">All actions</option>
           {uniqueActions.map((a) => (
@@ -131,7 +131,7 @@ export default function AuditLogPage() {
         <select
           value={filterEntityType}
           onChange={(e) => setFilterEntityType(e.target.value)}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 font-mono text-[10px] text-white/50 outline-none"
+          className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] text-[var(--text-secondary)] outline-none"
         >
           <option value="">All entity types</option>
           {uniqueEntityTypes.map((t) => (
@@ -146,7 +146,7 @@ export default function AuditLogPage() {
               setFilterAction("");
               setFilterEntityType("");
             }}
-            className="rounded-lg border border-white/[0.06] px-3 py-1.5 font-mono text-[10px] text-white/25 hover:text-white/40"
+            className="rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
           >
             CLEAR
           </button>
@@ -156,14 +156,14 @@ export default function AuditLogPage() {
       {/* Entries */}
       <div className="mt-4 space-y-1">
         {entries.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-white/[0.08] py-16 text-center">
-            <p className="font-mono text-xs text-white/30">No audit entries</p>
+          <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-16 text-center">
+            <p className="text-xs text-[var(--text-tertiary)]">No audit entries</p>
           </div>
         ) : (
           entries.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-lg border border-white/[0.04] bg-white/[0.01] transition-colors hover:border-white/[0.06]"
+              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-colors hover:border-[var(--border-subtle)]"
             >
               <button
                 onClick={() => setExpandedEntry(expandedEntry === entry.id ? null : entry.id)}
@@ -171,22 +171,22 @@ export default function AuditLogPage() {
               >
                 <span
                   className={`rounded px-1.5 py-0.5 font-mono text-[8px] tracking-wider ${
-                    ACTION_COLORS[entry.action] ?? "text-white/30 bg-white/5"
+                    ACTION_COLORS[entry.action] ?? "text-[var(--text-tertiary)] bg-[var(--bg-surface-hover)]"
                   }`}
                 >
                   {entry.action.toUpperCase()}
                 </span>
-                <span className="font-mono text-[10px] text-white/50">
+                <span className="font-mono text-[10px] text-[var(--text-secondary)]">
                   {entry.actor}
                 </span>
-                <span className="font-mono text-[10px] text-white/20">
+                <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
                   {entry.entityType}/{entry.entityId.substring(0, 8)}
                 </span>
-                <span className="ml-auto font-mono text-[9px] text-white/15">
+                <span className="ml-auto font-mono text-[9px] text-[var(--text-tertiary)]">
                   {formatDate(entry.createdAt)}
                 </span>
                 <svg
-                  className={`h-3 w-3 text-white/15 transition-transform ${
+                  className={`h-3 w-3 text-[var(--text-tertiary)] transition-transform ${
                     expandedEntry === entry.id ? "rotate-180" : ""
                   }`}
                   fill="none"
@@ -199,8 +199,8 @@ export default function AuditLogPage() {
               </button>
 
               {expandedEntry === entry.id && entry.details && (
-                <div className="border-t border-white/[0.04] px-3 pb-3 pt-2">
-                  <pre className="max-h-48 overflow-auto rounded-lg bg-black/30 p-3 font-mono text-[10px] text-white/40">
+                <div className="border-t border-[var(--border-subtle)] px-3 pb-3 pt-2">
+                  <pre className="max-h-48 overflow-auto rounded-lg bg-black/30 p-3 font-mono text-[10px] text-[var(--text-tertiary)]">
                     {JSON.stringify(entry.details, null, 2)}
                   </pre>
                 </div>
@@ -212,7 +212,7 @@ export default function AuditLogPage() {
 
       {/* Count */}
       <div className="mt-4 text-right">
-        <span className="font-mono text-[9px] text-white/15">
+        <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
           {entries.length} entries shown (max 500)
         </span>
       </div>

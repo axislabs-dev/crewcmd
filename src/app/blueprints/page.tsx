@@ -154,25 +154,25 @@ export default function BlueprintsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <div className="border-b border-white/[0.06] px-6 py-6">
-        <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-white/80">
+      <div className="border-b border-[var(--border-subtle)] px-6 py-6">
+        <h1 className="text-lg font-bold tracking-[0.15em] text-[var(--text-primary)]">
           TEAM BLUEPRINTS
         </h1>
-        <p className="mt-1 font-mono text-[11px] tracking-wider text-white/35">
+        <p className="mt-1 text-[11px] tracking-wider text-[var(--text-tertiary)]">
           DEPLOY A FULL AGENT TEAM IN ONE CLICK
         </p>
       </div>
 
       {/* Category filter bar */}
-      <div className="flex items-center gap-2 overflow-x-auto border-b border-white/[0.06] px-6 py-3">
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-[var(--border-subtle)] px-6 py-3">
         {CATEGORIES.map((cat) => (
           <button
             key={cat.key}
             onClick={() => setCategory(cat.key)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 font-mono text-[11px] tracking-wider transition-all ${
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] tracking-wider transition-all ${
               category === cat.key
-                ? "bg-neo/15 text-neo"
-                : "bg-white/[0.04] text-white/40 hover:bg-white/[0.06] hover:text-white/60"
+                ? "bg-neo/15 text-[var(--accent)]"
+                : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
             }`}
             style={category === cat.key ? { boxShadow: "inset 0 0 12px rgba(0, 240, 255, 0.08)" } : undefined}
           >
@@ -189,8 +189,8 @@ export default function BlueprintsPage() {
           </div>
         ) : blueprints.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="font-mono text-sm text-white/40">NO BLUEPRINTS FOUND</p>
-            <p className="mt-1 font-mono text-[11px] text-white/35">
+            <p className="text-sm text-[var(--text-tertiary)]">NO BLUEPRINTS FOUND</p>
+            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
               Try a different category filter
             </p>
           </div>
@@ -200,16 +200,16 @@ export default function BlueprintsPage() {
               <button
                 key={bp.id}
                 onClick={() => setSelected(bp)}
-                className="group relative flex flex-col rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 text-left transition-all hover:border-white/[0.1] hover:bg-white/[0.04]"
+                className="group relative flex flex-col rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 text-left transition-all hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
               >
                 {/* Icon + name */}
                 <div className="flex items-start gap-3">
                   <span className="text-3xl leading-none">{bp.icon}</span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-mono text-sm font-bold tracking-wider text-white/80 group-hover:text-white">
+                    <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)] group-hover:text-[var(--text-primary)]">
                       {bp.name.toUpperCase()}
                     </h3>
-                    <p className="mt-1 line-clamp-2 font-mono text-[11px] leading-relaxed text-white/40">
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
                       {bp.description}
                     </p>
                   </div>
@@ -217,14 +217,14 @@ export default function BlueprintsPage() {
 
                 {/* Badges */}
                 <div className="mt-4 flex items-center gap-2">
-                  <span className="rounded-md bg-neo/10 px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider text-neo">
+                  <span className="rounded-md bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider text-[var(--accent)]">
                     {bp.agentCount} AGENTS
                   </span>
-                  <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] tracking-wider text-white/40">
+                  <span className="rounded-md bg-[var(--bg-surface-hover)] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
                     {bp.category.toUpperCase()}
                   </span>
                   {bp.popularity > 0 && (
-                    <span className="rounded-md bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] tracking-wider text-white/35">
+                    <span className="rounded-md bg-[var(--bg-surface-hover)] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
                       DEPLOYED {bp.popularity}x
                     </span>
                   )}
@@ -232,7 +232,7 @@ export default function BlueprintsPage() {
 
                 {/* Deploy CTA */}
                 <div className="mt-4 flex items-center justify-end">
-                  <span className="rounded-lg bg-neo/15 px-3 py-1.5 font-mono text-[11px] font-bold tracking-wider text-neo opacity-0 transition-all group-hover:opacity-100"
+                  <span className="rounded-lg bg-neo/15 px-3 py-1.5 text-[11px] font-bold tracking-wider text-[var(--accent)] opacity-0 transition-all group-hover:opacity-100"
                     style={{ boxShadow: "0 0 12px rgba(0, 240, 255, 0.1)" }}
                   >
                     ► DEPLOY
@@ -248,28 +248,28 @@ export default function BlueprintsPage() {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setSelected(null)}>
           <div
-            className="relative mx-4 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#0a0e14]"
+            className="relative mx-4 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal header */}
-            <div className="flex items-center gap-4 border-b border-white/[0.06] px-6 py-5">
+            <div className="flex items-center gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
               <span className="text-4xl">{selected.icon}</span>
               <div className="flex-1">
-                <h2 className="font-mono text-base font-bold tracking-[0.12em] text-white/90">
+                <h2 className="font-mono text-base font-bold tracking-[0.12em] text-[var(--text-primary)]">
                   {selected.name.toUpperCase()}
                 </h2>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="rounded-md bg-neo/10 px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider text-neo">
+                  <span className="rounded-md bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider text-[var(--accent)]">
                     {selected.agentCount} AGENTS
                   </span>
-                  <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] tracking-wider text-white/40">
+                  <span className="rounded-md bg-[var(--bg-surface-hover)] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
                     {selected.category.toUpperCase()}
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => setSelected(null)}
-                className="rounded-lg p-2 text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/60"
+                className="rounded-lg p-2 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -305,20 +305,20 @@ export default function BlueprintsPage() {
               )}
 
               {/* Description */}
-              <p className="font-mono text-[12px] leading-relaxed text-white/50">
+              <p className="text-[12px] leading-relaxed text-[var(--text-secondary)]">
                 {selected.template.description}
               </p>
 
               {/* Use cases */}
               <div className="mt-5">
-                <h3 className="font-mono text-[11px] font-bold tracking-[0.15em] text-white/40">
+                <h3 className="text-[11px] font-bold tracking-[0.15em] text-[var(--text-tertiary)]">
                   USE CASES
                 </h3>
                 <ul className="mt-2 space-y-1.5">
                   {selected.template.useCases.map((uc, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neo/50" />
-                      <span className="font-mono text-[11px] leading-relaxed text-white/45">{uc}</span>
+                      <span className="text-[11px] leading-relaxed text-[var(--text-tertiary)]">{uc}</span>
                     </li>
                   ))}
                 </ul>
@@ -326,14 +326,14 @@ export default function BlueprintsPage() {
 
               {/* Agent roster */}
               <div className="mt-6">
-                <h3 className="font-mono text-[11px] font-bold tracking-[0.15em] text-white/40">
+                <h3 className="text-[11px] font-bold tracking-[0.15em] text-[var(--text-tertiary)]">
                   AGENT ROSTER
                 </h3>
                 <div className="mt-3 space-y-2">
                   {selected.template.agents.map((agent) => (
                     <div
                       key={agent.callsign}
-                      className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3"
+                      className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
                     >
                       <span className="text-xl">{agent.emoji}</span>
                       <div className="min-w-0 flex-1">
@@ -344,14 +344,14 @@ export default function BlueprintsPage() {
                           >
                             {agent.callsign}
                           </span>
-                          <span className="font-mono text-[11px] text-white/60">{agent.name}</span>
+                          <span className="font-mono text-[11px] text-[var(--text-secondary)]">{agent.name}</span>
                         </div>
-                        <p className="mt-0.5 font-mono text-[10px] text-white/35">
+                        <p className="mt-0.5 font-mono text-[10px] text-[var(--text-tertiary)]">
                           {agent.title} · {adapterLabel(agent.adapterType)}
                           {agent.reportsTo && <span> · reports to {agent.reportsTo}</span>}
                         </p>
                       </div>
-                      <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-white/40">
+                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
                         {agent.role.toUpperCase()}
                       </span>
                     </div>
@@ -361,7 +361,7 @@ export default function BlueprintsPage() {
 
               {/* Hierarchy tree */}
               <div className="mt-6">
-                <h3 className="font-mono text-[11px] font-bold tracking-[0.15em] text-white/40">
+                <h3 className="text-[11px] font-bold tracking-[0.15em] text-[var(--text-tertiary)]">
                   HIERARCHY
                 </h3>
                 <div className="mt-3 space-y-2">
@@ -370,7 +370,7 @@ export default function BlueprintsPage() {
                       (a) => a.callsign.toUpperCase() === node.callsign.toUpperCase()
                     );
                     return (
-                      <div key={node.callsign} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-4 py-3">
+                      <div key={node.callsign} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{parent?.emoji ?? "👤"}</span>
                           <span
@@ -382,7 +382,7 @@ export default function BlueprintsPage() {
                         </div>
                         {node.children.length > 0 && (
                           <div className="mt-2 ml-5 flex flex-wrap gap-1.5">
-                            <span className="font-mono text-[10px] text-white/35">→</span>
+                            <span className="font-mono text-[10px] text-[var(--text-tertiary)]">→</span>
                             {node.children.map((child) => {
                               const childAgent = selected.template.agents.find(
                                 (a) => a.callsign.toUpperCase() === child.toUpperCase()
@@ -390,7 +390,7 @@ export default function BlueprintsPage() {
                               return (
                                 <span
                                   key={child}
-                                  className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] tracking-wider"
+                                  className="rounded bg-[var(--bg-surface-hover)] px-2 py-0.5 font-mono text-[10px] tracking-wider"
                                   style={{ color: childAgent?.color ?? "#fff" }}
                                 >
                                   {childAgent?.emoji} {child}
@@ -409,7 +409,7 @@ export default function BlueprintsPage() {
               <div className="mt-6">
                 <button
                   onClick={() => setShowCustomize(!showCustomize)}
-                  className="flex items-center gap-2 font-mono text-[11px] tracking-wider text-white/40 transition-colors hover:text-white/60"
+                  className="flex items-center gap-2 text-[11px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
                 >
                   <svg
                     className={`h-3 w-3 transition-transform ${showCustomize ? "rotate-90" : ""}`}
@@ -424,17 +424,17 @@ export default function BlueprintsPage() {
                     {selected.template.agents.map((agent, idx) => (
                       <div
                         key={agent.callsign}
-                        className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3"
+                        className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
                       >
                         <div className="flex items-center gap-2 mb-2">
                           <span>{agent.emoji}</span>
-                          <span className="font-mono text-[11px] font-bold tracking-wider text-white/60">
+                          <span className="font-mono text-[11px] font-bold tracking-wider text-[var(--text-secondary)]">
                             {agent.callsign}
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="block font-mono text-[10px] tracking-wider text-white/35 mb-1">
+                            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)] mb-1">
                               NAME
                             </label>
                             <input
@@ -442,11 +442,11 @@ export default function BlueprintsPage() {
                               placeholder={agent.name}
                               value={customAgents[idx]?.name ?? ""}
                               onChange={(e) => updateCustomAgent(idx, "name", e.target.value)}
-                              className="w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-white placeholder:text-white/25 focus:border-neo/30 focus:outline-none"
+                              className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-neo/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="block font-mono text-[10px] tracking-wider text-white/35 mb-1">
+                            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)] mb-1">
                               CALLSIGN
                             </label>
                             <input
@@ -454,11 +454,11 @@ export default function BlueprintsPage() {
                               placeholder={agent.callsign}
                               value={customAgents[idx]?.callsign ?? ""}
                               onChange={(e) => updateCustomAgent(idx, "callsign", e.target.value)}
-                              className="w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-white placeholder:text-white/25 focus:border-neo/30 focus:outline-none"
+                              className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-neo/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="block font-mono text-[10px] tracking-wider text-white/35 mb-1">
+                            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)] mb-1">
                               ROLE
                             </label>
                             <input
@@ -466,11 +466,11 @@ export default function BlueprintsPage() {
                               placeholder={agent.role}
                               value={customAgents[idx]?.role ?? ""}
                               onChange={(e) => updateCustomAgent(idx, "role", e.target.value)}
-                              className="w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-white placeholder:text-white/25 focus:border-neo/30 focus:outline-none"
+                              className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-neo/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="block font-mono text-[10px] tracking-wider text-white/35 mb-1">
+                            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)] mb-1">
                               ADAPTER
                             </label>
                             <input
@@ -478,7 +478,7 @@ export default function BlueprintsPage() {
                               placeholder={adapterLabel(agent.adapterType)}
                               value={customAgents[idx]?.adapterType ?? ""}
                               onChange={(e) => updateCustomAgent(idx, "adapterType", e.target.value)}
-                              className="w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-white placeholder:text-white/25 focus:border-neo/30 focus:outline-none"
+                              className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-neo/30 focus:outline-none"
                             />
                           </div>
                         </div>
@@ -490,17 +490,17 @@ export default function BlueprintsPage() {
             </div>
 
             {/* Modal footer */}
-            <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] px-6 py-4">
+            <div className="flex items-center justify-end gap-3 border-t border-[var(--border-subtle)] px-6 py-4">
               <button
                 onClick={() => setSelected(null)}
-                className="rounded-lg px-4 py-2 font-mono text-[11px] tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/60"
+                className="rounded-lg px-4 py-2 text-[11px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
               >
                 CANCEL
               </button>
               {deployResult ? (
                 <Link
                   href="/agents"
-                  className="rounded-lg bg-neo/20 px-5 py-2 font-mono text-[11px] font-bold tracking-wider text-neo transition-all hover:bg-neo/30"
+                  className="rounded-lg bg-[var(--accent-soft)] px-5 py-2 text-[11px] font-bold tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-medium)]"
                   style={{ boxShadow: "0 0 16px rgba(0, 240, 255, 0.15)" }}
                 >
                   VIEW AGENTS →
@@ -509,7 +509,7 @@ export default function BlueprintsPage() {
                 <button
                   onClick={() => handleDeploy(selected)}
                   disabled={deploying}
-                  className="rounded-lg bg-neo/20 px-5 py-2 font-mono text-[11px] font-bold tracking-wider text-neo transition-all hover:bg-neo/30 disabled:opacity-50"
+                  className="rounded-lg bg-[var(--accent-soft)] px-5 py-2 text-[11px] font-bold tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-medium)] disabled:opacity-50"
                   style={{ boxShadow: "0 0 16px rgba(0, 240, 255, 0.15)" }}
                 >
                   {deploying ? (

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { CompanySwitcher } from "@/components/company-switcher";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // Grouped nav structure: section → items
 const navSections = [
@@ -156,10 +157,10 @@ export function Sidebar() {
         <Link
           href={item.href}
           onClick={onClick}
-          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-mono text-xs tracking-wider transition-all duration-200 ${
+          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs tracking-wide transition-all duration-200 ${
             active
-              ? "bg-neo/10 text-neo"
-              : "text-white/40 hover:bg-white/[0.04] hover:text-white/70"
+              ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+              : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           }`}
           style={active ? { boxShadow: "inset 0 0 20px rgba(0, 240, 255, 0.05)" } : undefined}
         >
@@ -169,7 +170,7 @@ export function Sidebar() {
               style={{ boxShadow: "0 0 8px rgba(0, 240, 255, 0.6)" }}
             />
           )}
-          <span className={`transition-colors ${active ? "text-neo" : "text-white/25 group-hover:text-white/50"}`}>
+          <span className={`transition-colors ${active ? "text-[var(--accent)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
             {item.icon}
           </span>
           <span>{item.label.toUpperCase()}</span>
@@ -189,7 +190,7 @@ export function Sidebar() {
       {navSections.map((section, idx) => (
         <div key={idx}>
           {section.label && (
-            <div className="mb-1.5 px-3 font-mono text-[10px] font-bold tracking-[0.2em] text-white/35">
+            <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">
               {section.label}
             </div>
           )}
@@ -202,7 +203,7 @@ export function Sidebar() {
       ))}
       {isSuperAdmin && (
         <div>
-          <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+          <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
           <ul className="space-y-0.5">
             <NavLink item={settingsItem} onClick={onClick} />
           </ul>
@@ -221,15 +222,15 @@ export function Sidebar() {
           <img
             src={session.user.image}
             alt=""
-            className="h-6 w-6 rounded-full border border-white/10"
+            className="h-6 w-6 rounded-full border border-[var(--border-medium)]"
           />
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[11px] tracking-wider text-white/60">
+          <p className="truncate text-[11px] text-[var(--text-secondary)]">
             {session.user.name || username || "User"}
           </p>
           {role && (
-            <p className="font-mono text-[9px] tracking-wider text-white/35">
+            <p className="text-[9px] text-[var(--text-tertiary)]">
               {role.toUpperCase().replace("_", " ")}
             </p>
           )}
@@ -241,7 +242,7 @@ export function Sidebar() {
   const SignOutButton = () => (
     <button
       onClick={() => signOut({ callbackUrl: "/" })}
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 font-mono text-[11px] tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/50"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] tracking-wide text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
     >
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
@@ -253,7 +254,7 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/[0.06] bg-bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-2.5">
           <div
             className="h-2.5 w-2.5 rounded-full bg-neo"
@@ -265,7 +266,7 @@ export function Sidebar() {
         </div>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white"
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           aria-label="Toggle navigation"
         >
           {mobileOpen ? (
@@ -289,11 +290,11 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <div
-        className={`fixed top-0 left-0 z-40 flex h-full w-64 flex-col border-r border-white/[0.06] bg-bg-primary/95 backdrop-blur-xl transition-transform duration-300 lg:hidden ${
+        className={`fixed top-0 left-0 z-40 flex h-full w-64 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl transition-transform duration-300 lg:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center gap-2.5 border-b border-white/[0.06] px-5 py-4">
+        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-5 py-4">
           <div
             className="h-2.5 w-2.5 rounded-full bg-neo"
             style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
@@ -306,17 +307,18 @@ export function Sidebar() {
         <nav className="flex-1 px-3 py-4">
           <NavList onClick={() => setMobileOpen(false)} />
         </nav>
-        <div className="border-t border-white/[0.04] px-3 py-3">
+        <div className="border-t border-[var(--border-subtle)] px-3 py-3">
           <UserInfo />
           <SignOutButton />
-          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-white/40">
+          <ThemeToggle />
+          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
             CREWCMD v0.3.0
           </span>
         </div>
       </div>
 
       {/* Desktop sidebar */}
-      <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[220px] flex-col border-r border-white/[0.06] bg-bg-primary/80 backdrop-blur-xl lg:flex">
+      <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[220px] flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl lg:flex">
         <div className="flex items-center gap-3 px-5 py-5">
           <div
             className="h-3 w-3 rounded-full bg-neo"
@@ -326,13 +328,13 @@ export function Sidebar() {
             <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
               CREWCMD
             </span>
-            <span className="font-mono text-[10px] tracking-[0.3em] text-white/45">
+            <span className="font-mono text-[10px] tracking-[0.3em] text-[var(--text-tertiary)]">
               YOUR CREW. YOUR COMMAND.
             </span>
           </div>
         </div>
 
-        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
 
         <CompanySwitcher />
 
@@ -340,10 +342,11 @@ export function Sidebar() {
           <NavList />
         </nav>
 
-        <div className="border-t border-white/[0.04] px-3 py-3">
+        <div className="border-t border-[var(--border-subtle)] px-3 py-3">
           <UserInfo />
           <SignOutButton />
-          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-white/40">
+          <ThemeToggle />
+          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
             CREWCMD v0.3.0
           </span>
         </div>

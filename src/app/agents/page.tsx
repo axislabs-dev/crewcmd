@@ -65,10 +65,10 @@ export default function AgentsPage() {
       <div className="flex-1 space-y-6 p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-white/80">
+            <h1 className="text-lg font-bold tracking-[0.15em] text-[var(--text-primary)]">
               AGENTS
             </h1>
-            <p className="font-mono text-[11px] tracking-wider text-white/35">
+            <p className="text-[11px] tracking-wider text-[var(--text-tertiary)]">
               {agents.length > 0
                 ? `${activeCount} OF ${agents.length} ACTIVE`
                 : "NO AGENTS DETECTED"}
@@ -81,11 +81,11 @@ export default function AgentsPage() {
               placeholder="Search agents..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 placeholder-white/20 outline-none transition-colors focus:border-neo/30"
+              className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-[var(--accent)]"
             />
             <button
               onClick={() => setShowNewAgent(true)}
-              className="rounded-lg bg-neo/20 px-3 py-2 font-mono text-[11px] tracking-wider text-neo transition-colors hover:bg-neo/30"
+              className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
             >
               + NEW AGENT
             </button>
@@ -97,15 +97,15 @@ export default function AgentsPage() {
             <button
               key={sf.key}
               onClick={() => setStatusFilter(sf.key)}
-              className={`rounded-lg px-3 py-1.5 font-mono text-[11px] tracking-wider transition-all duration-200 ${
+              className={`rounded-lg px-3 py-1.5 text-[11px] tracking-wider transition-all duration-200 ${
                 statusFilter === sf.key
-                  ? "bg-neo/15 text-neo"
-                  : "border border-white/[0.06] text-white/35 hover:bg-white/[0.04] hover:text-white/50"
+                  ? "bg-neo/15 text-[var(--accent)]"
+                  : "border border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
               }`}
             >
               {sf.label}
               {sf.key !== "all" && (
-                <span className="ml-1.5 text-white/20">
+                <span className="ml-1.5 text-[var(--text-tertiary)]">
                   {agents.filter((a) => a.status === sf.key).length}
                 </span>
               )}
@@ -120,7 +120,7 @@ export default function AgentsPage() {
             ))}
             {filtered.length === 0 && (
               <div className="col-span-full py-12 text-center">
-                <p className="font-mono text-xs text-white/20">
+                <p className="text-xs text-[var(--text-tertiary)]">
                   No agents match the current filters
                 </p>
               </div>
@@ -128,15 +128,15 @@ export default function AgentsPage() {
           </div>
         ) : (
           <div className="glass-card flex flex-col items-center justify-center py-16">
-            <p className="font-mono text-sm text-white/35">
+            <p className="text-sm text-[var(--text-tertiary)]">
               No agents detected
             </p>
-            <p className="mt-1 font-mono text-[11px] text-white/20">
+            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
               Create your first agent to get started
             </p>
             <button
               onClick={() => setShowNewAgent(true)}
-              className="mt-4 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30"
+              className="mt-4 rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
             >
               + NEW AGENT
             </button>

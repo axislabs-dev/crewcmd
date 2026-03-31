@@ -17,7 +17,7 @@ export function OrgChart({ agents }: OrgChartProps) {
   return (
     <section>
       <div className="mb-4">
-        <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+        <h2 className="text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
           Org Chart
         </h2>
       </div>
@@ -115,7 +115,7 @@ function AgentOrgNode({
       className="group flex flex-col items-center transition-transform duration-200 hover:scale-105"
     >
       <div
-        className={`flex flex-col items-center rounded-xl border border-white/[0.08] bg-white/[0.03] transition-all duration-300 group-hover:bg-white/[0.06] ${
+        className={`flex flex-col items-center rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] transition-all duration-300 group-hover:bg-[var(--bg-surface-hover)] ${
           compact ? "px-3 py-2" : "px-5 py-3"
         }`}
         style={{
@@ -132,7 +132,7 @@ function AgentOrgNode({
           {agent.callsign.toUpperCase()}
         </span>
         <span
-          className={`text-center text-white/40 ${
+          className={`text-center text-[var(--text-tertiary)] ${
             compact ? "max-w-[80px] text-[8px]" : "text-[10px]"
           }`}
         >
@@ -161,8 +161,8 @@ function OrgNode({
 }) {
   return (
     <div
-      className={`flex flex-col items-center rounded-xl border bg-white/[0.03] px-5 py-3 ${
-        isCommander ? "border-white/20" : "border-white/[0.08]"
+      className={`flex flex-col items-center rounded-xl border bg-[var(--bg-surface)] px-5 py-3 ${
+        isCommander ? "border-[var(--text-tertiary)]" : "border-[var(--border-medium)]"
       }`}
       style={{
         boxShadow: isCommander ? "0 0 20px rgba(255,255,255,0.05)" : undefined,
@@ -175,27 +175,27 @@ function OrgNode({
       >
         {callsign}
       </span>
-      <span className="text-[10px] text-white/40">{title}</span>
+      <span className="text-[10px] text-[var(--text-tertiary)]">{title}</span>
     </div>
   );
 }
 
 function VerticalLine() {
   return (
-    <div className="h-8 w-px bg-gradient-to-b from-white/20 to-white/5" />
+    <div className="h-8 w-px bg-gradient-to-b from-[var(--text-tertiary)] to-transparent" />
   );
 }
 
 function VerticalLineShort() {
   return (
-    <div className="h-5 w-px bg-gradient-to-b from-white/15 to-white/5" />
+    <div className="h-5 w-px bg-gradient-to-b from-[var(--text-tertiary)] to-transparent" />
   );
 }
 
 function HorizontalLine() {
   return (
     <div
-      className="absolute top-0 left-1/2 h-px -translate-x-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+      className="absolute top-0 left-1/2 h-px -translate-x-1/2 bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent"
       style={{ width: "calc(100% - 40px)" }}
     />
   );
@@ -204,7 +204,7 @@ function HorizontalLine() {
 function HorizontalLineSm({ count }: { count: number }) {
   return (
     <div
-      className="absolute top-0 left-1/2 h-px -translate-x-1/2 bg-gradient-to-r from-transparent via-white/15 to-transparent"
+      className="absolute top-0 left-1/2 h-px -translate-x-1/2 bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent"
       style={{ width: `${Math.max(count - 1, 1) * 80 + 40}px` }}
     />
   );

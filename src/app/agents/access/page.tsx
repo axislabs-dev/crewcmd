@@ -69,7 +69,7 @@ function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean
       type="button"
       onClick={() => !disabled && onChange(!on)}
       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-        on ? "bg-[#00f0ff]" : "bg-white/[0.08]"
+        on ? "bg-[#00f0ff]" : "bg-[var(--bg-tertiary)]"
       } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
     >
       <span
@@ -291,7 +291,7 @@ export default function AgentAccessPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-[11px] tracking-wider text-white/35 animate-pulse">
+        <div className="text-[11px] tracking-wider text-[var(--text-tertiary)] animate-pulse">
           LOADING ACCESS DATA...
         </div>
       </div>
@@ -305,7 +305,7 @@ export default function AgentAccessPage() {
           <p className="font-mono text-[12px] text-red-400">{error}</p>
           <button
             onClick={fetchData}
-            className="mt-3 font-mono text-[11px] tracking-wider text-white/50 hover:text-white/80 transition-colors"
+            className="mt-3 text-[11px] tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
           >
             RETRY
           </button>
@@ -319,10 +319,10 @@ export default function AgentAccessPage() {
       <div className="flex-1 space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-white/80">
+          <h1 className="text-lg font-bold tracking-[0.15em] text-[var(--text-primary)]">
             AGENT ACCESS CONTROL
           </h1>
-          <p className="font-mono text-[11px] tracking-wider text-white/35">
+          <p className="text-[11px] tracking-wider text-[var(--text-tertiary)]">
             Manage who can see and interact with your agents
           </p>
         </div>
@@ -330,12 +330,12 @@ export default function AgentAccessPage() {
         <div className="flex flex-col gap-6 lg:flex-row">
           {/* ── Agent List (Left Column) ─────────────────────────────── */}
           <div className="w-full space-y-2 lg:w-[320px] lg:shrink-0">
-            <p className="font-mono text-[10px] tracking-wider text-white/35 uppercase">
+            <p className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">
               Select Agent
             </p>
             {agents.length === 0 ? (
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-6 text-center">
-                <p className="font-mono text-[11px] text-white/35">No agents found</p>
+              <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 text-center">
+                <p className="text-[11px] text-[var(--text-tertiary)]">No agents found</p>
               </div>
             ) : (
               agents.map((agent) => {
@@ -348,19 +348,19 @@ export default function AgentAccessPage() {
                     className={`w-full rounded-lg border-2 p-3 text-left transition-all ${
                       isSelected
                         ? "border-[#00f0ff]/40 bg-[#00f0ff]/5"
-                        : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)]"
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-xl">{agent.emoji}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[12px] font-bold tracking-wider text-white/80 truncate">
+                          <span className="font-mono text-[12px] font-bold tracking-wider text-[var(--text-primary)] truncate">
                             {agent.callsign}
                           </span>
                           <VisibilityBadge visibility={vis} />
                         </div>
-                        <p className="font-mono text-[11px] text-white/35 truncate">
+                        <p className="text-[11px] text-[var(--text-tertiary)] truncate">
                           {agent.role}
                         </p>
                       </div>
@@ -374,21 +374,21 @@ export default function AgentAccessPage() {
           {/* ── Access Panel (Right Side) ────────────────────────────── */}
           <div className="flex-1">
             {!selectedAgent ? (
-              <div className="flex h-64 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02]">
-                <p className="font-mono text-[11px] tracking-wider text-white/35">
+              <div className="flex h-64 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                <p className="text-[11px] tracking-wider text-[var(--text-tertiary)]">
                   SELECT AN AGENT TO MANAGE ACCESS
                 </p>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Agent Header */}
-                <div className="flex items-center gap-4 rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="flex items-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
                   <span className="text-3xl">{selectedAgent.emoji}</span>
                   <div>
-                    <h2 className="font-mono text-[14px] font-bold tracking-wider text-white/80">
+                    <h2 className="font-mono text-[14px] font-bold tracking-wider text-[var(--text-primary)]">
                       {selectedAgent.name}
                     </h2>
-                    <p className="font-mono text-[11px] text-white/35">
+                    <p className="font-mono text-[11px] text-[var(--text-tertiary)]">
                       {selectedAgent.callsign} &middot; {selectedAgent.role}
                     </p>
                   </div>
@@ -399,7 +399,7 @@ export default function AgentAccessPage() {
 
                 {/* Visibility Selector */}
                 <div>
-                  <p className="mb-3 font-mono text-[10px] tracking-wider text-white/35 uppercase">
+                  <p className="mb-3 text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">
                     Visibility Tier
                   </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -414,14 +414,14 @@ export default function AgentAccessPage() {
                           className={`rounded-lg border-2 p-4 text-left transition-all cursor-pointer ${
                             isActive
                               ? `${meta.borderActive} ${meta.bgActive}`
-                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+                              : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)]"
                           } ${saving ? "opacity-50" : ""}`}
                         >
                           <div className="mb-2 text-xl">{meta.icon}</div>
-                          <p className="font-mono text-[12px] font-bold tracking-wider text-white/80">
+                          <p className="text-[12px] font-bold tracking-wider text-[var(--text-primary)]">
                             {meta.label}
                           </p>
-                          <p className="font-mono text-[11px] text-white/35">
+                          <p className="text-[11px] text-[var(--text-tertiary)]">
                             {meta.desc}
                           </p>
                         </button>
@@ -451,21 +451,21 @@ export default function AgentAccessPage() {
                 {(selectedAgent.visibility ?? "team") === "assigned" && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <p className="font-mono text-[10px] tracking-wider text-white/35 uppercase">
+                      <p className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">
                         Member Permissions
                       </p>
                       <div className="flex gap-2">
                         <button
                           onClick={grantAll}
                           disabled={saving || ungrantedMembers.length === 0}
-                          className="rounded border border-[#00f0ff]/30 bg-[#00f0ff]/5 px-3 py-1 font-mono text-[10px] tracking-wider text-[#00f0ff]/80 transition-colors hover:bg-[#00f0ff]/10 disabled:opacity-40"
+                          className="rounded border border-[#00f0ff]/30 bg-[#00f0ff]/5 px-3 py-1 text-[10px] tracking-wider text-[#00f0ff]/80 transition-colors hover:bg-[#00f0ff]/10 disabled:opacity-40"
                         >
                           GRANT ALL
                         </button>
                         <button
                           onClick={revokeAll}
                           disabled={saving || grants.length === 0}
-                          className="rounded border border-red-500/30 bg-red-500/5 px-3 py-1 font-mono text-[10px] tracking-wider text-red-400/80 transition-colors hover:bg-red-500/10 disabled:opacity-40"
+                          className="rounded border border-red-500/30 bg-red-500/5 px-3 py-1 text-[10px] tracking-wider text-red-400/80 transition-colors hover:bg-red-500/10 disabled:opacity-40"
                         >
                           REVOKE ALL
                         </button>
@@ -474,8 +474,8 @@ export default function AgentAccessPage() {
 
                     {/* Existing Grants */}
                     {grants.length === 0 ? (
-                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-6 text-center">
-                        <p className="font-mono text-[11px] text-white/35">
+                      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 text-center">
+                        <p className="text-[11px] text-[var(--text-tertiary)]">
                           No members have been granted access yet
                         </p>
                       </div>
@@ -489,19 +489,19 @@ export default function AgentAccessPage() {
                           return (
                             <div
                               key={grant.id}
-                              className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+                              className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3"
                             >
                               {/* Avatar */}
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.08] font-mono text-[12px] font-bold text-white/60">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--bg-tertiary)] font-mono text-[12px] font-bold text-[var(--text-secondary)]">
                                 {initial}
                               </div>
 
                               {/* Name + Role */}
                               <div className="min-w-0 flex-1">
-                                <p className="font-mono text-[12px] text-white/80 truncate">
+                                <p className="font-mono text-[12px] text-[var(--text-primary)] truncate">
                                   {displayName}
                                 </p>
-                                <p className="font-mono text-[10px] text-white/35 truncate">
+                                <p className="text-[10px] text-[var(--text-tertiary)] truncate">
                                   {member?.role ?? "member"}
                                 </p>
                               </div>
@@ -509,7 +509,7 @@ export default function AgentAccessPage() {
                               {/* Permission Toggles */}
                               <div className="flex items-center gap-4">
                                 <div className="flex flex-col items-center gap-1">
-                                  <span className={`text-[11px] ${grant.canInteract ? "text-[#00f0ff]" : "text-white/35"}`} title="Interact">
+                                  <span className={`text-[11px] ${grant.canInteract ? "text-[#00f0ff]" : "text-[var(--text-tertiary)]"}`} title="Interact">
                                     💬
                                   </span>
                                   <Toggle
@@ -519,7 +519,7 @@ export default function AgentAccessPage() {
                                   />
                                 </div>
                                 <div className="flex flex-col items-center gap-1">
-                                  <span className={`text-[11px] ${grant.canConfigure ? "text-[#00f0ff]" : "text-white/35"}`} title="Configure">
+                                  <span className={`text-[11px] ${grant.canConfigure ? "text-[#00f0ff]" : "text-[var(--text-tertiary)]"}`} title="Configure">
                                     ⚙️
                                   </span>
                                   <Toggle
@@ -529,7 +529,7 @@ export default function AgentAccessPage() {
                                   />
                                 </div>
                                 <div className="flex flex-col items-center gap-1">
-                                  <span className={`text-[11px] ${grant.canViewLogs ? "text-[#00f0ff]" : "text-white/35"}`} title="View Logs">
+                                  <span className={`text-[11px] ${grant.canViewLogs ? "text-[#00f0ff]" : "text-[var(--text-tertiary)]"}`} title="View Logs">
                                     👁️
                                   </span>
                                   <Toggle
@@ -558,7 +558,7 @@ export default function AgentAccessPage() {
                     {/* Add Member Section */}
                     {ungrantedMembers.length > 0 && (
                       <div>
-                        <p className="mb-2 font-mono text-[10px] tracking-wider text-white/35 uppercase">
+                        <p className="mb-2 text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase">
                           Add Member
                         </p>
                         <div className="space-y-1">
@@ -567,13 +567,13 @@ export default function AgentAccessPage() {
                               key={m.id}
                               onClick={() => grantAccess(m.id)}
                               disabled={saving}
-                              className="flex w-full items-center gap-3 rounded-lg border border-dashed border-white/[0.08] p-2.5 text-left transition-all hover:border-[#00f0ff]/30 hover:bg-[#00f0ff]/5 disabled:opacity-40"
+                              className="flex w-full items-center gap-3 rounded-lg border border-dashed border-[var(--border-medium)] p-2.5 text-left transition-all hover:border-[#00f0ff]/30 hover:bg-[#00f0ff]/5 disabled:opacity-40"
                             >
-                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] font-mono text-[11px] text-white/40">
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-surface-hover)] font-mono text-[11px] text-[var(--text-tertiary)]">
                                 {(m.name ?? m.email).charAt(0).toUpperCase()}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="font-mono text-[11px] text-white/60 truncate">
+                                <p className="font-mono text-[11px] text-[var(--text-secondary)] truncate">
                                   {m.name ?? m.email}
                                 </p>
                               </div>

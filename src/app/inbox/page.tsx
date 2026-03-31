@@ -36,7 +36,7 @@ const TYPE_STYLES: Record<InboxMessageType, { label: string; color: string; bg: 
   question: { label: "QUESTION", color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/30" },
   completed: { label: "COMPLETED", color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/30" },
   escalation: { label: "ESCALATION", color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/30" },
-  update: { label: "UPDATE", color: "text-white/50", bg: "bg-white/[0.04]", border: "border-white/[0.08]" },
+  update: { label: "UPDATE", color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-surface-hover)]", border: "border-[var(--border-medium)]" },
   approval: { label: "APPROVAL", color: "text-[#00f0ff]", bg: "bg-[#00f0ff]/10", border: "border-[#00f0ff]/30" },
 };
 
@@ -51,7 +51,7 @@ const PRIORITY_LABEL: Record<InboxPriority, { label: string; color: string; dot:
   critical: { label: "CRITICAL", color: "text-red-400", dot: "bg-red-500" },
   high: { label: "HIGH", color: "text-orange-400", dot: "bg-orange-400" },
   normal: { label: "NORMAL", color: "text-[#00f0ff]", dot: "bg-[#00f0ff]" },
-  low: { label: "LOW", color: "text-white/40", dot: "bg-white/40" },
+  low: { label: "LOW", color: "text-[var(--text-tertiary)]", dot: "bg-[var(--text-tertiary)]" },
 };
 
 type TypeFilter = "all" | InboxMessageType;
@@ -82,7 +82,7 @@ function PriorityBadge({ priority }: { priority: InboxPriority }) {
 function AgentTag({ callsign }: { callsign: string }) {
   const meta = AGENT_META[callsign] || { emoji: "\u{1F916}", name: callsign, color: "#888" };
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-white/70">
+    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--text-primary)]">
       <span>{meta.emoji}</span>
       <span style={{ color: meta.color }}>{callsign}</span>
     </span>
@@ -273,7 +273,7 @@ export default function InboxPage() {
           {/* Title + stats bar */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h1 className="font-mono text-lg font-bold tracking-wider text-white">
+              <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--text-primary)]">
                 INBOX
               </h1>
               {stats && stats.total > 0 && (
@@ -319,7 +319,7 @@ export default function InboxPage() {
                   className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-wider transition-colors ${
                     typeFilter === f.value
                       ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30"
-                      : "text-white/40 hover:text-white/60 hover:bg-white/[0.04] border border-transparent"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] border border-transparent"
                   }`}
                 >
                   {f.label}
@@ -327,7 +327,7 @@ export default function InboxPage() {
               ))}
             </div>
 
-            <span className="text-white/[0.08]">|</span>
+            <span className="text-[var(--border-medium)]">|</span>
 
             {/* Priority filters */}
             <div className="flex items-center gap-1">
@@ -338,7 +338,7 @@ export default function InboxPage() {
                   className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-wider transition-colors ${
                     priorityFilter === f.value
                       ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30"
-                      : "text-white/40 hover:text-white/60 hover:bg-white/[0.04] border border-transparent"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] border border-transparent"
                   }`}
                 >
                   {f.label}
@@ -346,7 +346,7 @@ export default function InboxPage() {
               ))}
             </div>
 
-            <span className="text-white/[0.08]">|</span>
+            <span className="text-[var(--border-medium)]">|</span>
 
             {/* Status toggle */}
             <div className="flex items-center gap-1">
@@ -357,7 +357,7 @@ export default function InboxPage() {
                   className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-wider transition-colors ${
                     statusFilter === f.value
                       ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30"
-                      : "text-white/40 hover:text-white/60 hover:bg-white/[0.04] border border-transparent"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] border border-transparent"
                   }`}
                 >
                   {f.label}
@@ -370,7 +370,7 @@ export default function InboxPage() {
         {/* ── Loading state ────────────────────────────────────────── */}
         {loading && (
           <div className="flex items-center justify-center py-20">
-            <div className="flex items-center gap-3 font-mono text-sm text-white/40">
+            <div className="flex items-center gap-3 text-sm text-[var(--text-tertiary)]">
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                 <path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -388,18 +388,18 @@ export default function InboxPage() {
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            <p className="font-mono text-sm font-bold tracking-wider text-white/60">ALL CLEAR</p>
-            <p className="mt-1 font-mono text-[11px] text-white/35">No messages match your filters</p>
+            <p className="text-sm font-bold tracking-wider text-[var(--text-secondary)]">ALL CLEAR</p>
+            <p className="mt-1 font-mono text-[11px] text-[var(--text-tertiary)]">No messages match your filters</p>
           </div>
         )}
 
         {/* ── Split panel ──────────────────────────────────────────── */}
         {!loading && filteredMessages.length > 0 && (
-          <div className="flex gap-0 overflow-hidden rounded-lg border border-white/[0.06]" style={{ height: "calc(100vh - 220px)" }}>
+          <div className="flex gap-0 overflow-hidden rounded-lg border border-[var(--border-subtle)]" style={{ height: "calc(100vh - 220px)" }}>
             {/* ── Message List (left) ─────────────────────────────── */}
             <div
               ref={listRef}
-              className="w-[450px] min-w-[320px] flex-shrink-0 overflow-y-auto border-r border-white/[0.06] bg-white/[0.01]"
+              className="w-[450px] min-w-[320px] flex-shrink-0 overflow-y-auto border-r border-[var(--border-subtle)] bg-[var(--bg-surface)]"
             >
               {filteredMessages.map((msg) => {
                 const isSelected = msg.id === selectedId;
@@ -410,14 +410,14 @@ export default function InboxPage() {
                   <button
                     key={msg.id}
                     onClick={() => setSelectedId(msg.id)}
-                    className={`w-full text-left border-l-[3px] border-b border-b-white/[0.04] px-3 py-3 transition-colors ${
+                    className={`w-full text-left border-l-[3px] border-b border-b-[var(--border-subtle)] px-3 py-3 transition-colors ${
                       PRIORITY_BORDER[msg.priority]
                     } ${
                       isSelected
-                        ? "bg-white/[0.06]"
+                        ? "bg-[var(--bg-surface-hover)]"
                         : isUnread
-                        ? "bg-white/[0.02] hover:bg-white/[0.04]"
-                        : "bg-transparent hover:bg-white/[0.03]"
+                        ? "bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]"
+                        : "bg-transparent hover:bg-[var(--bg-surface)]"
                     } ${isActioned ? "opacity-50" : ""}`}
                   >
                     {/* Row 1: agent + type + time */}
@@ -430,19 +430,19 @@ export default function InboxPage() {
                         {isUnread && (
                           <span className="h-2 w-2 rounded-full bg-[#00f0ff] shadow-[0_0_6px_rgba(0,240,255,0.5)]" />
                         )}
-                        <span className="font-mono text-[10px] text-white/35">
+                        <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
                           {timeAgo(msg.createdAt)}
                         </span>
                       </div>
                     </div>
 
                     {/* Row 2: title */}
-                    <p className={`truncate font-mono text-[12px] leading-snug ${isUnread ? "font-semibold text-white" : "text-white/70"}`}>
+                    <p className={`truncate text-[12px] leading-snug ${isUnread ? "font-semibold text-[var(--text-primary)]" : "text-[var(--text-primary)]"}`}>
                       {msg.title}
                     </p>
 
                     {/* Row 3: body preview */}
-                    <p className="mt-0.5 line-clamp-2 font-mono text-[11px] leading-relaxed text-white/35">
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
                       {msg.body.replace(/[*#`_~\[\]]/g, "").slice(0, 120)}
                     </p>
                   </button>
@@ -451,10 +451,10 @@ export default function InboxPage() {
             </div>
 
             {/* ── Detail Panel (right) ────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto bg-[#0a0e14] p-6">
+            <div className="flex-1 overflow-y-auto bg-[var(--bg-primary)] p-6">
               {!selected ? (
                 <div className="flex h-full items-center justify-center">
-                  <p className="font-mono text-sm text-white/35">Select a message</p>
+                  <p className="text-sm text-[var(--text-tertiary)]">Select a message</p>
                 </div>
               ) : (
                 <div className="space-y-5">
@@ -464,18 +464,18 @@ export default function InboxPage() {
                       <AgentTag callsign={selected.fromAgentId} />
                       <TypeBadge type={selected.type} />
                       <PriorityBadge priority={selected.priority} />
-                      <span className="ml-auto font-mono text-[11px] text-white/35">
+                      <span className="ml-auto font-mono text-[11px] text-[var(--text-tertiary)]">
                         {new Date(selected.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <h2 className="font-mono text-base font-bold text-white leading-snug">
+                    <h2 className="text-base font-bold text-[var(--text-primary)] leading-snug">
                       {selected.title}
                     </h2>
                   </div>
 
                   {/* Body */}
-                  <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
-                    <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-white/70">
+                  <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+                    <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-[var(--text-primary)]">
                       {selected.body}
                     </div>
                   </div>
@@ -486,7 +486,7 @@ export default function InboxPage() {
                       {selected.context.taskId && (
                         <a
                           href={`/tasks`}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-[11px] text-white/50 hover:text-[#00f0ff] hover:border-[#00f0ff]/30 transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1 font-mono text-[11px] text-[var(--text-secondary)] hover:text-[#00f0ff] hover:border-[#00f0ff]/30 transition-colors"
                         >
                           <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -498,7 +498,7 @@ export default function InboxPage() {
                       {selected.context.projectId && (
                         <a
                           href={`/projects`}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-[11px] text-white/50 hover:text-[#00f0ff] hover:border-[#00f0ff]/30 transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1 font-mono text-[11px] text-[var(--text-secondary)] hover:text-[#00f0ff] hover:border-[#00f0ff]/30 transition-colors"
                         >
                           <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -508,7 +508,7 @@ export default function InboxPage() {
                       )}
                       {selected.context.relatedAgents && selected.context.relatedAgents.length > 0 && (
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[10px] text-white/35 tracking-wider">RELATED:</span>
+                          <span className="font-mono text-[10px] text-[var(--text-tertiary)] tracking-wider">RELATED:</span>
                           {selected.context.relatedAgents.map((a) => (
                             <AgentTag key={a} callsign={a} />
                           ))}
@@ -539,7 +539,7 @@ export default function InboxPage() {
                               ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30 hover:bg-[#00f0ff]/25 shadow-[0_0_8px_rgba(0,240,255,0.15)]"
                               : action.style === "danger"
                               ? "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
-                              : "bg-transparent text-white/50 border border-white/[0.08] hover:bg-white/[0.04] hover:text-white/70"
+                              : "bg-transparent text-[var(--text-secondary)] border border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                           }`}
                         >
                           {actioningId === selected.id ? (
@@ -554,11 +554,11 @@ export default function InboxPage() {
                       ))}
 
                       {/* Quick actions */}
-                      <span className="mx-1 text-white/[0.08]">|</span>
+                      <span className="mx-1 text-[var(--border-medium)]">|</span>
                       {selected.status === "unread" && (
                         <button
                           onClick={() => handleAction(selected.id, "read", "mark_read")}
-                          className="rounded-md px-3 py-2 font-mono text-[11px] text-white/35 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
+                          className="rounded-md px-3 py-2 font-mono text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                           title="Mark as read (r)"
                         >
                           Mark Read
@@ -566,7 +566,7 @@ export default function InboxPage() {
                       )}
                       <button
                         onClick={() => handleAction(selected.id, "dismissed", "dismiss")}
-                        className="rounded-md px-3 py-2 font-mono text-[11px] text-white/35 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
+                        className="rounded-md px-3 py-2 font-mono text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                         title="Dismiss (e)"
                       >
                         Dismiss
@@ -577,14 +577,14 @@ export default function InboxPage() {
                       {selected.status === "unread" && (
                         <button
                           onClick={() => handleAction(selected.id, "read", "mark_read")}
-                          className="rounded-md border border-white/[0.08] px-4 py-2 font-mono text-[12px] text-white/50 hover:bg-white/[0.04] transition-colors"
+                          className="rounded-md border border-[var(--border-medium)] px-4 py-2 font-mono text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                         >
                           Mark Read
                         </button>
                       )}
                       <button
                         onClick={() => handleAction(selected.id, "dismissed", "dismiss")}
-                        className="rounded-md border border-white/[0.08] px-4 py-2 font-mono text-[12px] text-white/50 hover:bg-white/[0.04] transition-colors"
+                        className="rounded-md border border-[var(--border-medium)] px-4 py-2 font-mono text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                       >
                         Dismiss
                       </button>
@@ -592,18 +592,18 @@ export default function InboxPage() {
                   )}
 
                   {/* Keyboard hints */}
-                  <div className="flex items-center gap-4 border-t border-white/[0.04] pt-3">
-                    <span className="font-mono text-[10px] text-white/25 tracking-wider">
-                      <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 text-[9px]">&uarr;</kbd>
-                      <kbd className="ml-0.5 rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 text-[9px]">&darr;</kbd>
+                  <div className="flex items-center gap-4 border-t border-[var(--border-subtle)] pt-3">
+                    <span className="font-mono text-[10px] text-[var(--text-tertiary)] tracking-wider">
+                      <kbd className="rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1 py-0.5 text-[9px]">&uarr;</kbd>
+                      <kbd className="ml-0.5 rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1 py-0.5 text-[9px]">&darr;</kbd>
                       {" "}navigate
                     </span>
-                    <span className="font-mono text-[10px] text-white/25 tracking-wider">
-                      <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 text-[9px]">r</kbd>
+                    <span className="font-mono text-[10px] text-[var(--text-tertiary)] tracking-wider">
+                      <kbd className="rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1 py-0.5 text-[9px]">r</kbd>
                       {" "}mark read
                     </span>
-                    <span className="font-mono text-[10px] text-white/25 tracking-wider">
-                      <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 text-[9px]">e</kbd>
+                    <span className="font-mono text-[10px] text-[var(--text-tertiary)] tracking-wider">
+                      <kbd className="rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1 py-0.5 text-[9px]">e</kbd>
                       {" "}dismiss
                     </span>
                   </div>

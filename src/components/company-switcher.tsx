@@ -62,23 +62,23 @@ export function CompanySwitcher() {
     <div ref={ref} className="relative px-3 pb-3">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left transition-colors hover:bg-white/[0.04]"
+        className="flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
       >
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-neo/20 font-mono text-[10px] font-bold text-neo">
+        <div className="flex h-6 w-6 items-center justify-center rounded bg-[var(--accent-soft)] font-mono text-[10px] font-bold text-[var(--accent)]">
           {active?.name?.[0]?.toUpperCase() ?? "?"}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[10px] tracking-wider text-white/70">
+          <p className="truncate text-[10px] tracking-wider text-[var(--text-primary)]">
             {active?.name ?? "Select company"}
           </p>
           {active?.mission && (
-            <p className="truncate font-mono text-[8px] tracking-wider text-white/30">
+            <p className="truncate text-[8px] tracking-wider text-[var(--text-tertiary)]">
               {active.mission}
             </p>
           )}
         </div>
         <svg
-          className={`h-3 w-3 text-white/30 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -89,20 +89,20 @@ export function CompanySwitcher() {
       </button>
 
       {open && (
-        <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-white/[0.08] bg-bg-primary/95 py-1 shadow-xl backdrop-blur-xl">
+        <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] py-1 shadow-xl backdrop-blur-xl">
           {companies.map((c) => (
             <button
               key={c.id}
               onClick={() => switchCompany(c.id)}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-white/[0.04] ${
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)] ${
                 c.id === activeId ? "bg-neo/5" : ""
               }`}
             >
-              <div className="flex h-5 w-5 items-center justify-center rounded bg-neo/15 font-mono text-[9px] font-bold text-neo">
+              <div className="flex h-5 w-5 items-center justify-center rounded bg-neo/15 font-mono text-[9px] font-bold text-[var(--accent)]">
                 {c.name[0]?.toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-mono text-[10px] tracking-wider text-white/70">
+                <p className="truncate text-[10px] tracking-wider text-[var(--text-primary)]">
                   {c.name}
                 </p>
               </div>

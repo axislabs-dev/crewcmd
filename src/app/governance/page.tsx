@@ -193,7 +193,7 @@ export default function GovernancePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -202,8 +202,8 @@ export default function GovernancePage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to manage governance.
           </p>
         </div>
@@ -216,27 +216,27 @@ export default function GovernancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-wider text-neo">GOVERNANCE</h1>
-          <p className="mt-1 font-mono text-xs text-white/30">
+          <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">GOVERNANCE</h1>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Approval gates, requests &amp; controls
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1 rounded-lg bg-white/[0.02] p-1">
+      <div className="mt-6 flex gap-1 rounded-lg bg-[var(--bg-surface)] p-1">
         <button
           onClick={() => setTab("gates")}
-          className={`flex-1 rounded-md px-4 py-2 font-mono text-xs tracking-wider transition-colors ${
-            tab === "gates" ? "bg-neo/10 text-neo" : "text-white/30 hover:text-white/50"
+          className={`flex-1 rounded-md px-4 py-2 text-xs tracking-wider transition-colors ${
+            tab === "gates" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           APPROVAL GATES
         </button>
         <button
           onClick={() => setTab("requests")}
-          className={`flex-1 rounded-md px-4 py-2 font-mono text-xs tracking-wider transition-colors ${
-            tab === "requests" ? "bg-neo/10 text-neo" : "text-white/30 hover:text-white/50"
+          className={`flex-1 rounded-md px-4 py-2 text-xs tracking-wider transition-colors ${
+            tab === "requests" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           REQUESTS
@@ -252,12 +252,12 @@ export default function GovernancePage() {
       {tab === "gates" && (
         <div className="mt-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
               CONFIGURED GATES
             </h2>
             <button
               onClick={openCreateGate}
-              className="rounded-lg bg-neo/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-neo transition-colors hover:bg-neo/30"
+              className="rounded-lg bg-[var(--accent-soft)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
             >
               + ADD GATE
             </button>
@@ -265,9 +265,9 @@ export default function GovernancePage() {
 
           <div className="mt-3 space-y-2">
             {gates.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-white/[0.08] py-12 text-center">
-                <p className="font-mono text-xs text-white/30">No approval gates configured</p>
-                <p className="mt-1 font-mono text-[10px] text-white/20">
+              <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
+                <p className="text-xs text-[var(--text-tertiary)]">No approval gates configured</p>
+                <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                   Gates control which actions require approval before proceeding.
                 </p>
               </div>
@@ -275,7 +275,7 @@ export default function GovernancePage() {
               gates.map((gate) => (
                 <div
                   key={gate.id}
-                  className="group flex items-center gap-4 rounded-lg border border-white/[0.04] bg-white/[0.01] p-4 transition-colors hover:border-white/[0.08] hover:bg-white/[0.02]"
+                  className="group flex items-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
                     <svg className="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -283,10 +283,10 @@ export default function GovernancePage() {
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-xs font-bold text-white/70">
+                    <p className="font-mono text-xs font-bold text-[var(--text-primary)]">
                       {GATE_LABELS[gate.gateType] ?? gate.gateType}
                     </p>
-                    <p className="font-mono text-[9px] text-white/25">
+                    <p className="font-mono text-[9px] text-[var(--text-tertiary)]">
                       {gate.requiresHuman ? "Requires human approval" : `Approved by: ${getAgentName(gate.approverAgentId ?? "")}`}
                     </p>
                   </div>
@@ -302,7 +302,7 @@ export default function GovernancePage() {
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => openEditGate(gate)}
-                      className="rounded p-1 text-white/25 hover:bg-white/[0.06] hover:text-white/50"
+                      className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                     >
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
@@ -329,13 +329,13 @@ export default function GovernancePage() {
         <div className="mt-4 space-y-6">
           {/* Pending */}
           <div>
-            <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
               PENDING REQUESTS
             </h2>
             <div className="mt-3 space-y-2">
               {pendingRequests.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-white/[0.08] py-8 text-center">
-                  <p className="font-mono text-xs text-white/30">No pending requests</p>
+                <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-8 text-center">
+                  <p className="text-xs text-[var(--text-tertiary)]">No pending requests</p>
                 </div>
               ) : (
                 pendingRequests.map((req) => (
@@ -346,14 +346,14 @@ export default function GovernancePage() {
                     <div className="flex items-center gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-white/70">
+                          <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
                             {GATE_LABELS[req.requestType] ?? req.requestType}
                           </span>
                           <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[8px] tracking-wider text-amber-400">
                             PENDING
                           </span>
                         </div>
-                        <p className="mt-0.5 font-mono text-[10px] text-white/25">
+                        <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">
                           Requested by {req.requestedBy} {timeAgo(req.createdAt)}
                         </p>
                       </div>
@@ -375,12 +375,12 @@ export default function GovernancePage() {
                     {/* Payload toggle */}
                     <button
                       onClick={() => setExpandedRequest(expandedRequest === req.id ? null : req.id)}
-                      className="mt-2 font-mono text-[9px] text-white/20 hover:text-white/40"
+                      className="mt-2 text-[9px] text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
                     >
                       {expandedRequest === req.id ? "HIDE PAYLOAD" : "SHOW PAYLOAD"}
                     </button>
                     {expandedRequest === req.id && (
-                      <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-black/30 p-3 font-mono text-[10px] text-white/40">
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-black/30 p-3 font-mono text-[10px] text-[var(--text-tertiary)]">
                         {JSON.stringify(req.payload, null, 2)}
                       </pre>
                     )}
@@ -392,28 +392,28 @@ export default function GovernancePage() {
 
           {/* History */}
           <div>
-            <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
               HISTORY
             </h2>
             <div className="mt-3 space-y-1">
               {historyRequests.length === 0 ? (
-                <p className="font-mono text-[10px] text-white/20">No history yet</p>
+                <p className="text-[10px] text-[var(--text-tertiary)]">No history yet</p>
               ) : (
                 historyRequests.map((req) => (
                   <div
                     key={req.id}
-                    className="flex items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.01] p-3"
+                    className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3"
                   >
                     <span
                       className={`h-2 w-2 rounded-full ${
-                        req.status === "approved" ? "bg-emerald-400" : req.status === "rejected" ? "bg-red-400" : "bg-white/20"
+                        req.status === "approved" ? "bg-emerald-400" : req.status === "rejected" ? "bg-red-400" : "bg-[var(--bg-tertiary)]"
                       }`}
                     />
                     <div className="min-w-0 flex-1">
-                      <span className="font-mono text-[10px] text-white/50">
+                      <span className="text-[10px] text-[var(--text-secondary)]">
                         {GATE_LABELS[req.requestType] ?? req.requestType}
                       </span>
-                      <span className="ml-2 font-mono text-[10px] text-white/20">
+                      <span className="ml-2 text-[10px] text-[var(--text-tertiary)]">
                         by {req.requestedBy}
                       </span>
                     </div>
@@ -423,12 +423,12 @@ export default function GovernancePage() {
                           ? "bg-emerald-500/10 text-emerald-400"
                           : req.status === "rejected"
                             ? "bg-red-500/10 text-red-400"
-                            : "bg-white/5 text-white/25"
+                            : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
                       }`}
                     >
                       {req.status.toUpperCase()}
                     </span>
-                    <span className="font-mono text-[9px] text-white/15">
+                    <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                       {timeAgo(req.decidedAt ?? req.createdAt)}
                     </span>
                   </div>
@@ -442,18 +442,18 @@ export default function GovernancePage() {
       {/* Gate Modal */}
       {showGateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-bg-primary p-6 shadow-2xl">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-6 shadow-2xl">
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
               {editGate ? "EDIT GATE" : "ADD APPROVAL GATE"}
             </h2>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">GATE TYPE</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">GATE TYPE</label>
                 <select
                   value={formGateType}
                   onChange={(e) => setFormGateType(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="">Select type...</option>
                   {GATE_TYPES.map((t) => (
@@ -469,7 +469,7 @@ export default function GovernancePage() {
                   type="button"
                   onClick={() => setFormRequiresHuman(!formRequiresHuman)}
                   className={`h-5 w-9 rounded-full transition-colors ${
-                    formRequiresHuman ? "bg-neo/40" : "bg-white/[0.08]"
+                    formRequiresHuman ? "bg-neo/40" : "bg-[var(--bg-tertiary)]"
                   }`}
                 >
                   <div
@@ -478,18 +478,18 @@ export default function GovernancePage() {
                     }`}
                   />
                 </button>
-                <span className="font-mono text-[10px] tracking-wider text-white/40">
+                <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   REQUIRES HUMAN APPROVAL
                 </span>
               </div>
 
               {!formRequiresHuman && (
                 <div>
-                  <label className="block font-mono text-[10px] tracking-wider text-white/40">APPROVER AGENT</label>
+                  <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">APPROVER AGENT</label>
                   <select
                     value={formApproverAgentId}
                     onChange={(e) => setFormApproverAgentId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                    className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                   >
                     <option value="">Select agent...</option>
                     {agents.map((a) => (
@@ -505,14 +505,14 @@ export default function GovernancePage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowGateModal(false)}
-                className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSaveGate}
                 disabled={saving || !formGateType}
-                className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : editGate ? "UPDATE" : "CREATE"}
               </button>

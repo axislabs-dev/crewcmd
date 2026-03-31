@@ -92,7 +92,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     <div className="flex flex-col items-center gap-2">
       {/* Interim transcript preview */}
       {isRecording && (interimText || finalTranscriptRef.current) && (
-        <div className="w-full px-4 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] font-mono text-[12px] text-white/40 truncate">
+        <div className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-tertiary)] truncate">
           {finalTranscriptRef.current}{interimText}
         </div>
       )}
@@ -108,7 +108,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
         className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-200 select-none touch-none ${
           isRecording
             ? "border-neo bg-neo/20 scale-110"
-            : "border-white/15 bg-white/[0.05] hover:border-white/25 hover:bg-white/[0.08]"
+            : "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]"
         } ${isDisabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
         style={
           isRecording
@@ -119,7 +119,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
         {/* Mic icon */}
         <svg
           className={`h-7 w-7 transition-colors ${
-            isRecording ? "text-neo" : "text-white/50"
+            isRecording ? "text-[var(--accent)]" : "text-[var(--text-secondary)]"
           }`}
           fill="none"
           viewBox="0 0 24 24"
@@ -142,7 +142,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
         )}
       </button>
 
-      <span className="font-mono text-[10px] tracking-wider text-white/25">
+      <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
         {isRecording ? "RELEASE TO SEND" : "HOLD TO SPEAK"}
       </span>
     </div>

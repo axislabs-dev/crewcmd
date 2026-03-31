@@ -103,7 +103,7 @@ export default function LoginPage() {
             <h1 className="glow-text-neo font-mono text-2xl font-bold tracking-[0.2em] text-neo">
               CREWCMD
             </h1>
-            <p className="mt-1 font-mono text-[10px] tracking-[0.4em] text-white/30">
+            <p className="mt-1 font-mono text-[10px] tracking-[0.4em] text-[var(--text-tertiary)]">
               COMMAND CENTER
             </p>
           </div>
@@ -115,10 +115,10 @@ export default function LoginPage() {
           style={{ borderColor: "rgba(0, 240, 255, 0.1)" }}
         >
           <div className="mb-6 text-center">
-            <h2 className="font-mono text-sm font-bold tracking-[0.15em] text-white/70">
+            <h2 className="text-sm font-bold tracking-[0.15em] text-[var(--text-primary)]">
               {mode === "signup" ? "CREATE YOUR ACCOUNT" : "TACTICAL ACCESS"}
             </h2>
-            <p className="mt-1.5 text-xs text-white/30">
+            <p className="mt-1.5 text-xs text-[var(--text-tertiary)]">
               {mode === "signup"
                 ? "Set up the first admin account"
                 : "Authenticate to enter the command center"}
@@ -126,7 +126,7 @@ export default function LoginPage() {
           </div>
 
           {/* Divider */}
-          <div className="mb-6 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+          <div className="mb-6 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
 
           {/* Error */}
           {error && (
@@ -139,7 +139,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <div>
-                <label className="mb-1.5 block font-mono text-[10px] tracking-wider text-white/40">
+                <label className="mb-1.5 block text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   NAME
                 </label>
                 <input
@@ -148,13 +148,13 @@ export default function LoginPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                   placeholder="Your name"
-                  className="w-full rounded-lg border border-white/[0.12] bg-white/[0.04] px-3 py-2.5 font-mono text-sm text-white/80 placeholder-white/20 outline-none transition-colors focus:border-neo/40 focus:bg-neo/[0.04]"
+                  className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-[var(--accent)] focus:bg-[var(--accent-soft)]"
                 />
               </div>
             )}
 
             <div>
-              <label className="mb-1.5 block font-mono text-[10px] tracking-wider text-white/40">
+              <label className="mb-1.5 block text-[10px] tracking-wider text-[var(--text-tertiary)]">
                 EMAIL
               </label>
               <input
@@ -163,12 +163,12 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="you@example.com"
-                className="w-full rounded-lg border border-white/[0.12] bg-white/[0.04] px-3 py-2.5 font-mono text-sm text-white/80 placeholder-white/20 outline-none transition-colors focus:border-neo/40 focus:bg-neo/[0.04]"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-[var(--accent)] focus:bg-[var(--accent-soft)]"
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block font-mono text-[10px] tracking-wider text-white/40">
+              <label className="mb-1.5 block text-[10px] tracking-wider text-[var(--text-tertiary)]">
                 PASSWORD
               </label>
               <input
@@ -178,14 +178,14 @@ export default function LoginPage() {
                 required
                 minLength={8}
                 placeholder="Min 8 characters"
-                className="w-full rounded-lg border border-white/[0.12] bg-white/[0.04] px-3 py-2.5 font-mono text-sm text-white/80 placeholder-white/20 outline-none transition-colors focus:border-neo/40 focus:bg-neo/[0.04]"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-[var(--accent)] focus:bg-[var(--accent-soft)]"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="group flex w-full items-center justify-center gap-3 rounded-lg border border-white/[0.12] bg-white/[0.04] px-4 py-3 font-mono text-sm font-bold tracking-wider text-white/80 transition-all duration-200 hover:border-neo/40 hover:bg-neo/[0.08] hover:text-neo hover:shadow-[0_0_20px_rgba(0,240,255,0.1)] disabled:opacity-50"
+              className="group flex w-full items-center justify-center gap-3 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-3 text-sm font-bold tracking-wider text-[var(--text-primary)] transition-all duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] hover:shadow-[0_0_20px_rgba(0,240,255,0.1)] disabled:opacity-50"
             >
               {loading
                 ? "AUTHENTICATING..."
@@ -202,7 +202,7 @@ export default function LoginPage() {
                 setMode(mode === "login" ? "signup" : "login");
                 setError("");
               }}
-              className="font-mono text-[10px] tracking-wider text-white/30 transition-colors hover:text-neo/60"
+              className="text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-neo/60"
             >
               {mode === "login"
                 ? "NEED AN ACCOUNT? CREATE ONE"
@@ -211,14 +211,14 @@ export default function LoginPage() {
           </div>
 
           {/* Footer note */}
-          <p className="mt-4 text-center font-mono text-[9px] tracking-wider text-white/20">
+          <p className="mt-4 text-center text-[9px] tracking-wider text-[var(--text-tertiary)]">
             ACCESS RESTRICTED TO AUTHORIZED PERSONNEL
           </p>
         </div>
 
         {/* Bottom branding */}
         <div className="mt-6 text-center">
-          <span className="font-mono text-[9px] tracking-wider text-white/15">
+          <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
             CREWCMD v0.2.0 · crewcmd.dev
           </span>
         </div>

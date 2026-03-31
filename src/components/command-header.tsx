@@ -56,7 +56,7 @@ export function CommandHeader({ agents, tasks }: CommandHeaderProps) {
                 boxShadow: "0 0 12px rgba(0, 240, 255, 0.6)",
               }}
             />
-            <h1 className="glow-text-neo font-mono text-lg tracking-[0.2em] font-bold text-neo">
+            <h1 className="glow-text-neo font-mono text-lg tracking-[0.2em] font-bold text-[var(--accent)]">
               CREW ROSTER
             </h1>
           </div>
@@ -72,10 +72,10 @@ export function CommandHeader({ agents, tasks }: CommandHeaderProps) {
           </div>
 
           <div className="flex flex-col items-end">
-            <span className="font-mono text-xl font-bold text-white tabular-nums">
+            <span className="text-xl font-bold text-[var(--text-primary)] tabular-nums">
               {time}
             </span>
-            <span className="font-mono text-xs text-white/40">{date}</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{date}</span>
           </div>
         </div>
       </div>
@@ -86,14 +86,14 @@ export function CommandHeader({ agents, tasks }: CommandHeaderProps) {
 function StatBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col items-center">
-      <span className="font-mono text-[10px] tracking-widest text-white/30 uppercase">
+      <span className="text-[10px] tracking-widest text-[var(--text-tertiary)] uppercase">
         {label}
       </span>
-      <span className="font-mono text-lg font-bold text-white">{value}</span>
+      <span className="text-lg font-bold text-[var(--text-primary)]">{value}</span>
     </div>
   );
 }
 
 function Divider() {
-  return <div className="h-8 w-px bg-white/10" />;
+  return <div className="h-8 w-px bg-[var(--border-medium)]" />;
 }

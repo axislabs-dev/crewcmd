@@ -49,7 +49,7 @@ interface Agent {
 
 const SOURCE_STYLES: Record<string, { label: string; icon: string; color: string; border: string; bg: string }> = {
   clawhub: { label: "ClawHub", icon: "\u{1F43E}", color: "text-[#00f0ff]", border: "border-[#00f0ff]/30", bg: "bg-[#00f0ff]/10" },
-  skills_sh: { label: "skills.sh", icon: "\u25B2", color: "text-white", border: "border-white/20", bg: "bg-white/[0.06]" },
+  skills_sh: { label: "skills.sh", icon: "\u25B2", color: "text-[var(--text-primary)]", border: "border-[var(--border-medium)]", bg: "bg-[var(--bg-surface-hover)]" },
   github: { label: "GitHub", icon: "\u2B24", color: "text-[#8b949e]", border: "border-[#8b949e]/30", bg: "bg-[#8b949e]/10" },
   custom: { label: "Custom", icon: "\u270F\uFE0F", color: "text-amber-400", border: "border-amber-400/30", bg: "bg-amber-400/10" },
 };
@@ -69,7 +69,7 @@ function SourceBadge({ source }: { source: string }) {
 // ─── Styling Constants ──────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white placeholder:text-white/25 outline-none focus:border-[#00f0ff]/40 transition-colors";
+  "w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-white placeholder:text-[var(--text-tertiary)] outline-none focus:border-[#00f0ff]/40 transition-colors";
 
 // ─── Main Page ──────────────────────────────────────────────────────────
 
@@ -312,7 +312,7 @@ export default function SkillsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -321,8 +321,8 @@ export default function SkillsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">Select a company from the sidebar to manage skills.</p>
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">Select a company from the sidebar to manage skills.</p>
         </div>
       </div>
     );
@@ -331,12 +331,12 @@ export default function SkillsPage() {
   return (
     <div className="flex h-[calc(100vh-56px)] lg:h-screen">
       {/* ── Left Panel: Skills Library ── */}
-      <div className="flex w-full flex-col border-r border-white/[0.06] lg:w-[420px] lg:flex-shrink-0">
+      <div className="flex w-full flex-col border-r border-[var(--border-subtle)] lg:w-[420px] lg:flex-shrink-0">
         {/* Header */}
-        <div className="border-b border-white/[0.06] px-4 py-4">
+        <div className="border-b border-[var(--border-subtle)] px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="font-mono text-lg font-bold tracking-wider text-neo">SKILLS</h1>
-            <span className="font-mono text-[11px] text-white/35">{skills.length} INSTALLED</span>
+            <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">SKILLS</h1>
+            <span className="text-[11px] text-[var(--text-tertiary)]">{skills.length} INSTALLED</span>
           </div>
           <div className="mt-3">
             <input
@@ -350,15 +350,15 @@ export default function SkillsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0 border-b border-white/[0.06]">
+        <div className="flex gap-0 border-b border-[var(--border-subtle)]">
           {(["installed", "browse", "custom"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 py-2.5 font-mono text-[11px] tracking-wider transition-colors ${
+              className={`flex-1 py-2.5 text-[11px] tracking-wider transition-colors ${
                 tab === t
-                  ? "border-b-2 border-neo text-neo"
-                  : "text-white/35 hover:text-white/50"
+                  ? "border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               }`}
             >
               {t.toUpperCase()}
@@ -372,14 +372,14 @@ export default function SkillsPage() {
           {tab === "installed" && (
             <>
               {filteredInstalled.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-white/[0.08] py-10 text-center">
-                  <p className="font-mono text-xs text-white/30">No skills installed</p>
-                  <p className="mt-1 font-mono text-[10px] text-white/20">
+                <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-10 text-center">
+                  <p className="text-xs text-[var(--text-tertiary)]">No skills installed</p>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                     Browse the marketplace to install skills.
                   </p>
                   <button
                     onClick={() => setTab("browse")}
-                    className="mt-3 rounded-lg bg-neo/10 px-4 py-2 font-mono text-[11px] tracking-wider text-neo border border-neo/20 transition-colors hover:bg-neo/20"
+                    className="mt-3 rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] border border-[var(--accent-medium)] transition-colors hover:bg-[var(--accent-soft)]"
                   >
                     BROWSE MARKETPLACE
                   </button>
@@ -391,20 +391,20 @@ export default function SkillsPage() {
                     onClick={() => selectSkill(skill)}
                     className={`w-full rounded-lg border p-3 text-left transition-colors ${
                       selectedSkill?.id === skill.id
-                        ? "border-neo/30 bg-neo/[0.05]"
-                        : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] hover:bg-white/[0.03]"
+                        ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs text-white/80">{skill.name}</span>
+                      <span className="font-mono text-xs text-[var(--text-primary)]">{skill.name}</span>
                       <SourceBadge source={skill.source} />
                     </div>
                     {skill.description && (
-                      <p className="mt-1 font-mono text-[10px] text-white/35 line-clamp-1">{skill.description}</p>
+                      <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-1">{skill.description}</p>
                     )}
                     <div className="mt-1.5 flex items-center gap-2">
                       {skill.version && (
-                        <span className="font-mono text-[9px] text-white/25">v{skill.version}</span>
+                        <span className="font-mono text-[9px] text-[var(--text-tertiary)]">v{skill.version}</span>
                       )}
                     </div>
                   </button>
@@ -429,8 +429,8 @@ export default function SkillsPage() {
                     onClick={() => setSourceFilter(f.value)}
                     className={`rounded-full px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors border ${
                       sourceFilter === f.value
-                        ? "border-neo/30 bg-neo/10 text-neo"
-                        : "border-white/[0.06] text-white/35 hover:text-white/50"
+                        ? "border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                        : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                     }`}
                   >
                     {f.label.toUpperCase()}
@@ -446,12 +446,12 @@ export default function SkillsPage() {
                     onClick={() => selectMarketplaceSkill(ms)}
                     className={`w-full rounded-lg border p-3 text-left transition-colors ${
                       selectedMarketplace?.slug === ms.slug && selectedMarketplace?.source === ms.source
-                        ? "border-neo/30 bg-neo/[0.05]"
-                        : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] hover:bg-white/[0.03]"
+                        ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs text-white/80">{ms.name}</span>
+                      <span className="font-mono text-xs text-[var(--text-primary)]">{ms.name}</span>
                       <div className="flex items-center gap-2">
                         <SourceBadge source={ms.source} />
                         {isInstalled ? (
@@ -465,15 +465,15 @@ export default function SkillsPage() {
                               handleInstall(ms);
                             }}
                             disabled={installing === ms.slug}
-                            className="rounded-full border border-neo/20 bg-neo/10 px-2 py-0.5 font-mono text-[9px] tracking-wider text-neo transition-colors hover:bg-neo/20 disabled:opacity-50"
+                            className="rounded-full border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                           >
                             {installing === ms.slug ? "..." : "INSTALL"}
                           </button>
                         )}
                       </div>
                     </div>
-                    <p className="mt-1 font-mono text-[10px] text-white/35 line-clamp-2">{ms.description}</p>
-                    <span className="mt-1 inline-block font-mono text-[9px] text-white/25">v{ms.version}</span>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-2">{ms.description}</p>
+                    <span className="mt-1 inline-block font-mono text-[9px] text-[var(--text-tertiary)]">v{ms.version}</span>
                   </button>
                 );
               })}
@@ -485,7 +485,7 @@ export default function SkillsPage() {
             <>
               <button
                 onClick={() => setShowCustomForm(true)}
-                className="w-full rounded-lg border border-dashed border-neo/20 bg-neo/[0.03] py-3 font-mono text-[11px] tracking-wider text-neo transition-colors hover:bg-neo/[0.06]"
+                className="w-full rounded-lg border border-dashed border-[var(--accent-medium)] bg-[var(--accent-soft)] py-3 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)]"
               >
                 + NEW SKILL
               </button>
@@ -496,23 +496,23 @@ export default function SkillsPage() {
                   onClick={() => selectSkill(skill)}
                   className={`w-full rounded-lg border p-3 text-left transition-colors ${
                     selectedSkill?.id === skill.id
-                      ? "border-neo/30 bg-neo/[0.05]"
-                      : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] hover:bg-white/[0.03]"
+                      ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]"
+                      : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-white/80">{skill.name}</span>
+                    <span className="font-mono text-xs text-[var(--text-primary)]">{skill.name}</span>
                     <SourceBadge source="custom" />
                   </div>
                   {skill.description && (
-                    <p className="mt-1 font-mono text-[10px] text-white/35 line-clamp-1">{skill.description}</p>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-1">{skill.description}</p>
                   )}
                 </button>
               ))}
 
               {filteredCustom.length === 0 && !showCustomForm && (
                 <div className="py-6 text-center">
-                  <p className="font-mono text-[10px] text-white/25">No custom skills yet.</p>
+                  <p className="font-mono text-[10px] text-[var(--text-tertiary)]">No custom skills yet.</p>
                 </div>
               )}
             </>
@@ -525,10 +525,10 @@ export default function SkillsPage() {
         {/* Custom skill creation form */}
         {showCustomForm && (
           <div className="mx-auto max-w-2xl p-6">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">NEW CUSTOM SKILL</h2>
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">NEW CUSTOM SKILL</h2>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">NAME</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">NAME</label>
                 <input
                   type="text"
                   value={customName}
@@ -539,7 +539,7 @@ export default function SkillsPage() {
                 />
               </div>
               <div>
-                <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">DESCRIPTION</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">DESCRIPTION</label>
                 <input
                   type="text"
                   value={customDescription}
@@ -549,7 +549,7 @@ export default function SkillsPage() {
                 />
               </div>
               <div>
-                <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">SKILL.MD CONTENT</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">SKILL.MD CONTENT</label>
                 <textarea
                   value={customContent}
                   onChange={(e) => setCustomContent(e.target.value)}
@@ -561,14 +561,14 @@ export default function SkillsPage() {
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   onClick={() => setShowCustomForm(false)}
-                  className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                  className="rounded-lg border border-[var(--border-medium)] px-4 py-2 font-mono text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
                 >
                   CANCEL
                 </button>
                 <button
                   onClick={handleCreateCustom}
                   disabled={savingCustom || !customName.trim()}
-                  className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                  className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
                 >
                   {savingCustom ? "SAVING..." : "CREATE SKILL"}
                 </button>
@@ -583,27 +583,27 @@ export default function SkillsPage() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="font-mono text-sm font-bold tracking-wider text-white">{selectedSkill.name}</h2>
+                  <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">{selectedSkill.name}</h2>
                   <SourceBadge source={selectedSkill.source} />
                 </div>
                 {selectedSkill.version && (
-                  <p className="mt-1 font-mono text-[10px] text-white/25">v{selectedSkill.version}</p>
+                  <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">v{selectedSkill.version}</p>
                 )}
                 {selectedSkill.description && (
-                  <p className="mt-2 font-mono text-xs text-white/50">{selectedSkill.description}</p>
+                  <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">{selectedSkill.description}</p>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 {selectedSkill.source === "custom" && !editing && (
                   <button
                     onClick={() => startEditing(selectedSkill)}
-                    className="rounded-lg border border-white/[0.08] px-3 py-1.5 font-mono text-[10px] tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/60"
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                   >
                     EDIT
                   </button>
                 )}
                 {selectedSkill.source !== "custom" && (
-                  <button className="rounded-lg border border-white/[0.08] px-3 py-1.5 font-mono text-[10px] tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/60">
+                  <button className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]">
                     CHECK FOR UPDATES
                   </button>
                 )}
@@ -617,16 +617,16 @@ export default function SkillsPage() {
             </div>
 
             {selectedSkill.sourceUrl && (
-              <p className="mt-2 font-mono text-[10px] text-white/25">
+              <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">
                 Source: {selectedSkill.sourceUrl}
               </p>
             )}
 
             {/* Edit mode */}
             {editing && (
-              <div className="mt-4 space-y-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+              <div className="mt-4 space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
                 <div>
-                  <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">NAME</label>
+                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">NAME</label>
                   <input
                     type="text"
                     value={editName}
@@ -635,7 +635,7 @@ export default function SkillsPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">DESCRIPTION</label>
+                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">DESCRIPTION</label>
                   <input
                     type="text"
                     value={editDescription}
@@ -644,7 +644,7 @@ export default function SkillsPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">CONTENT</label>
+                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">CONTENT</label>
                   <textarea
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
@@ -655,14 +655,14 @@ export default function SkillsPage() {
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setEditing(false)}
-                    className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                    className="rounded-lg border border-[var(--border-medium)] px-4 py-2 font-mono text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
                   >
                     CANCEL
                   </button>
                   <button
                     onClick={handleSaveEdit}
                     disabled={savingEdit}
-                    className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                    className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
                   >
                     {savingEdit ? "SAVING..." : "SAVE"}
                   </button>
@@ -673,8 +673,8 @@ export default function SkillsPage() {
             {/* Content display */}
             {!editing && selectedSkill.content && (
               <div className="mt-4">
-                <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">SKILL.MD</label>
-                <pre className="mt-2 max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 font-mono text-xs text-white/60">
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">SKILL.MD</label>
+                <pre className="mt-2 max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 font-mono text-xs text-[var(--text-secondary)]">
                   {selectedSkill.content}
                 </pre>
               </div>
@@ -682,18 +682,18 @@ export default function SkillsPage() {
 
             {/* Agents using this skill */}
             <div className="mt-6">
-              <label className="font-mono text-[11px] tracking-wider text-white/50 uppercase">
+              <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
                 AGENTS USING THIS SKILL
               </label>
               {skillAgents.length === 0 ? (
-                <p className="mt-2 font-mono text-[10px] text-white/25">No agents have this skill attached.</p>
+                <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">No agents have this skill attached.</p>
               ) : (
                 <div className="mt-2 space-y-1">
                   {skillAgents.map((a) => (
-                    <div key={a.callsign} className="flex items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.01] px-3 py-2">
+                    <div key={a.callsign} className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2">
                       <span className="text-sm">{a.emoji}</span>
-                      <span className="font-mono text-xs text-white/70">{a.name}</span>
-                      <span className="font-mono text-[10px] text-white/30">{a.callsign}</span>
+                      <span className="font-mono text-xs text-[var(--text-primary)]">{a.name}</span>
+                      <span className="font-mono text-[10px] text-[var(--text-tertiary)]">{a.callsign}</span>
                     </div>
                   ))}
                 </div>
@@ -708,11 +708,11 @@ export default function SkillsPage() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="font-mono text-sm font-bold tracking-wider text-white">{selectedMarketplace.name}</h2>
+                  <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">{selectedMarketplace.name}</h2>
                   <SourceBadge source={selectedMarketplace.source} />
                 </div>
-                <p className="mt-1 font-mono text-[10px] text-white/25">v{selectedMarketplace.version}</p>
-                <p className="mt-2 font-mono text-xs text-white/50">{selectedMarketplace.description}</p>
+                <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">v{selectedMarketplace.version}</p>
+                <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">{selectedMarketplace.description}</p>
               </div>
               <div>
                 {installedSlugs.has(selectedMarketplace.slug) ? (
@@ -723,7 +723,7 @@ export default function SkillsPage() {
                   <button
                     onClick={() => handleInstall(selectedMarketplace)}
                     disabled={installing === selectedMarketplace.slug}
-                    className="rounded-lg border border-neo/20 bg-neo/10 px-4 py-2 font-mono text-[11px] tracking-wider text-neo transition-colors hover:bg-neo/20 disabled:opacity-50"
+                    className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                   >
                     {installing === selectedMarketplace.slug ? "INSTALLING..." : "INSTALL SKILL"}
                   </button>
@@ -731,12 +731,12 @@ export default function SkillsPage() {
               </div>
             </div>
 
-            <p className="mt-3 font-mono text-[10px] text-white/25">
+            <p className="mt-3 font-mono text-[10px] text-[var(--text-tertiary)]">
               Source: {selectedMarketplace.sourceUrl}
             </p>
 
-            <div className="mt-6 rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
-              <p className="font-mono text-[10px] text-white/35">
+            <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+              <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
                 Skill content will be fetched from the marketplace when real API integration is available.
                 For now, installing creates a skill record that can be attached to agents.
               </p>
@@ -748,13 +748,13 @@ export default function SkillsPage() {
         {!selectedSkill && !selectedMarketplace && !showCustomForm && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.02]">
-                <svg className="h-6 w-6 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                <svg className="h-6 w-6 text-[var(--text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 0 1-.657.643 48.39 48.39 0 0 1-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 0 1-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 0 0-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 0 1-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 0 0 .657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 0 1-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 0 0 5.427-.63 48.05 48.05 0 0 0 .582-4.717.532.532 0 0 0-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 0 0 .658-.663 48.422 48.422 0 0 0-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 0 1-.61-.58v0Z" />
                 </svg>
               </div>
-              <p className="font-mono text-xs text-white/30">Select a skill to view details</p>
-              <p className="mt-1 font-mono text-[10px] text-white/20">Or browse the marketplace to discover new skills.</p>
+              <p className="text-xs text-[var(--text-tertiary)]">Select a skill to view details</p>
+              <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Or browse the marketplace to discover new skills.</p>
             </div>
           </div>
         )}

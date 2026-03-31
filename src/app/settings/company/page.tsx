@@ -144,7 +144,7 @@ export default function CompanySettingsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -153,8 +153,8 @@ export default function CompanySettingsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar or create one in the onboarding flow.
           </p>
         </div>
@@ -178,8 +178,8 @@ export default function CompanySettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <h1 className="font-mono text-lg font-bold tracking-wider text-neo">COMPANY SETTINGS</h1>
-      <p className="mt-1 font-mono text-xs text-white/30">Manage your company profile and team members</p>
+      <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">COMPANY SETTINGS</h1>
+      <p className="mt-1 text-xs text-[var(--text-tertiary)]">Manage your company profile and team members</p>
 
       {message && (
         <div
@@ -194,37 +194,37 @@ export default function CompanySettingsPage() {
       )}
 
       {/* Company Info */}
-      <div className="mt-6 space-y-4 rounded-lg border border-white/[0.06] bg-white/[0.02] p-5">
-        <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">COMPANY INFO</h2>
+      <div className="mt-6 space-y-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+        <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">COMPANY INFO</h2>
 
         <div>
-          <label className="block font-mono text-[10px] tracking-wider text-white/40">NAME</label>
+          <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">NAME</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+            className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
           />
         </div>
 
         <div>
-          <label className="block font-mono text-[10px] tracking-wider text-white/40">MISSION</label>
+          <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">MISSION</label>
           <textarea
             value={mission}
             onChange={(e) => setMission(e.target.value)}
             rows={3}
-            className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+            className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
             placeholder="What's your company's mission?"
           />
         </div>
 
         <div>
-          <label className="block font-mono text-[10px] tracking-wider text-white/40">LOGO URL</label>
+          <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">LOGO URL</label>
           <input
             type="text"
             value={logoUrl}
             onChange={(e) => setLogoUrl(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+            className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
             placeholder="https://..."
           />
         </div>
@@ -232,15 +232,15 @@ export default function CompanySettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+          className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
         >
           {saving ? "SAVING..." : "SAVE CHANGES"}
         </button>
       </div>
 
       {/* Members */}
-      <div className="mt-6 rounded-lg border border-white/[0.06] bg-white/[0.02] p-5">
-        <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">TEAM MEMBERS</h2>
+      <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+        <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">TEAM MEMBERS</h2>
 
         {/* Invite form */}
         <div className="mt-4 flex gap-2">
@@ -249,12 +249,12 @@ export default function CompanySettingsPage() {
             value={inviteUsername}
             onChange={(e) => setInviteUsername(e.target.value)}
             placeholder="GitHub username"
-            className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+            className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
           />
           <select
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value)}
-            className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+            className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
           >
             <option value="member">Member</option>
             <option value="admin">Admin</option>
@@ -263,7 +263,7 @@ export default function CompanySettingsPage() {
           <button
             onClick={handleInvite}
             disabled={inviting || !inviteUsername.trim()}
-            className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+            className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
           >
             {inviting ? "..." : "INVITE"}
           </button>
@@ -274,16 +274,16 @@ export default function CompanySettingsPage() {
           {members.map((m) => (
             <div
               key={m.id}
-              className="flex items-center justify-between rounded-lg border border-white/[0.04] bg-white/[0.01] px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.05] font-mono text-xs text-white/50">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-surface-hover)] font-mono text-xs text-[var(--text-secondary)]">
                   {m.githubUsername[0]?.toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-mono text-xs text-white/70">{m.githubUsername}</p>
+                  <p className="font-mono text-xs text-[var(--text-primary)]">{m.githubUsername}</p>
                   {m.email && (
-                    <p className="font-mono text-[10px] text-white/30">{m.email}</p>
+                    <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{m.email}</p>
                   )}
                 </div>
                 {roleBadge(m.role)}
@@ -299,7 +299,7 @@ export default function CompanySettingsPage() {
             </div>
           ))}
           {members.length === 0 && (
-            <p className="py-4 text-center font-mono text-xs text-white/25">No members yet</p>
+            <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">No members yet</p>
           )}
         </div>
       </div>

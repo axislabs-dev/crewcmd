@@ -182,9 +182,9 @@ interface AgentConfigFieldsProps {
 // ─── Styling ────────────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white placeholder:text-white/25 outline-none focus:border-[#00f0ff]/40 transition-colors";
-const labelClass = "font-mono text-[11px] tracking-wider text-white/50 uppercase";
-const sectionHeaderClass = "font-mono text-xs tracking-[0.15em] text-white/60 uppercase";
+  "w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[#00f0ff]/40 transition-colors";
+const labelClass = "text-[11px] tracking-wider text-[var(--text-secondary)] uppercase";
+const sectionHeaderClass = "text-xs tracking-[0.15em] text-[var(--text-secondary)] uppercase";
 
 // ─── Custom Dropdown ────────────────────────────────────────────────────
 
@@ -219,11 +219,11 @@ function Dropdown({
         onClick={() => setOpen(!open)}
         className={`${inputClass} flex items-center justify-between text-left`}
       >
-        <span className={selected ? "text-white" : "text-white/25"}>
+        <span className={selected ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>
           {selected?.label ?? placeholder ?? "Select..."}
         </span>
         <svg
-          className={`h-3.5 w-3.5 text-white/35 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -233,7 +233,7 @@ function Dropdown({
         </svg>
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-white/[0.08] bg-[#0d1117] py-1 shadow-xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-[var(--border-medium)] bg-[#0d1117] py-1 shadow-xl">
           {options.map((o) => (
             <button
               key={o.value}
@@ -242,8 +242,8 @@ function Dropdown({
                 onChange(o.value);
                 setOpen(false);
               }}
-              className={`w-full px-3 py-1.5 text-left font-mono text-sm transition-colors hover:bg-white/[0.06] ${
-                o.value === value ? "text-[#00f0ff]" : "text-white/70"
+              className={`w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                o.value === value ? "text-[#00f0ff]" : "text-[var(--text-primary)]"
               }`}
             >
               {o.label}
@@ -296,7 +296,7 @@ function ModelCombo({
             className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
           >
             <svg
-              className={`h-3.5 w-3.5 text-white/35 transition-transform ${open ? "rotate-180" : ""}`}
+              className={`h-3.5 w-3.5 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -308,7 +308,7 @@ function ModelCombo({
         )}
       </div>
       {open && presets.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-white/[0.08] bg-[#0d1117] py-1 shadow-xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-[var(--border-medium)] bg-[#0d1117] py-1 shadow-xl">
           {presets.map((m) => (
             <button
               key={m}
@@ -317,8 +317,8 @@ function ModelCombo({
                 onChange(m);
                 setOpen(false);
               }}
-              className={`w-full px-3 py-1.5 text-left font-mono text-sm transition-colors hover:bg-white/[0.06] ${
-                m === value ? "text-[#00f0ff]" : "text-white/70"
+              className={`w-full px-3 py-1.5 text-left font-mono text-sm transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                m === value ? "text-[#00f0ff]" : "text-[var(--text-primary)]"
               }`}
             >
               {m}
@@ -338,12 +338,12 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       type="button"
       onClick={() => onChange(!checked)}
       className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
-        checked ? "bg-[#00f0ff]/30" : "bg-white/[0.08]"
+        checked ? "bg-[#00f0ff]/30" : "bg-[var(--bg-tertiary)]"
       }`}
     >
       <div
         className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-          checked ? "left-[18px] bg-[#00f0ff]" : "left-0.5 bg-white/40"
+          checked ? "left-[18px] bg-[#00f0ff]" : "left-0.5 bg-[var(--text-tertiary)]"
         }`}
       />
     </button>
@@ -366,7 +366,7 @@ function Section({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-white/[0.06]">
+    <div className="border-b border-[var(--border-subtle)]">
       <button
         type="button"
         onClick={() => collapsible && setOpen(!open)}
@@ -375,7 +375,7 @@ function Section({
         <span className={sectionHeaderClass}>{title}</span>
         {collapsible && (
           <svg
-            className={`h-3.5 w-3.5 text-white/35 transition-transform ${open ? "rotate-180" : ""}`}
+            className={`h-3.5 w-3.5 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -414,7 +414,7 @@ function PasswordInput({
       <button
         type="button"
         onClick={() => setVisible(!visible)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-white/35 transition-colors hover:text-white/60"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
       >
         {visible ? "HIDE" : "SHOW"}
       </button>
@@ -492,7 +492,7 @@ function EnvVarEditor({
             <button
               type="button"
               onClick={() => removeRow(i)}
-              className="flex-shrink-0 font-mono text-sm text-white/35 transition-colors hover:text-red-400"
+              className="flex-shrink-0 text-sm text-[var(--text-tertiary)] transition-colors hover:text-red-400"
             >
               &times;
             </button>
@@ -526,7 +526,7 @@ function NumberInput({
         min={min ?? 0}
         className={`${inputClass} w-24`}
       />
-      {suffix && <span className="font-mono text-[11px] text-white/35">{suffix}</span>}
+      {suffix && <span className="text-[11px] text-[var(--text-tertiary)]">{suffix}</span>}
     </div>
   );
 }
@@ -535,7 +535,7 @@ function NumberInput({
 
 const SKILL_SOURCE_STYLES: Record<string, { icon: string; color: string }> = {
   clawhub: { icon: "\u{1F43E}", color: "text-[#00f0ff]" },
-  skills_sh: { icon: "\u25B2", color: "text-white" },
+  skills_sh: { icon: "\u25B2", color: "text-[var(--text-primary)]" },
   github: { icon: "\u2B24", color: "text-[#8b949e]" },
   custom: { icon: "\u270F\uFE0F", color: "text-amber-400" },
 };
@@ -619,7 +619,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
               <label className={labelClass}>COLOR</label>
               <div className="mt-1 flex items-center gap-2">
                 <div
-                  className="h-[34px] w-8 flex-shrink-0 rounded-md border border-white/[0.06]"
+                  className="h-[34px] w-8 flex-shrink-0 rounded-md border border-[var(--border-subtle)]"
                   style={{ backgroundColor: values.color || "#00f0ff" }}
                 />
                 <input
@@ -771,7 +771,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
                   placeholder="sk-or-v1-..."
                 />
               </div>
-              <p className="mt-1 font-mono text-[11px] text-white/35">
+              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
                 Get your key at openrouter.ai/keys
               </p>
             </div>
@@ -799,9 +799,9 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
               onChange={(e) => onChange({ promptTemplate: e.target.value })}
               rows={6}
               placeholder={"You are {{ agent.name }}. Your role is {{ agent.role }}..."}
-              className={`mt-1 ${inputClass} font-mono`}
+              className={`mt-1 ${inputClass}`}
             />
-            <p className="mt-1 font-mono text-[11px] text-white/35">
+            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
               Defines the agent&apos;s personality and behavior. Supports variables like {"{{ agent.name }}"}, {"{{ agent.role }}"}.
             </p>
           </div>
@@ -814,7 +814,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
               placeholder="/path/to/AGENTS.md"
               className={`mt-1 ${inputClass}`}
             />
-            <p className="mt-1 font-mono text-[11px] text-white/35">
+            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
               Path to a markdown file injected into the agent&apos;s system prompt at runtime.
             </p>
           </div>
@@ -836,7 +836,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
       {/* ── ENVIRONMENT VARIABLES ── */}
       <Section title="Environment Variables">
         <EnvVarEditor envVars={values.envVars} onChange={(v) => onChange({ envVars: v })} />
-        <p className="mt-2 font-mono text-[11px] text-white/35">
+        <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">
           {isLocal
             ? "Injected into the agent\u2019s process environment at runtime."
             : "Passed to the agent as context variables."}
@@ -932,7 +932,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
               return (
                 <label
                   key={skill.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.01] px-3 py-2 transition-colors hover:border-white/[0.08] hover:bg-white/[0.02]"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                 >
                   <input
                     type="checkbox"
@@ -943,20 +943,20 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
                         : [...values.skillIds, skill.id];
                       onChange({ skillIds: next });
                     }}
-                    className="h-3.5 w-3.5 rounded border-white/20 bg-transparent accent-[#00f0ff]"
+                    className="h-3.5 w-3.5 rounded border-[var(--text-tertiary)] bg-transparent accent-[#00f0ff]"
                   />
                   <span className={`text-[10px] ${style.color}`}>{style.icon}</span>
                   <div className="min-w-0 flex-1">
-                    <span className="font-mono text-xs text-white/70">{skill.name}</span>
+                    <span className="text-xs text-[var(--text-primary)]">{skill.name}</span>
                     {skill.description && (
-                      <p className="font-mono text-[9px] text-white/30 line-clamp-1">{skill.description}</p>
+                      <p className="text-[9px] text-[var(--text-tertiary)] line-clamp-1">{skill.description}</p>
                     )}
                   </div>
                 </label>
               );
             })}
           </div>
-          <p className="mt-2 font-mono text-[11px] text-white/35">
+          <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">
             Toggle skills to attach or detach them from this agent.
           </p>
         </Section>

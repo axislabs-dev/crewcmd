@@ -40,7 +40,7 @@ const statusLabels: Record<TaskStatus, string> = {
 };
 
 const priorityStyles: Record<string, { text: string; bg: string }> = {
-  low: { text: "text-white/30", bg: "bg-white/5" },
+  low: { text: "text-[var(--text-tertiary)]", bg: "bg-[var(--bg-surface-hover)]" },
   medium: { text: "text-blue-400", bg: "bg-blue-400/10" },
   high: { text: "text-orange-400", bg: "bg-orange-400/10" },
   critical: { text: "text-red-400", bg: "bg-red-400/10" },
@@ -50,7 +50,7 @@ type SortKey = "title" | "status" | "priority" | "project" | "assignee" | "creat
 type SortDir = "asc" | "desc";
 
 const sourceStyles: Record<TaskSource, { label: string; cls: string }> = {
-  manual: { label: "manual", cls: "text-white/30 border-white/10" },
+  manual: { label: "manual", cls: "text-[var(--text-tertiary)] border-[var(--border-subtle)]" },
   error_log: { label: "error", cls: "text-red-400/70 border-red-400/20" },
   test_failure: { label: "test", cls: "text-orange-400/70 border-orange-400/20" },
   ui_scan: { label: "ui", cls: "text-blue-400/70 border-blue-400/20" },
@@ -259,9 +259,9 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
 
   function SortIcon({ col }: { col: SortKey }) {
     if (sortKey !== col) {
-      return <span className="ml-1 text-white/15">↕</span>;
+      return <span className="ml-1 text-[var(--text-tertiary)]">↕</span>;
     }
-    return <span className="ml-1 text-neo">{sortDir === "asc" ? "↑" : "↓"}</span>;
+    return <span className="ml-1 text-[var(--accent)]">{sortDir === "asc" ? "↑" : "↓"}</span>;
   }
 
   const allSelected = paginated.length > 0 && selected.size === paginated.length;
@@ -274,7 +274,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
       <div className="flex flex-col gap-2 sm:hidden">
         <div className="relative">
           <svg
-            className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-white/25"
+            className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--text-tertiary)]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -287,7 +287,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
             placeholder="Search tasks..."
             value={searchText}
             onChange={(e) => { setSearchText(e.target.value); resetPage(); }}
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 pl-7 pr-3 font-mono text-[11px] text-white/60 placeholder:text-white/20 outline-none focus:border-neo/30"
+            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-2 pl-7 pr-3 text-[11px] text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-neo/30"
           />
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto">
@@ -295,13 +295,13 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
           <FilterSelect value={filterPriority} onChange={(v) => { setFilterPriority(v); resetPage(); }} options={[{ value: "all", label: "Priority" }, { value: "critical", label: "Critical" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} placeholder="PRIORITY" compact />
           <button
             onClick={() => { setShowDone((v) => !v); resetPage(); }}
-            className={`shrink-0 font-mono text-[10px] tracking-wider transition-colors ${
-              showDone ? "text-neo/70 hover:text-neo" : "text-white/30 hover:text-white/50"
+            className={`shrink-0 text-[10px] tracking-wider transition-colors ${
+              showDone ? "text-neo/70 hover:text-neo" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             }`}
           >
             {showDone ? "◉ DONE" : "○ DONE"}
           </button>
-          <span className="ml-auto shrink-0 font-mono text-[10px] text-white/25">
+          <span className="ml-auto shrink-0 text-[10px] text-[var(--text-tertiary)]">
             {filtered.length} task{filtered.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -312,7 +312,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
         {/* Search */}
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <svg
-            className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-white/25"
+            className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--text-tertiary)]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -329,7 +329,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
             placeholder="Search tasks..."
             value={searchText}
             onChange={(e) => { setSearchText(e.target.value); resetPage(); }}
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] py-1.5 pl-7 pr-3 font-mono text-[10px] text-white/60 placeholder:text-white/20 outline-none focus:border-neo/30"
+            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1.5 pl-7 pr-3 text-[10px] text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-neo/30"
           />
         </div>
 
@@ -389,14 +389,14 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
         {/* Show done toggle */}
         <button
           onClick={() => { setShowDone((v) => !v); resetPage(); }}
-          className={`font-mono text-[10px] tracking-wider transition-colors ${
-            showDone ? "text-neo/70 hover:text-neo" : "text-white/30 hover:text-white/50"
+          className={`text-[10px] tracking-wider transition-colors ${
+            showDone ? "text-neo/70 hover:text-neo" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           {showDone ? "◉ DONE SHOWN" : "○ SHOW DONE"}
         </button>
 
-        <span className="ml-auto font-mono text-[10px] text-white/25">
+        <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">
           {filtered.length} task{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -404,10 +404,10 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neo/20 bg-neo/5 px-3 py-2">
-          <span className="font-mono text-[10px] text-neo/70">
+          <span className="text-[10px] text-neo/70">
             {selected.size} selected
           </span>
-          <div className="h-3 w-px bg-white/10" />
+          <div className="h-3 w-px bg-[var(--border-medium)]" />
 
           {/* Action selector */}
           <FilterSelect
@@ -463,10 +463,10 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
             <button
               onClick={applyBulkAction}
               disabled={bulkLoading}
-              className={`rounded-lg px-3 py-1 font-mono text-[10px] tracking-wider transition-all ${
+              className={`rounded-lg px-3 py-1 text-[10px] tracking-wider transition-all ${
                 bulkAction === "delete"
                   ? "border border-red-500/30 text-red-400 hover:bg-red-400/10"
-                  : "border border-neo/30 text-neo hover:bg-neo/10"
+                  : "border border-neo/30 text-[var(--accent)] hover:bg-neo/10"
               } disabled:opacity-30`}
             >
               {bulkLoading ? "APPLYING..." : "APPLY"}
@@ -475,7 +475,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
 
           <button
             onClick={() => setSelected(new Set())}
-            className="ml-auto font-mono text-[10px] text-white/30 hover:text-white/60 transition-colors"
+            className="ml-auto text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
           >
             CLEAR
           </button>
@@ -483,10 +483,10 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-white/[0.06]">
+      <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)]">
         <table className="w-full min-w-[900px] border-collapse">
           <thead>
-            <tr className="border-b border-white/[0.08] bg-white/[0.02]">
+            <tr className="border-b border-[var(--border-medium)] bg-[var(--bg-surface)]">
               <th className="w-8 px-3 py-2.5">
                 <input
                   type="checkbox"
@@ -508,7 +508,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
           <tbody>
             {paginated.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center font-mono text-[11px] text-white/20">
+                <td colSpan={8} className="px-4 py-10 text-center text-[11px] text-[var(--text-tertiary)]">
                   No tasks match your filters
                 </td>
               </tr>
@@ -522,10 +522,10 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
               return (
                 <tr
                   key={task.id}
-                  className={`group border-b border-white/[0.04] transition-colors ${
+                  className={`group border-b border-[var(--border-subtle)] transition-colors ${
                     isSelected
                       ? "bg-neo/5"
-                      : "hover:bg-white/[0.02]"
+                      : "hover:bg-[var(--bg-surface)]"
                   }`}
                 >
                   {/* Checkbox */}
@@ -544,10 +544,10 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                     onClick={() => onTaskClick(task)}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="shrink-0 rounded border border-white/[0.06] bg-white/[0.02] px-1 py-0.5 font-mono text-[8px] tracking-wider text-white/25">
+                      <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1 py-0.5 font-mono text-[8px] tracking-wider text-[var(--text-tertiary)]">
                         TSK-{String(task.shortId).padStart(4, "0")}
                       </span>
-                      <span className="truncate font-mono text-[11px] text-white/70 group-hover:text-white/90 transition-colors">
+                      <span className="truncate text-[11px] text-[var(--text-primary)] group-hover:text-[var(--text-primary)] transition-colors">
                         {task.title}
                       </span>
                       {task.source && task.source !== "manual" && (() => {
@@ -566,7 +566,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                     <select
                       value={task.status}
                       onChange={(e) => inlineUpdate(task.id, "status", e.target.value)}
-                      className="rounded-md border border-white/[0.08] bg-[#12121a] px-2 py-1 font-mono text-[9px] tracking-wider outline-none focus:border-neo/30 cursor-pointer"
+                      className="rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] tracking-wider outline-none focus:border-neo/30 cursor-pointer"
                       style={{ color: statusColors[task.status as TaskStatus] ?? "#fff" }}
                     >
                       {STATUS_ORDER.map((s) => (
@@ -589,7 +589,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                     <select
                       value={task.priority}
                       onChange={(e) => inlineUpdate(task.id, "priority", e.target.value)}
-                      className={`rounded-md border border-white/[0.06] bg-[#12121a] px-2 py-1 font-mono text-[9px] uppercase tracking-wider outline-none focus:border-neo/30 cursor-pointer ${ps.text} ${ps.bg}`}
+                      className={`rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] uppercase tracking-wider outline-none focus:border-neo/30 cursor-pointer ${ps.text} ${ps.bg}`}
                     >
                       {["low", "medium", "high", "critical"].map((p) => (
                         <option
@@ -609,7 +609,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                       const projectColor = project.color || "#00f0ff";
                       return (
                         <span 
-                          className="rounded-full border px-2 py-0.5 font-mono text-[9px] tracking-wider"
+                          className="rounded-full border px-2 py-0.5 text-[9px] tracking-wider"
                           style={{ 
                             borderColor: `${projectColor}30`,
                             backgroundColor: `${projectColor}15`,
@@ -620,7 +620,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                         </span>
                       );
                     })() : (
-                      <span className="font-mono text-[10px] text-white/15">—</span>
+                      <span className="text-[10px] text-[var(--text-tertiary)]">—</span>
                     )}
                   </td>
 
@@ -632,7 +632,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                         onChange={(e) =>
                           inlineUpdate(task.id, "assignedAgentId", e.target.value || null)
                         }
-                        className="rounded-md border border-white/[0.08] bg-[#12121a] px-2 py-1 font-mono text-[9px] tracking-wider outline-none focus:border-neo/30 cursor-pointer"
+                        className="rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] tracking-wider outline-none focus:border-neo/30 cursor-pointer"
                         style={{
                           color: agent?.color ?? "rgba(255,255,255,0.3)",
                         }}
@@ -651,7 +651,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                         ))}
                       </select>
                       {task.humanAssignee && (
-                        <span className="flex items-center gap-1 rounded border border-red-400/20 bg-red-400/5 px-1.5 py-0.5 font-mono text-[8px] text-red-400/70 w-fit">
+                        <span className="flex items-center gap-1 rounded border border-red-400/20 bg-red-400/5 px-1.5 py-0.5 text-[8px] text-red-400/70 w-fit">
                           👤 {task.humanAssignee}
                         </span>
                       )}
@@ -660,14 +660,14 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
 
                   {/* Created */}
                   <td className="px-3 py-2">
-                    <span className="font-mono text-[10px] text-white/25">
+                    <span className="text-[10px] text-[var(--text-tertiary)]">
                       {formatDate(task.createdAt)}
                     </span>
                   </td>
 
                   {/* Updated */}
                   <td className="px-3 py-2">
-                    <span className="font-mono text-[10px] text-white/25">
+                    <span className="text-[10px] text-[var(--text-tertiary)]">
                       {formatDate(task.updatedAt)}
                     </span>
                   </td>
@@ -681,7 +681,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] text-white/25">
+          <span className="text-[10px] text-[var(--text-tertiary)]">
             Page {page + 1} of {totalPages} · {filtered.length} tasks
           </span>
           <div className="flex items-center gap-1">
@@ -744,16 +744,16 @@ function TH({
   const active = sortKey === col;
   return (
     <th
-      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-left font-mono text-[9px] tracking-[0.15em] transition-colors ${
-        active ? "text-neo/70" : "text-white/30 hover:text-white/50"
+      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-left text-[9px] tracking-[0.15em] transition-colors ${
+        active ? "text-neo/70" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
       }`}
       onClick={() => onSort(col)}
     >
       {label}
       {active ? (
-        <span className="ml-1 text-neo">{sortDir === "asc" ? "↑" : "↓"}</span>
+        <span className="ml-1 text-[var(--accent)]">{sortDir === "asc" ? "↑" : "↓"}</span>
       ) : (
-        <span className="ml-1 text-white/10">↕</span>
+        <span className="ml-1 text-[var(--text-tertiary)]">↕</span>
       )}
     </th>
   );
@@ -776,10 +776,10 @@ function FilterSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`appearance-none rounded-lg border border-white/[0.08] bg-[#12121a] font-mono tracking-wider outline-none transition-all focus:border-neo/30 cursor-pointer ${
+      className={`appearance-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-secondary)] tracking-wider outline-none transition-all focus:border-neo/30 cursor-pointer ${
         compact
-          ? "px-2 py-1.5 pr-5 text-[10px] text-white/50 shrink-0"
-          : "px-2.5 py-1.5 pr-6 text-[10px] text-white/50"
+          ? "px-2 py-1.5 pr-5 text-[10px] text-[var(--text-secondary)] shrink-0"
+          : "px-2.5 py-1.5 pr-6 text-[10px] text-[var(--text-secondary)]"
       }`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.2)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
@@ -815,10 +815,10 @@ function PagBtn({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex h-6 w-6 items-center justify-center rounded font-mono text-[10px] transition-all ${
+      className={`flex h-6 w-6 items-center justify-center rounded text-[10px] transition-all ${
         active
-          ? "bg-neo/20 text-neo"
-          : "text-white/30 hover:text-white/60 disabled:opacity-20"
+          ? "bg-neo/20 text-[var(--accent)]"
+          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] disabled:opacity-20"
       }`}
     >
       {label}

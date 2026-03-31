@@ -130,14 +130,14 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-white/[0.08] bg-[#0a0a0f] shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
-          <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">NEW AGENT</h2>
+        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
+          <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">NEW AGENT</h2>
           <button
             onClick={onClose}
-            className="font-mono text-xs text-white/35 transition-colors hover:text-white/60"
+            className="text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
           >
             &times;
           </button>
@@ -145,7 +145,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {error && (
-            <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 font-mono text-xs text-red-400">
+            <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
               {error}
             </div>
           )}
@@ -157,17 +157,17 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
           />
         </div>
 
-        <div className="flex gap-2 border-t border-white/[0.06] px-6 py-4">
+        <div className="flex gap-2 border-t border-[var(--border-subtle)] px-6 py-4">
           <button
             onClick={onClose}
-            className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
+            className="flex-1 rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
           >
             CANCEL
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading || !values.name.trim()}
-            className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+            className="flex-1 rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
           >
             {loading ? "CREATING..." : "CREATE AGENT"}
           </button>

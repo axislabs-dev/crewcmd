@@ -193,7 +193,7 @@ export default function EscalationsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -202,8 +202,8 @@ export default function EscalationsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to manage escalation paths.
           </p>
         </div>
@@ -216,27 +216,27 @@ export default function EscalationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-wider text-neo">ESCALATIONS</h1>
-          <p className="mt-1 font-mono text-xs text-white/30">
+          <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">ESCALATIONS</h1>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Escalation paths &amp; active escalations
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1 rounded-lg bg-white/[0.02] p-1">
+      <div className="mt-6 flex gap-1 rounded-lg bg-[var(--bg-surface)] p-1">
         <button
           onClick={() => setTab("paths")}
-          className={`flex-1 rounded-md px-4 py-2 font-mono text-xs tracking-wider transition-colors ${
-            tab === "paths" ? "bg-neo/10 text-neo" : "text-white/30 hover:text-white/50"
+          className={`flex-1 rounded-md px-4 py-2 text-xs tracking-wider transition-colors ${
+            tab === "paths" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           ESCALATION PATHS
         </button>
         <button
           onClick={() => setTab("active")}
-          className={`flex-1 rounded-md px-4 py-2 font-mono text-xs tracking-wider transition-colors ${
-            tab === "active" ? "bg-neo/10 text-neo" : "text-white/30 hover:text-white/50"
+          className={`flex-1 rounded-md px-4 py-2 text-xs tracking-wider transition-colors ${
+            tab === "active" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           }`}
         >
           ACTIVE ESCALATIONS
@@ -252,12 +252,12 @@ export default function EscalationsPage() {
       {tab === "paths" && (
         <div className="mt-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
               CONFIGURED PATHS
             </h2>
             <button
               onClick={openCreate}
-              className="rounded-lg bg-neo/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-neo transition-colors hover:bg-neo/30"
+              className="rounded-lg bg-[var(--accent-soft)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
             >
               + ADD PATH
             </button>
@@ -265,9 +265,9 @@ export default function EscalationsPage() {
 
           <div className="mt-3 space-y-2">
             {paths.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-white/[0.08] py-12 text-center">
-                <p className="font-mono text-xs text-white/30">No escalation paths configured</p>
-                <p className="mt-1 font-mono text-[10px] text-white/20">
+              <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
+                <p className="text-xs text-[var(--text-tertiary)]">No escalation paths configured</p>
+                <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                   Paths define how issues get escalated to managers or humans.
                 </p>
               </div>
@@ -275,7 +275,7 @@ export default function EscalationsPage() {
               paths.map((path) => (
                 <div
                   key={path.id}
-                  className="group flex items-center gap-4 rounded-lg border border-white/[0.04] bg-white/[0.01] p-4 transition-colors hover:border-white/[0.08] hover:bg-white/[0.02]"
+                  className="group flex items-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
                     <svg className="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -283,10 +283,10 @@ export default function EscalationsPage() {
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-xs font-bold text-white/70">
+                    <p className="font-mono text-xs font-bold text-[var(--text-primary)]">
                       {TRIGGER_LABELS[path.triggerType] ?? path.triggerType}
                     </p>
-                    <p className="font-mono text-[9px] text-white/25">
+                    <p className="font-mono text-[9px] text-[var(--text-tertiary)]">
                       {path.sourceAgentId ? `From: ${getAgentName(path.sourceAgentId)}` : "Any agent"}
                       {" → "}
                       {path.escalateToAgentId ? getAgentName(path.escalateToAgentId) : "Human"}
@@ -294,14 +294,14 @@ export default function EscalationsPage() {
                       Timeout: {path.timeoutMinutes}m
                     </p>
                   </div>
-                  <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${TRIGGER_COLORS[path.triggerType] ?? "bg-white/5 text-white/25"}`}>
+                  <span className={`rounded px-2 py-0.5 font-mono text-[9px] tracking-wider ${TRIGGER_COLORS[path.triggerType] ?? "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"}`}>
                     {path.triggerType.toUpperCase().replace("_", " ")}
                   </span>
                   {/* Auto-escalate toggle */}
                   <button
                     onClick={() => handleToggleAutoEscalate(path)}
                     className={`h-5 w-9 rounded-full transition-colors ${
-                      path.autoEscalate ? "bg-neo/40" : "bg-white/[0.08]"
+                      path.autoEscalate ? "bg-neo/40" : "bg-[var(--bg-tertiary)]"
                     }`}
                     title={path.autoEscalate ? "Auto-escalate enabled" : "Auto-escalate disabled"}
                   >
@@ -314,7 +314,7 @@ export default function EscalationsPage() {
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => openEdit(path)}
-                      className="rounded p-1 text-white/25 hover:bg-white/[0.06] hover:text-white/50"
+                      className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                     >
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
@@ -339,14 +339,14 @@ export default function EscalationsPage() {
       {/* Active Escalations Tab */}
       {tab === "active" && (
         <div className="mt-4">
-          <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">
+          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">
             ACTIVE ESCALATIONS
           </h2>
           <div className="mt-3 space-y-2">
             {activeEscalations.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-white/[0.08] py-8 text-center">
-                <p className="font-mono text-xs text-white/30">No active escalations</p>
-                <p className="mt-1 font-mono text-[10px] text-white/20">
+              <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-8 text-center">
+                <p className="text-xs text-[var(--text-tertiary)]">No active escalations</p>
+                <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                   Escalations appear here when triggered by blocked tasks, agent failures, etc.
                 </p>
               </div>
@@ -363,10 +363,10 @@ export default function EscalationsPage() {
                         {TRIGGER_LABELS[triggerType] ?? triggerType}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs text-white/50">
+                        <p className="text-xs text-[var(--text-secondary)]">
                           Triggered by {esc.requestedBy}
                         </p>
-                        <p className="font-mono text-[9px] text-white/20">
+                        <p className="text-[9px] text-[var(--text-tertiary)]">
                           {timeAgo(esc.createdAt)}
                         </p>
                       </div>
@@ -385,18 +385,18 @@ export default function EscalationsPage() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-bg-primary p-6 shadow-2xl">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-6 shadow-2xl">
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
               {editPath ? "EDIT ESCALATION PATH" : "ADD ESCALATION PATH"}
             </h2>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">TRIGGER TYPE</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">TRIGGER TYPE</label>
                 <select
                   value={formTriggerType}
                   onChange={(e) => setFormTriggerType(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="">Select trigger...</option>
                   {TRIGGER_TYPES.map((t) => (
@@ -408,11 +408,11 @@ export default function EscalationsPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">SOURCE AGENT (OPTIONAL)</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">SOURCE AGENT (OPTIONAL)</label>
                 <select
                   value={formSourceAgentId}
                   onChange={(e) => setFormSourceAgentId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="">Any agent</option>
                   {agents.map((a) => (
@@ -424,11 +424,11 @@ export default function EscalationsPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">ESCALATE TO AGENT</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">ESCALATE TO AGENT</label>
                 <select
                   value={formEscalateToAgentId}
                   onChange={(e) => setFormEscalateToAgentId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="">Human (no agent)</option>
                   {agents.map((a) => (
@@ -440,12 +440,12 @@ export default function EscalationsPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">TIMEOUT (MINUTES)</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">TIMEOUT (MINUTES)</label>
                 <input
                   type="number"
                   value={formTimeoutMinutes}
                   onChange={(e) => setFormTimeoutMinutes(parseInt(e.target.value, 10) || 60)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 />
               </div>
 
@@ -454,7 +454,7 @@ export default function EscalationsPage() {
                   type="button"
                   onClick={() => setFormAutoEscalate(!formAutoEscalate)}
                   className={`h-5 w-9 rounded-full transition-colors ${
-                    formAutoEscalate ? "bg-neo/40" : "bg-white/[0.08]"
+                    formAutoEscalate ? "bg-neo/40" : "bg-[var(--bg-tertiary)]"
                   }`}
                 >
                   <div
@@ -463,7 +463,7 @@ export default function EscalationsPage() {
                     }`}
                   />
                 </button>
-                <span className="font-mono text-[10px] tracking-wider text-white/40">
+                <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   AUTO-ESCALATE
                 </span>
               </div>
@@ -472,14 +472,14 @@ export default function EscalationsPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formTriggerType}
-                className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : editPath ? "UPDATE" : "CREATE"}
               </button>

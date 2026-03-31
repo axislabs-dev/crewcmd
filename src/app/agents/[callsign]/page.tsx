@@ -79,10 +79,10 @@ export default function AgentProfilePage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-lg text-white/40">AGENT NOT FOUND</p>
+          <p className="text-lg text-[var(--text-tertiary)]">AGENT NOT FOUND</p>
           <Link
             href="/agents"
-            className="mt-2 inline-block font-mono text-xs text-neo transition-colors hover:text-neo/80"
+            className="mt-2 inline-block font-mono text-xs text-[var(--accent)] transition-colors hover:text-neo/80"
           >
             &larr; BACK TO AGENTS
           </Link>
@@ -94,7 +94,7 @@ export default function AgentProfilePage() {
   if (!agent) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="font-mono text-xs text-white/20 animate-pulse">LOADING...</p>
+        <p className="text-xs text-[var(--text-tertiary)] animate-pulse">LOADING...</p>
       </div>
     );
   }
@@ -108,22 +108,22 @@ export default function AgentProfilePage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-white/[0.06] px-6 py-3">
+      <nav className="border-b border-[var(--border-subtle)] px-6 py-3">
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="font-mono text-xs text-white/40 transition-colors hover:text-neo"
+            className="text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--accent)]"
           >
             COMMAND CENTER
           </Link>
-          <span className="font-mono text-xs text-white/20">/</span>
+          <span className="text-xs text-[var(--text-tertiary)]">/</span>
           <Link
             href="/agents"
-            className="font-mono text-xs text-white/40 transition-colors hover:text-neo"
+            className="text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--accent)]"
           >
             AGENTS
           </Link>
-          <span className="font-mono text-xs text-white/20">/</span>
+          <span className="text-xs text-[var(--text-tertiary)]">/</span>
           <span
             className="font-mono text-xs font-bold"
             style={{ color: agent.color }}
@@ -144,7 +144,7 @@ export default function AgentProfilePage() {
 
           <div className="relative flex items-start gap-6">
             <div
-              className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-4xl"
+              className="flex h-20 w-20 items-center justify-center rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-4xl"
               style={{
                 boxShadow: `0 0 30px ${agent.color}20`,
               }}
@@ -164,35 +164,35 @@ export default function AgentProfilePage() {
                   <span
                     className={`status-dot status-dot-${agent.status}`}
                   />
-                  <span className="font-mono text-[10px] tracking-wider text-white/50">
+                  <span className="font-mono text-[10px] tracking-wider text-[var(--text-secondary)]">
                     {statusLabels[agent.status]}
                   </span>
                 </div>
               </div>
 
-              <p className="mb-3 text-sm text-white/50">{agent.title}</p>
+              <p className="mb-3 text-sm text-[var(--text-secondary)]">{agent.title}</p>
 
               {agent.currentTask && (
-                <div className="inline-flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-1.5">
-                  <span className="font-mono text-[10px] text-white/30">
+                <div className="inline-flex items-center gap-2 rounded-lg bg-[var(--bg-surface-hover)] px-3 py-1.5">
+                  <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
                     WORKING ON:
                   </span>
-                  <span className="text-xs text-white/70">
+                  <span className="text-xs text-[var(--text-primary)]">
                     {agent.currentTask}
                   </span>
                 </div>
               )}
 
               <div className="mt-3 flex items-center gap-4">
-                <span className="font-mono text-[10px] text-white/25">
+                <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
                   Last active: {timeAgo(agent.lastActive)}
                 </span>
                 {reportsTo && (
-                  <span className="font-mono text-[10px] text-white/25">
+                  <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
                     Reports to:{" "}
                     <Link
                       href={`/agents/${reportsTo.callsign.toLowerCase()}`}
-                      className="transition-colors hover:text-white/60"
+                      className="transition-colors hover:text-[var(--text-secondary)]"
                       style={{ color: reportsTo.color }}
                     >
                       {reportsTo.callsign}
@@ -206,10 +206,10 @@ export default function AgentProfilePage() {
 
         {agent.soulContent && (
           <div className="glass-card p-6">
-            <h2 className="mb-3 font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+            <h2 className="mb-3 text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
               Soul
             </h2>
-            <p className="text-sm leading-relaxed text-white/60 italic">
+            <p className="text-sm leading-relaxed text-[var(--text-secondary)] italic">
               &ldquo;{agent.soulContent}&rdquo;
             </p>
           </div>
@@ -217,7 +217,7 @@ export default function AgentProfilePage() {
 
         {directReports.length > 0 && (
           <div className="glass-card p-6">
-            <h2 className="mb-4 font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+            <h2 className="mb-4 text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
               Direct Reports
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -225,7 +225,7 @@ export default function AgentProfilePage() {
                 <Link
                   key={report.id}
                   href={`/agents/${report.callsign.toLowerCase()}`}
-                  className="flex flex-col items-center rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-all hover:bg-white/[0.05]"
+                  className="flex flex-col items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 transition-all hover:bg-[var(--bg-surface-hover)]"
                 >
                   <span className="text-xl">{report.emoji}</span>
                   <span
@@ -234,7 +234,7 @@ export default function AgentProfilePage() {
                   >
                     {report.callsign.toUpperCase()}
                   </span>
-                  <span className="text-[9px] text-white/30">
+                  <span className="text-[9px] text-[var(--text-tertiary)]">
                     {report.title}
                   </span>
                   <span
@@ -248,7 +248,7 @@ export default function AgentProfilePage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="glass-card p-6">
-            <h2 className="mb-4 font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+            <h2 className="mb-4 text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
               Task History ({agentTasks.length})
             </h2>
             {agentTasks.length > 0 ? (
@@ -256,10 +256,10 @@ export default function AgentProfilePage() {
                 {agentTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+                    className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3"
                   >
                     <div className="flex items-start justify-between">
-                      <p className="text-xs font-medium text-white/70">
+                      <p className="text-xs font-medium text-[var(--text-primary)]">
                         {task.title}
                       </p>
                       <span
@@ -269,15 +269,15 @@ export default function AgentProfilePage() {
                       </span>
                     </div>
                     {task.description && (
-                      <p className="mt-1 text-[11px] text-white/40 line-clamp-2">
+                      <p className="mt-1 text-[11px] text-[var(--text-tertiary)] line-clamp-2">
                         {task.description}
                       </p>
                     )}
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-white/30 uppercase">
+                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)] uppercase">
                         {task.status.replace("_", " ")}
                       </span>
-                      <span className="font-mono text-[9px] text-white/20">
+                      <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                         {timeAgo(task.updatedAt)}
                       </span>
                     </div>
@@ -285,14 +285,14 @@ export default function AgentProfilePage() {
                 ))}
               </div>
             ) : (
-              <p className="text-center font-mono text-xs text-white/20 py-4">
+              <p className="text-center text-xs text-[var(--text-tertiary)] py-4">
                 No tasks assigned
               </p>
             )}
           </div>
 
           <div className="glass-card p-6">
-            <h2 className="mb-4 font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+            <h2 className="mb-4 text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
               Recent Activity ({agentActivities.length})
             </h2>
             {agentActivities.length > 0 ? (
@@ -300,7 +300,7 @@ export default function AgentProfilePage() {
                 {agentActivities.map((activity) => (
                   <div
                     key={activity.id}
-                    className="relative rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+                    className="relative rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3"
                   >
                     <div
                       className="absolute left-0 top-0 h-full w-[3px] rounded-l"
@@ -308,14 +308,14 @@ export default function AgentProfilePage() {
                     />
                     <div className="ml-2">
                       <div className="mb-0.5 flex items-center gap-2">
-                        <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-white/30 uppercase">
+                        <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)] uppercase">
                           {activity.actionType}
                         </span>
-                        <span className="font-mono text-[9px] text-white/20">
+                        <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                           {timeAgo(activity.createdAt)}
                         </span>
                       </div>
-                      <p className="text-xs text-white/60">
+                      <p className="text-xs text-[var(--text-secondary)]">
                         {activity.description}
                       </p>
                     </div>
@@ -323,7 +323,7 @@ export default function AgentProfilePage() {
                 ))}
               </div>
             ) : (
-              <p className="text-center font-mono text-xs text-white/20 py-4">
+              <p className="text-center text-xs text-[var(--text-tertiary)] py-4">
                 No recent activity
               </p>
             )}

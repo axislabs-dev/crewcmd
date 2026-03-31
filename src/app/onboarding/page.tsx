@@ -209,10 +209,10 @@ export default function OnboardingPage() {
           <div
             className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-xs transition-colors ${
               s === step
-                ? "bg-neo/20 text-neo"
+                ? "bg-[var(--accent-soft)] text-[var(--accent)]"
                 : s < step
                   ? "bg-emerald-500/20 text-emerald-400"
-                  : "bg-white/[0.04] text-white/20"
+                  : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
             }`}
           >
             {s < step ? (
@@ -224,7 +224,7 @@ export default function OnboardingPage() {
             )}
           </div>
           {s < totalSteps && (
-            <div className={`h-px w-8 ${s < step ? "bg-emerald-500/30" : "bg-white/[0.06]"}`} />
+            <div className={`h-px w-8 ${s < step ? "bg-emerald-500/30" : "bg-[var(--bg-surface-hover)]"}`} />
           )}
         </div>
       ))}
@@ -232,28 +232,28 @@ export default function OnboardingPage() {
   );
 
   const inputClass =
-    "mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50";
-  const labelClass = "block font-mono text-[11px] tracking-wider text-white/40";
+    "mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50";
+  const labelClass = "block text-[11px] tracking-wider text-[var(--text-tertiary)]";
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-lg">
         <div className="text-center">
-          <h1 className="font-mono text-xl font-bold tracking-wider text-neo">WELCOME TO CREWCMD</h1>
-          <p className="mt-2 font-mono text-xs text-white/35">
+          <h1 className="font-mono text-xl font-bold tracking-wider text-[var(--accent)]">WELCOME TO CREWCMD</h1>
+          <p className="mt-2 text-xs text-[var(--text-tertiary)]">
             Let&apos;s set up your crew in a few quick steps.
           </p>
         </div>
 
         <div className="mt-6">{stepIndicator}</div>
 
-        <div className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
+        <div className="mt-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6">
           {/* Step 1: Create Company */}
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">CREATE YOUR COMPANY</h2>
-                <p className="mt-1 font-mono text-[11px] text-white/35">
+                <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">CREATE YOUR COMPANY</h2>
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
                   This is your organization — the home for your agent crew.
                 </p>
               </div>
@@ -284,7 +284,7 @@ export default function OnboardingPage() {
               <button
                 onClick={handleCreateCompany}
                 disabled={loading || !companyName.trim()}
-                className="w-full rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="w-full rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {loading ? "CREATING..." : "CREATE COMPANY"}
               </button>
@@ -295,8 +295,8 @@ export default function OnboardingPage() {
           {step === 2 && (
             <div className="space-y-4">
               <div>
-                <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">CREATE YOUR FIRST AGENT</h2>
-                <p className="mt-1 font-mono text-[11px] text-white/35">
+                <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">CREATE YOUR FIRST AGENT</h2>
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
                   Add an AI agent to your crew. You can add more later.
                 </p>
               </div>
@@ -312,14 +312,14 @@ export default function OnboardingPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setStep(3)}
-                  className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
+                  className="flex-1 rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
                 >
                   SKIP
                 </button>
                 <button
                   onClick={handleCreateAgent}
                   disabled={loading || !agentValues.name.trim()}
-                  className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
                 >
                   {loading ? "CREATING..." : "CREATE AGENT"}
                 </button>
@@ -331,8 +331,8 @@ export default function OnboardingPage() {
           {step === 3 && (
             <div className="space-y-4">
               <div>
-                <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">INVITE YOUR TEAM</h2>
-                <p className="mt-1 font-mono text-[11px] text-white/35">
+                <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">INVITE YOUR TEAM</h2>
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
                   Add team members by their GitHub username. You can skip this step.
                 </p>
               </div>
@@ -349,12 +349,12 @@ export default function OnboardingPage() {
                         setInvites(next);
                       }}
                       placeholder="GitHub username"
-                      className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                      className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
                     />
                     {invites.length > 1 && (
                       <button
                         onClick={() => setInvites(invites.filter((_, j) => j !== i))}
-                        className="rounded-lg border border-white/[0.06] px-3 font-mono text-xs text-white/35 hover:text-white/50"
+                        className="rounded-lg border border-[var(--border-subtle)] px-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                       >
                         &times;
                       </button>
@@ -363,7 +363,7 @@ export default function OnboardingPage() {
                 ))}
                 <button
                   onClick={() => setInvites([...invites, ""])}
-                  className="font-mono text-[11px] text-neo/60 transition-colors hover:text-neo"
+                  className="text-[11px] text-[var(--accent)] transition-colors hover:text-[var(--accent)]"
                 >
                   + ADD ANOTHER
                 </button>
@@ -372,14 +372,14 @@ export default function OnboardingPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setStep(4)}
-                  className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
+                  className="flex-1 rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
                 >
                   SKIP
                 </button>
                 <button
                   onClick={handleInviteMembers}
                   disabled={loading || invites.every((u) => !u.trim())}
-                  className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
                 >
                   {loading ? "INVITING..." : "INVITE & CONTINUE"}
                 </button>
@@ -391,8 +391,8 @@ export default function OnboardingPage() {
           {step === 4 && (
             <div className="space-y-4">
               <div>
-                <h2 className="font-mono text-sm font-bold tracking-wider text-white/70">DEFINE YOUR FIRST GOAL</h2>
-                <p className="mt-1 font-mono text-[11px] text-white/35">
+                <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">DEFINE YOUR FIRST GOAL</h2>
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
                   Goals drive everything — tasks trace back to goals, goals trace back to mission.
                 </p>
               </div>
@@ -423,14 +423,14 @@ export default function OnboardingPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => router.push("/dashboard")}
-                  className="flex-1 rounded-lg border border-white/[0.08] px-4 py-2.5 font-mono text-xs tracking-wider text-white/40 transition-colors hover:bg-white/[0.04]"
+                  className="flex-1 rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
                 >
                   SKIP
                 </button>
                 <button
                   onClick={handleCreateGoal}
                   disabled={loading}
-                  className="flex-1 rounded-lg bg-neo/20 px-4 py-2.5 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
                 >
                   {loading ? "FINISHING..." : goalTitle.trim() ? "CREATE & FINISH" : "FINISH SETUP"}
                 </button>

@@ -393,7 +393,7 @@ export default function OfficePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center lg:pl-[220px]">
-        <div className="font-mono text-sm text-white/30 animate-pulse">
+        <div className="text-sm text-[var(--text-tertiary)] animate-pulse">
           Loading office floor...
         </div>
       </div>
@@ -405,10 +405,10 @@ export default function OfficePage() {
       <div className="px-4 py-6 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="font-mono text-lg font-bold tracking-wider text-white/90">
+          <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--text-primary)]">
             🏢 THE OFFICE
           </h1>
-          <p className="font-mono text-xs text-white/30 mt-1">
+          <p className="text-xs text-[var(--text-tertiary)] mt-1">
             CREWCMD HQ — LIVE AGENT FLOOR
           </p>
         </div>

@@ -156,7 +156,7 @@ export default function BudgetsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="font-mono text-sm text-white/30">Loading...</div>
+        <div className="text-sm text-[var(--text-tertiary)]">Loading...</div>
       </div>
     );
   }
@@ -165,8 +165,8 @@ export default function BudgetsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="font-mono text-sm text-white/40">No company selected</p>
-          <p className="mt-1 font-mono text-xs text-white/25">
+          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Select a company from the sidebar to view budgets.
           </p>
         </div>
@@ -179,14 +179,14 @@ export default function BudgetsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold tracking-wider text-neo">BUDGETS</h1>
-          <p className="mt-1 font-mono text-xs text-white/30">
+          <h1 className="text-lg font-bold tracking-wider text-[var(--accent)]">BUDGETS</h1>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Agent spend tracking &amp; cost control
           </p>
         </div>
         <button
           onClick={openCreate}
-          className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30"
+          className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
         >
           + SET BUDGET
         </button>
@@ -194,25 +194,25 @@ export default function BudgetsPage() {
 
       {/* Summary Cards */}
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
-          <p className="font-mono text-[10px] tracking-wider text-white/30">TOTAL SPEND THIS MONTH</p>
-          <p className="mt-1 font-mono text-xl font-bold text-white/80">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+          <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">TOTAL SPEND THIS MONTH</p>
+          <p className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
             ${totalSpend.toFixed(2)}
           </p>
         </div>
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
-          <p className="font-mono text-[10px] tracking-wider text-white/30">TOTAL BUDGET</p>
-          <p className="mt-1 font-mono text-xl font-bold text-white/80">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+          <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">TOTAL BUDGET</p>
+          <p className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
             ${totalBudget.toFixed(2)}
           </p>
         </div>
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
-          <p className="font-mono text-[10px] tracking-wider text-white/30">TOP SPENDER</p>
-          <p className="mt-1 font-mono text-xl font-bold text-white/80">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+          <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">TOP SPENDER</p>
+          <p className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
             {topSpender ? getAgentName(topSpender.groupKey) : "—"}
           </p>
           {topSpender && (
-            <p className="mt-0.5 font-mono text-[10px] text-white/30">
+            <p className="mt-0.5 font-mono text-[10px] text-[var(--text-tertiary)]">
               ${parseFloat(topSpender.totalCost).toFixed(2)}
             </p>
           )}
@@ -221,17 +221,17 @@ export default function BudgetsPage() {
 
       {/* Per-Agent Budget Table */}
       <div className="mt-6">
-        <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">AGENT BUDGETS</h2>
+        <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">AGENT BUDGETS</h2>
         <div className="mt-3 space-y-2">
           {budgets.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-white/[0.08] py-12 text-center">
-              <p className="font-mono text-xs text-white/30">No budgets configured</p>
-              <p className="mt-1 font-mono text-[10px] text-white/20">
+            <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
+              <p className="text-xs text-[var(--text-tertiary)]">No budgets configured</p>
+              <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                 Set a budget to start tracking agent spend.
               </p>
               <button
                 onClick={openCreate}
-                className="mt-4 rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30"
+                className="mt-4 rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
               >
                 SET FIRST BUDGET
               </button>
@@ -247,20 +247,20 @@ export default function BudgetsPage() {
               return (
                 <div
                   key={budget.id}
-                  className="group flex items-center gap-4 rounded-lg border border-white/[0.04] bg-white/[0.01] p-4 transition-colors hover:border-white/[0.08] hover:bg-white/[0.02]"
+                  className="group flex items-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                 >
                   {/* Agent name */}
                   <div className="min-w-0 flex-shrink-0 w-40">
-                    <p className="truncate font-mono text-xs text-white/80">
+                    <p className="truncate font-mono text-xs text-[var(--text-primary)]">
                       {getAgentName(budget.agentId)}
                     </p>
-                    <p className="font-mono text-[9px] text-white/25">{budget.agentId}</p>
+                    <p className="font-mono text-[9px] text-[var(--text-tertiary)]">{budget.agentId}</p>
                   </div>
 
                   {/* Progress bar */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-mono text-[10px] text-white/40">
+                      <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
                         ${spend.toFixed(2)} / ${limit.toFixed(2)}
                       </span>
                       <span
@@ -275,7 +275,7 @@ export default function BudgetsPage() {
                         {pct.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-surface-hover)]">
                       <div
                         className={`h-full rounded-full transition-all ${
                           isOver
@@ -295,7 +295,7 @@ export default function BudgetsPage() {
                     className={`flex-shrink-0 rounded px-2 py-1 font-mono text-[9px] tracking-wider transition-colors ${
                       budget.autoPause
                         ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                        : "bg-white/[0.04] text-white/30 hover:bg-white/[0.06]"
+                        : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]"
                     }`}
                     title={budget.autoPause ? "Auto-pause enabled — click to disable" : "Auto-pause disabled — click to enable"}
                   >
@@ -321,9 +321,9 @@ export default function BudgetsPage() {
 
       {/* Cost Breakdown Placeholder */}
       <div className="mt-8">
-        <h2 className="font-mono text-xs font-bold tracking-wider text-white/50">COST BREAKDOWN</h2>
-        <div className="mt-3 rounded-xl border border-dashed border-white/[0.08] bg-white/[0.01] p-12 text-center">
-          <p className="font-mono text-xs text-white/25">
+        <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">COST BREAKDOWN</h2>
+        <div className="mt-3 rounded-xl border border-dashed border-[var(--border-medium)] bg-[var(--bg-surface)] p-12 text-center">
+          <p className="text-xs text-[var(--text-tertiary)]">
             Charts coming soon — cost breakdown by model, agent, and time period
           </p>
         </div>
@@ -332,18 +332,18 @@ export default function BudgetsPage() {
       {/* Add Budget Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-bg-primary p-6 shadow-2xl">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-neo">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-6 shadow-2xl">
+            <h2 className="text-sm font-bold tracking-wider text-[var(--accent)]">
               SET AGENT BUDGET
             </h2>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">AGENT</label>
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">AGENT</label>
                 <select
                   value={formAgentId}
                   onChange={(e) => setFormAgentId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/60 outline-none"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
                 >
                   <option value="">Select agent...</option>
                   {agents.map((a) => (
@@ -355,7 +355,7 @@ export default function BudgetsPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   MONTHLY LIMIT (USD)
                 </label>
                 <input
@@ -365,12 +365,12 @@ export default function BudgetsPage() {
                   value={formLimit}
                   onChange={(e) => setFormLimit(e.target.value)}
                   placeholder="100.00"
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] tracking-wider text-white/40">
+                <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   ALERT THRESHOLD (%)
                 </label>
                 <input
@@ -379,7 +379,7 @@ export default function BudgetsPage() {
                   max="100"
                   value={formThreshold}
                   onChange={(e) => setFormThreshold(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
+                  className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
                 />
               </div>
 
@@ -388,7 +388,7 @@ export default function BudgetsPage() {
                   type="button"
                   onClick={() => setFormAutoPause(!formAutoPause)}
                   className={`h-5 w-9 rounded-full transition-colors ${
-                    formAutoPause ? "bg-neo/40" : "bg-white/[0.08]"
+                    formAutoPause ? "bg-neo/40" : "bg-[var(--bg-tertiary)]"
                   }`}
                 >
                   <div
@@ -397,7 +397,7 @@ export default function BudgetsPage() {
                     }`}
                   />
                 </button>
-                <span className="font-mono text-[10px] tracking-wider text-white/40">
+                <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   AUTO-PAUSE WHEN BUDGET EXCEEDED
                 </span>
               </div>
@@ -406,14 +406,14 @@ export default function BudgetsPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-xs text-white/40 transition-colors hover:bg-white/[0.04]"
+                className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formAgentId || !formLimit}
-                className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-xs tracking-wider text-neo transition-colors hover:bg-neo/30 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : "SET BUDGET"}
               </button>

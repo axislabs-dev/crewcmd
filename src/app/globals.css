@@ -1,11 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #0a0a0f;
-  --color-bg-secondary: #12121a;
-  --color-bg-tertiary: #1a1a2e;
-  --color-border-subtle: rgba(255, 255, 255, 0.06);
-
+  /* Agent callsign colors — always visible */
   --color-neo: #00f0ff;
   --color-cipher: #f0ff00;
   --color-havoc: #ff6600;
@@ -15,21 +11,100 @@
   --color-maverick: #ff4444;
   --color-viper: #88ff00;
 
+  /* Status colors */
   --color-status-online: #00ff88;
   --color-status-working: #f0ff00;
   --color-status-idle: #ff6600;
   --color-status-offline: #555555;
 
+  /* Fonts */
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), "JetBrains Mono", monospace;
 
-  --color-surface: rgba(15, 15, 25, 0.7);
-  --color-surface-hover: rgba(20, 20, 35, 0.8);
+  /* Theme-aware colors (defaults to light, overridden by [data-theme='dark']) */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f9fb;
+  --color-bg-tertiary: #f0f2f5;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f5f6f8;
+  --color-border-subtle: rgba(0, 0, 0, 0.08);
+  --color-border-medium: rgba(0, 0, 0, 0.12);
+  --color-t-primary: #1a1a2e;
+  --color-t-secondary: #4a4a68;
+  --color-t-tertiary: #8a8aa0;
+  --color-accent: #0891b2;
+  --color-accent-hover: #0e7490;
+  --color-accent-soft: rgba(8, 145, 178, 0.08);
+  --color-accent-medium: rgba(8, 145, 178, 0.15);
+  --color-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Light theme (default) ─── */
+:root,
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fb;
+  --bg-tertiary: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f5f6f8;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-medium: rgba(0, 0, 0, 0.12);
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a68;
+  --text-tertiary: #8a8aa0;
+  --accent: #0891b2;
+  --accent-hover: #0e7490;
+  --accent-soft: rgba(8, 145, 178, 0.08);
+  --accent-medium: rgba(8, 145, 178, 0.15);
+  --theme-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  color-scheme: light;
+}
+
+/* ─── Dark theme ─── */
+[data-theme="dark"] {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a2e;
+  --bg-surface: rgba(15, 15, 25, 0.7);
+  --bg-surface-hover: rgba(20, 20, 35, 0.8);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --text-primary: #e0e0e8;
+  --text-secondary: #a0a0b8;
+  --text-tertiary: #606078;
+  --accent: #00f0ff;
+  --accent-hover: #00d0dd;
+  --accent-soft: rgba(0, 240, 255, 0.08);
+  --accent-medium: rgba(0, 240, 255, 0.15);
+  --theme-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+/* System preference fallback */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a2e;
+    --bg-surface: rgba(15, 15, 25, 0.7);
+    --bg-surface-hover: rgba(20, 20, 35, 0.8);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-medium: rgba(255, 255, 255, 0.12);
+    --text-primary: #e0e0e8;
+    --text-secondary: #a0a0b8;
+    --text-tertiary: #606078;
+    --accent: #00f0ff;
+    --accent-hover: #00d0dd;
+    --accent-soft: rgba(0, 240, 255, 0.08);
+    --accent-medium: rgba(0, 240, 255, 0.15);
+    --theme-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
 }
 
 ::selection {
-  background: rgba(0, 240, 255, 0.3);
-  color: #fff;
+  background: var(--accent-medium);
+  color: var(--text-primary);
 }
 
 html {
@@ -37,24 +112,27 @@ html {
 }
 
 body {
-  background-color: var(--color-bg-primary);
-  color: #e0e0e8;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
+/* ─── Glass card ─── */
 .glass-card {
-  background: var(--color-surface);
+  background: var(--bg-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
+  box-shadow: var(--theme-shadow);
 }
 
 .glass-card-hover:hover {
-  background: var(--color-surface-hover);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-medium);
 }
 
+/* ─── Grid background (dark only) ─── */
 .grid-bg {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
@@ -62,6 +140,11 @@ body {
   background-size: 48px 48px;
 }
 
+[data-theme="light"] .grid-bg {
+  background-image: none;
+}
+
+/* ─── Scanlines (dark only) ─── */
 .scanlines {
   position: relative;
 }
@@ -81,6 +164,11 @@ body {
   z-index: 50;
 }
 
+[data-theme="light"] .scanlines::after {
+  display: none;
+}
+
+/* ─── Glow text effects (dark only — light mode falls back to solid color) ─── */
 .glow-text-neo {
   text-shadow:
     0 0 10px rgba(0, 240, 255, 0.6),
@@ -129,6 +217,19 @@ body {
     0 0 40px rgba(136, 255, 0, 0.2);
 }
 
+/* Light mode: disable glow, use solid colors */
+[data-theme="light"] .glow-text-neo,
+[data-theme="light"] .glow-text-cipher,
+[data-theme="light"] .glow-text-havoc,
+[data-theme="light"] .glow-text-pulse,
+[data-theme="light"] .glow-text-razor,
+[data-theme="light"] .glow-text-ghost,
+[data-theme="light"] .glow-text-maverick,
+[data-theme="light"] .glow-text-viper {
+  text-shadow: none;
+}
+
+/* ─── Animations ─── */
 @keyframes pulse-glow {
   0%,
   100% {
@@ -144,10 +245,10 @@ body {
 @keyframes border-glow {
   0%,
   100% {
-    border-color: rgba(255, 255, 255, 0.06);
+    border-color: var(--border-subtle);
   }
   50% {
-    border-color: rgba(0, 240, 255, 0.3);
+    border-color: var(--accent-medium);
   }
 }
 
@@ -190,6 +291,7 @@ body {
   animation: slide-in-right 0.3s ease-out;
 }
 
+/* ─── Status dots ─── */
 .status-dot {
   width: 8px;
   height: 8px;
@@ -221,6 +323,14 @@ body {
   color: var(--color-status-offline);
 }
 
+/* Light mode: no pulse glow on status dots */
+[data-theme="light"] .status-dot-online,
+[data-theme="light"] .status-dot-working,
+[data-theme="light"] .status-dot-idle {
+  animation: none;
+}
+
+/* ─── Priority badges ─── */
 .priority-critical {
   color: #ff3333;
   background: rgba(255, 51, 51, 0.1);
@@ -245,27 +355,35 @@ body {
   border: 1px solid rgba(0, 255, 136, 0.3);
 }
 
+/* Light mode: darker priority text for readability */
+[data-theme="light"] .priority-critical { color: #dc2626; background: rgba(220, 38, 38, 0.08); border-color: rgba(220, 38, 38, 0.2); }
+[data-theme="light"] .priority-high { color: #ea580c; background: rgba(234, 88, 12, 0.08); border-color: rgba(234, 88, 12, 0.2); }
+[data-theme="light"] .priority-medium { color: #ca8a04; background: rgba(202, 138, 4, 0.08); border-color: rgba(202, 138, 4, 0.2); }
+[data-theme="light"] .priority-low { color: #16a34a; background: rgba(22, 163, 74, 0.08); border-color: rgba(22, 163, 74, 0.2); }
+
+/* ─── Scrollbar ─── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border-medium);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--text-tertiary);
 }
 
+/* ─── Drag/drop ─── */
 .drag-over {
-  background: rgba(0, 240, 255, 0.05) !important;
-  border-color: rgba(0, 240, 255, 0.3) !important;
+  background: var(--accent-soft) !important;
+  border-color: var(--accent-medium) !important;
 }
 
 .dragging {

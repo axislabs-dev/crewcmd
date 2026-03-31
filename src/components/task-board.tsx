@@ -50,7 +50,7 @@ const columnColors: Record<TaskStatus, string> = {
 };
 
 const priorityStyles: Record<string, string> = {
-  low: "text-white/30 bg-white/5",
+  low: "text-[var(--text-tertiary)] bg-[var(--bg-surface-hover)]",
   medium: "text-blue-400 bg-blue-400/10",
   high: "text-orange-400 bg-orange-400/10",
   critical: "text-red-400 bg-red-400/10",
@@ -839,21 +839,21 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+        <h2 className="text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
           Task Board
         </h2>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowDone(!showDone)}
-            className={`font-mono text-[10px] tracking-wider transition-colors ${
-              showDone 
-                ? "text-neo/60 hover:text-neo" 
-                : "text-white/30 hover:text-white/50"
+            className={`text-[10px] tracking-wider transition-colors ${
+              showDone
+                ? "text-neo/60 hover:text-neo"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             }`}
           >
             {showDone ? "◉ DONE SHOWN" : "○ SHOW DONE"}
           </button>
-          <span className="font-mono text-[10px] text-white/20">
+          <span className="text-[10px] text-[var(--text-tertiary)]">
             Click task for details · Drag between columns
           </span>
         </div>
@@ -868,7 +868,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
           <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setLightboxImage(null)}
-              className="absolute -top-10 right-0 text-white/60 hover:text-white transition-colors"
+              className="absolute -top-10 right-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             >
               <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -880,7 +880,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
               className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
             />
             <div className="mt-2 text-center">
-              <span className="font-mono text-xs text-white/50">{lightboxImage.filename}</span>
+              <span className="text-xs text-[var(--text-secondary)]">{lightboxImage.filename}</span>
             </div>
           </div>
         </div>
@@ -893,7 +893,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full" style={{ backgroundColor: columnColors[selectedTask.status as TaskStatus] }} />
-                <span className="font-mono text-[10px] tracking-wider text-white/30">
+                <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
                   {selectedTask.status.replace("_", " ").toUpperCase()}
                 </span>
                 {selectedTask.projectId && projectMap.get(selectedTask.projectId) && (() => {
@@ -901,9 +901,9 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   const projectColor = project.color || "#00f0ff";
                   return (
                     <>
-                      <span className="text-white/10">·</span>
+                      <span className="text-[var(--text-tertiary)]">·</span>
                       <span 
-                        className="rounded-full border px-2 py-0.5 font-mono text-[9px] tracking-wider"
+                        className="rounded-full border px-2 py-0.5 text-[9px] tracking-wider"
                         style={{ 
                           borderColor: `${projectColor}30`,
                           backgroundColor: `${projectColor}15`,
@@ -920,20 +920,20 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                 {!editing && (
                   <button
                     onClick={() => setEditing(true)}
-                    className="rounded-lg border border-white/[0.08] px-3 py-1.5 font-mono text-[10px] tracking-wider text-white/40 transition-colors hover:text-neo"
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-neo"
                   >
                     EDIT
                   </button>
                 )}
                 <button
                   onClick={deleteTask}
-                  className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-red-400/40 transition-colors hover:text-red-400"
+                  className="rounded-lg border border-red-500/20 px-3 py-1.5 text-[10px] tracking-wider text-red-400/40 transition-colors hover:text-red-400"
                 >
                   DELETE
                 </button>
                 <button
                   onClick={() => setSelectedTask(null)}
-                  className="text-white/30 transition-colors hover:text-white/60"
+                  className="text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -945,30 +945,30 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
             {editing ? (
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">TITLE</label>
+                  <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">TITLE</label>
                   <input
                     type="text"
                     value={editForm.title}
                     onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">DESCRIPTION</label>
+                  <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">DESCRIPTION</label>
                   <textarea
                     value={editForm.description}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     rows={4}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">STATUS</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">STATUS</label>
                     <select
                       value={editForm.status}
                       onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="backlog">Backlog</option>
                       <option value="inbox">Inbox</option>
@@ -979,11 +979,11 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">PRIORITY</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">PRIORITY</label>
                     <select
                       value={editForm.priority}
                       onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -992,11 +992,11 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">ASSIGN TO AGENT</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">ASSIGN TO AGENT</label>
                     <select
                       value={editForm.assignedAgentId}
                       onChange={(e) => setEditForm({ ...editForm, assignedAgentId: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="">Unassigned</option>
                       {agents.map((a) => (
@@ -1007,22 +1007,22 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">ASSIGN TO HUMAN</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">ASSIGN TO HUMAN</label>
                     <select
                       value={editForm.humanAssignee}
                       onChange={(e) => setEditForm({ ...editForm, humanAssignee: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-red-400/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-red-400/30"
                     >
                       <option value="">None</option>
                       <option value="roger">👤 Roger</option>
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block font-mono text-[10px] tracking-wider text-white/30">PROJECT</label>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">PROJECT</label>
                     <select
                       value={editForm.projectId}
                       onChange={(e) => setEditForm({ ...editForm, projectId: e.target.value })}
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
                     >
                       <option value="">No project</option>
                       {projects.map((p) => (
@@ -1034,14 +1034,14 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                 <div className="flex justify-end gap-3 pt-2">
                   <button
                     onClick={() => setEditing(false)}
-                    className="rounded-lg border border-white/[0.08] px-4 py-2 font-mono text-[10px] tracking-wider text-white/40 transition-colors hover:text-white/60"
+                    className="rounded-lg border border-[var(--border-medium)] px-4 py-2 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
                   >
                     CANCEL
                   </button>
                   <button
                     onClick={saveTask}
                     disabled={saving}
-                    className="rounded-lg bg-neo/20 px-4 py-2 font-mono text-[10px] tracking-wider text-neo transition-all duration-200 hover:bg-neo/30 disabled:opacity-30"
+                    className="rounded-lg bg-neo/20 px-4 py-2 text-[10px] tracking-wider text-neo transition-all duration-200 hover:bg-neo/30 disabled:opacity-30"
                   >
                     {saving ? "SAVING..." : "SAVE CHANGES"}
                   </button>
@@ -1052,12 +1052,12 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                 <div className="flex items-center gap-2">
                   <button
                     onClick={(e) => copyShortId(e, selectedTask)}
-                    className="shrink-0 rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-white/30 transition-colors hover:border-white/15 hover:text-white/50"
+                    className="shrink-0 rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-secondary)]"
                     title="Copy task ID"
                   >
                     {copiedTaskId === selectedTask.id ? "Copied!" : formatShortId(selectedTask.shortId)}
                   </button>
-                  <h2 className="font-mono text-sm font-bold tracking-wider text-white/80">
+                  <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
                     {selectedTask.title}
                   </h2>
                 </div>
@@ -1072,7 +1072,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         <svg className="h-3.5 w-3.5 shrink-0 text-yellow-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.95 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
                         </svg>
-                        <span className="font-mono text-[9px] tracking-[0.2em] text-yellow-400/70">READ BEFORE STARTING</span>
+                        <span className="text-[9px] tracking-[0.2em] text-yellow-400/70">READ BEFORE STARTING</span>
                       </div>
                       <div className="space-y-1">
                         {docs.map((doc, i) => (
@@ -1081,7 +1081,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                             href={doc.url.startsWith("http") ? doc.url : `/docs?file=${encodeURIComponent(doc.url)}`}
                             target={doc.url.startsWith("http") ? "_blank" : undefined}
                             rel={doc.url.startsWith("http") ? "noopener noreferrer" : undefined}
-                            className="flex items-center gap-2 font-mono text-[11px] text-yellow-300/70 transition-colors hover:text-yellow-300"
+                            className="flex items-center gap-2 text-[11px] text-yellow-300/70 transition-colors hover:text-yellow-300"
                           >
                             <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -1097,16 +1097,16 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                 {selectedTask.description && (
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="font-mono text-[9px] tracking-wider text-white/20">DESCRIPTION</span>
+                      <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">DESCRIPTION</span>
                       <button
                         onClick={copyDescription}
-                        className="shrink-0 rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-white/30 transition-colors hover:border-white/15 hover:text-white/50"
+                        className="shrink-0 rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-[9px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-secondary)]"
                         title="Copy description"
                       >
                         {copiedDescription ? "Copied!" : "Copy"}
                       </button>
                     </div>
-                    <div className="prose prose-invert max-w-none font-mono text-[11px] leading-relaxed text-white/40 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_h1]:text-white/70 [&_h2]:text-white/60 [&_h3]:text-white/50 [&_strong]:text-white/60 [&_code]:text-neo [&_code]:bg-white/5 [&_code]:px-1 [&_code]:rounded [&_hr]:border-white/10 [&_hr]:my-3">
+                    <div className="prose prose-invert max-w-none text-[11px] leading-relaxed text-[var(--text-tertiary)] [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_h1]:text-[var(--text-primary)] [&_h2]:text-[var(--text-secondary)] [&_h3]:text-[var(--text-secondary)] [&_strong]:text-[var(--text-secondary)] [&_code]:text-neo [&_code]:bg-[var(--bg-surface-hover)] [&_code]:px-1 [&_code]:rounded [&_hr]:border-[var(--border-medium)] [&_hr]:my-3">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {selectedTask.description}
                       </ReactMarkdown>
@@ -1116,7 +1116,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
 
                 {/* Task Images — drag & drop zone */}
                 <div
-                  className={`border-t border-white/[0.06] pt-4 rounded-lg transition-all ${
+                  className={`border-t border-[var(--border-subtle)] pt-4 rounded-lg transition-all ${
                     isDraggingOver
                       ? "bg-neo/[0.06] ring-2 ring-neo/30 ring-inset"
                       : ""
@@ -1127,7 +1127,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   onDrop={handleDrop}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-mono text-[10px] tracking-[0.2em] text-white/30 uppercase">
+                    <h3 className="text-[10px] tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
                       {loadingTaskImages ? "Loading..." : `Images (${taskImages.length})`}
                     </h3>
                     <div className="flex items-center gap-2">
@@ -1144,7 +1144,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       <button
                         onClick={() => imageInput?.click()}
                         disabled={uploadingImage}
-                        className="font-mono text-[10px] text-neo/50 hover:text-neo/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="text-[10px] text-neo/50 hover:text-neo/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {uploadingImage ? "Uploading…" : "+ Add Image"}
                       </button>
@@ -1157,7 +1157,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         <svg className="mx-auto mb-2 h-8 w-8 text-neo/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
                         </svg>
-                        <span className="font-mono text-[11px] text-neo/60">Drop images here</span>
+                        <span className="text-[11px] text-neo/60">Drop images here</span>
                       </div>
                     </div>
                   )}
@@ -1165,21 +1165,21 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   {uploadingImage && (
                     <div className="mb-3 flex items-center gap-2 rounded-lg border border-neo/20 bg-neo/[0.04] px-3 py-2">
                       <div className="h-3 w-3 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
-                      <span className="font-mono text-[10px] text-neo/60">Uploading…</span>
+                      <span className="text-[10px] text-neo/60">Uploading…</span>
                     </div>
                   )}
 
                   {loadingTaskImages ? (
-                    <p className="text-xs text-white/20 italic">Loading...</p>
+                    <p className="text-xs text-[var(--text-tertiary)] italic">Loading...</p>
                   ) : taskImages.length === 0 && !isDraggingOver ? (
                     <div
-                      className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.1] bg-white/[0.01] py-6 transition-colors hover:border-white/[0.2] hover:bg-white/[0.02]"
+                      className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border-medium)] bg-[var(--bg-surface)] py-6 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                       onClick={() => imageInput?.click()}
                     >
-                      <svg className="mb-2 h-6 w-6 text-white/15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <svg className="mb-2 h-6 w-6 text-[var(--text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
                       </svg>
-                      <span className="font-mono text-[10px] text-white/20">
+                      <span className="text-[10px] text-[var(--text-tertiary)]">
                         Drop images here, paste from clipboard, or click to browse
                       </span>
                     </div>
@@ -1188,7 +1188,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       {taskImages.map((image, index) => (
                         <div key={index} className="group relative">
                           <div 
-                            className="relative aspect-square rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02] cursor-pointer transition-all hover:border-white/[0.15]"
+                            className="relative aspect-square rounded-lg overflow-hidden border border-[var(--border-medium)] bg-[var(--bg-surface)] cursor-pointer transition-all hover:border-[var(--border-medium)]"
                             onClick={() => setLightboxImage(image)}
                           >
                             <img
@@ -1229,7 +1229,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                               </svg>
                             </button>
                           </div>
-                          <span className="mt-1 block truncate font-mono text-[9px] text-white/30">
+                          <span className="mt-1 block truncate text-[9px] text-[var(--text-tertiary)]">
                             {image.filename}
                           </span>
                         </div>
@@ -1237,15 +1237,15 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-3 border-t border-white/[0.06] pt-4">
+                <div className="flex flex-wrap gap-3 border-t border-[var(--border-subtle)] pt-4">
                   <div>
-                    <span className="font-mono text-[9px] tracking-wider text-white/20">PRIORITY</span>
-                    <div className={`mt-1 rounded px-2 py-0.5 font-mono text-[10px] uppercase ${priorityStyles[selectedTask.priority]}`}>
+                    <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">PRIORITY</span>
+                    <div className={`mt-1 rounded px-2 py-0.5 text-[10px] uppercase ${priorityStyles[selectedTask.priority]}`}>
                       {selectedTask.priority}
                     </div>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] tracking-wider text-white/20">ASSIGNED TO</span>
+                    <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">ASSIGNED TO</span>
                     <select
                       value={selectedTask.assignedAgentId || ""}
                       onChange={async (e) => {
@@ -1255,7 +1255,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         setBoardTasks((prev) => prev.map((t) => t.id === selectedTask.id ? updated : t));
                         await fetch(`/api/tasks/${selectedTask.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignedAgentId: val }) });
                       }}
-                      className="mt-1 w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 font-mono text-[11px] text-white/50 outline-none focus:border-neo/30"
+                      className="mt-1 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)] outline-none focus:border-neo/30"
                     >
                       <option value="">Unassigned</option>
                       {agents.map((a) => (
@@ -1264,7 +1264,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     </select>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] tracking-wider text-red-400/50">HUMAN ASSIGNEE</span>
+                    <span className="text-[9px] tracking-wider text-red-400/50">HUMAN ASSIGNEE</span>
                     <div className="mt-1 flex items-center gap-2">
                       <select
                         value={selectedTask.humanAssignee || ""}
@@ -1275,7 +1275,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                           setBoardTasks((prev) => prev.map((t) => t.id === selectedTask.id ? updated : t));
                           await fetch(`/api/tasks/${selectedTask.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ humanAssignee: val }) });
                         }}
-                        className="w-full rounded-lg border border-red-400/[0.08] bg-red-400/[0.02] px-2 py-1.5 font-mono text-[11px] text-red-400/50 outline-none focus:border-red-400/20"
+                        className="w-full rounded-lg border border-red-400/[0.08] bg-red-400/[0.02] px-2 py-1.5 text-[11px] text-red-400/50 outline-none focus:border-red-400/20"
                       >
                         <option value="">None</option>
                         <option value="roger">👤 Roger</option>
@@ -1283,14 +1283,14 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     </div>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] tracking-wider text-white/20">CREATED BY</span>
-                    <div className="mt-1 font-mono text-[11px] text-white/50">
+                    <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">CREATED BY</span>
+                    <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
                       {selectedTask.createdBy || "Unknown"}
                     </div>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] tracking-wider text-white/20">PROJECT</span>
-                    <div className="mt-1 font-mono text-[11px]">
+                    <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">PROJECT</span>
+                    <div className="mt-1 text-[11px]">
                       {selectedTask.projectId && projectMap.get(selectedTask.projectId) ? (() => {
                         const project = projectMap.get(selectedTask.projectId)!;
                         const projectColor = project.color || "#00f0ff";
@@ -1299,33 +1299,33 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                             📁 {project.name}
                           </span>
                         );
-                      })() : <span className="text-white/25">No project</span>}
+                      })() : <span className="text-[var(--text-tertiary)]">No project</span>}
                     </div>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] tracking-wider text-white/20">CREATED</span>
-                    <div className="mt-1 font-mono text-[11px] text-white/50">
+                    <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">CREATED</span>
+                    <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
                       {new Date(selectedTask.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   {selectedTask.prUrl && (
                     <>
                       <div>
-                        <span className="font-mono text-[9px] tracking-wider text-white/20">PR</span>
+                        <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">PR</span>
                         <div className="mt-1">
                           <a
                             href={selectedTask.prUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-mono text-[11px] text-neo/70 transition-colors hover:text-neo"
+                            className="text-[11px] text-neo/70 transition-colors hover:text-neo"
                           >
                             {selectedTask.prUrl.replace(/.*\/pull\//, "PR #")} ↗
                           </a>
                         </div>
                       </div>
                       <div>
-                        <span className="font-mono text-[9px] tracking-wider text-white/20">PR STATUS</span>
-                        <div className={`mt-1 font-mono text-[11px] ${
+                        <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">PR STATUS</span>
+                        <div className={`mt-1 text-[11px] ${
                           selectedTask.prStatus === "merged" ? "text-green-400/70"
                             : selectedTask.prStatus === "changes_requested" ? "text-orange-400/70"
                             : "text-neo/50"
@@ -1337,8 +1337,8 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   )}
                   {selectedTask.branch && (
                     <div>
-                      <span className="font-mono text-[9px] tracking-wider text-white/20">BRANCH</span>
-                      <div className="mt-1 font-mono text-[11px] text-white/40">
+                      <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">BRANCH</span>
+                      <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">
                         {selectedTask.branch}
                       </div>
                     </div>
@@ -1347,9 +1347,9 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
               </div>
             )}
             {selectedTask.humanAssignee && (
-              <div className="border-t border-white/[0.06] pt-4">
+              <div className="border-t border-[var(--border-subtle)] pt-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="font-mono text-[10px] tracking-[0.2em] text-white/30 uppercase">
+                  <h3 className="text-[10px] tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
                     TIME TRACKING
                   </h3>
                   {(() => {
@@ -1359,7 +1359,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     );
                     if (totalSecs === 0) return null;
                     return (
-                      <span className="font-mono text-[10px] tracking-wider text-white/30">
+                      <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
                         TOTAL: <span className="text-neo/70">{formatDurationShort(totalSecs)}</span>
                       </span>
                     );
@@ -1374,14 +1374,14 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         <>
                           <button
                             onClick={() => stopTimer(selectedTask.id, activeEntry.id)}
-                            className="flex items-center gap-2 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-all hover:bg-red-400/20"
+                            className="flex items-center gap-2 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-[10px] tracking-wider text-red-400 transition-all hover:bg-red-400/20"
                           >
                             <span className="inline-block h-2.5 w-2.5 rounded-sm bg-red-400" />
                             STOP
                           </button>
                           <div className="flex items-center gap-2">
                             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-400" />
-                            <span className="font-mono text-sm font-bold tabular-nums text-red-400">
+                            <span className="text-sm font-bold tabular-nums text-red-400">
                               {formatDuration(getElapsedSeconds(activeEntry))}
                             </span>
                           </div>
@@ -1389,7 +1389,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       ) : (
                         <button
                           onClick={() => startTimer(selectedTask.id, selectedTask.humanAssignee!)}
-                          className="flex items-center gap-2 rounded-lg border border-green-400/20 bg-green-400/5 px-3 py-2 font-mono text-[10px] tracking-wider text-green-400/70 transition-all hover:border-green-400/40 hover:bg-green-400/10 hover:text-green-400"
+                          className="flex items-center gap-2 rounded-lg border border-green-400/20 bg-green-400/5 px-3 py-2 text-[10px] tracking-wider text-green-400/70 transition-all hover:border-green-400/40 hover:bg-green-400/10 hover:text-green-400"
                         >
                           <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z" />
@@ -1402,9 +1402,9 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                 })()}
 
                 {loadingTimeEntries ? (
-                  <p className="font-mono text-[10px] text-white/20">Loading...</p>
+                  <p className="text-[10px] text-[var(--text-tertiary)]">Loading...</p>
                 ) : taskTimeEntries.filter((e) => e.stoppedAt).length === 0 ? (
-                  <p className="font-mono text-[10px] text-white/15 italic">No time entries recorded yet.</p>
+                  <p className="text-[10px] text-[var(--text-tertiary)] italic">No time entries recorded yet.</p>
                 ) : (
                   <div className="space-y-1.5">
                     {taskTimeEntries
@@ -1412,20 +1412,20 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       .map((entry) => (
                         <div
                           key={entry.id}
-                          className="flex items-center justify-between rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2"
+                          className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] text-white/20">⏱️</span>
-                            <span className="font-mono text-[10px] font-bold text-neo/60">
+                            <span className="text-[10px] text-[var(--text-tertiary)]">⏱️</span>
+                            <span className="text-[10px] font-bold text-neo/60">
                               {formatDurationShort(entry.durationSeconds ?? 0)}
                             </span>
                             {entry.note && (
-                              <span className="font-mono text-[10px] text-white/30">
+                              <span className="text-[10px] text-[var(--text-tertiary)]">
                                 — {entry.note}
                               </span>
                             )}
                           </div>
-                          <span className="font-mono text-[9px] text-white/15">
+                          <span className="text-[9px] text-[var(--text-tertiary)]">
                             {new Date(entry.startedAt).toLocaleDateString("en-AU", {
                               day: "numeric",
                               month: "short",
@@ -1448,8 +1448,8 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
               const proj = projectMap.get(selectedTask.projectId!);
               if (!proj?.documents?.length) return null;
               return (
-                <div className="border-t border-white/[0.06] pt-4">
-                  <h3 className="mb-2 font-mono text-[10px] tracking-[0.2em] text-white/30">
+                <div className="border-t border-[var(--border-subtle)] pt-4">
+                  <h3 className="mb-2 text-[10px] tracking-[0.2em] text-[var(--text-tertiary)]">
                     PROJECT DOCS ({proj.documents.length})
                   </h3>
                   <div className="flex flex-wrap gap-2">
@@ -1459,7 +1459,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         href={doc.url.startsWith("http") ? doc.url : `/docs?file=${encodeURIComponent(doc.url)}`}
                         target={doc.url.startsWith("http") ? "_blank" : undefined}
                         rel={doc.url.startsWith("http") ? "noopener noreferrer" : undefined}
-                        className="flex items-center gap-1.5 rounded-lg border border-neo/10 bg-neo/5 px-2.5 py-1 font-mono text-[10px] text-neo/60 transition-colors hover:border-neo/20 hover:text-neo/80"
+                        className="flex items-center gap-1.5 rounded-lg border border-neo/10 bg-neo/5 px-2.5 py-1 text-[10px] text-neo/60 transition-colors hover:border-neo/20 hover:text-neo/80"
                       >
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -1473,12 +1473,12 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
             })()}
 
             {/* Task Documents */}
-            <div className="border-t border-white/[0.06] pt-4">
+            <div className="border-t border-[var(--border-subtle)] pt-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-mono text-[10px] tracking-[0.2em] text-white/30 uppercase">Documents</h3>
+                <h3 className="text-[10px] tracking-[0.2em] text-[var(--text-tertiary)] uppercase">Documents</h3>
                 <button
                   onClick={() => setShowNewDocForm((v) => !v)}
-                  className="font-mono text-[10px] text-neo/50 hover:text-neo/80 transition-colors"
+                  className="text-[10px] text-neo/50 hover:text-neo/80 transition-colors"
                 >
                   {showNewDocForm ? "cancel" : "+ new doc"}
                 </button>
@@ -1491,13 +1491,13 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     value={newDocTitle}
                     onChange={(e) => setNewDocTitle(e.target.value)}
                     placeholder="Document title"
-                    className="w-full bg-transparent border border-white/10 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-neo/40"
+                    className="w-full bg-transparent border border-[var(--border-medium)] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-neo/40"
                   />
                   <textarea
                     value={newDocContent}
                     onChange={(e) => setNewDocContent(e.target.value)}
                     placeholder="Optional initial content (markdown)..."
-                    className="w-full bg-transparent border border-white/10 rounded px-2 py-1.5 text-xs font-mono h-20 resize-none focus:outline-none focus:border-neo/40"
+                    className="w-full bg-transparent border border-[var(--border-medium)] rounded px-2 py-1.5 text-xs font-mono h-20 resize-none focus:outline-none focus:border-neo/40"
                   />
                   <button
                     onClick={() => createTaskDoc(selectedTask!.id, selectedTask!.projectId ?? null)}
@@ -1510,13 +1510,13 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
               )}
 
               {loadingTaskDocs ? (
-                <p className="text-xs text-white/20 italic">Loading…</p>
+                <p className="text-xs text-[var(--text-tertiary)] italic">Loading…</p>
               ) : taskDocs.length === 0 ? (
-                <p className="text-xs text-white/20 italic">No documents linked to this task.</p>
+                <p className="text-xs text-[var(--text-tertiary)] italic">No documents linked to this task.</p>
               ) : (
                 <div className="space-y-2">
                   {taskDocs.map((doc) => (
-                    <div key={doc.id} className="rounded-lg border border-white/[0.06] overflow-hidden">
+                    <div key={doc.id} className="rounded-lg border border-[var(--border-subtle)] overflow-hidden">
                       <button
                         onClick={() => {
                           if (activeDocId === doc.id) {
@@ -1529,22 +1529,22 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                             setDocEditMode(false);
                           }
                         }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/[0.03] transition-colors"
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--bg-surface)] transition-colors"
                       >
                         <span className="text-xs font-medium truncate">{doc.title}</span>
-                        <span className="text-[10px] text-white/30 shrink-0 ml-2">
+                        <span className="text-[10px] text-[var(--text-tertiary)] shrink-0 ml-2">
                           {activeDocId === doc.id ? "▲" : "▼"}
                         </span>
                       </button>
 
                       {activeDocId === doc.id && (
-                        <div className="border-t border-white/[0.06]">
-                          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/[0.06] bg-white/[0.02]">
+                        <div className="border-t border-[var(--border-subtle)]">
+                          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                             {docEditMode ? (
                               <>
                                 <button
                                   onClick={() => setDocEditMode(false)}
-                                  className="text-[10px] text-white/40 hover:text-white/60"
+                                  className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                                 >cancel</button>
                                 <button
                                   onClick={() => saveTaskDoc(doc.id)}
@@ -1556,7 +1556,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                               <>
                                 <button
                                   onClick={() => setDocEditMode(true)}
-                                  className="text-[10px] text-white/40 hover:text-white/60"
+                                  className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                                 >edit</button>
                                 <button
                                   onClick={() => deleteTaskDoc(doc.id)}
@@ -1572,16 +1572,16 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                                   type="text"
                                   value={docEditTitle}
                                   onChange={(e) => setDocEditTitle(e.target.value)}
-                                  className="w-full bg-transparent border border-white/10 rounded px-2 py-1 text-xs focus:outline-none focus:border-neo/40"
+                                  className="w-full bg-transparent border border-[var(--border-medium)] rounded px-2 py-1 text-xs focus:outline-none focus:border-neo/40"
                                 />
                                 <textarea
                                   value={docEditContent}
                                   onChange={(e) => setDocEditContent(e.target.value)}
-                                  className="w-full bg-transparent border border-white/10 rounded px-2 py-1.5 text-xs font-mono h-48 resize-none focus:outline-none focus:border-neo/40"
+                                  className="w-full bg-transparent border border-[var(--border-medium)] rounded px-2 py-1.5 text-xs font-mono h-48 resize-none focus:outline-none focus:border-neo/40"
                                 />
                               </div>
                             ) : (
-                              <div className="prose prose-invert prose-xs max-w-none text-xs [&>*]:text-white/70 [&>h1]:text-white/90 [&>h2]:text-white/90 [&>h3]:text-white/80">
+                              <div className="prose prose-invert prose-xs max-w-none text-xs [&>*]:text-[var(--text-primary)] [&>h1]:text-[var(--text-primary)] [&>h2]:text-[var(--text-primary)] [&>h3]:text-[var(--text-primary)]">
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
                               </div>
                             )}
@@ -1595,8 +1595,8 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
             </div>
 
             {/* Comment Thread */}
-            <div className="border-t border-white/[0.06] pt-4">
-              <h3 className="mb-3 font-mono text-[10px] tracking-[0.2em] text-white/30 uppercase">
+            <div className="border-t border-[var(--border-subtle)] pt-4">
+              <h3 className="mb-3 text-[10px] tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
                 AUDIT TRAIL ({comments.length})
               </h3>
 
@@ -1607,12 +1607,12 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   onChange={(e) => setNewComment(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && postComment()}
                   placeholder="Add a comment..."
-                  className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/70 placeholder:text-white/20 outline-none focus:border-neo/30"
+                  className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-neo/30"
                 />
                 <button
                   onClick={postComment}
                   disabled={!newComment.trim()}
-                  className="rounded-lg border border-neo/20 bg-neo/10 px-3 py-2 font-mono text-[10px] tracking-wider text-neo transition-all hover:bg-neo/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-neo/20 bg-neo/10 px-3 py-2 text-[10px] tracking-wider text-neo transition-all hover:bg-neo/20 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   POST
                 </button>
@@ -1620,14 +1620,14 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
 
               <div className="min-h-[120px] flex-1 space-y-2 overflow-y-auto">
                 {loadingComments ? (
-                  <p className="font-mono text-[10px] text-white/20">Loading...</p>
+                  <p className="text-[10px] text-[var(--text-tertiary)]">Loading...</p>
                 ) : comments.length === 0 ? (
-                  <p className="font-mono text-[10px] text-white/15 italic">No comments yet</p>
+                  <p className="text-[10px] text-[var(--text-tertiary)] italic">No comments yet</p>
                 ) : (
                   comments.map((c) => {
                     const commentAgent = c.agentId ? agentMap.get(c.agentId) : null;
                     return (
-                      <div key={c.id} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                      <div key={c.id} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2">
                         <div className="mb-1 flex items-center justify-between">
                           <span
                             className="font-mono text-[9px] font-bold tracking-wider"
@@ -1635,11 +1635,11 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                           >
                             {commentAgent ? `${commentAgent.emoji} ${commentAgent.callsign}` : c.agentId || "Unknown"}
                           </span>
-                          <span className="font-mono text-[8px] text-white/15">
+                          <span className="text-[8px] text-[var(--text-tertiary)]">
                             {new Date(c.createdAt).toLocaleString()}
                           </span>
                         </div>
-                        <div className="prose-sm prose-invert max-w-none font-mono text-[11px] leading-relaxed text-white/50 [&_h1]:text-[12px] [&_h1]:font-bold [&_h1]:text-white/60 [&_h1]:mt-1 [&_h1]:mb-1 [&_h2]:text-[11px] [&_h2]:font-bold [&_h2]:text-white/60 [&_h2]:mt-1 [&_h2]:mb-1 [&_h3]:text-[11px] [&_h3]:font-bold [&_h3]:text-white/50 [&_h3]:mt-1 [&_h3]:mb-0.5 [&_strong]:text-white/60 [&_table]:text-[9px] [&_table]:border-collapse [&_th]:border [&_th]:border-white/10 [&_th]:px-2 [&_th]:py-0.5 [&_th]:text-white/40 [&_td]:border [&_td]:border-white/[0.06] [&_td]:px-2 [&_td]:py-0.5 [&_p]:my-0.5 [&_ul]:my-0.5 [&_li]:my-0 [&_code]:text-neo/60 [&_code]:text-[10px] [&_hr]:border-white/[0.06] [&_hr]:my-1">
+                        <div className="prose-sm prose-invert max-w-none text-[11px] leading-relaxed text-[var(--text-secondary)] [&_h1]:text-[12px] [&_h1]:font-bold [&_h1]:text-[var(--text-secondary)] [&_h1]:mt-1 [&_h1]:mb-1 [&_h2]:text-[11px] [&_h2]:font-bold [&_h2]:text-[var(--text-secondary)] [&_h2]:mt-1 [&_h2]:mb-1 [&_h3]:text-[11px] [&_h3]:font-bold [&_h3]:text-[var(--text-secondary)] [&_h3]:mt-1 [&_h3]:mb-0.5 [&_strong]:text-[var(--text-secondary)] [&_table]:text-[9px] [&_table]:border-collapse [&_th]:border [&_th]:border-[var(--border-medium)] [&_th]:px-2 [&_th]:py-0.5 [&_th]:text-[var(--text-tertiary)] [&_td]:border [&_td]:border-[var(--border-subtle)] [&_td]:px-2 [&_td]:py-0.5 [&_p]:my-0.5 [&_ul]:my-0.5 [&_li]:my-0 [&_code]:text-neo/60 [&_code]:text-[10px] [&_hr]:border-[var(--border-subtle)] [&_hr]:my-1">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.content}</ReactMarkdown>
                         </div>
                       </div>
@@ -1675,12 +1675,12 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                     className="h-2 w-2 rounded-full"
                     style={{ backgroundColor: columnColors[col.key] }}
                   />
-                  <span className="font-mono text-[10px] tracking-wider text-white/50">
+                  <span className="text-[10px] tracking-wider text-[var(--text-secondary)]">
                     {col.label}
                   </span>
                 </div>
                 <span
-                  className="flex h-4 w-4 items-center justify-center rounded-full font-mono text-[9px]"
+                  className="flex h-4 w-4 items-center justify-center rounded-full text-[9px]"
                   style={{
                     backgroundColor: `${columnColors[col.key]}20`,
                     color: columnColors[col.key],
@@ -1704,7 +1704,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         // Only open detail if we weren't dragging
                         if (!dragRef.current?.isDragging) openTaskDetail(task);
                       }}
-                      className={`cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] p-2.5 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.05] ${
+                      className={`cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2.5 transition-all duration-200 hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)] ${
                         isDragging ? "opacity-40" : ""
                       } ${isDragOver ? "border-neo/50 bg-neo/5 ring-1 ring-neo/30" : ""}`}
                       style={{ touchAction: "none" }}
@@ -1715,7 +1715,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         return (
                           <div className="mb-1.5">
                             <span 
-                              className="rounded-full border px-1.5 py-0.5 font-mono text-[8px] tracking-wider"
+                              className="rounded-full border px-1.5 py-0.5 text-[8px] tracking-wider"
                               style={{ 
                                 borderColor: `${projectColor}30`,
                                 backgroundColor: `${projectColor}15`,
@@ -1732,12 +1732,12 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         <div className="flex items-start gap-2">
                           <button
                             onClick={(e) => copyShortId(e, task)}
-                            className="mt-0.5 shrink-0 rounded border border-white/[0.06] bg-white/[0.02] px-1 py-0.5 font-mono text-[8px] tracking-wider text-white/25 transition-colors hover:border-white/15 hover:text-white/50"
+                            className="mt-0.5 shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1 py-0.5 font-mono text-[8px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-secondary)]"
                             title="Copy task ID"
                           >
                             {copiedTaskId === task.id ? "Copied!" : formatShortId(task.shortId)}
                           </button>
-                          <p className="text-xs font-medium text-white/80 leading-snug">
+                          <p className="text-xs font-medium text-[var(--text-primary)] leading-snug">
                             {task.title}
                           </p>
                         </div>
@@ -1746,12 +1746,12 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1">
                           <span
-                            className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase ${priorityStyles[task.priority] || ""}`}
+                            className={`rounded px-1.5 py-0.5 text-[9px] uppercase ${priorityStyles[task.priority] || ""}`}
                           >
                             {task.priority}
                           </span>
                           {task.humanAssignee && (
-                            <span className="flex items-center gap-0.5 rounded border border-red-400/30 bg-red-400/10 px-1.5 py-0.5 font-mono text-[8px] tracking-wider text-red-400/70">
+                            <span className="flex items-center gap-0.5 rounded border border-red-400/30 bg-red-400/10 px-1.5 py-0.5 text-[8px] tracking-wider text-red-400/70">
                               👤 {task.humanAssignee}
                               <button
                                 onClick={async (e) => {
@@ -1772,7 +1772,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         {(task.branch || task.prUrl) && (
                           <div className="flex items-center gap-1">
                             {task.branch && !task.prUrl && (
-                              <span className="rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[8px] tracking-wider text-white/30">
+                              <span className="rounded border border-[var(--border-medium)] px-1.5 py-0.5 font-mono text-[8px] tracking-wider text-[var(--text-tertiary)]">
                                 ⎇ {task.branch.replace(/^task\/[a-f0-9]+-/, '').slice(0, 20)}
                               </span>
                             )}
@@ -1782,7 +1782,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className={`rounded px-1.5 py-0.5 font-mono text-[8px] tracking-wider transition-colors hover:opacity-80 ${
+                                className={`rounded px-1.5 py-0.5 text-[8px] tracking-wider transition-colors hover:opacity-80 ${
                                   task.prStatus === "merged"
                                     ? "border border-green-400/20 text-green-400/60"
                                     : task.prStatus === "changes_requested"
@@ -1818,7 +1818,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                                 setBoardTasks(previousTasks);
                               }
                             }}
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] text-white/20 transition-all hover:border-green-400/30 hover:text-green-400"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[var(--border-medium)] text-[var(--text-tertiary)] transition-all hover:border-green-400/30 hover:text-green-400"
                             title="Mark as done"
                           >
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1878,7 +1878,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                                   e.stopPropagation();
                                   stopTimer(task.id, activeEntry.id);
                                 }}
-                                className="flex h-6 shrink-0 items-center gap-1 rounded border border-red-400/30 bg-red-400/10 px-1.5 font-mono text-[8px] tracking-wider text-red-400 transition-all hover:border-red-400/50 hover:bg-red-400/20"
+                                className="flex h-6 shrink-0 items-center gap-1 rounded border border-red-400/30 bg-red-400/10 px-1.5 text-[8px] tracking-wider text-red-400 transition-all hover:border-red-400/50 hover:bg-red-400/20"
                                 title="Stop timer"
                               >
                                 <span className="inline-block h-2 w-2 rounded-sm bg-red-400" />
@@ -1925,7 +1925,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                               setBoardTasks(previousTasks);
                             }
                           }}
-                          className="w-full appearance-none rounded-md border border-white/[0.08] bg-[#12121a] px-2 py-1.5 pr-6 font-mono text-[9px] tracking-wider outline-none transition-all duration-200 focus:border-neo/40 focus:shadow-[0_0_8px_rgba(0,240,255,0.1)]"
+                          className="w-full appearance-none rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1.5 pr-6 text-[9px] tracking-wider outline-none transition-all duration-200 focus:border-neo/40 focus:shadow-[0_0_8px_rgba(0,240,255,0.1)]"
                           style={{
                             color: task.assignedAgentId
                               ? (agentMap.get(task.assignedAgentId)?.color || "rgba(255,255,255,0.5)")

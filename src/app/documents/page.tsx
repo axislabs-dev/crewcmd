@@ -156,7 +156,7 @@ export default function DocumentsPage() {
             <h1 className="font-bold text-lg">Documents</h1>
             <button
               onClick={() => setShowCreate(true)}
-              className="text-xs bg-neo/20 hover:bg-neo/30 text-neo px-2 py-1 rounded"
+              className="text-xs bg-[var(--accent-soft)] hover:bg-[var(--accent-medium)] text-[var(--accent)] px-2 py-1 rounded"
             >
               + New
             </button>
@@ -189,7 +189,7 @@ export default function DocumentsPage() {
                 key={doc.id}
                 onClick={() => openDoc(doc)}
                 className={`w-full text-left px-4 py-3 border-b border-border/20 hover:bg-muted/30 transition-colors ${
-                  selectedDoc?.id === doc.id ? "bg-neo/10 border-l-2 border-l-neo" : ""
+                  selectedDoc?.id === doc.id ? "bg-[var(--accent-soft)] border-l-2 border-l-neo" : ""
                 }`}
               >
                 <div className="font-medium text-sm truncate">{doc.title}</div>
@@ -240,7 +240,7 @@ export default function DocumentsPage() {
                     <button
                       onClick={saveDoc}
                       disabled={saving}
-                      className="text-xs px-3 py-1.5 rounded bg-neo/20 hover:bg-neo/30 text-neo disabled:opacity-50"
+                      className="text-xs px-3 py-1.5 rounded bg-[var(--accent-soft)] hover:bg-[var(--accent-medium)] text-[var(--accent)] disabled:opacity-50"
                     >
                       {saving ? "Saving…" : "Save"}
                     </button>
@@ -305,7 +305,7 @@ export default function DocumentsPage() {
               <p className="text-sm">Select a document to view</p>
               <button
                 onClick={() => setShowCreate(true)}
-                className="mt-4 text-sm bg-neo/20 hover:bg-neo/30 text-neo px-4 py-2 rounded"
+                className="mt-4 text-sm bg-[var(--accent-soft)] hover:bg-[var(--accent-medium)] text-[var(--accent)] px-4 py-2 rounded"
               >
                 Create your first document
               </button>
@@ -364,7 +364,7 @@ export default function DocumentsPage() {
               <button
                 onClick={createDoc}
                 disabled={creating || !newTitle.trim()}
-                className="text-sm px-4 py-2 rounded bg-neo/20 hover:bg-neo/30 text-neo disabled:opacity-50"
+                className="text-sm px-4 py-2 rounded bg-[var(--accent-soft)] hover:bg-[var(--accent-medium)] text-[var(--accent)] disabled:opacity-50"
               >
                 {creating ? "Creating…" : "Create"}
               </button>

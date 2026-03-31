@@ -142,28 +142,28 @@ export default function Dashboard() {
       <div className="flex-1 space-y-6 p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="glow-text-neo font-mono text-lg font-bold tracking-[0.15em] text-neo sm:text-xl">
+            <h1 className="glow-text-neo font-mono text-lg font-bold tracking-[0.15em] text-[var(--accent)] sm:text-xl">
               COMMAND CENTER
             </h1>
             <div className="flex items-center gap-2">
-              <p className="font-mono text-xs tracking-wider text-white/50">
+              <p className="font-mono text-xs tracking-wider text-[var(--text-secondary)]">
                 TACTICAL OVERVIEW
               </p>
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${isLive ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" : "bg-white/20"}`}
+                className={`inline-block h-1.5 w-1.5 rounded-full ${isLive ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" : "bg-[var(--text-tertiary)]"}`}
                 title={isLive ? "LIVE — OpenClaw Connected" : "OFFLINE — No Data Source"}
               />
-              <span className="font-mono text-[11px] tracking-wider text-white/40">
+              <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
                 {isLive ? "LIVE" : "OFFLINE"}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end">
-              <span className="font-mono text-xl font-bold tabular-nums text-white">
+              <span className="font-mono text-xl font-bold tabular-nums text-[var(--text-primary)]">
                 {time}
               </span>
-              <span className="font-mono text-xs text-white/50">{date}</span>
+              <span className="font-mono text-xs text-[var(--text-secondary)]">{date}</span>
             </div>
           </div>
         </div>
@@ -193,12 +193,12 @@ export default function Dashboard() {
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
+            <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
               Agent Status
             </h2>
             <Link
               href="/agents"
-              className="font-mono text-[11px] tracking-wider text-white/50 transition-colors hover:text-neo"
+              className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
             >
               VIEW ALL &rarr;
             </Link>
@@ -228,7 +228,7 @@ export default function Dashboard() {
                         </span>
                         <span className={`status-dot status-dot-${agent.status} shrink-0`} />
                       </div>
-                      <p className="truncate text-[11px] text-white/50">
+                      <p className="truncate text-[11px] text-[var(--text-secondary)]">
                         {agent.currentTask ?? "No active task"}
                       </p>
                     </div>
@@ -237,7 +237,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="glass-card flex items-center justify-center py-8">
-              <p className="font-mono text-sm text-white/40">
+              <p className="text-sm text-[var(--text-tertiary)]">
                 No agents detected — connect OpenClaw to see your team
               </p>
             </div>
@@ -247,11 +247,11 @@ export default function Dashboard() {
         {(nodes.length > 0 || health) && (
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
+              <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
                 Infrastructure
               </h2>
               {health && (
-                <span className="font-mono text-[11px] tracking-wider text-white/40">
+                <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
                   GATEWAY{" "}
                   <span
                     className={
@@ -263,7 +263,7 @@ export default function Dashboard() {
                     {health.source === "live" ? "ONLINE" : "OFFLINE"}
                   </span>
                   {health.version && (
-                    <span className="ml-2 text-white/15">v{health.version}</span>
+                    <span className="ml-2 text-[var(--text-tertiary)]">v{health.version}</span>
                   )}
                 </span>
               )}
@@ -274,14 +274,14 @@ export default function Dashboard() {
               ))}
               {nodes.length === 0 && health && (
                 <div className="glass-card col-span-full flex items-center gap-3 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/[0.04]">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--bg-surface-hover)]">
                     <span className="text-lg">🖥️</span>
                   </div>
                   <div>
-                    <p className="font-mono text-xs font-bold text-white/50">
+                    <p className="text-xs font-bold text-[var(--text-secondary)]">
                       NO NODES DETECTED
                     </p>
-                    <p className="text-[11px] text-white/40">
+                    <p className="text-[11px] text-[var(--text-tertiary)]">
                       Node connections will appear here when available
                     </p>
                   </div>
@@ -294,12 +294,12 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
+              <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
                 Active Projects
               </h2>
               <Link
                 href="/projects"
-                className="font-mono text-[11px] tracking-wider text-white/50 transition-colors hover:text-neo"
+                className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
               >
                 VIEW ALL &rarr;
               </Link>
@@ -328,24 +328,24 @@ export default function Dashboard() {
                       className="glass-card glass-card-hover group p-4 transition-all duration-200"
                     >
                       <div className="mb-2 flex items-start justify-between">
-                        <h3 className="font-mono text-sm font-bold text-white/80">
+                        <h3 className="font-mono text-sm font-bold text-[var(--text-primary)]">
                           {project.name}
                         </h3>
-                        <span className="shrink-0 rounded bg-neo/10 px-1.5 py-0.5 font-mono text-[11px] text-neo uppercase">
+                        <span className="shrink-0 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--accent)] uppercase">
                           {project.status}
                         </span>
                       </div>
-                      <p className="mb-3 text-xs text-white/50 line-clamp-2">
+                      <p className="mb-3 text-xs text-[var(--text-secondary)] line-clamp-2">
                         {project.description}
                       </p>
-                      <div className="mb-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="mb-2 h-1 overflow-hidden rounded-full bg-[var(--bg-surface-hover)]">
                         <div
                           className="h-full rounded-full bg-neo/60 transition-all duration-500"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[11px] text-white/40">
+                        <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                           {doneTasks.length}/{projectTasks.length} tasks &middot;{" "}
                           {pct}%
                         </span>
@@ -367,7 +367,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="glass-card flex items-center justify-center py-8">
-                <p className="font-mono text-sm text-white/40">
+                <p className="text-sm text-[var(--text-tertiary)]">
                   No projects created yet
                 </p>
               </div>
@@ -384,12 +384,12 @@ export default function Dashboard() {
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
+            <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
               Tasks In Progress
             </h2>
             <Link
               href="/tasks"
-              className="font-mono text-[11px] tracking-wider text-white/50 transition-colors hover:text-neo"
+              className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
             >
               VIEW BOARD &rarr;
             </Link>
@@ -411,7 +411,7 @@ export default function Dashboard() {
                       {task.priority}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-white/70">
+                      <p className="text-xs font-medium text-[var(--text-primary)]">
                         {task.title}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
@@ -426,7 +426,7 @@ export default function Dashboard() {
                             </span>
                           </div>
                         )}
-                        <span className="font-mono text-[11px] text-white/35">
+                        <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
                           {timeAgo(task.updatedAt)}
                         </span>
                       </div>
@@ -437,7 +437,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="glass-card flex items-center justify-center py-8">
-              <p className="font-mono text-sm text-white/40">
+              <p className="text-sm text-[var(--text-tertiary)]">
                 No tasks in progress
               </p>
             </div>
@@ -445,7 +445,7 @@ export default function Dashboard() {
         </section>
 
         <section className="glass-card p-6">
-          <h2 className="mb-4 font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
+          <h2 className="mb-4 font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
             Quick Stats
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -457,12 +457,12 @@ export default function Dashboard() {
         </section>
       </div>
 
-      <footer className="border-t border-white/[0.04] px-6 py-3">
+      <footer className="border-t border-[var(--border-subtle)] px-6 py-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] tracking-wider text-white/40">
+          <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
             CREWCMD v0.2.0
           </span>
-          <span className="font-mono text-[11px] tracking-wider text-white/40">
+          <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
             crewcmd.dev
           </span>
         </div>
@@ -492,7 +492,7 @@ function StatCard({
         }}
       />
       <div className="relative">
-        <span className="font-mono text-[11px] tracking-widest text-white/50 uppercase">
+        <span className="font-mono text-[11px] tracking-widest text-[var(--text-secondary)] uppercase">
           {label}
         </span>
         <p className="mt-1 font-mono text-2xl font-bold" style={{ color }}>
@@ -526,19 +526,19 @@ function NodeCard({ node, nodeAgentMap }: { node: NodeInfo; nodeAgentMap: Record
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-bold text-white/70">
+          <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
             {node.name || node.id}
           </span>
           <span className={`status-dot ${isConnected ? "status-dot-online" : "status-dot-offline"}`} />
         </div>
         {node.hostname && (
-          <p className="text-xs text-white/50">{node.hostname}</p>
+          <p className="text-xs text-[var(--text-secondary)]">{node.hostname}</p>
         )}
         <div className="mt-1 flex items-center gap-3">
-          <span className="font-mono text-[11px] text-white/40">
+          <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
             {isConnected ? "CONNECTED" : "DISCONNECTED"}
           </span>
-          <span className="font-mono text-[11px] text-white/35">
+          <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
             {uptimeText}
           </span>
         </div>
@@ -547,7 +547,7 @@ function NodeCard({ node, nodeAgentMap }: { node: NodeInfo; nodeAgentMap: Record
             {node.capabilities.slice(0, 4).map((cap) => (
               <span
                 key={cap}
-                className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-white/40"
+                className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-tertiary)]"
               >
                 {cap}
               </span>
@@ -578,9 +578,9 @@ function NodeCard({ node, nodeAgentMap }: { node: NodeInfo; nodeAgentMap: Record
 
 function ChartPlaceholder({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.08] py-8">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border-medium)] py-8">
       <svg
-        className="mb-2 h-8 w-8 text-white/10"
+        className="mb-2 h-8 w-8 text-[var(--text-tertiary)]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -592,7 +592,7 @@ function ChartPlaceholder({ label }: { label: string }) {
           d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
         />
       </svg>
-      <span className="font-mono text-[11px] text-white/35">{label}</span>
+      <span className="font-mono text-[11px] text-[var(--text-tertiary)]">{label}</span>
     </div>
   );
 }

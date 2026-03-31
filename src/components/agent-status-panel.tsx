@@ -14,7 +14,7 @@ export function AgentStatusPanel({ agents }: AgentStatusPanelProps) {
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+        <h2 className="text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
           Agent Status
         </h2>
         <div className="flex items-center gap-4">
@@ -43,7 +43,7 @@ function StatusLegend({
   return (
     <div className="flex items-center gap-1.5">
       <span className={`status-dot ${dotClass}`} />
-      <span className="font-mono text-[10px] text-white/30">{label}</span>
+      <span className="text-[10px] text-[var(--text-tertiary)]">{label}</span>
     </div>
   );
 }

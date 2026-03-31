@@ -287,37 +287,37 @@ export default function ChatPage() {
       <audio ref={audioRef} className="hidden" />
 
       {/* Header */}
-      <div className="shrink-0 border-b border-white/[0.06] bg-bg-primary/50 backdrop-blur-xl px-4 py-3 lg:px-6">
+      <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-4 py-3 lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
               className="h-2.5 w-2.5 rounded-full bg-neo"
               style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
             />
-            <h1 className="glow-text-neo font-mono text-sm font-bold tracking-wider text-neo">
+            <h1 className="glow-text-neo font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
               NEO CHAT
             </h1>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Mode toggle: Talk / Create Task */}
-            <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5">
+            <div className="flex rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
               <button
                 onClick={() => setChatMode("talk")}
-                className={`rounded-md px-3 py-1.5 font-mono text-[10px] tracking-wider transition-all ${
+                className={`rounded-md px-3 py-1.5 text-[10px] tracking-wider transition-all ${
                   chatMode === "talk"
-                    ? "bg-neo/15 text-neo"
-                    : "text-white/35 hover:text-white/50"
+                    ? "bg-neo/15 text-[var(--accent)]"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 }`}
               >
                 TALK TO NEO
               </button>
               <button
                 onClick={() => setChatMode("task")}
-                className={`rounded-md px-3 py-1.5 font-mono text-[10px] tracking-wider transition-all ${
+                className={`rounded-md px-3 py-1.5 text-[10px] tracking-wider transition-all ${
                   chatMode === "task"
-                    ? "bg-neo/15 text-neo"
-                    : "text-white/35 hover:text-white/50"
+                    ? "bg-neo/15 text-[var(--accent)]"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 }`}
               >
                 CREATE TASK
@@ -325,33 +325,33 @@ export default function ChatPage() {
             </div>
 
             {/* Voice mode toggle: OFF / PUSH / AGENT */}
-            <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5">
+            <div className="flex rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
               <button
                 onClick={() => setVoiceMode("off")}
-                className={`rounded-md px-2.5 py-1.5 font-mono text-[10px] tracking-wider transition-all ${
+                className={`rounded-md px-2.5 py-1.5 text-[10px] tracking-wider transition-all ${
                   voiceMode === "off"
-                    ? "bg-white/10 text-white/60"
-                    : "text-white/25 hover:text-white/40"
+                    ? "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
                 }`}
               >
                 TEXT
               </button>
               <button
                 onClick={() => setVoiceMode("push")}
-                className={`rounded-md px-2.5 py-1.5 font-mono text-[10px] tracking-wider transition-all ${
+                className={`rounded-md px-2.5 py-1.5 text-[10px] tracking-wider transition-all ${
                   voiceMode === "push"
-                    ? "bg-neo/15 text-neo"
-                    : "text-white/25 hover:text-white/40"
+                    ? "bg-neo/15 text-[var(--accent)]"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
                 }`}
               >
                 PUSH
               </button>
               <button
                 onClick={() => setVoiceMode("agent")}
-                className={`rounded-md px-2.5 py-1.5 font-mono text-[10px] tracking-wider transition-all ${
+                className={`rounded-md px-2.5 py-1.5 text-[10px] tracking-wider transition-all ${
                   voiceMode === "agent"
                     ? "bg-violet-500/15 text-violet-400"
-                    : "text-white/25 hover:text-white/40"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
                 }`}
               >
                 AGENT
@@ -361,7 +361,7 @@ export default function ChatPage() {
             {/* Clear chat */}
             <button
               onClick={clearChat}
-              className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 font-mono text-[10px] tracking-wider text-white/25 transition-all hover:border-white/15 hover:text-white/40"
+              className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:border-[var(--border-medium)] hover:text-[var(--text-tertiary)]"
             >
               CLEAR
             </button>
@@ -375,28 +375,28 @@ export default function ChatPage() {
           {messages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
-                className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-neo/20 bg-neo/10"
+                className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-neo/20 bg-[var(--accent-soft)]"
                 style={{
                   boxShadow: "0 0 30px rgba(0, 240, 255, 0.15)",
                 }}
               >
-                <span className="font-mono text-xl text-neo">N</span>
+                <span className="font-mono text-xl text-[var(--accent)]">N</span>
               </div>
-              <h2 className="glow-text-neo mb-2 font-mono text-lg tracking-wider text-neo">
+              <h2 className="glow-text-neo mb-2 font-mono text-lg tracking-wider text-[var(--accent)]">
                 {chatMode === "talk" ? "TALK TO NEO" : "CREATE A TASK"}
               </h2>
-              <p className="max-w-md font-mono text-[12px] leading-relaxed text-white/30">
+              <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
                 {chatMode === "talk"
                   ? "Start a conversation with Neo via the OpenClaw Gateway. Your messages are stored locally in this browser."
                   : "Describe a task and it will be created in the task board automatically."}
               </p>
               {voiceMode === "push" && (
-                <p className="mt-2 font-mono text-[11px] text-neo/50">
+                <p className="mt-2 text-[11px] text-neo/50">
                   Voice mode active - hold the mic button to speak
                 </p>
               )}
               {voiceMode === "agent" && (
-                <p className="mt-2 font-mono text-[11px] text-violet-400/50">
+                <p className="mt-2 text-[11px] text-violet-400/50">
                   Agent mode - activate and speak naturally
                 </p>
               )}
@@ -419,7 +419,7 @@ export default function ChatPage() {
           {/* Loading indicator */}
           {isLoading && !streamingContent && (
             <div className="flex gap-3 animate-fade-in">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neo/20 bg-neo/10 text-xs font-mono text-neo">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-xs font-mono text-[var(--accent)]">
                 NEO
               </div>
               <div className="flex items-center gap-1.5 rounded-xl border border-neo/10 bg-neo/[0.06] px-4 py-3">
@@ -448,7 +448,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-white/[0.06] bg-bg-primary/50 backdrop-blur-xl px-4 py-3 lg:px-6">
+      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-4 py-3 lg:px-6">
         <div className="mx-auto max-w-3xl">
           {voiceMode === "agent" ? (
             <VoiceAgent
@@ -482,12 +482,12 @@ export default function ChatPage() {
                         : "Or type a message..."
                     }
                     disabled={isLoading}
-                    className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2 font-mono text-[12px] text-white/70 placeholder-white/20 outline-none transition-colors focus:border-neo/30 focus:bg-white/[0.05] disabled:opacity-40"
+                    className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-2 text-[12px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
                   />
                   <button
                     onClick={() => sendMessage(input)}
                     disabled={isLoading || !input.trim()}
-                    className="rounded-lg border border-neo/20 bg-neo/10 px-4 py-2 font-mono text-[11px] tracking-wider text-neo transition-all hover:bg-neo/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     SEND
                   </button>
@@ -508,7 +508,7 @@ export default function ChatPage() {
                 }
                 disabled={isLoading}
                 rows={1}
-                className="flex-1 resize-none rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-3 font-mono text-[13px] text-white/70 placeholder-white/20 outline-none transition-colors focus:border-neo/30 focus:bg-white/[0.05] disabled:opacity-40"
+                className="flex-1 resize-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-3 text-[13px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
                 style={{ maxHeight: "120px" }}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
@@ -519,7 +519,7 @@ export default function ChatPage() {
               <button
                 onClick={() => sendMessage(input)}
                 disabled={isLoading || !input.trim()}
-                className="self-end rounded-lg border border-neo/20 bg-neo/10 px-4 py-3 font-mono text-[11px] tracking-wider text-neo transition-all hover:bg-neo/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="self-end rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
                 style={
                   !isLoading && input.trim()
                     ? { boxShadow: "0 0 15px rgba(0, 240, 255, 0.15)" }

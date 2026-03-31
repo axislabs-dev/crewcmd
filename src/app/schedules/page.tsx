@@ -120,10 +120,10 @@ export default function SchedulesPage() {
       <div className="flex-1 space-y-6 p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-white/80">
+            <h1 className="font-mono text-lg font-bold tracking-[0.15em] text-[var(--text-primary)]">
               SCHEDULES
             </h1>
-            <p className="font-mono text-[10px] tracking-wider text-white/30">
+            <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
               {jobs.filter((j) => j.enabled).length} ACTIVE
               &middot; {jobs.length} TOTAL CRON JOBS
             </p>
@@ -131,7 +131,7 @@ export default function SchedulesPage() {
 
           <button
             onClick={() => { setLoading(true); refresh(); }}
-            className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2 font-mono text-[10px] tracking-wider text-white/40 transition-all duration-200 hover:border-neo/20 hover:text-neo"
+            className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-2 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all duration-200 hover:border-[var(--accent-medium)] hover:text-[var(--accent)]"
           >
             <svg className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
@@ -146,11 +146,11 @@ export default function SchedulesPage() {
           </div>
         ) : jobs.length === 0 ? (
           <div className="glass-card flex flex-col items-center justify-center py-16">
-            <svg className="mb-4 h-12 w-12 text-white/10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <svg className="mb-4 h-12 w-12 text-[var(--text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
-            <p className="font-mono text-sm text-white/30">No cron jobs found</p>
-            <p className="mt-1 font-mono text-[10px] text-white/15">
+            <p className="text-sm text-[var(--text-tertiary)]">No cron jobs found</p>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
               Connect OpenClaw to manage scheduled jobs
             </p>
           </div>
@@ -179,49 +179,49 @@ export default function SchedulesPage() {
                             boxShadow: job.enabled ? "0 0 8px rgba(0, 255, 136, 0.4)" : "none",
                           }}
                         />
-                        <h3 className="font-mono text-sm font-bold tracking-wider text-white/80">
+                        <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">
                           {job.name.toUpperCase()}
                         </h3>
-                        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] tracking-wider text-white/25">
+                        <span className="rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
                           {job.sessionTarget.toUpperCase()}
                         </span>
                       </div>
 
                       {job.description && (
-                        <p className="mt-2 font-mono text-[11px] leading-relaxed text-white/40">
+                        <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
                           {job.description}
                         </p>
                       )}
 
                       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
                         <div>
-                          <span className="font-mono text-[9px] tracking-wider text-white/20">
+                          <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
                             SCHEDULE
                           </span>
-                          <div className="mt-0.5 font-mono text-[11px] text-neo/70">
+                          <div className="mt-0.5 font-mono text-[11px] text-[var(--accent)]/70">
                             {formatSchedule(job.schedule)}
                           </div>
                         </div>
                         <div>
-                          <span className="font-mono text-[9px] tracking-wider text-white/20">
+                          <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
                             NEXT RUN
                           </span>
-                          <div className="mt-0.5 font-mono text-[11px] text-white/50">
+                          <div className="mt-0.5 font-mono text-[11px] text-[var(--text-secondary)]">
                             {job.enabled
                               ? formatTimestamp(job.state.nextRunAtMs)
                               : "—"}
                           </div>
                         </div>
                         <div>
-                          <span className="font-mono text-[9px] tracking-wider text-white/20">
+                          <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
                             LAST RUN
                           </span>
-                          <div className="mt-0.5 font-mono text-[11px] text-white/50">
+                          <div className="mt-0.5 font-mono text-[11px] text-[var(--text-secondary)]">
                             {formatTimestamp(job.state.lastRunAtMs)}
                           </div>
                         </div>
                         <div>
-                          <span className="font-mono text-[9px] tracking-wider text-white/20">
+                          <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
                             STATUS
                           </span>
                           <div className="mt-0.5">
@@ -229,7 +229,7 @@ export default function SchedulesPage() {
                               className={`rounded-full border px-2 py-0.5 font-mono text-[9px] tracking-wider ${
                                 job.enabled
                                   ? "border-green-400/20 bg-green-400/10 text-green-400"
-                                  : "border-white/10 bg-white/5 text-white/30"
+                                  : "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
                               }`}
                             >
                               {job.enabled ? "ENABLED" : "DISABLED"}
@@ -244,8 +244,8 @@ export default function SchedulesPage() {
                       disabled={isToggling}
                       className={`relative shrink-0 rounded-full transition-all duration-300 ${
                         job.enabled
-                          ? "bg-neo/20 shadow-[0_0_12px_rgba(0,240,255,0.15)]"
-                          : "bg-white/[0.06]"
+                          ? "bg-[var(--accent-soft)] shadow-[0_0_12px_rgba(0,240,255,0.15)]"
+                          : "bg-[var(--bg-surface-hover)]"
                       }`}
                       style={{ width: 44, height: 24 }}
                       title={job.enabled ? "Disable" : "Enable"}
@@ -254,7 +254,7 @@ export default function SchedulesPage() {
                         className={`absolute top-1 h-4 w-4 rounded-full transition-all duration-300 ${
                           job.enabled
                             ? "left-6 bg-neo shadow-[0_0_6px_rgba(0,240,255,0.5)]"
-                            : "left-1 bg-white/30"
+                            : "left-1 bg-[var(--text-tertiary)]"
                         } ${isToggling ? "opacity-50" : ""}`}
                       />
                     </button>

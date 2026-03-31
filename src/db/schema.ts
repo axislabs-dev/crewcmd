@@ -506,6 +506,42 @@ export const escalationPaths = pgTable("escalation_paths", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Skills ─────────────────────────────────────────────────────────
+
+export const skills = pgTable("skills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  source: text("source").notNull().default("custom"),
+  sourceUrl: text("source_url"),
+  sourceRef: text("source_ref"),
+  version: text("version"),
+  content: text("content"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  installed: boolean("installed").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Agent Skills (many-to-many) ────────────────────────────────────
+
+export const agentSkills = pgTable("agent_skills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" })
+    .notNull(),
+  skillId: uuid("skill_id")
+    .references(() => skills.id, { onDelete: "cascade" })
+    .notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  config: jsonb("config").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Routine Templates ──────────────────────────────────────────────
 
 interface TaskTemplate {

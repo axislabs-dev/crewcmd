@@ -123,6 +123,15 @@ export interface AgentConfigValues {
   httpAuthHeader: string;
   openrouterApiKey: string;
   openrouterBaseUrl: string;
+  skillIds: string[];
+}
+
+export interface CompanySkill {
+  id: string;
+  name: string;
+  slug: string;
+  source: string;
+  description?: string;
 }
 
 export function defaultAgentConfigValues(): AgentConfigValues {
@@ -155,6 +164,7 @@ export function defaultAgentConfigValues(): AgentConfigValues {
     httpAuthHeader: "",
     openrouterApiKey: "",
     openrouterBaseUrl: "",
+    skillIds: [],
   };
 }
 
@@ -166,6 +176,7 @@ interface AgentConfigFieldsProps {
   values: AgentConfigValues;
   onChange: (patch: Partial<AgentConfigValues>) => void;
   existingAgents?: { id: string; name: string; callsign: string }[];
+  companySkills?: CompanySkill[];
 }
 
 // ─── Styling ────────────────────────────────────────────────────────────
@@ -522,7 +533,14 @@ function NumberInput({
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export function AgentConfigFields({ values, onChange, existingAgents }: AgentConfigFieldsProps) {
+const SKILL_SOURCE_STYLES: Record<string, { icon: string; color: string }> = {
+  clawhub: { icon: "\u{1F43E}", color: "text-[#00f0ff]" },
+  skills_sh: { icon: "\u25B2", color: "text-white" },
+  github: { icon: "\u2B24", color: "text-[#8b949e]" },
+  custom: { icon: "\u270F\uFE0F", color: "text-amber-400" },
+};
+
+export function AgentConfigFields({ values, onChange, existingAgents, companySkills }: AgentConfigFieldsProps) {
   const isLocal = LOCAL_ADAPTERS.includes(values.adapterType);
   const isGateway = GATEWAY_ADAPTERS.includes(values.adapterType);
   const isHttp = HTTP_ADAPTERS.includes(values.adapterType);
@@ -903,6 +921,46 @@ export function AgentConfigFields({ values, onChange, existingAgents }: AgentCon
           </div>
         </div>
       </Section>
+
+      {/* ── SKILLS ── */}
+      {companySkills && companySkills.length > 0 && (
+        <Section title="Skills">
+          <div className="space-y-1.5">
+            {companySkills.map((skill) => {
+              const checked = values.skillIds.includes(skill.id);
+              const style = SKILL_SOURCE_STYLES[skill.source] || SKILL_SOURCE_STYLES.custom;
+              return (
+                <label
+                  key={skill.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.01] px-3 py-2 transition-colors hover:border-white/[0.08] hover:bg-white/[0.02]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? values.skillIds.filter((id) => id !== skill.id)
+                        : [...values.skillIds, skill.id];
+                      onChange({ skillIds: next });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-white/20 bg-transparent accent-[#00f0ff]"
+                  />
+                  <span className={`text-[10px] ${style.color}`}>{style.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-mono text-xs text-white/70">{skill.name}</span>
+                    {skill.description && (
+                      <p className="font-mono text-[9px] text-white/30 line-clamp-1">{skill.description}</p>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <p className="mt-2 font-mono text-[11px] text-white/35">
+            Toggle skills to attach or detach them from this agent.
+          </p>
+        </Section>
+      )}
     </div>
   );
 }

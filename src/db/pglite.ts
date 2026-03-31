@@ -37,6 +37,41 @@ async function applySchema() {
     }
   }
 
+  // Skills tables
+  const skillsTables = [
+    `CREATE TABLE IF NOT EXISTS skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      source TEXT NOT NULL DEFAULT 'custom',
+      source_url TEXT,
+      source_ref TEXT,
+      version TEXT,
+      content TEXT,
+      metadata JSONB DEFAULT '{}',
+      installed BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS agent_skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      config JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+  ];
+  for (const stmt of skillsTables) {
+    try {
+      await client.exec(stmt);
+    } catch {
+      // Safe to ignore — table may already exist
+    }
+  }
+
   if (existsSync(markerFile)) {
     console.log("[CrewCmd] Using PGlite (local) — data at .data/pglite");
     return;

@@ -1,23 +1,27 @@
 # CrewCmd
 
-> Your AI team, ready to work.
+> The AI-native workspace for human + AI teams.
 
-Build, deploy, and manage a team of AI agents that work alongside your people. Pick from pre-built team templates or bring your own agents. Works for solo founders, small teams, and growing companies.
+Most AI tools assume you're either all-human or all-AI. Real teams are both. CrewCmd is the workspace where humans and AI agents work side by side: same task board, same org chart, same inbox. Your team of 3 becomes a team of 30.
+
+**Built for small teams that want to punch way above their weight.**
+
+A solo founder deploys a full dev squad, marketing team, and support ops in minutes. A 5-person startup runs like a 50-person company. A freelancer shows up with agents as part of their toolkit. That's the idea.
 
 **One-click team deployment · Agent inbox · Skills marketplace · Task management · Team structure · Budgets & governance**
 
 ## Why CrewCmd?
 
-Most AI tools give you one agent at a time. CrewCmd gives you a whole team.
+Other platforms treat AI agents as tools you configure. CrewCmd treats them as team members you manage. The difference matters.
 
-- **Deploy a team in one click** — Choose from 8 pre-built team templates (dev squad, marketing team, support ops, solo founder kit, and more). Customize and deploy in seconds.
-- **Bring your own agents** — Connect Claude Code, Codex, Gemini, Cursor, OpenCode, or any agent via API. Mix and match.
-- **Agent inbox** — Your agents surface decisions, blockers, and completed work. Review and approve from one place, not scattered notifications.
-- **Skills marketplace** — Browse and install agent capabilities from ClawHub, skills.sh, and GitHub.
-- **Access control** — Private agents, shared agents, team-wide agents. Control who uses what.
-- **Task management** — Kanban boards, project tracking, and time logging for humans and agents working together.
-- **Team structure** — Visual org chart showing who reports to whom, human and AI.
-- **Budgets & governance** — Set spending limits, approval gates, and audit trails.
+- **Deploy a full team in one click** — 8 pre-built team templates: dev squad, marketing, support, solo founder kit, and more. Customize roles, hierarchy, and skills before deploying, or just hit go.
+- **Bring your own agents** — Connect Claude Code, Codex, Gemini, Cursor, OpenCode, or any agent via API. Use what you already have. Mix AI providers freely.
+- **One inbox for everything** — Agents surface decisions, blockers, and completed work with priority tiers. No more checking 7 different tools. Review and approve from one place.
+- **Skills marketplace** — Browse and install agent capabilities from ClawHub, skills.sh, and GitHub. Give your agents superpowers.
+- **Real access control** — Private agents only you can use. Shared agents for your team. Per-person permissions. A contractor can bring their own agents and you assign them company ones too.
+- **Humans and agents on the same board** — Task management, project tracking, and time logging that works for both. See who's doing what, human or AI.
+- **Team structure that makes sense** — Visual org chart with humans and agents. Set reporting lines, delegation rules, and escalation paths.
+- **Budgets and guardrails** — Per-agent spending limits, approval gates, cost tracking, and audit trails. Stay in control as your AI team scales.
 
 ## Quick Start
 

@@ -241,12 +241,40 @@ docker compose up
 | `pnpm dev` | Dev server (Turbopack) |
 | `pnpm build` | Production build |
 | `pnpm start` | Production server |
-| `pnpm lint` | ESLint |
+| `pnpm lint` | ESLint (fix mode) |
+| `pnpm typecheck` | TypeScript type-check (`tsc --noEmit`) |
 | `pnpm db:generate` | Generate Drizzle migrations |
 | `pnpm db:migrate` | Run migrations |
 | `pnpm db:push` | Push schema to DB |
 | `pnpm db:studio` | Drizzle Studio |
 | `pnpm db:seed` | Seed database |
+
+### Pre-commit Hooks (Husky)
+
+Hooks install automatically via `pnpm install` (the `prepare` script runs Husky).
+
+- **Pre-commit:** `tsc --noEmit` on staged `.ts/.tsx` files. Type errors block the commit.
+- **Pre-push:** Full `tsc --noEmit` + `pnpm build`. Build failures block the push.
+- **Emergency bypass:** `git commit --no-verify` (CI will still catch issues on the PR).
+
+### CI (GitHub Actions)
+
+Every PR to `main` runs the `check` job:
+1. `pnpm install --frozen-lockfile`
+2. `pnpm typecheck`
+3. `pnpm build`
+
+PRs cannot merge until CI passes and one approving review is submitted.
+
+### Branch Protection
+
+`main` is protected with:
+- Required CI status check (`check` must pass)
+- 1 approving review required
+- Stale reviews dismissed on new pushes
+- Branch must be up-to-date with `main`
+- Linear history enforced (squash or rebase merges only)
+- No force pushes, no branch deletion
 
 ---
 
@@ -367,9 +395,9 @@ docker compose up
 
 ## Known Issues
 
-- **README says MIT but LICENSE is BSL 1.1** — README footer needs updating to match the actual BSL license
 - Real-time updates still use polling (WebSocket/SSE not yet implemented)
 - Agent execution is functional but terminal UX needs polish
+- `eslint-config-next` has a known ESLint 9 compatibility issue (`@rushstack/eslint-patch`). Lint-staged uses `tsc` instead of `eslint` for pre-commit checks until this is resolved upstream.
 
 ---
 
@@ -396,7 +424,7 @@ docker compose up
 
 - **TypeScript strict mode always.** No `any` types (comment why if unavoidable).
 - **No hardcoded user IDs, team names, or environment-specific values.** Use env vars or config tables.
-- **Every change must build and lint.** `pnpm build && pnpm lint` before pushing.
+- **Every change must build and typecheck.** `pnpm typecheck && pnpm build` before pushing. Pre-commit hooks enforce this automatically.
 - **Atomic commits.** One logical change per commit. Use conventional commit format.
   ```
   feat: add agent execution controls to dashboard
@@ -472,8 +500,8 @@ git commit -m "feat: add agent execution status tracking"
 
 Before opening a PR:
 
+- [ ] `pnpm typecheck` passes
 - [ ] `pnpm build` passes
-- [ ] `pnpm lint` passes
 - [ ] Code follows TypeScript strict mode
 - [ ] No hardcoded personal/internal references
 - [ ] API endpoints have proper auth guards

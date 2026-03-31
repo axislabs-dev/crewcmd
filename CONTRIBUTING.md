@@ -18,8 +18,26 @@ No database setup required. CrewCmd uses embedded PGlite for local development.
 1. **Fork the repo** and create a feature branch from `main`
 2. **Make your changes** with atomic commits (one logical change per commit)
 3. **Run `pnpm build`** to verify the project compiles
-4. **Run `pnpm lint`** to check for lint errors
+4. **Run `pnpm typecheck`** to verify TypeScript types
 5. **Open a pull request** against `main`
+6. **Wait for CI** — PRs must pass the `check` job (typecheck + build) and get one approving review before merge
+
+### Pre-commit Hooks
+
+Hooks install automatically when you run `pnpm install` (via Husky). No manual setup.
+
+- **Pre-commit:** Runs `tsc --noEmit` on staged `.ts/.tsx` files. Type errors block the commit.
+- **Pre-push:** Runs full typecheck + `pnpm build`. Build failures block the push.
+
+If you need to bypass hooks in an emergency: `git commit --no-verify` (but CI will still catch issues).
+
+### Branch Protection
+
+`main` is protected:
+- CI must pass (typecheck + build)
+- 1 approving review required
+- Linear history enforced (squash or rebase, no merge commits)
+- No force pushes
 
 ## Code Style
 

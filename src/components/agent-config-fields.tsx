@@ -59,6 +59,22 @@ export const GATEWAY_ADAPTERS = ["openclaw_gateway"];
 export const HTTP_ADAPTERS = ["http"];
 export const OPENROUTER_ADAPTERS = ["openrouter"];
 
+export const PROVIDERS = [
+  { value: "", label: "None (manual)" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "openai", label: "OpenAI" },
+  { value: "google", label: "Google" },
+  { value: "openrouter", label: "OpenRouter" },
+];
+
+// Maps adapter types to their default provider for auto-inference
+export const ADAPTER_TO_PROVIDER: Record<string, string> = {
+  claude_local: "anthropic",
+  codex_local: "openai",
+  gemini_local: "google",
+  openrouter: "openrouter",
+};
+
 const MODEL_PLACEHOLDERS: Record<string, string> = {
   claude_local: "e.g. claude-sonnet-4-20250514",
   codex_local: "e.g. o4-mini",
@@ -93,6 +109,7 @@ export interface AgentConfigValues {
   callsign: string;
   role: string;
   adapterType: string;
+  provider: string;
   model: string;
   workspacePath: string;
   emoji: string;
@@ -134,6 +151,7 @@ export function defaultAgentConfigValues(): AgentConfigValues {
     callsign: "",
     role: "engineer",
     adapterType: "claude_local",
+    provider: "",
     model: "",
     workspacePath: "",
     emoji: "\u{1F916}",
@@ -171,6 +189,7 @@ interface AgentConfigFieldsProps {
   onChange: (patch: Partial<AgentConfigValues>) => void;
   existingAgents?: { id: string; name: string; callsign: string }[];
   companySkills?: CompanySkill[];
+  companyId?: string | null;
 }
 
 // ─── Styling ────────────────────────────────────────────────────────────
@@ -270,6 +289,172 @@ function ModelInput({
       placeholder={placeholder}
       className={inputClass}
     />
+  );
+}
+
+// ─── Dynamic Model Selector (fetches from provider API) ────────────────
+
+function DynamicModelSelector({
+  value,
+  provider,
+  adapterType,
+  companyId,
+  onChange,
+}: {
+  value: string;
+  provider: string;
+  adapterType: string;
+  companyId: string;
+  onChange: (val: string) => void;
+}) {
+  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!provider || !companyId) return;
+    setLoading(true);
+    setError(null);
+    fetch(`/api/providers/${provider}/models?companyId=${companyId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+          setModels([]);
+        } else {
+          setModels(data.models ?? []);
+        }
+      })
+      .catch(() => setError("Failed to fetch models"))
+      .finally(() => setLoading(false));
+  }, [provider, companyId]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // If no models fetched (error or no API key), fall back to free text
+  if (error || (!loading && models.length === 0)) {
+    return (
+      <div>
+        <ModelInput value={value} adapterType={adapterType} onChange={onChange} />
+        {error && (
+          <p className="mt-1 text-[11px] text-amber-400/80">{error}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className={`${inputClass} flex items-center gap-2 text-[var(--text-tertiary)]`}>
+        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[var(--text-tertiary)] border-t-transparent" />
+        Loading models...
+      </div>
+    );
+  }
+
+  // For OpenRouter (many models), always show search
+  const isLargeList = provider === "openrouter" || models.length > 50;
+  const filtered = search
+    ? models.filter(
+        (m) =>
+          m.id.toLowerCase().includes(search.toLowerCase()) ||
+          m.name.toLowerCase().includes(search.toLowerCase())
+      )
+    : models;
+
+  const selectedModel = models.find((m) => m.id === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`${inputClass} flex items-center justify-between text-left`}
+      >
+        <span className={value ? "text-[var(--text-primary)] truncate" : "text-[var(--text-tertiary)]"}>
+          {selectedModel ? selectedModel.name : value || "Select model..."}
+        </span>
+        <svg
+          className={`h-3.5 w-3.5 flex-shrink-0 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-[var(--border-medium)] bg-[#0d1117] shadow-xl">
+          {/* Search input for large lists or always for combobox feel */}
+          {(isLargeList || models.length > 10) && (
+            <div className="border-b border-[var(--border-subtle)] p-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search models..."
+                className={`${inputClass} text-xs`}
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto py-1">
+            {/* Free text option for OpenRouter */}
+            {isLargeList && search && !filtered.find((m) => m.id === search) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(search);
+                  setOpen(false);
+                  setSearch("");
+                }}
+                className="w-full px-3 py-1.5 text-left text-sm text-amber-400 transition-colors hover:bg-[var(--bg-surface-hover)]"
+              >
+                Use &quot;{search}&quot; as custom model
+              </button>
+            )}
+            {filtered.slice(0, 100).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  onChange(m.id);
+                  setOpen(false);
+                  setSearch("");
+                }}
+                className={`w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                  m.id === value ? "text-[#00f0ff]" : "text-[var(--text-primary)]"
+                }`}
+              >
+                <span className="block truncate">{m.name}</span>
+                {m.name !== m.id && (
+                  <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.id}</span>
+                )}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-2 text-xs text-[var(--text-tertiary)]">No models found</div>
+            )}
+            {filtered.length > 100 && (
+              <div className="px-3 py-2 text-[10px] text-[var(--text-tertiary)]">
+                Showing first 100 of {filtered.length} — refine your search
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -483,7 +668,7 @@ const SKILL_SOURCE_STYLES: Record<string, { icon: string; color: string }> = {
   custom: { icon: "\u270F\uFE0F", color: "text-amber-400" },
 };
 
-export function AgentConfigFields({ values, onChange, existingAgents, companySkills }: AgentConfigFieldsProps) {
+export function AgentConfigFields({ values, onChange, existingAgents, companySkills, companyId }: AgentConfigFieldsProps) {
   const isLocal = LOCAL_ADAPTERS.includes(values.adapterType);
   const isGateway = GATEWAY_ADAPTERS.includes(values.adapterType);
   const isHttp = HTTP_ADAPTERS.includes(values.adapterType);
@@ -588,20 +773,47 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
               <Dropdown
                 value={values.adapterType}
                 options={ADAPTER_TYPES}
-                onChange={(v) => onChange({ adapterType: v })}
+                onChange={(v) => {
+                  const inferredProvider = ADAPTER_TO_PROVIDER[v] ?? "";
+                  onChange({ adapterType: v, provider: inferredProvider });
+                }}
               />
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>PROVIDER</label>
+            <div className="mt-1">
+              <Dropdown
+                value={values.provider}
+                options={PROVIDERS}
+                onChange={(v) => onChange({ provider: v, model: "" })}
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+              Determines which models are available. Add API keys in Settings.
+            </p>
           </div>
 
           {showModel && (
             <div>
               <label className={labelClass}>MODEL</label>
               <div className="mt-1">
-                <ModelInput
-                  value={values.model}
-                  adapterType={values.adapterType}
-                  onChange={(v) => onChange({ model: v })}
-                />
+                {values.provider && companyId ? (
+                  <DynamicModelSelector
+                    value={values.model}
+                    provider={values.provider}
+                    adapterType={values.adapterType}
+                    companyId={companyId}
+                    onChange={(v) => onChange({ model: v })}
+                  />
+                ) : (
+                  <ModelInput
+                    value={values.model}
+                    adapterType={values.adapterType}
+                    onChange={(v) => onChange({ model: v })}
+                  />
+                )}
               </div>
             </div>
           )}

@@ -91,6 +91,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
           color: values.color || "#00f0ff",
           adapterType: values.adapterType,
           adapterConfig,
+          provider: values.provider || null,
           role: values.role,
           model: values.model.trim() || null,
           workspacePath: values.workspacePath.trim() || null,
@@ -154,6 +155,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialog
             values={values}
             onChange={handleChange}
             existingAgents={existingAgents}
+            companyId={companyId}
           />
         </div>
 

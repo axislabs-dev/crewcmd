@@ -18,6 +18,22 @@ interface Member {
   createdAt: string;
 }
 
+interface ProviderKey {
+  id: string;
+  provider: string;
+  label: string | null;
+  maskedKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const PROVIDER_INFO: Record<string, { label: string; placeholder: string }> = {
+  anthropic: { label: "Anthropic", placeholder: "sk-ant-..." },
+  openai: { label: "OpenAI", placeholder: "sk-..." },
+  google: { label: "Google", placeholder: "AIza..." },
+  openrouter: { label: "OpenRouter", placeholder: "sk-or-v1-..." },
+};
+
 export default function CompanySettingsPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -30,6 +46,12 @@ export default function CompanySettingsPage() {
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Provider keys state
+  const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([]);
+  const [newKeyProvider, setNewKeyProvider] = useState("anthropic");
+  const [newKeyValue, setNewKeyValue] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
 
   const getActiveCompanyId = () => {
     const cookie = document.cookie
@@ -46,9 +68,10 @@ export default function CompanySettingsPage() {
     }
 
     try {
-      const [companyRes, membersRes] = await Promise.all([
+      const [companyRes, membersRes, keysRes] = await Promise.all([
         fetch(`/api/companies/${companyId}`),
         fetch(`/api/companies/${companyId}/members`),
+        fetch(`/api/provider-keys?companyId=${companyId}`),
       ]);
 
       if (companyRes.ok) {
@@ -61,6 +84,11 @@ export default function CompanySettingsPage() {
 
       if (membersRes.ok) {
         setMembers(await membersRes.json());
+      }
+
+      if (keysRes.ok) {
+        const data = await keysRes.json();
+        setProviderKeys(data.keys ?? []);
       }
     } catch {
       // ignore

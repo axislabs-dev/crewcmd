@@ -128,19 +128,20 @@ export async function PATCH(
       }).catch(() => {});
     }
 
-    // Send Slack DM when humanAssignee is set
-    if (body.humanAssignee && oldTask && body.humanAssignee !== oldTask.humanAssignee && body.humanAssignee === "roger") {
+    // Send Slack DM when humanAssignee changes
+    if (body.humanAssignee && oldTask && body.humanAssignee !== oldTask.humanAssignee) {
       // Log the activity
       await db.insert(schema.activityLog).values({
         agentId: "system",
         actionType: "human_assigned",
-        description: `Assigned to Roger: ${task.title}`,
+        description: `Assigned to ${body.humanAssignee}: ${task.title}`,
         metadata: { taskId: task.id, humanAssignee: body.humanAssignee },
       }).catch(() => {});
 
-      // Send Slack DM to Roger
+      // Send Slack notification if configured
       const slackToken = process.env.SLACK_BOT_TOKEN;
-      if (slackToken) {
+      const slackChannel = process.env.SLACK_NOTIFICATION_CHANNEL;
+      if (slackToken && slackChannel) {
         try {
           const slackRes = await fetch("https://slack.com/api/chat.postMessage", {
             method: "POST",
@@ -149,8 +150,8 @@ export async function PATCH(
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              channel: "U09DM3RM9DX",
-              text: `🔔 *New Task Assigned to You*\n\n*${task.title}*\n${task.description || "No description"}\n\nView in CrewCmd: ${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/tasks`,
+              channel: slackChannel,
+              text: `🔔 *New Task Assigned to ${body.humanAssignee}*\n\n*${task.title}*\n${task.description || "No description"}\n\nView in CrewCmd: ${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/tasks`,
             }),
           });
           if (!slackRes.ok) {

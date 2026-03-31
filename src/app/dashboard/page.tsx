@@ -460,7 +460,7 @@ export default function Dashboard() {
       <footer className="border-t border-[var(--border-subtle)] px-6 py-3">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v0.2.0
+            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}
           </span>
           <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
             crewcmd.dev

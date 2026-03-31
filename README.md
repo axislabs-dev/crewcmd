@@ -86,7 +86,7 @@ pnpm dev
 
 ## Contributing
 
-CrewCmd is open source under the MIT license. Contributions welcome.
+CrewCmd is source-available under the [BSL 1.1](./LICENSE). Contributions welcome.
 
 ```bash
 git clone https://github.com/axislabs-dev/crewcmd.git
@@ -99,4 +99,4 @@ See [CLAUDE.md](./CLAUDE.md) for the project plan and architecture notes.
 
 ## License
 
-MIT © 2026 Axislabs
+[BSL 1.1](./LICENSE) © 2026 RSCreative Technologies Pty Ltd. Converts to Apache 2.0 on 2030-03-31.

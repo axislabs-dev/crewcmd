@@ -20,7 +20,7 @@ async function seed() {
         callsign: "Neo",
         name: "Neo",
         title: "Chief Revenue Officer",
-        emoji: "\ud83d\udd76\ufe0f",
+        emoji: "🕶️",
         color: "#00f0ff",
         status: "online",
         currentTask: "Orchestrating Q1 revenue strategy",
@@ -32,7 +32,7 @@ async function seed() {
         callsign: "Cipher",
         name: "Cipher",
         title: "CTO & Founding Software Engineer",
-        emoji: "\u26a1",
+        emoji: "⚡",
         color: "#f0ff00",
         status: "working",
         currentTask: "Building CrewCmd dashboard",
@@ -44,7 +44,7 @@ async function seed() {
         callsign: "Havoc",
         name: "Havoc",
         title: "Chief Marketing Officer",
-        emoji: "\ud83d\udd25",
+        emoji: "🔥",
         color: "#ff6600",
         status: "online",
         currentTask: "Reviewing campaign performance",
@@ -56,7 +56,7 @@ async function seed() {
         callsign: "Pulse",
         name: "Pulse",
         title: "Trend Intelligence Analyst",
-        emoji: "\ud83d\udce1",
+        emoji: "📡",
         color: "#00ff88",
         status: "idle",
         currentTask: null,
@@ -68,7 +68,7 @@ async function seed() {
         callsign: "Razor",
         name: "Razor",
         title: "Creative Director (Video & Visual)",
-        emoji: "\u2702\ufe0f",
+        emoji: "✂️",
         color: "#ff00aa",
         status: "working",
         currentTask: "Editing product demo video",
@@ -80,7 +80,7 @@ async function seed() {
         callsign: "Ghost",
         name: "Ghost",
         title: "Head of SEO & Content Strategy",
-        emoji: "\ud83d\udc7b",
+        emoji: "👻",
         color: "#aa88ff",
         status: "online",
         currentTask: "Optimizing landing page keywords",
@@ -92,7 +92,7 @@ async function seed() {
         callsign: "Viper",
         name: "Viper",
         title: "Head of Growth & Outreach",
-        emoji: "\ud83d\udc0d",
+        emoji: "🐍",
         color: "#88ff00",
         status: "offline",
         currentTask: null,
@@ -104,7 +104,7 @@ async function seed() {
     .returning();
 
   console.log("Seeding projects...");
-  const [projMC, projCC, projPD, _projTAI] = await db
+  const [projCC, projLaunch, projContent] = await db
     .insert(projects)
     .values([
       {
@@ -115,31 +115,18 @@ async function seed() {
         ownerAgentId: cipher.id,
       },
       {
-        name: "ClutchCut Launch",
+        name: "Product Launch",
         description:
-          "Full product launch for ClutchCut \u2014 AI-powered video editing tool.",
+          "Full product launch campaign with landing pages, demos, and outreach.",
         status: "active",
         ownerAgentId: havoc.id,
       },
       {
-        name: "PostDropr Setup",
+        name: "Content Pipeline",
         description:
-          "Social media automation pipeline setup. Content calendar, scheduling, analytics.",
+          "Social media automation pipeline. Content calendar, scheduling, analytics.",
         status: "active",
         ownerAgentId: neo.id,
-      },
-      {
-        name: "Thoroughbreds.ai",
-        description:
-          "Roger's day job \u2014 CTO & co-founder. TAI is a racing analytics platform. Agents should read the TAI Context doc before picking up any TAI-related task.",
-        status: "active",
-        ownerAgentId: neo.id,
-        documents: [
-          {
-            name: "TAI Context",
-            url: "memory/tai-context.md",
-          },
-        ],
       },
     ])
     .returning();
@@ -152,8 +139,8 @@ async function seed() {
       status: "in_progress",
       priority: "critical",
       assignedAgentId: cipher.id,
-      projectId: projMC.id,
-      createdBy: "Roger",
+      projectId: projCC.id,
+      createdBy: "admin",
     },
     {
       title: "Q1 Revenue Strategy Document",
@@ -161,7 +148,7 @@ async function seed() {
       status: "in_progress",
       priority: "high",
       assignedAgentId: neo.id,
-      createdBy: "Roger",
+      createdBy: "admin",
     },
     {
       title: "Product Demo Video",
@@ -169,16 +156,16 @@ async function seed() {
       status: "in_progress",
       priority: "high",
       assignedAgentId: razor.id,
-      projectId: projCC.id,
+      projectId: projLaunch.id,
       createdBy: "Havoc",
     },
     {
-      title: "SEO Audit for example.com",
+      title: "SEO Audit",
       description: "Full technical SEO audit with keyword gap analysis",
       status: "review",
       priority: "medium",
       assignedAgentId: ghost.id,
-      projectId: projCC.id,
+      projectId: projLaunch.id,
       createdBy: "Havoc",
     },
     {
@@ -190,12 +177,12 @@ async function seed() {
       createdBy: "Neo",
     },
     {
-      title: "Outreach Campaign - AI Founders",
+      title: "Outreach Campaign — AI Founders",
       description: "Build outreach list targeting AI startup founders",
       status: "queued",
       priority: "high",
       assignedAgentId: viper.id,
-      projectId: projCC.id,
+      projectId: projLaunch.id,
       createdBy: "Havoc",
     },
     {
@@ -203,15 +190,15 @@ async function seed() {
       description: "Plan 30-day content calendar",
       status: "inbox",
       priority: "medium",
-      projectId: projPD.id,
-      createdBy: "Roger",
+      projectId: projContent.id,
+      createdBy: "admin",
     },
     {
       title: "Landing Page Redesign",
       description: "Redesign hero section and feature showcase",
       status: "inbox",
       priority: "high",
-      projectId: projCC.id,
+      projectId: projLaunch.id,
       createdBy: "Neo",
     },
   ]);
@@ -252,19 +239,19 @@ async function seed() {
         "# CrewCmd Architecture\n\nOverview of the agent crew orchestration platform built with Next.js 16, Drizzle ORM, and Neon Postgres.",
       category: "Architecture",
       authorAgentId: cipher.id,
-      projectId: projMC.id,
+      projectId: projCC.id,
       tags: ["architecture", "technical", "nextjs"],
     },
     {
-      title: "Q1 2025 Growth Strategy",
+      title: "Q1 Growth Strategy",
       content:
-        "# Q1 2025 Growth Strategy\n\nTargeting 3x revenue growth through organic content, partnerships, and outreach.",
+        "# Q1 Growth Strategy\n\nTargeting 3x revenue growth through organic content, partnerships, and outreach.",
       category: "Strategy",
       authorAgentId: neo.id,
       tags: ["strategy", "growth", "q1"],
     },
     {
-      title: "AI Agent Landscape \u2014 Competitor Analysis",
+      title: "AI Agent Landscape — Competitor Analysis",
       content:
         "# Competitor Analysis\n\nAnalysis of top 5 competitors in the autonomous AI agent space.",
       category: "Research",
@@ -272,12 +259,12 @@ async function seed() {
       tags: ["research", "competitors", "market-analysis"],
     },
     {
-      title: "SEO Playbook for example.com",
+      title: "SEO Playbook",
       content:
         "# SEO Playbook\n\nComprehensive SEO strategy including quick wins, content calendar, and technical optimizations.",
       category: "Guide",
       authorAgentId: ghost.id,
-      projectId: projCC.id,
+      projectId: projLaunch.id,
       tags: ["seo", "marketing", "guide"],
     },
   ]);

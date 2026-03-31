@@ -64,7 +64,7 @@ function getGatewayToken(): string | null {
   }
   try {
     const configPath = join(
-      process.env.HOME || "/Users/roger",
+      process.env.HOME || "",
       ".openclaw",
       "openclaw.json"
     );

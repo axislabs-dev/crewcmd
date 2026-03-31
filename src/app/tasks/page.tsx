@@ -351,7 +351,7 @@ export default function TasksPage() {
       <footer className="border-t border-[var(--border-subtle)] px-6 py-3">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v0.2.0
+            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}
           </span>
           <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
             crewcmd.dev
@@ -566,7 +566,7 @@ function TableTaskModal({
                 className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
               >
                 <option value="">None</option>
-                <option value="roger">👤 Roger</option>
+                <option value="admin">👤 Admin</option>
               </select>
             </div>
             <div>

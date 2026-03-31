@@ -66,11 +66,6 @@ export async function GET() {
       if (/\bpr[\s-]?review\b/.test(titleLower) || /\bsentinel\b/.test(titleLower)) {
         agent = "agent-sentinel";
       }
-      // Thoroughbreds.ai project → agent-forge or agent-blitz (round-robin)
-      else if (projectName === "Thoroughbreds.ai") {
-        agent = forgeBlitzRoundRobin % 2 === 0 ? "agent-forge" : "agent-blitz";
-        forgeBlitzRoundRobin++;
-      }
       // ClutchCut project → agent-cipher
       else if (projectName === "ClutchCut") {
         agent = "agent-cipher";

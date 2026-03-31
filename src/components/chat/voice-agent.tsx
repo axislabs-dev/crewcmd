@@ -271,7 +271,7 @@ export function VoiceAgent({
     idle: "ACTIVATE AGENT",
     listening: "LISTENING",
     processing: "THINKING",
-    speaking: "NEO SPEAKING",
+    speaking: "SPEAKING",
   };
 
   return (

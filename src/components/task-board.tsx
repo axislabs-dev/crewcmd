@@ -355,7 +355,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
       const res = await fetch(`/api/tasks/${selectedTask.id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newComment.trim(), agentId: "roger" }),
+        body: JSON.stringify({ content: newComment.trim(), agentId: "admin" }),
       });
       if (res.ok) {
         const comment = await res.json();
@@ -568,22 +568,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
         setSelectedTask(updated);
         setEditing(false);
 
-        // Send Slack DM to Roger when humanAssignee is set
-        if (editForm.humanAssignee && editForm.humanAssignee !== (selectedTask.humanAssignee || "")) {
-          try {
-            await fetch("https://slack.com/api/chat.postMessage", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${process.env.SLACK_BOT_TOKEN || ""}`,
-              },
-              body: JSON.stringify({
-                channel: "U09DM3RM9DX",
-                text: `📋 Task assigned to human: *${editForm.humanAssignee}*\n\n${updated.title}\n${updated.description ? updated.description.slice(0, 200) : "No description"}`,
-              }),
-            });
-          } catch { /* ignore Slack errors */ }
-        }
+        // Slack notification is handled server-side via the PATCH API route
       }
     } finally {
       setSaving(false);
@@ -1014,7 +999,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-red-400/30"
                     >
                       <option value="">None</option>
-                      <option value="roger">👤 Roger</option>
+                      <option value="admin">👤 Admin</option>
                     </select>
                   </div>
                   <div>
@@ -1278,7 +1263,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                         className="w-full rounded-lg border border-red-400/[0.08] bg-red-400/[0.02] px-2 py-1.5 text-[11px] text-red-400/50 outline-none focus:border-red-400/20"
                       >
                         <option value="">None</option>
-                        <option value="roger">👤 Roger</option>
+                        <option value="admin">👤 Admin</option>
                       </select>
                     </div>
                   </div>
@@ -1834,7 +1819,7 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                               setBoardTasks((prev) =>
                                 prev.map((t) =>
                                   t.id === task.id
-                                    ? { ...t, humanAssignee: "roger" }
+                                    ? { ...t, humanAssignee: "admin" }
                                     : t
                                 )
                               );
@@ -1842,28 +1827,16 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                                 const res = await fetch(`/api/tasks/${task.id}`, {
                                   method: "PATCH",
                                   headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ humanAssignee: "roger" }),
+                                  body: JSON.stringify({ humanAssignee: "admin" }),
                                 });
                                 if (!res.ok) throw new Error();
-                                try {
-                                  await fetch("https://slack.com/api/chat.postMessage", {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                      "Authorization": `Bearer ${process.env.SLACK_BOT_TOKEN || ""}`,
-                                    },
-                                    body: JSON.stringify({
-                                      channel: "U09DM3RM9DX",
-                                      text: `📋 Task assigned to human: *roger*\n\n${task.title}\n${task.description ? task.description.slice(0, 200) : "No description"}`,
-                                    }),
-                                  });
-                                } catch { /* ignore Slack errors */ }
+                                // Slack notification handled server-side via PATCH route
                               } catch {
                                 setBoardTasks(previousTasks);
                               }
                             }}
                             className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-red-400/20 text-red-400/30 transition-all hover:border-red-400/50 hover:text-red-400"
-                            title="Assign to Roger"
+                            title="Assign to human"
                           >
                             👤
                           </button>

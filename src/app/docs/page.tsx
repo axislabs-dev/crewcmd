@@ -178,7 +178,7 @@ function WorkspaceContent() {
               WORKSPACE
             </h1>
             <p className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
-              NEO&apos;S MEMORY FILES
+              WORKSPACE FILES
             </p>
           </div>
         </div>

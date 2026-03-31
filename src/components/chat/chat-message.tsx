@@ -29,7 +29,7 @@ export function ChatMessage({ role, content, isStreaming }: ChatMessageProps) {
             : undefined
         }
       >
-        {isUser ? "YOU" : "NEO"}
+        {isUser ? "YOU" : "AI"}
       </div>
 
       {/* Message bubble */}

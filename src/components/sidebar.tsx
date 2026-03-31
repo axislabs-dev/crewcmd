@@ -312,7 +312,7 @@ export function Sidebar() {
           <SignOutButton />
           <ThemeToggle />
           <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v0.3.0
+            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}
           </span>
         </div>
       </div>
@@ -347,7 +347,7 @@ export function Sidebar() {
           <SignOutButton />
           <ThemeToggle />
           <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v0.3.0
+            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION}
           </span>
         </div>
       </aside>

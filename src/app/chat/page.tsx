@@ -295,7 +295,7 @@ export default function ChatPage() {
               style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
             />
             <h1 className="glow-text-neo font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
-              NEO CHAT
+              CREW CHAT
             </h1>
           </div>
 
@@ -504,7 +504,7 @@ export default function ChatPage() {
                 placeholder={
                   chatMode === "task"
                     ? "Describe a task to create..."
-                    : "Message Neo..."
+                    : "Message your crew..."
                 }
                 disabled={isLoading}
                 rows={1}

@@ -104,7 +104,7 @@ export default function LoginPage() {
               CREWCMD
             </h1>
             <p className="mt-1 font-mono text-[10px] tracking-[0.4em] text-[var(--text-tertiary)]">
-              COMMAND CENTER
+              YOUR CREW. YOUR COMMAND.
             </p>
           </div>
         </div>
@@ -116,12 +116,12 @@ export default function LoginPage() {
         >
           <div className="mb-6 text-center">
             <h2 className="text-sm font-bold tracking-[0.15em] text-[var(--text-primary)]">
-              {mode === "signup" ? "CREATE YOUR ACCOUNT" : "TACTICAL ACCESS"}
+              {mode === "signup" ? "CREATE YOUR ACCOUNT" : "SIGN IN"}
             </h2>
             <p className="mt-1.5 text-xs text-[var(--text-tertiary)]">
               {mode === "signup"
                 ? "Set up the first admin account"
-                : "Authenticate to enter the command center"}
+                : "Sign in to your workspace"}
             </p>
           </div>
 
@@ -219,7 +219,7 @@ export default function LoginPage() {
         {/* Bottom branding */}
         <div className="mt-6 text-center">
           <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v0.2.0 · crewcmd.dev
+            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"} · crewcmd.dev
           </span>
         </div>
       </div>

@@ -44,5 +44,8 @@ next-env.d.ts
 
 .heartbeat-env
 
+# Claude Code
+.claude/
+
 # PGlite local data
 .data/

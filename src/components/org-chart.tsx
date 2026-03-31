@@ -5,14 +5,82 @@ interface OrgChartProps {
   agents: Agent[];
 }
 
+interface TreeNode {
+  agent: Agent;
+  children: TreeNode[];
+}
+
+/** Build a tree from the flat agent list using reportsTo. */
+function buildTree(agents: Agent[]): TreeNode[] {
+  const agentMap = new Map<string, Agent>();
+  for (const a of agents) {
+    agentMap.set(a.id, a);
+    agentMap.set(a.callsign.toLowerCase(), a);
+    agentMap.set(`agent-${a.callsign.toLowerCase()}`, a);
+  }
+
+  const childrenMap = new Map<string, TreeNode[]>();
+  const roots: TreeNode[] = [];
+
+  for (const agent of agents) {
+    const node: TreeNode = { agent, children: [] };
+
+    if (!agent.reportsTo) {
+      roots.push(node);
+    } else {
+      const parentKey = agent.reportsTo;
+      if (!childrenMap.has(parentKey)) {
+        childrenMap.set(parentKey, []);
+      }
+      childrenMap.get(parentKey)!.push(node);
+    }
+  }
+
+  // Attach children to their parents
+  function attachChildren(node: TreeNode): TreeNode {
+    const possibleKeys = [
+      node.agent.id,
+      node.agent.callsign.toLowerCase(),
+      `agent-${node.agent.callsign.toLowerCase()}`,
+    ];
+    for (const key of possibleKeys) {
+      const children = childrenMap.get(key);
+      if (children) {
+        node.children.push(...children);
+        childrenMap.delete(key);
+      }
+    }
+    node.children.forEach(attachChildren);
+    return node;
+  }
+
+  roots.forEach(attachChildren);
+
+  // Any orphans with unresolved parents become roots
+  for (const orphans of childrenMap.values()) {
+    roots.push(...orphans);
+  }
+
+  return roots;
+}
+
 export function OrgChart({ agents }: OrgChartProps) {
-  const neo = agents.find((a) => a.callsign === "Neo");
-  const cipher = agents.find((a) => a.callsign === "Cipher");
-  const havoc = agents.find((a) => a.callsign === "Havoc");
-  const maverick = agents.find((a) => a.callsign === "Maverick");
-  const havocReports = agents.filter((a) => a.reportsTo === "agent-havoc");
-  const cipherReports = agents.filter((a) => a.reportsTo === "agent-cipher");
-  const maverickReports = agents.filter((a) => a.reportsTo === "agent-maverick");
+  const tree = buildTree(agents);
+
+  if (tree.length === 0) {
+    return (
+      <section>
+        <div className="mb-4">
+          <h2 className="text-xs tracking-[0.2em] text-[var(--text-tertiary)] uppercase">
+            Org Chart
+          </h2>
+        </div>
+        <div className="glass-card p-8 text-center text-sm text-[var(--text-tertiary)]">
+          No agents yet. Create agents and set their reporting structure to build your org chart.
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section>
@@ -23,82 +91,48 @@ export function OrgChart({ agents }: OrgChartProps) {
       </div>
 
       <div className="glass-card overflow-x-auto p-6">
-        <div className="flex flex-col items-center gap-0 min-w-[700px]">
-          <OrgNode
-            emoji="\ud83c\udf1f"
-            callsign="ROGER"
-            title="Commander / Founder"
-            color="#ffffff"
-            isCommander
-          />
-
-          <VerticalLine />
-
-          {neo && <AgentOrgNode agent={neo} />}
-
-          <VerticalLine />
-
-          <div className="relative flex items-start justify-center gap-24">
-            <HorizontalLine />
-
-            <div className="flex flex-col items-center">
-              {cipher && <AgentOrgNode agent={cipher} />}
-              {cipherReports.length > 0 && (
-                <>
-                  <VerticalLine />
-                  <div className="relative flex items-start justify-center gap-8">
-                    <HorizontalLineSm count={cipherReports.length} />
-                    {cipherReports.map((agent) => (
-                      <div key={agent.id} className="flex flex-col items-center">
-                        <VerticalLineShort />
-                        <AgentOrgNode agent={agent} compact />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+        <div className="flex flex-col items-center gap-0 min-w-[400px]">
+          {tree.length === 1 ? (
+            <TreeNodeView node={tree[0]} />
+          ) : (
+            <div className="relative flex items-start justify-center gap-16">
+              <HorizontalLine />
+              {tree.map((root) => (
+                <div key={root.agent.id} className="flex flex-col items-center">
+                  <TreeNodeView node={root} />
+                </div>
+              ))}
             </div>
-
-            <div className="flex flex-col items-center">
-              {maverick && <AgentOrgNode agent={maverick} />}
-              {maverickReports.length > 0 && (
-                <>
-                  <VerticalLine />
-                  <div className="relative flex items-start justify-center gap-8">
-                    <HorizontalLineSm count={maverickReports.length} />
-                    {maverickReports.map((agent) => (
-                      <div key={agent.id} className="flex flex-col items-center">
-                        <VerticalLineShort />
-                        <AgentOrgNode agent={agent} compact />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-col items-center">
-              {havoc && <AgentOrgNode agent={havoc} />}
-
-              {havocReports.length > 0 && (
-                <>
-                  <VerticalLine />
-                  <div className="relative flex items-start justify-center gap-8">
-                    <HorizontalLineSm count={havocReports.length} />
-                    {havocReports.map((agent) => (
-                      <div key={agent.id} className="flex flex-col items-center">
-                        <VerticalLineShort />
-                        <AgentOrgNode agent={agent} compact />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+function TreeNodeView({ node, compact }: { node: TreeNode; compact?: boolean }) {
+  return (
+    <div className="flex flex-col items-center">
+      <AgentOrgNode agent={node.agent} compact={compact} />
+      {node.children.length > 0 && (
+        <>
+          <VerticalLine />
+          {node.children.length === 1 ? (
+            <TreeNodeView node={node.children[0]} compact />
+          ) : (
+            <div className="relative flex items-start justify-center gap-8">
+              <HorizontalLineSm count={node.children.length} />
+              {node.children.map((child) => (
+                <div key={child.agent.id} className="flex flex-col items-center">
+                  <VerticalLineShort />
+                  <TreeNodeView node={child} compact />
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -143,40 +177,6 @@ function AgentOrgNode({
         </div>
       </div>
     </Link>
-  );
-}
-
-function OrgNode({
-  emoji,
-  callsign,
-  title,
-  color,
-  isCommander,
-}: {
-  emoji: string;
-  callsign: string;
-  title: string;
-  color: string;
-  isCommander?: boolean;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center rounded-xl border bg-[var(--bg-surface)] px-5 py-3 ${
-        isCommander ? "border-[var(--text-tertiary)]" : "border-[var(--border-medium)]"
-      }`}
-      style={{
-        boxShadow: isCommander ? "0 0 20px rgba(255,255,255,0.05)" : undefined,
-      }}
-    >
-      <span className="text-2xl">{emoji}</span>
-      <span
-        className="font-mono text-xs font-bold tracking-wider"
-        style={{ color }}
-      >
-        {callsign}
-      </span>
-      <span className="text-[10px] text-[var(--text-tertiary)]">{title}</span>
-    </div>
   );
 }
 

@@ -195,7 +195,7 @@ async function main() {
           Authorization: `Bearer ${AUTH_TOKEN}`,
         },
         body: JSON.stringify({
-          humanAssignee: "roger",
+          humanAssignee: process.env.DEFAULT_HUMAN_ASSIGNEE || "admin",
           status: "inbox",
           reviewNotes: `Auto-assigned: Exceeded ${MAX_REVIEW_CYCLES} review cycles without resolution.`,
         }),

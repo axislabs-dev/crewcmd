@@ -291,7 +291,7 @@ export function Sidebar() {
         <div className="border-t border-white/[0.04] px-3 py-3">
           <UserInfo />
           <SignOutButton />
-          <span className="block px-3 pt-2 font-mono text-[10px] tracking-wider text-white/25">
+          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-white/40">
             CREWCMD v0.3.0
           </span>
         </div>
@@ -308,7 +308,7 @@ export function Sidebar() {
             <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
               CREWCMD
             </span>
-            <span className="font-mono text-[8px] tracking-[0.3em] text-white/20">
+            <span className="font-mono text-[10px] tracking-[0.3em] text-white/45">
               YOUR CREW. YOUR COMMAND.
             </span>
           </div>
@@ -325,7 +325,7 @@ export function Sidebar() {
         <div className="border-t border-white/[0.04] px-3 py-3">
           <UserInfo />
           <SignOutButton />
-          <span className="block px-3 pt-2 font-mono text-[10px] tracking-wider text-white/25">
+          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-white/40">
             CREWCMD v0.3.0
           </span>
         </div>

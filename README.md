@@ -1,12 +1,12 @@
 # CrewCmd
 
-> The AI-native workspace for human + AI teams.
+> Give your team AI superpowers.
 
-Most AI tools assume you're either all-human or all-AI. Real teams are both. CrewCmd is the workspace where humans and AI agents work side by side: same task board, same org chart, same inbox. Your team of 3 becomes a team of 30.
+CrewCmd is the AI-native workspace where humans and AI agents work side by side: same task board, same org chart, same inbox. Every person on your team gets AI agents that multiply what they can do. Your team of 3 operates like a team of 30.
 
 **Built for small teams that want to punch way above their weight.**
 
-A solo founder deploys a full dev squad, marketing team, and support ops in minutes. A 5-person startup runs like a 50-person company. A freelancer shows up with agents as part of their toolkit. That's the idea.
+A solo founder deploys a full dev squad, marketing team, and support ops in minutes. A 5-person startup runs like a 50-person company. A freelancer shows up with agents as part of their toolkit. Every human on the team gets superpowers. That's the idea.
 
 **One-click team deployment · Agent inbox · Skills marketplace · Task management · Team structure · Budgets & governance**
 

@@ -99,14 +99,14 @@ export function ActivityFeed({ activities, agents }: ActivityFeedProps) {
                     >
                       {agent?.callsign.toUpperCase() ?? "UNKNOWN"}
                     </span>
-                    <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-white/30 uppercase">
+                    <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-white/50 uppercase">
                       {activity.actionType}
                     </span>
                   </div>
                   <p className="text-xs text-white/60 leading-relaxed">
                     {activity.description}
                   </p>
-                  <span className="mt-1 block font-mono text-[10px] text-white/20">
+                  <span className="mt-1 block font-mono text-[11px] text-white/40">
                     {timeAgo(activity.createdAt)}
                   </span>
                 </div>
@@ -116,7 +116,7 @@ export function ActivityFeed({ activities, agents }: ActivityFeedProps) {
         })}
 
         {filtered.length === 0 && (
-          <div className="py-8 text-center font-mono text-xs text-white/20">
+          <div className="py-8 text-center font-mono text-sm text-white/40">
             No activity found
           </div>
         )}

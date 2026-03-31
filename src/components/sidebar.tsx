@@ -138,7 +138,7 @@ export function Sidebar() {
         <Link
           href={item.href}
           onClick={onClick}
-          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-mono text-[11px] tracking-wider transition-all duration-200 ${
+          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-mono text-xs tracking-wider transition-all duration-200 ${
             active
               ? "bg-neo/10 text-neo"
               : "text-white/40 hover:bg-white/[0.04] hover:text-white/70"
@@ -171,7 +171,7 @@ export function Sidebar() {
       {navSections.map((section, idx) => (
         <div key={idx}>
           {section.label && (
-            <div className="mb-1.5 px-3 font-mono text-[9px] font-bold tracking-[0.2em] text-white/20">
+            <div className="mb-1.5 px-3 font-mono text-[10px] font-bold tracking-[0.2em] text-white/35">
               {section.label}
             </div>
           )}
@@ -207,11 +207,11 @@ export function Sidebar() {
           />
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[10px] tracking-wider text-white/50">
+          <p className="truncate font-mono text-[11px] tracking-wider text-white/60">
             {session.user.name || username || "User"}
           </p>
           {role && (
-            <p className="font-mono text-[8px] tracking-wider text-white/25">
+            <p className="font-mono text-[9px] tracking-wider text-white/35">
               {role.toUpperCase().replace("_", " ")}
             </p>
           )}
@@ -223,7 +223,7 @@ export function Sidebar() {
   const SignOutButton = () => (
     <button
       onClick={() => signOut({ callbackUrl: "/" })}
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 font-mono text-[10px] tracking-wider text-white/25 transition-colors hover:bg-white/[0.04] hover:text-white/50"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 font-mono text-[11px] tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/50"
     >
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
@@ -291,7 +291,7 @@ export function Sidebar() {
         <div className="border-t border-white/[0.04] px-3 py-3">
           <UserInfo />
           <SignOutButton />
-          <span className="block px-3 pt-2 font-mono text-[9px] tracking-wider text-white/15">
+          <span className="block px-3 pt-2 font-mono text-[10px] tracking-wider text-white/25">
             CREWCMD v0.3.0
           </span>
         </div>
@@ -325,7 +325,7 @@ export function Sidebar() {
         <div className="border-t border-white/[0.04] px-3 py-3">
           <UserInfo />
           <SignOutButton />
-          <span className="block px-3 pt-2 font-mono text-[9px] tracking-wider text-white/15">
+          <span className="block px-3 pt-2 font-mono text-[10px] tracking-wider text-white/25">
             CREWCMD v0.3.0
           </span>
         </div>

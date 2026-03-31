@@ -146,14 +146,14 @@ export default function Dashboard() {
               COMMAND CENTER
             </h1>
             <div className="flex items-center gap-2">
-              <p className="font-mono text-[10px] tracking-wider text-white/30">
+              <p className="font-mono text-xs tracking-wider text-white/50">
                 TACTICAL OVERVIEW
               </p>
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${isLive ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" : "bg-white/20"}`}
                 title={isLive ? "LIVE — OpenClaw Connected" : "OFFLINE — No Data Source"}
               />
-              <span className="font-mono text-[9px] tracking-wider text-white/20">
+              <span className="font-mono text-[11px] tracking-wider text-white/40">
                 {isLive ? "LIVE" : "OFFLINE"}
               </span>
             </div>
@@ -163,7 +163,7 @@ export default function Dashboard() {
               <span className="font-mono text-xl font-bold tabular-nums text-white">
                 {time}
               </span>
-              <span className="font-mono text-[10px] text-white/30">{date}</span>
+              <span className="font-mono text-xs text-white/50">{date}</span>
             </div>
           </div>
         </div>
@@ -193,12 +193,12 @@ export default function Dashboard() {
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+            <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
               Agent Status
             </h2>
             <Link
               href="/agents"
-              className="font-mono text-[10px] tracking-wider text-white/30 transition-colors hover:text-neo"
+              className="font-mono text-[11px] tracking-wider text-white/50 transition-colors hover:text-neo"
             >
               VIEW ALL &rarr;
             </Link>
@@ -221,14 +221,14 @@ export default function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className="truncate font-mono text-[10px] font-bold tracking-wider"
+                          className="truncate font-mono text-[11px] font-bold tracking-wider"
                           style={{ color: agent.color }}
                         >
                           {agent.callsign.toUpperCase()}
                         </span>
                         <span className={`status-dot status-dot-${agent.status} shrink-0`} />
                       </div>
-                      <p className="truncate text-[9px] text-white/30">
+                      <p className="truncate text-[11px] text-white/50">
                         {agent.currentTask ?? "No active task"}
                       </p>
                     </div>
@@ -237,7 +237,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="glass-card flex items-center justify-center py-8">
-              <p className="font-mono text-xs text-white/20">
+              <p className="font-mono text-sm text-white/40">
                 No agents detected — connect OpenClaw to see your team
               </p>
             </div>
@@ -247,11 +247,11 @@ export default function Dashboard() {
         {(nodes.length > 0 || health) && (
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+              <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
                 Infrastructure
               </h2>
               {health && (
-                <span className="font-mono text-[10px] tracking-wider text-white/20">
+                <span className="font-mono text-[11px] tracking-wider text-white/40">
                   GATEWAY{" "}
                   <span
                     className={
@@ -281,7 +281,7 @@ export default function Dashboard() {
                     <p className="font-mono text-xs font-bold text-white/50">
                       NO NODES DETECTED
                     </p>
-                    <p className="text-[10px] text-white/25">
+                    <p className="text-[11px] text-white/40">
                       Node connections will appear here when available
                     </p>
                   </div>
@@ -294,12 +294,12 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+              <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
                 Active Projects
               </h2>
               <Link
                 href="/projects"
-                className="font-mono text-[10px] tracking-wider text-white/30 transition-colors hover:text-neo"
+                className="font-mono text-[11px] tracking-wider text-white/50 transition-colors hover:text-neo"
               >
                 VIEW ALL &rarr;
               </Link>
@@ -331,11 +331,11 @@ export default function Dashboard() {
                         <h3 className="font-mono text-sm font-bold text-white/80">
                           {project.name}
                         </h3>
-                        <span className="shrink-0 rounded bg-neo/10 px-1.5 py-0.5 font-mono text-[9px] text-neo uppercase">
+                        <span className="shrink-0 rounded bg-neo/10 px-1.5 py-0.5 font-mono text-[11px] text-neo uppercase">
                           {project.status}
                         </span>
                       </div>
-                      <p className="mb-3 text-[11px] text-white/40 line-clamp-2">
+                      <p className="mb-3 text-xs text-white/50 line-clamp-2">
                         {project.description}
                       </p>
                       <div className="mb-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
@@ -345,7 +345,7 @@ export default function Dashboard() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[9px] text-white/25">
+                        <span className="font-mono text-[11px] text-white/40">
                           {doneTasks.length}/{projectTasks.length} tasks &middot;{" "}
                           {pct}%
                         </span>
@@ -367,7 +367,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="glass-card flex items-center justify-center py-8">
-                <p className="font-mono text-xs text-white/20">
+                <p className="font-mono text-sm text-white/40">
                   No projects created yet
                 </p>
               </div>
@@ -384,12 +384,12 @@ export default function Dashboard() {
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+            <h2 className="font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
               Tasks In Progress
             </h2>
             <Link
               href="/tasks"
-              className="font-mono text-[10px] tracking-wider text-white/30 transition-colors hover:text-neo"
+              className="font-mono text-[11px] tracking-wider text-white/50 transition-colors hover:text-neo"
             >
               VIEW BOARD &rarr;
             </Link>
@@ -426,7 +426,7 @@ export default function Dashboard() {
                             </span>
                           </div>
                         )}
-                        <span className="font-mono text-[9px] text-white/20">
+                        <span className="font-mono text-[11px] text-white/35">
                           {timeAgo(task.updatedAt)}
                         </span>
                       </div>
@@ -437,7 +437,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="glass-card flex items-center justify-center py-8">
-              <p className="font-mono text-xs text-white/20">
+              <p className="font-mono text-sm text-white/40">
                 No tasks in progress
               </p>
             </div>
@@ -445,7 +445,7 @@ export default function Dashboard() {
         </section>
 
         <section className="glass-card p-6">
-          <h2 className="mb-4 font-mono text-xs tracking-[0.2em] text-white/40 uppercase">
+          <h2 className="mb-4 font-mono text-sm tracking-[0.15em] text-white/60 uppercase">
             Quick Stats
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -459,10 +459,10 @@ export default function Dashboard() {
 
       <footer className="border-t border-white/[0.04] px-6 py-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] tracking-wider text-white/20">
+          <span className="font-mono text-[11px] tracking-wider text-white/40">
             CREWCMD v0.2.0
           </span>
-          <span className="font-mono text-[10px] tracking-wider text-white/20">
+          <span className="font-mono text-[11px] tracking-wider text-white/40">
             crewcmd.dev
           </span>
         </div>
@@ -492,7 +492,7 @@ function StatCard({
         }}
       />
       <div className="relative">
-        <span className="font-mono text-[9px] tracking-widest text-white/30 uppercase">
+        <span className="font-mono text-[11px] tracking-widest text-white/50 uppercase">
           {label}
         </span>
         <p className="mt-1 font-mono text-2xl font-bold" style={{ color }}>
@@ -532,13 +532,13 @@ function NodeCard({ node, nodeAgentMap }: { node: NodeInfo; nodeAgentMap: Record
           <span className={`status-dot ${isConnected ? "status-dot-online" : "status-dot-offline"}`} />
         </div>
         {node.hostname && (
-          <p className="text-[10px] text-white/30">{node.hostname}</p>
+          <p className="text-xs text-white/50">{node.hostname}</p>
         )}
         <div className="mt-1 flex items-center gap-3">
-          <span className="font-mono text-[9px] text-white/25">
+          <span className="font-mono text-[11px] text-white/40">
             {isConnected ? "CONNECTED" : "DISCONNECTED"}
           </span>
-          <span className="font-mono text-[9px] text-white/20">
+          <span className="font-mono text-[11px] text-white/35">
             {uptimeText}
           </span>
         </div>
@@ -547,7 +547,7 @@ function NodeCard({ node, nodeAgentMap }: { node: NodeInfo; nodeAgentMap: Record
             {node.capabilities.slice(0, 4).map((cap) => (
               <span
                 key={cap}
-                className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[8px] text-white/25"
+                className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-white/40"
               >
                 {cap}
               </span>
@@ -592,7 +592,7 @@ function ChartPlaceholder({ label }: { label: string }) {
           d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
         />
       </svg>
-      <span className="font-mono text-[9px] text-white/20">{label}</span>
+      <span className="font-mono text-[11px] text-white/35">{label}</span>
     </div>
   );
 }

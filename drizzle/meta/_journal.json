@@ -43,6 +43,13 @@
       "when": 1774921047391,
       "tag": "0005_broad_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774999990282,
+      "tag": "0006_faulty_thing",
+      "breakpoints": true
     }
   ]
 }

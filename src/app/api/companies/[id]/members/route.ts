@@ -42,8 +42,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
 
-  if (!body.githubUsername) {
-    return NextResponse.json({ error: "githubUsername is required" }, { status: 400 });
+  const identifier = body.email || body.githubUsername;
+  if (!identifier) {
+    return NextResponse.json({ error: "email or githubUsername is required" }, { status: 400 });
   }
 
   // Verify company exists
@@ -57,16 +58,16 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   // Find or create the user record
-  let [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.githubUsername, body.githubUsername.toLowerCase()))
-    .limit(1);
+  let [user] = body.email
+    ? await db.select({ id: users.id }).from(users).where(eq(users.email, body.email.toLowerCase())).limit(1)
+    : await db.select({ id: users.id }).from(users).where(eq(users.githubUsername, body.githubUsername.toLowerCase())).limit(1);
 
   if (!user) {
-    // Create a pending user record (they'll complete signup on first login)
+    // Create a pending user record
+    const email = (body.email || `${body.githubUsername}@pending.local`).toLowerCase();
     [user] = await db.insert(users).values({
-      githubUsername: body.githubUsername.toLowerCase(),
+      email,
+      githubUsername: body.githubUsername?.toLowerCase() || null,
       role: "viewer",
       invitedBy: body.invitedBy || "system",
     }).returning({ id: users.id });

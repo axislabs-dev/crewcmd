@@ -38,11 +38,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invite expired" }, { status: 400 });
     }
 
-    // Verify the logged-in user matches the invite
-    const username = (session.user as Record<string, unknown>).username as string;
-    if (invite.githubUsername !== username) {
+    // Verify the logged-in user matches the invite (by email or username)
+    const currentEmail = session.user.email;
+    const currentUsername = (session.user as Record<string, unknown>).username as string | undefined;
+    const matchesEmail = currentEmail && invite.email === currentEmail;
+    const matchesUsername = currentUsername && invite.githubUsername === currentUsername;
+    if (!matchesEmail && !matchesUsername) {
       return NextResponse.json(
-        { error: "This invite is for a different GitHub user" },
+        { error: "This invite is for a different user" },
         { status: 403 }
       );
     }
@@ -51,7 +54,7 @@ export async function POST(request: Request) {
       .update(users)
       .set({
         acceptedAt: new Date(),
-        githubId: session.user.email, // best effort
+        email: currentEmail || invite.email,
       })
       .where(eq(users.id, invite.id));
 

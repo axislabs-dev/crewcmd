@@ -153,7 +153,7 @@ export default function OnboardingPage() {
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g., Axislabs"
+                  placeholder="e.g., Acme Corp"
                   className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-white/80 outline-none transition-colors focus:border-neo/50"
                   autoFocus
                 />

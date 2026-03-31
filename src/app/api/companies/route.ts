@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, companyMembers, users } from "@/db/schema";
+import { companies, companyMembers } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
-import { auth } from "@/lib/auth";
+import { resolveCurrentUser } from "@/lib/resolve-user";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +13,7 @@ export async function GET(request: NextRequest) {
   if (authError) return authError;
   if (!db) return NextResponse.json([]);
 
-  const session = await auth();
-  const username = (session?.user as Record<string, unknown> | undefined)?.username as string | undefined;
-  if (!username) return NextResponse.json([]);
-
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.githubUsername, username))
-    .limit(1);
+  const user = await resolveCurrentUser();
   if (!user) return NextResponse.json([]);
 
   // Get all companies this user is a member of
@@ -48,16 +40,10 @@ export async function POST(request: NextRequest) {
   if (authError) return authError;
   if (!db) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
 
-  const session = await auth();
-  const username = (session?.user as Record<string, unknown> | undefined)?.username as string | undefined;
-  if (!username) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await resolveCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.githubUsername, username))
-    .limit(1);
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  const displayName = user.name || user.email;
 
   const body = await request.json();
   if (!body.name) {
@@ -69,7 +55,7 @@ export async function POST(request: NextRequest) {
     mission: body.mission || null,
     logoUrl: body.logoUrl || null,
     settings: body.settings || null,
-    createdBy: username,
+    createdBy: displayName,
   }).returning();
 
   // Add creator as owner
@@ -77,7 +63,7 @@ export async function POST(request: NextRequest) {
     companyId: company.id,
     userId: user.id,
     role: "owner",
-    invitedBy: username,
+    invitedBy: displayName,
   });
 
   return NextResponse.json(company, { status: 201 });

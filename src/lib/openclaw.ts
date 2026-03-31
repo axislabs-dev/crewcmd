@@ -243,7 +243,7 @@ export const AGENT_META: Record<
     emoji: "\u26a1",
     color: "#f0ff00",
     reportsTo: "agent-neo",
-    soulContent: "The Builder. Writes code that ships. Pragmatic, fast, and obsessed with clean architecture. First engineer at Axislabs.",
+    soulContent: "The Builder. Writes code that ships. Pragmatic, fast, and obsessed with clean architecture. First engineer at CrewCmd.",
   },
   havoc: {
     callsign: "Havoc",

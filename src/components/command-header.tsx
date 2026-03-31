@@ -57,7 +57,7 @@ export function CommandHeader({ agents, tasks }: CommandHeaderProps) {
               }}
             />
             <h1 className="glow-text-neo font-mono text-lg tracking-[0.2em] font-bold text-neo">
-              AXISLABS TACTICAL SQUAD
+              CREW ROSTER
             </h1>
           </div>
         </div>

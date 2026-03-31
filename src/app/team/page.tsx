@@ -74,7 +74,7 @@ export default function TeamPage() {
             <p className="font-mono text-[10px] tracking-wider text-white/30">
               {loading
                 ? "LOADING..."
-                : `${activeCount} OF ${agents.length} ACTIVE — AXISLABS TACTICAL SQUAD`}
+                : `${activeCount} OF ${agents.length} ACTIVE — CREW ROSTER`}
             </p>
           </div>
           <Link

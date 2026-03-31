@@ -115,9 +115,11 @@ export const userRoleEnum = pgEnum("user_role", [
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  githubUsername: text("github_username").notNull().unique(),
+  name: text("name"),
+  githubUsername: text("github_username").unique(),
   githubId: text("github_id"),
-  email: text("email"),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash"),
   role: userRoleEnum("role").notNull().default("viewer"),
   invitedBy: text("invited_by"),
   inviteToken: text("invite_token").unique(),

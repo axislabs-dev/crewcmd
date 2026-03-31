@@ -18,15 +18,14 @@ export async function getActiveCompany(req?: NextRequest) {
   const session = await auth();
   if (!session?.user) return null;
 
-  const username = (session.user as Record<string, unknown>).username as string | undefined;
-  if (!username) return null;
+  const userEmail = session.user.email;
+  const userId = (session.user as Record<string, unknown>).id as string | undefined;
+  if (!userEmail && !userId) return null;
 
-  // Resolve user id from username
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.githubUsername, username))
-    .limit(1);
+  // Resolve user id from email or direct id
+  const [user] = userId
+    ? await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1)
+    : await db.select({ id: users.id }).from(users).where(eq(users.email, userEmail!)).limit(1);
   if (!user) return null;
 
   // Get company_id from header or cookie

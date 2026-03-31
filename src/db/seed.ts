@@ -173,7 +173,7 @@ async function seed() {
       createdBy: "Havoc",
     },
     {
-      title: "SEO Audit for axislabs.dev",
+      title: "SEO Audit for example.com",
       description: "Full technical SEO audit with keyword gap analysis",
       status: "review",
       priority: "medium",
@@ -272,7 +272,7 @@ async function seed() {
       tags: ["research", "competitors", "market-analysis"],
     },
     {
-      title: "SEO Playbook for axislabs.dev",
+      title: "SEO Playbook for example.com",
       content:
         "# SEO Playbook\n\nComprehensive SEO strategy including quick wins, content calendar, and technical optimizations.",
       category: "Guide",

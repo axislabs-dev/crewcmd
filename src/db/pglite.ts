@@ -69,11 +69,9 @@ async function applySchema() {
   for (const stmt of alterStatements) {
     try {
       await client.exec(stmt);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes("already exists") && !msg.includes("duplicate")) {
-        console.warn("[CrewCmd] PGlite alter warning:", msg.slice(0, 120));
-      }
+    } catch {
+      // Silently ignore ALTER failures — expected on fresh installs
+      // when referenced tables/columns don't yet exist
     }
   }
 

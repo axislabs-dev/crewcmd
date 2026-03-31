@@ -84,10 +84,10 @@ export async function GET() {
       else if (projectName === "Quant Trading") {
         agent = "agent-maverick"; // Default to maverick for quant
       }
-      // Axislabs Portfolio / generic → agent-blitz
+      // Default Portfolio / generic → agent-blitz
       else if (
-        projectName === "Axislabs Portfolio" ||
-        projectName === "Axislabs" ||
+        projectName === "Default Portfolio" ||
+        projectName === "Default" ||
         !projectName
       ) {
         agent = "agent-blitz";

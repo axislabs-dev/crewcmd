@@ -131,7 +131,7 @@ export default function TasksPage() {
           <div className="hidden items-center justify-between gap-4 sm:flex">
             <div className="flex items-center gap-3">
               <Link href="/" className="font-mono text-xs text-white/40 transition-colors hover:text-neo">
-                MISSION CONTROL
+                COMMAND CENTER
               </Link>
               <span className="font-mono text-xs text-white/20">/</span>
               <span className="font-mono text-xs font-bold text-white/70">TASKS</span>
@@ -351,10 +351,10 @@ export default function TasksPage() {
       <footer className="border-t border-white/[0.04] px-6 py-3">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] tracking-wider text-white/20">
-            MISSION CONTROL v0.2.0
+            CREWCMD v0.2.0
           </span>
           <span className="font-mono text-[10px] tracking-wider text-white/20">
-            AXISLABS.DEV
+            crewcmd.dev
           </span>
         </div>
       </footer>

@@ -78,7 +78,7 @@ export default function InviteAcceptPage() {
             href="/dashboard"
             className="rounded-lg border border-neo/30 bg-neo/10 px-6 py-2.5 font-mono text-xs font-bold tracking-wider text-neo transition hover:bg-neo/20"
           >
-            ENTER MISSION CONTROL
+            ENTER COMMAND CENTER
           </a>
         </>
       )}

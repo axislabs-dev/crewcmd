@@ -50,12 +50,13 @@ export async function DELETE(request: Request) {
     }
 
     // Prevent self-removal
-    const username = (session.user as Record<string, unknown>).username as string;
+    const currentUserId = (session.user as Record<string, unknown>).id as string | undefined;
+    const currentEmail = session.user.email;
     const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    if (target.githubUsername === username) {
+    if (target.id === currentUserId || target.email === currentEmail) {
       return NextResponse.json({ error: "Cannot remove yourself" }, { status: 400 });
     }
 

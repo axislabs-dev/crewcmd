@@ -102,7 +102,7 @@ function OfficeRoom({ callsign, status, color }: { callsign: string; status: str
         return (
           <>
             <div className="window" />
-            <div className="neon-sign">AXISLABS</div>
+            <div className="neon-sign">CREWCMD</div>
             <div className="desk" />
           </>
         );
@@ -409,7 +409,7 @@ export default function OfficePage() {
             🏢 THE OFFICE
           </h1>
           <p className="font-mono text-xs text-white/30 mt-1">
-            AXISLABS HQ — LIVE AGENT FLOOR
+            CREWCMD HQ — LIVE AGENT FLOOR
           </p>
         </div>
 

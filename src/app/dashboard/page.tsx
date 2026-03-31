@@ -143,11 +143,11 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="glow-text-neo font-mono text-lg font-bold tracking-[0.15em] text-neo sm:text-xl">
-              MISSION CONTROL
+              COMMAND CENTER
             </h1>
             <div className="flex items-center gap-2">
               <p className="font-mono text-[10px] tracking-wider text-white/30">
-                AXISLABS TACTICAL OVERVIEW
+                TACTICAL OVERVIEW
               </p>
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${isLive ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" : "bg-white/20"}`}
@@ -460,10 +460,10 @@ export default function Dashboard() {
       <footer className="border-t border-white/[0.04] px-6 py-3">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] tracking-wider text-white/20">
-            MISSION CONTROL v0.2.0
+            CREWCMD v0.2.0
           </span>
           <span className="font-mono text-[10px] tracking-wider text-white/20">
-            AXISLABS.DEV
+            crewcmd.dev
           </span>
         </div>
       </footer>

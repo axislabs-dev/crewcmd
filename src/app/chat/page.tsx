@@ -70,7 +70,7 @@ export default function ChatPage() {
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: "Neo",
-        artist: "Axislabs",
+        artist: "CrewCmd",
         album: "CrewCmd",
       });
       navigator.mediaSession.setActionHandler("play", () => {

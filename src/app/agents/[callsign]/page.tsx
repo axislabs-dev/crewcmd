@@ -114,7 +114,7 @@ export default function AgentProfilePage() {
             href="/"
             className="font-mono text-xs text-white/40 transition-colors hover:text-neo"
           >
-            MISSION CONTROL
+            COMMAND CENTER
           </Link>
           <span className="font-mono text-xs text-white/20">/</span>
           <Link

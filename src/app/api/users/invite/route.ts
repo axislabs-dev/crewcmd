@@ -21,9 +21,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { githubUsername, role: inviteRole } = await request.json();
+    const body = await request.json();
+    const { email, githubUsername, role: inviteRole } = body;
 
-    if (!githubUsername || !inviteRole) {
+    const identifier = email || githubUsername;
+    if (!identifier || !inviteRole) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -33,24 +35,23 @@ export async function POST(request: Request) {
     }
 
     // Check if user already exists
-    const [existing] = await db
-      .select()
-      .from(users)
-      .where(eq(users.githubUsername, githubUsername.toLowerCase()))
-      .limit(1);
+    const [existing] = email
+      ? await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1)
+      : await db.select().from(users).where(eq(users.githubUsername, githubUsername.toLowerCase())).limit(1);
 
     if (existing) {
       return NextResponse.json({ error: "User already exists" }, { status: 409 });
     }
 
     const inviteToken = randomUUID();
-    const inviterUsername = (session.user as Record<string, unknown>).username as string;
+    const inviterName = session.user.name || session.user.email || "system";
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await db.insert(users).values({
-      githubUsername: githubUsername.toLowerCase(),
+      email: (email || `${githubUsername}@pending.local`).toLowerCase(),
+      githubUsername: githubUsername?.toLowerCase() || null,
       role: inviteRole,
-      invitedBy: inviterUsername,
+      invitedBy: inviterName,
       inviteToken,
       expiresAt,
     });

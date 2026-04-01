@@ -216,11 +216,13 @@ export async function parseOpenClawConfig(
         if (soulParsed.reportsTo && !reportsTo) reportsTo = soulParsed.reportsTo;
       }
 
-      // Read AGENTS.md for reportsTo
-      const agentsPath = join(workspacePath, "AGENTS.md");
-      const agentsMd = await readFileContent(agentsPath);
-      if (agentsMd) {
-        reportsTo = parseReportsTo(agentsMd);
+      // Read AGENTS.md for reportsTo (only if SOUL.md didn't provide one)
+      if (!reportsTo) {
+        const agentsPath = join(workspacePath, "AGENTS.md");
+        const agentsMd = await readFileContent(agentsPath);
+        if (agentsMd) {
+          reportsTo = parseReportsTo(agentsMd);
+        }
       }
     }
 
@@ -237,6 +239,28 @@ export async function parseOpenClawConfig(
       identityRaw,
       soulRaw,
     });
+  }
+
+  // Resolve reportsTo: SOUL.md uses human names like "Neo", "Havoc", "Cipher"
+  // but CrewCmd needs callsigns (uppercased agent IDs like "MAIN", "HAVOC", "CIPHER").
+  // Build a lookup from name → id, then resolve.
+  const nameToId = new Map<string, string>();
+  for (const a of agents) {
+    // Map both the agent name and the id itself (lowercased for matching)
+    nameToId.set(a.name.toLowerCase(), a.id);
+    nameToId.set(a.id.toLowerCase(), a.id);
+  }
+  for (const a of agents) {
+    if (a.reportsTo) {
+      const resolved = nameToId.get(a.reportsTo.toLowerCase());
+      if (resolved) {
+        // Store as uppercased callsign (matches how import creates callsigns)
+        a.reportsTo = resolved.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+      } else {
+        // Try uppercasing as-is (might already be a valid callsign)
+        a.reportsTo = a.reportsTo.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+      }
+    }
   }
 
   // Gateway config (redacted)

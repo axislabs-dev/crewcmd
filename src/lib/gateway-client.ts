@@ -530,6 +530,7 @@ async function discoverFromClient(
     const fileReads = agentsResult.agents.map(async (agent) => {
       let identityRaw: string | undefined;
       let soulRaw: string | undefined;
+      let agentsMdRaw: string | undefined;
 
       try {
         const identityResult = await client.getAgentFile(agent.id, "IDENTITY.md");
@@ -545,7 +546,14 @@ async function discoverFromClient(
         }
       } catch { /* file doesn't exist */ }
 
-      discoveredAgents.push(parseAgentIdentity(agent, identityRaw, soulRaw));
+      try {
+        const agentsMdResult = await client.getAgentFile(agent.id, "AGENTS.md");
+        if (agentsMdResult.file && !agentsMdResult.file.missing) {
+          agentsMdRaw = agentsMdResult.file.content;
+        }
+      } catch { /* file doesn't exist */ }
+
+      discoveredAgents.push(parseAgentIdentity(agent, identityRaw, soulRaw, agentsMdRaw));
     });
 
     await Promise.all(fileReads);
@@ -573,7 +581,8 @@ async function discoverFromClient(
 function parseAgentIdentity(
   agent: GatewayAgent,
   identityRaw?: string,
-  soulRaw?: string
+  soulRaw?: string,
+  agentsMdRaw?: string
 ): DiscoveredAgent {
   let name = agent.identity?.name || agent.name || agent.id;
   let emoji = agent.identity?.emoji || "🤖";
@@ -622,6 +631,24 @@ function parseAgentIdentity(
           (l) => !l.startsWith("#") && !l.startsWith("_") && !l.startsWith("-") && l.length > 20
         );
         if (descLine) description = descLine.trim().slice(0, 200);
+      }
+    }
+  }
+
+  // Parse AGENTS.md (fallback for reportsTo, role/title)
+  if (agentsMdRaw) {
+    if (!reportsTo) {
+      // Match "**Reports to:** Name (Title)" or "- **Reports to:** Name"
+      const reportsMatch = agentsMdRaw.match(/\*?\*?Reports?\s*to:?\*?\*?\s*(.+)/i);
+      if (reportsMatch?.[1]?.trim()) {
+        // Extract just the name, strip parenthetical like "(CTO)"
+        reportsTo = reportsMatch[1].trim().split(/\s*\(/)[0].trim();
+      }
+    }
+    if (title === "Agent") {
+      const roleMatch = agentsMdRaw.match(/\*?\*?Role:?\*?\*?\s*(.+)/i);
+      if (roleMatch?.[1]?.trim()) {
+        title = roleMatch[1].trim();
       }
     }
   }

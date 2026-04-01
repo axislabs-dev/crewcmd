@@ -137,6 +137,7 @@ export async function POST(request: Request) {
             model: agent.model || null,
             runtimeId,
             runtimeRef: agent.id,
+            reportsTo: agent.reportsTo || null,
           })
           .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
 

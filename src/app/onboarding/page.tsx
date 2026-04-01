@@ -57,6 +57,7 @@ export default function OnboardingPage() {
   const [importing, setImporting] = useState(false);
   // Persist device key across retries (probeResult gets cleared on each attempt)
   const [deviceKeyPem, setDeviceKeyPem] = useState<string | undefined>();
+  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
@@ -689,7 +690,7 @@ export default function OnboardingPage() {
                     DEVICE PAIRING REQUIRED
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    CrewCmd registered as a new device. Approve it on your OpenClaw gateway.
+                    CrewCmd registered as a new device. Approve it on your OpenClaw gateway host.
                   </p>
                 </div>
                 <button
@@ -701,16 +702,41 @@ export default function OnboardingPage() {
               </div>
 
               {/* Pairing instructions */}
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-2">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🔐</span>
                   <span className="text-[11px] font-bold tracking-wider text-amber-400">
                     APPROVE ON GATEWAY HOST
                   </span>
                 </div>
-                <pre className="mt-2 rounded-md bg-[var(--bg-tertiary)] p-3 font-mono text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap">
-                  {probeResult.pairingInstructions || "Run: openclaw devices approve"}
-                </pre>
+
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Run this command on the machine running your OpenClaw gateway:
+                </p>
+
+                {/* Click-to-copy command */}
+                {["openclaw devices approve"].map((cmd) => (
+                  <button
+                    key={cmd}
+                    onClick={() => { navigator.clipboard.writeText(cmd); setCopiedCmd(cmd); setTimeout(() => setCopiedCmd(null), 2000); }}
+                    className="group flex w-full items-center justify-between rounded-md bg-[var(--bg-tertiary)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    <code className="font-mono text-[12px] text-[var(--accent)]">{cmd}</code>
+                    <span className="text-[10px] text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors">
+                      {copiedCmd === cmd ? "✓ COPIED" : "CLICK TO COPY"}
+                    </span>
+                  </button>
+                ))}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="h-px flex-1 bg-[var(--border-subtle)]" />
+                  <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">OR</span>
+                  <div className="h-px flex-1 bg-[var(--border-subtle)]" />
+                </div>
+
+                <p className="text-[10px] text-[var(--text-tertiary)]">
+                  Via Telegram: send <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">/pair pending</code> to your bot, then approve the request.
+                </p>
               </div>
 
               <button

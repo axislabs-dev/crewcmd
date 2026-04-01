@@ -208,8 +208,12 @@ export async function parseOpenClawConfig(
       // Read SOUL.md
       const soulPath = join(workspacePath, "SOUL.md");
       soulRaw = (await readFileContent(soulPath)) ?? undefined;
-      if (soulRaw && !description) {
-        description = parseSoulDescription(soulRaw);
+      if (soulRaw) {
+        const soulParsed = parseSoulMd(soulRaw);
+        if (!description) description = soulParsed.description || parseSoulDescription(soulRaw);
+        if (emoji === "🤖" && soulParsed.emoji) emoji = soulParsed.emoji;
+        if (title === "Agent" && soulParsed.title) title = soulParsed.title;
+        if (soulParsed.reportsTo && !reportsTo) reportsTo = soulParsed.reportsTo;
       }
 
       // Read AGENTS.md for reportsTo
@@ -270,7 +274,7 @@ function parseIdentityMd(content: string): {
   }
 
   const emojiMatch = content.match(/\*\*Emoji:\*\*\s*(.+)/);
-  if (emojiMatch?.[1]?.trim()) {
+  if (emojiMatch?.[1]?.trim() && !emojiMatch[1].includes("pick one") && !emojiMatch[1].includes("_(")) {
     result.emoji = emojiMatch[1].trim();
   }
 
@@ -282,6 +286,38 @@ function parseIdentityMd(content: string): {
   const vibeMatch = content.match(/\*\*Vibe:\*\*\s*(.+)/);
   if (vibeMatch?.[1]?.trim() && !vibeMatch[1].includes("_")) {
     result.description = vibeMatch[1].trim();
+  }
+
+  return result;
+}
+
+function parseSoulMd(content: string): {
+  emoji?: string;
+  title?: string;
+  description?: string;
+  reportsTo?: string;
+} {
+  const result: { emoji?: string; title?: string; description?: string; reportsTo?: string } = {};
+
+  const emojiMatch = content.match(/\*\*Emoji:\*\*\s*(.+)/);
+  if (emojiMatch?.[1]?.trim()) {
+    result.emoji = emojiMatch[1].trim();
+  }
+
+  const titleMatch = content.match(/\*\*Title:\*\*\s*(.+)/);
+  if (titleMatch?.[1]?.trim()) {
+    result.title = titleMatch[1].trim();
+  }
+
+  const reportsMatch = content.match(/\*\*Reports to:\*\*\s*(.+)/);
+  if (reportsMatch?.[1]?.trim()) {
+    result.reportsTo = reportsMatch[1].trim().split(/\s/)[0];
+  }
+
+  // First italic line after the heading is usually the tagline
+  const taglineMatch = content.match(/^#.+\n+_(.+)_$/m);
+  if (taglineMatch?.[1]?.trim() && !taglineMatch[1].includes("not a chatbot")) {
+    result.description = taglineMatch[1].trim().slice(0, 200);
   }
 
   return result;

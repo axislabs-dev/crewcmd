@@ -360,7 +360,9 @@ function parseSoulDescription(content: string): string {
 }
 
 function parseReportsTo(content: string): string | undefined {
-  // Look for "Reports to: <callsign>" or "reportsTo: <callsign>" pattern
-  const match = content.match(/reports?\s*to[:\s]+(\w+)/i);
+  // Look for "Reports to: <callsign>" or "**Reports to:** <name>" patterns
+  // Strip markdown bold markers before matching
+  const stripped = content.replace(/\*\*/g, "");
+  const match = stripped.match(/reports?\s*to[:\s]+(\w+)/i);
   return match?.[1];
 }

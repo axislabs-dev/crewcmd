@@ -198,12 +198,6 @@ interface ResponseFrame {
   error?: { code?: string; message?: string; details?: Record<string, unknown> };
 }
 
-interface EventFrame {
-  type: "event";
-  event: string;
-  payload?: Record<string, unknown>;
-}
-
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
@@ -220,6 +214,11 @@ export class GatewayClient {
   private serverVersion?: string;
   private challengeResolve?: (nonce: string) => void;
   private challengeReject?: (err: Error) => void;
+  private eventListeners = new Map<string, Set<(payload: unknown) => void>>();
+
+  get isConnected(): boolean {
+    return this.connected;
+  }
 
   constructor(
     private gatewayUrl: string,
@@ -400,12 +399,57 @@ export class GatewayClient {
     return this.rpc<GatewayFileGetResult>("agents.files.get", { agentId, name });
   }
 
+  on(event: string, callback: (payload: unknown) => void): void {
+    let listeners = this.eventListeners.get(event);
+    if (!listeners) {
+      listeners = new Set();
+      this.eventListeners.set(event, listeners);
+    }
+    listeners.add(callback);
+  }
+
+  off(event: string, callback: (payload: unknown) => void): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.delete(callback);
+      if (listeners.size === 0) this.eventListeners.delete(event);
+    }
+  }
+
+  async chatSend(params: {
+    message: string;
+    sessionKey?: string;
+    idempotencyKey?: string;
+  }): Promise<{ runId: string; status: string }> {
+    return this.rpc("chat.send", {
+      message: params.message,
+      sessionKey: params.sessionKey || "main",
+      deliver: false,
+      idempotencyKey: params.idempotencyKey || crypto.randomUUID(),
+    });
+  }
+
+  async chatHistory(params: {
+    sessionKey?: string;
+    agentId?: string;
+    limit?: number;
+  }): Promise<unknown> {
+    return this.rpc("chat.history", params);
+  }
+
+  async chatAbort(params: {
+    sessionKey?: string;
+  }): Promise<unknown> {
+    return this.rpc("chat.abort", params);
+  }
+
   close(): void {
     if (this.ws) {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
     this.connected = false;
+    this.eventListeners.clear();
   }
 
   private handleMessage(raw: string): void {
@@ -416,14 +460,23 @@ export class GatewayClient {
       return;
     }
 
-    // Handle challenge event
+    // Handle events
     if (msg.type === "event") {
       const event = msg.event as string;
+      const payload = msg.payload as Record<string, unknown> | undefined;
+
       if (event === "connect.challenge") {
-        const payload = msg.payload as { nonce?: string } | undefined;
-        const nonce = payload?.nonce;
+        const nonce = payload?.nonce as string | undefined;
         if (nonce && this.challengeResolve) {
           this.challengeResolve(nonce);
+        }
+      }
+
+      // Emit to registered listeners
+      const listeners = this.eventListeners.get(event);
+      if (listeners) {
+        for (const cb of listeners) {
+          try { cb(payload); } catch { /* listener error */ }
         }
       }
       return;
@@ -468,7 +521,7 @@ export async function probeGateway(
   const device = resolveDeviceIdentity(existingDeviceKeyPem);
 
   // First attempt
-  let client = new GatewayClient(gatewayUrl, authToken, device);
+  const client = new GatewayClient(gatewayUrl, authToken, device);
   try {
     const { version } = await client.connect();
     return await discoverFromClient(client, version, device.privateKeyPem);

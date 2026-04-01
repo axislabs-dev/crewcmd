@@ -213,7 +213,7 @@ export default function Dashboard() {
                 .map((agent) => (
                   <Link
                     key={agent.id}
-                    href={`/agents/${agent.callsign.toLowerCase()}`}
+                    href="/team"
                     className="glass-card glass-card-hover flex items-center gap-2.5 p-3 transition-all duration-200"
                     style={{ borderColor: `${agent.color}10` }}
                   >

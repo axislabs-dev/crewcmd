@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import Link from "next/link";
 import { NewAgentDialog } from "@/components/new-agent-dialog";
 import { EditAgentDialog } from "@/components/edit-agent-dialog";
+import { AgentProfilePanel } from "@/components/agent-profile-panel";
 import { TaskDialog } from "@/components/task-dialog";
 import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
 import type { Agent } from "@/lib/data";
@@ -135,6 +136,7 @@ function NodeCard({
   onRefresh,
   collapsed,
   onToggleCollapse,
+  onCardClick,
 }: {
   node: TreeNode;
   depth: number;
@@ -145,6 +147,7 @@ function NodeCard({
   onRefresh: () => void;
   collapsed: Set<string>;
   onToggleCollapse: (callsign: string) => void;
+  onCardClick: (callsign: string) => void;
 }) {
   const { agent } = node;
   const reportCount = countNodes(node.children);
@@ -153,7 +156,10 @@ function NodeCard({
 
   return (
     <div className={depth > 0 ? "ml-6 sm:ml-10 border-l border-[var(--border-subtle)] pl-3 sm:pl-5" : ""}>
-      <div className="group relative flex items-stretch gap-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all hover:border-[var(--accent-medium)] hover:shadow-lg hover:shadow-[var(--accent)]/5">
+      <div
+        className="group relative flex cursor-pointer items-stretch gap-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all hover:border-[var(--accent-medium)] hover:shadow-lg hover:shadow-[var(--accent)]/5"
+        onClick={() => onCardClick(agent.callsign)}
+      >
         {/* Color accent bar */}
         <div
           className="w-1 rounded-l-xl flex-shrink-0"
@@ -165,7 +171,7 @@ function NodeCard({
           {/* Collapse toggle for nodes with children */}
           {node.children.length > 0 ? (
             <button
-              onClick={() => onToggleCollapse(agent.callsign)}
+              onClick={(e) => { e.stopPropagation(); onToggleCollapse(agent.callsign); }}
               className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
             >
               <svg
@@ -193,13 +199,12 @@ function NodeCard({
           {/* Info */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/agents/${agent.callsign.toLowerCase()}`}
-                className="font-mono text-xs font-bold tracking-wider transition-colors hover:underline"
+              <span
+                className="font-mono text-xs font-bold tracking-wider cursor-pointer transition-colors hover:underline"
                 style={{ color: agent.color }}
               >
                 {agent.callsign.toUpperCase()}
-              </Link>
+              </span>
               <span className="text-xs text-[var(--text-secondary)] truncate">
                 {agent.name}
               </span>
@@ -257,7 +262,7 @@ function NodeCard({
           </div>
 
           {/* Action buttons (visible on hover) */}
-          <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => onAssignTask(agent)}
               className="rounded-md bg-[var(--bg-surface-hover)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
@@ -304,6 +309,7 @@ function NodeCard({
               onRefresh={onRefresh}
               collapsed={collapsed}
               onToggleCollapse={onToggleCollapse}
+              onCardClick={onCardClick}
             />
           ))}
         </div>
@@ -320,15 +326,17 @@ function GridCard({
   onEdit,
   onAssignTask,
   onRefresh,
+  onCardClick,
 }: {
   agent: Agent;
   skills: AgentSkillBadge[];
   onEdit: (callsign: string) => void;
   onAssignTask: (agent: Agent) => void;
   onRefresh: () => void;
+  onCardClick: (callsign: string) => void;
 }) {
   return (
-    <div className="glass-card glass-card-hover group relative overflow-hidden p-4 transition-all duration-300">
+    <div className="glass-card glass-card-hover group relative cursor-pointer overflow-hidden p-4 transition-all duration-300" onClick={() => onCardClick(agent.callsign)}>
       <div
         className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{ background: `radial-gradient(ellipse at top, ${agent.color}08, transparent 70%)` }}
@@ -338,13 +346,12 @@ function GridCard({
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">{agent.emoji}</span>
             <div>
-              <Link
-                href={`/agents/${agent.callsign.toLowerCase()}`}
-                className="font-mono text-sm font-bold tracking-wider transition-colors hover:underline"
+              <span
+                className="font-mono text-sm font-bold tracking-wider cursor-pointer transition-colors hover:underline"
                 style={{ color: agent.color }}
               >
                 {agent.callsign.toUpperCase()}
-              </Link>
+              </span>
               <p className="text-xs text-[var(--text-tertiary)]">{agent.title}</p>
             </div>
           </div>
@@ -388,7 +395,7 @@ function GridCard({
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           <AgentRuntimeBadge callsign={agent.callsign.toLowerCase()} onStartStop={onRefresh} />
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <button
@@ -425,6 +432,7 @@ export default function TeamPage() {
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [newAgentParent, setNewAgentParent] = useState<string | null>(null);
   const [editingCallsign, setEditingCallsign] = useState<string | null>(null);
+  const [profileCallsign, setProfileCallsign] = useState<string | null>(null);
   const [taskAgent, setTaskAgent] = useState<Agent | null>(null);
 
   const fetchSkills = useCallback(async (agentList: Agent[]) => {
@@ -639,7 +647,7 @@ export default function TeamPage() {
               <TeamCanvas
                 agents={filtered}
                 agentSkills={agentSkills}
-                onEdit={setEditingCallsign}
+                onEdit={setProfileCallsign}
                 onAddChild={handleAddChild}
                 onAssignTask={setTaskAgent}
                 onRefresh={refresh}
@@ -681,12 +689,13 @@ export default function TeamPage() {
                   node={node}
                   depth={0}
                   skills={agentSkills}
-                  onEdit={setEditingCallsign}
+                  onEdit={setProfileCallsign}
                   onAddChild={handleAddChild}
                   onAssignTask={setTaskAgent}
                   onRefresh={refresh}
                   collapsed={collapsed}
                   onToggleCollapse={toggleCollapse}
+                  onCardClick={setProfileCallsign}
                 />
               ))
             )}
@@ -698,9 +707,10 @@ export default function TeamPage() {
                 key={agent.id}
                 agent={agent}
                 skills={agentSkills[agent.id] ?? []}
-                onEdit={setEditingCallsign}
+                onEdit={setProfileCallsign}
                 onAssignTask={setTaskAgent}
                 onRefresh={refresh}
+                onCardClick={setProfileCallsign}
               />
             ))}
             {filtered.length === 0 && (
@@ -719,6 +729,17 @@ export default function TeamPage() {
           parentCallsign={newAgentParent}
           onCreated={handleNewAgentCreated}
           onClose={() => { setShowNewAgent(false); setNewAgentParent(null); }}
+        />
+      )}
+
+      {profileCallsign && (
+        <AgentProfilePanel
+          callsign={profileCallsign}
+          onClose={() => setProfileCallsign(null)}
+          onEdit={(cs) => {
+            setProfileCallsign(null);
+            setEditingCallsign(cs);
+          }}
         />
       )}
 

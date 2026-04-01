@@ -146,7 +146,7 @@ function TeamCanvasInner({
       onAddChild,
       onAssignTask,
       onNavigate: (callsign: string) => {
-        window.location.href = `/agents/${callsign}`;
+        onEdit(callsign);
       },
     }),
     [onEdit, onAddChild, onAssignTask]

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AgentCard } from "@/components/agent-card";
+import type { AgentSkillBadge } from "@/components/agent-card";
 import { NewAgentDialog } from "@/components/new-agent-dialog";
 import { AdapterCheck } from "@/components/adapter-check";
 import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
@@ -24,22 +25,50 @@ function getCompanyId(): string | null {
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentSkills, setAgentSkills] = useState<Record<string, AgentSkillBadge[]>>({});
   const [statusFilter, setStatusFilter] = useState<AgentStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [taskAgent, setTaskAgent] = useState<Agent | null>(null);
+
+  const fetchSkills = useCallback(async (agentList: Agent[]) => {
+    const results: Record<string, AgentSkillBadge[]> = {};
+    await Promise.all(
+      agentList.map(async (agent) => {
+        try {
+          const res = await fetch(`/api/agents/${agent.callsign.toLowerCase()}/skills`);
+          if (!res.ok) return;
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            results[agent.id] = rows
+              .filter((r: { skill?: { name?: string; slug?: string; metadata?: { icon?: string } } }) => r.skill)
+              .map((r: { skill: { name: string; slug: string; metadata?: { icon?: string } } }) => ({
+                slug: r.skill.slug,
+                name: r.skill.name,
+                icon: (r.skill.metadata as { icon?: string } | null)?.icon ?? "⚡",
+              }));
+          }
+        } catch {
+          /* empty */
+        }
+      })
+    );
+    setAgentSkills(results);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/agents");
       if (res.ok) {
         const data = await res.json();
-        setAgents(data.agents || []);
+        const agentList = data.agents || [];
+        setAgents(agentList);
+        fetchSkills(agentList);
       }
     } catch {
       /* empty */
     }
-  }, []);
+  }, [fetchSkills]);
 
   useEffect(() => {
     refresh();
@@ -124,7 +153,7 @@ export default function AgentsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filtered.map((agent) => (
               <div key={agent.id} className="group/card relative">
-                <AgentCard agent={agent} />
+                <AgentCard agent={agent} skills={agentSkills[agent.id]} />
                 {/* Runtime badge overlay */}
                 <div className="absolute right-3 bottom-10 z-10">
                   <AgentRuntimeBadge callsign={agent.callsign.toLowerCase()} onStartStop={refresh} />

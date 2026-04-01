@@ -46,7 +46,7 @@ const adapterLabels: Record<string, string> = {
 export function AgentCard({ agent, skills }: AgentCardProps) {
   return (
     <Link
-      href={`/agents/${agent.callsign.toLowerCase()}`}
+      href="/team"
       className="glass-card glass-card-hover group relative block overflow-hidden p-4 transition-all duration-300"
       style={{
         borderColor: `${agent.color}15`,

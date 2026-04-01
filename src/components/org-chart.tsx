@@ -145,7 +145,7 @@ function AgentOrgNode({
 }) {
   return (
     <Link
-      href={`/agents/${agent.callsign.toLowerCase()}`}
+      href="/team"
       className="group flex flex-col items-center transition-transform duration-200 hover:scale-105"
     >
       <div

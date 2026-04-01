@@ -2,98 +2,119 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SpeechRecognitionInstance = any;
-
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void;
   isDisabled?: boolean;
 }
 
-function getSpeechRecognition(): (new () => SpeechRecognitionInstance) | null {
-  if (typeof window === "undefined") return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const w = window as any;
-  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
-}
+const MIN_RECORDING_MS = 300;
 
 export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
-  const [interimText, setInterimText] = useState("");
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const finalTranscriptRef = useRef("");
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
-    setIsSupported(!!getSpeechRecognition());
+    // MediaRecorder is available in all modern browsers, no HTTPS required for getUserMedia on localhost
+    setIsSupported(typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia);
   }, []);
 
-  const startRecording = useCallback(() => {
-    const SpeechRecognitionClass = getSpeechRecognition();
-    if (!SpeechRecognitionClass || isDisabled) return;
+  const startRecording = useCallback(async () => {
+    if (isDisabled || isTranscribing) return;
 
-    const recognition = new SpeechRecognitionClass();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      startTimeRef.current = Date.now();
 
-    finalTranscriptRef.current = "";
-    setInterimText("");
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      let final = "";
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          final += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        // Release mic immediately
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
         }
-      }
-      finalTranscriptRef.current = final;
-      setInterimText(interim);
-    };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onerror = (event: any) => {
-      console.error("[VoiceRecorder] Error:", event.error);
-      setIsRecording(false);
-    };
+        const duration = Date.now() - startTimeRef.current;
+        if (duration < MIN_RECORDING_MS || chunksRef.current.length === 0) return;
 
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        setIsTranscribing(true);
 
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsRecording(true);
-  }, [isDisabled]);
+        try {
+          const formData = new FormData();
+          formData.append("audio", blob, "audio.webm");
+
+          const response = await fetch("/api/stt", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (response.ok) {
+            const { text } = await response.json();
+            if (text?.trim()) {
+              onTranscript(text.trim());
+            }
+          } else {
+            console.error("[VoiceRecorder] STT error:", response.status);
+          }
+        } catch (err) {
+          console.error("[VoiceRecorder] Transcription error:", err);
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(100);
+      setIsRecording(true);
+    } catch (err) {
+      console.error("[VoiceRecorder] Mic error:", err);
+    }
+  }, [isDisabled, isTranscribing, onTranscript]);
 
   const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
     setIsRecording(false);
-
-    const text = (finalTranscriptRef.current + " " + interimText).trim();
-    if (text) {
-      onTranscript(text);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
     }
-    setInterimText("");
-    finalTranscriptRef.current = "";
-  }, [onTranscript, interimText]);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
 
   if (!isSupported) return null;
 
   return (
     <div className="flex flex-col items-center gap-2">
-      {/* Interim transcript preview */}
-      {isRecording && (interimText || finalTranscriptRef.current) && (
-        <div className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-tertiary)] truncate">
-          {finalTranscriptRef.current}{interimText}
+      {/* Transcribing indicator */}
+      {isTranscribing && (
+        <div className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-tertiary)] text-center">
+          Transcribing...
         </div>
       )}
 
@@ -104,12 +125,14 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
         onPointerLeave={() => {
           if (isRecording) stopRecording();
         }}
-        disabled={isDisabled}
+        disabled={isDisabled || isTranscribing}
         className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-200 select-none touch-none ${
           isRecording
             ? "border-neo bg-neo/20 scale-110"
-            : "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]"
-        } ${isDisabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
+            : isTranscribing
+              ? "border-amber-400/50 bg-amber-400/10"
+              : "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]"
+        } ${isDisabled || isTranscribing ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
         style={
           isRecording
             ? { boxShadow: "0 0 30px rgba(0, 240, 255, 0.3), 0 0 60px rgba(0, 240, 255, 0.1)" }
@@ -143,7 +166,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       </button>
 
       <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
-        {isRecording ? "RELEASE TO SEND" : "HOLD TO SPEAK"}
+        {isRecording ? "RELEASE TO SEND" : isTranscribing ? "TRANSCRIBING..." : "HOLD TO SPEAK"}
       </span>
     </div>
   );

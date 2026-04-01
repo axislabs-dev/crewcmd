@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
-import { db, withRetry } from "@/db";
-import { companyRuntimes } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getGatewayClient } from "@/lib/gateway-chat-pool";
 
 export const dynamic = "force-dynamic";
 
@@ -21,48 +19,88 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const runtime = await withRetry(() =>
-      db!.query.companyRuntimes.findFirst({
-        where: eq(companyRuntimes.isPrimary, true),
-      })
-    );
-
-    if (!runtime?.httpUrl) {
+    // Get the last user message
+    const lastUserMessage = [...messages].reverse().find((m: { role: string }) => m.role === "user");
+    if (!lastUserMessage) {
       return Response.json(
-        { error: "No runtime configured. Connect an OpenClaw Gateway in Settings." },
-        { status: 503 }
+        { error: "No user message found" },
+        { status: 400 }
       );
     }
 
-    const gatewayUrl = runtime.httpUrl.replace(/\/+$/, "");
-    const gatewayToken = runtime.authToken || "";
+    const client = await getGatewayClient();
 
-    const model = agent ? `openclaw:${agent}` : "openclaw:main";
+    // Derive a session key from agent to maintain context
+    const agentId = agent || "main";
+    const sessionKey = `crewcmd:${agentId}`;
 
-    const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${gatewayToken}`,
+    // Set up SSE stream
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController | null = null;
+
+    const stream = new ReadableStream({
+      start(controller) {
+        streamController = controller;
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-      }),
+      cancel() {
+        // Client disconnected, clean up event listener
+        client.off("chat", chatHandler);
+      },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[api/chat] Gateway error:", response.status, errorText);
+    let done = false;
+
+    const chatHandler = (payload: unknown) => {
+      const p = payload as Record<string, unknown>;
+      const text = (p.text as string) || (p.delta as string) || "";
+      const isComplete = p.done === true || p.status === "complete" || p.status === "done";
+
+      if (text && streamController) {
+        const chunk = JSON.stringify({
+          choices: [{ delta: { content: text } }],
+        });
+        streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      }
+
+      if (isComplete && streamController && !done) {
+        done = true;
+        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
+        streamController.close();
+        client.off("chat", chatHandler);
+      }
+    };
+
+    client.on("chat", chatHandler);
+
+    // Send the message
+    try {
+      await client.chatSend({
+        message: lastUserMessage.content,
+        agentId,
+        sessionKey,
+      });
+    } catch (err) {
+      client.off("chat", chatHandler);
+      const msg = err instanceof Error ? err.message : String(err);
       return Response.json(
-        { error: "Gateway error", details: errorText },
-        { status: response.status }
+        { error: `Gateway error: ${msg}` },
+        { status: 502 }
       );
     }
 
-    // Stream the response back
-    return new Response(response.body, {
+    // Safety timeout - if no [DONE] in 5 minutes, close the stream
+    setTimeout(() => {
+      if (!done && streamController) {
+        done = true;
+        try {
+          streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
+          streamController.close();
+        } catch { /* already closed */ }
+        client.off("chat", chatHandler);
+      }
+    }, 300_000);
+
+    return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -71,6 +109,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[api/chat] Error:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Internal server error";
+    if (msg === "No runtime configured") {
+      return Response.json(
+        { error: "No runtime configured. Connect an OpenClaw Gateway in Settings." },
+        { status: 503 }
+      );
+    }
+    return Response.json({ error: msg }, { status: 500 });
   }
 }

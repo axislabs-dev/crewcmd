@@ -468,7 +468,7 @@ export async function probeGateway(
   const device = resolveDeviceIdentity(existingDeviceKeyPem);
 
   // First attempt
-  let client = new GatewayClient(gatewayUrl, authToken, device);
+  const client = new GatewayClient(gatewayUrl, authToken, device);
   try {
     const { version } = await client.connect();
     return await discoverFromClient(client, version, device.privateKeyPem);

@@ -49,20 +49,72 @@ export async function POST(request: NextRequest) {
     });
 
     let done = false;
+    let lastStreamedText = "";
 
-    const chatHandler = (payload: unknown) => {
-      const p = payload as Record<string, unknown>;
-      const text = (p.text as string) || (p.delta as string) || "";
-      const isComplete = p.done === true || p.status === "complete" || p.status === "done";
+    // Extract text content from a gateway chat message object
+    // Handles: string, { content: string }, { text: string }, 
+    // { content: [{ type: "text", text: "..." }] }
+    function extractText(message: unknown): string {
+      if (typeof message === "string") return message;
+      if (!message || typeof message !== "object") return "";
+      const msg = message as Record<string, unknown>;
 
-      if (text && streamController) {
-        const chunk = JSON.stringify({
-          choices: [{ delta: { content: text } }],
-        });
-        streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      // Try content array format: { role, content: [{ type: "text", text: "..." }] }
+      if (Array.isArray(msg.content)) {
+        return (msg.content as Array<Record<string, unknown>>)
+          .filter((c) => c.type === "text" && typeof c.text === "string")
+          .map((c) => c.text as string)
+          .join("");
       }
 
-      if (isComplete && streamController && !done) {
+      // Try plain text/content field
+      if (typeof msg.content === "string") return msg.content;
+      if (typeof msg.text === "string") return msg.text;
+
+      return "";
+    }
+
+    const chatHandler = (payload: unknown) => {
+      if (!streamController || done) return;
+      const p = payload as Record<string, unknown>;
+      const state = p.state as string;
+
+      if (state === "delta") {
+        // Delta events contain cumulative text (full text so far)
+        const fullText = extractText(p.message);
+        if (fullText && fullText.length > lastStreamedText.length) {
+          const newContent = fullText.slice(lastStreamedText.length);
+          lastStreamedText = fullText;
+          const chunk = JSON.stringify({
+            choices: [{ delta: { content: newContent } }],
+          });
+          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+        }
+      } else if (state === "final") {
+        // Final event — send any remaining text and close
+        const finalText = extractText(p.message);
+        if (finalText && finalText.length > lastStreamedText.length) {
+          const remaining = finalText.slice(lastStreamedText.length);
+          const chunk = JSON.stringify({
+            choices: [{ delta: { content: remaining } }],
+          });
+          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+        }
+        done = true;
+        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
+        streamController.close();
+        client.off("chat", chatHandler);
+      } else if (state === "aborted") {
+        done = true;
+        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
+        streamController.close();
+        client.off("chat", chatHandler);
+      } else if (state === "error") {
+        const errorMsg = (p.errorMessage as string) || "Chat error";
+        const chunk = JSON.stringify({
+          choices: [{ delta: { content: `\n\nError: ${errorMsg}` } }],
+        });
+        streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         done = true;
         streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
         streamController.close();

@@ -102,7 +102,7 @@ export function AgentControlPanel({ callsign, onStatusChange }: AgentControlPane
   }
 
   const runtimeStatus = status?.status ?? "stopped";
-  const config = STATUS_CONFIG[runtimeStatus];
+  const config = STATUS_CONFIG[runtimeStatus as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.stopped;
 
   return (
     <div className="glass-card p-4 space-y-3">

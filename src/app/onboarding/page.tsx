@@ -41,10 +41,6 @@ export default function OnboardingPage() {
   // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
 
-  // Step 4: Goal
-  const [goalTitle, setGoalTitle] = useState("");
-  const [goalDescription, setGoalDescription] = useState("");
-
   // ── Handlers ──
 
   async function handleCreateCompany() {
@@ -140,36 +136,13 @@ export default function OnboardingPage() {
       // ignore
     } finally {
       setLoading(false);
-      setStep(4);
-    }
-  }
-
-  async function handleCreateGoal() {
-    if (!companyId) return;
-    setLoading(true);
-    try {
-      if (goalTitle.trim()) {
-        await fetch("/api/goals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            companyId,
-            title: goalTitle.trim(),
-            description: goalDescription.trim() || null,
-          }),
-        });
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
       router.push("/dashboard");
     }
   }
 
   // ── Rendering ──
 
-  const totalSteps = 4;
+  const totalSteps = 3;
   const inputClass =
     "mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]/50";
   const labelClass = "block text-[11px] tracking-wider text-[var(--text-tertiary)]";
@@ -578,7 +551,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(4)} className={`flex-1 ${btnSecondary}`}>
+                <button onClick={() => router.push("/dashboard")} className={`flex-1 ${btnSecondary}`}>
                   SKIP
                 </button>
                 <button
@@ -592,52 +565,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* ── Step 4: Goal ── */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
-                  DEFINE YOUR FIRST GOAL
-                </h2>
-                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                  Goals drive everything. Tasks trace back to goals, goals trace back to mission.
-                </p>
-              </div>
-              <div>
-                <label className={labelClass}>GOAL TITLE</label>
-                <input
-                  type="text"
-                  value={goalTitle}
-                  onChange={(e) => setGoalTitle(e.target.value)}
-                  placeholder="e.g., Launch v1.0 of the platform"
-                  className={inputClass}
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className={labelClass}>DESCRIPTION (OPTIONAL)</label>
-                <textarea
-                  value={goalDescription}
-                  onChange={(e) => setGoalDescription(e.target.value)}
-                  rows={2}
-                  placeholder="What does success look like?"
-                  className={inputClass}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => router.push("/dashboard")} className={`flex-1 ${btnSecondary}`}>
-                  SKIP
-                </button>
-                <button
-                  onClick={handleCreateGoal}
-                  disabled={loading}
-                  className={`flex-1 ${btnPrimary}`}
-                >
-                  {loading ? "FINISHING..." : goalTitle.trim() ? "CREATE & FINISH" : "FINISH SETUP"}
-                </button>
-              </div>
-            </div>
-          )}
+
         </div>
       </div>
     </div>

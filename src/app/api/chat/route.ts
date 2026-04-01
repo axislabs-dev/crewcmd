@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
 
     const client = await getGatewayClient();
 
-    // Derive a session key from agent to maintain context
+    // Use the agent's session key — "main" for default, agent callsign for specific agents
     const agentId = agent || "main";
-    const sessionKey = `crewcmd:${agentId}`;
+    const sessionKey = agentId === "main" ? "main" : agentId;
 
     // Set up SSE stream
     const encoder = new TextEncoder();
@@ -76,12 +76,12 @@ export async function POST(request: NextRequest) {
     try {
       await client.chatSend({
         message: lastUserMessage.content,
-        agentId,
         sessionKey,
       });
     } catch (err) {
       client.off("chat", chatHandler);
       const msg = err instanceof Error ? err.message : String(err);
+      console.error("[api/chat] chat.send failed:", msg);
       return Response.json(
         { error: `Gateway error: ${msg}` },
         { status: 502 }

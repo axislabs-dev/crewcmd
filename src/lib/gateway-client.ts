@@ -418,14 +418,13 @@ export class GatewayClient {
 
   async chatSend(params: {
     message: string;
-    agentId?: string;
     sessionKey?: string;
     idempotencyKey?: string;
   }): Promise<{ runId: string; status: string }> {
     return this.rpc("chat.send", {
       message: params.message,
-      agentId: params.agentId,
-      sessionKey: params.sessionKey,
+      sessionKey: params.sessionKey || "main",
+      deliver: false,
       idempotencyKey: params.idempotencyKey || crypto.randomUUID(),
     });
   }

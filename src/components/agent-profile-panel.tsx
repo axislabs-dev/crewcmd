@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { Agent, Task, Activity } from "@/lib/data";
 import { ROLES } from "@/components/agent-config-fields";
 import { timeAgo } from "@/lib/utils";
+import { AgentControlPanel } from "@/components/agent-control-panel";
+import { AgentOutputViewer } from "@/components/agent-output-viewer";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -23,7 +25,7 @@ interface AgentDetail extends Agent {
   runtimeConfig?: Record<string, unknown>;
 }
 
-type Tab = "summary" | "skills" | "config" | "activity";
+type Tab = "summary" | "skills" | "config" | "terminal" | "activity";
 
 interface AgentProfilePanelProps {
   callsign: string;
@@ -276,6 +278,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
     { key: "summary", label: "Summary" },
     { key: "skills", label: "Skills", count: skills.length },
     { key: "config", label: "Config" },
+    { key: "terminal", label: "Terminal" },
     { key: "activity", label: "Activity" },
   ];
 
@@ -321,13 +324,12 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               {/* Identity */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <Link
-                    href={`/agents/${agent.callsign.toLowerCase()}`}
-                    className="font-mono text-sm font-bold tracking-wider transition-colors hover:underline"
+                  <span
+                    className="font-mono text-sm font-bold tracking-wider"
                     style={{ color: agentColor }}
                   >
                     {agent.callsign.toUpperCase()}
-                  </Link>
+                  </span>
                   <span
                     className={`h-2 w-2 flex-shrink-0 rounded-full ${statusDotClass[agent.status] ?? statusDotClass.offline}`}
                   />
@@ -355,6 +357,13 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
             <p className="text-xs text-red-400">Agent not found</p>
           )}
         </div>
+
+        {/* ─── Control Panel ─────────────────────────────────────── */}
+        {agent && (
+          <div className="flex-shrink-0 border-b border-[var(--border-subtle)] px-3 py-2">
+            <AgentControlPanel callsign={callsign} />
+          </div>
+        )}
 
         {/* ─── Tabs ───────────────────────────────────────────────── */}
         <div className="flex flex-shrink-0 border-b border-[var(--border-subtle)]">
@@ -418,6 +427,11 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               onEdit={agent ? () => onEdit(agent.callsign) : undefined}
             />
           )}
+          {activeTab === "terminal" && (
+            <div className="p-5">
+              <AgentOutputViewer callsign={callsign} maxHeight={400} />
+            </div>
+          )}
           {activeTab === "activity" && (
             <ActivityTab
               tasks={tasks}
@@ -462,13 +476,12 @@ function SummaryTab({
 
         {agent.reportsTo && (
           <InfoRow label="Reports To">
-            <Link
-              href={`/agents/${agent.reportsTo.toLowerCase()}`}
-              className="font-mono text-xs tracking-wider transition-colors hover:underline"
+            <span
+              className="font-mono text-xs tracking-wider"
               style={{ color: agentColor }}
             >
               {agent.reportsTo.toUpperCase()}
-            </Link>
+            </span>
           </InfoRow>
         )}
 

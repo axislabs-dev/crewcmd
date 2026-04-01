@@ -287,18 +287,18 @@ function TeamCanvasInner({
           style: { strokeWidth: 2 },
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-zinc-950"
+        className="bg-[var(--bg-primary)]"
       >
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#333"
+          color="var(--border-subtle)"
         />
 
         <Controls
           showInteractive={false}
-          className="!bg-zinc-900/90 !border-zinc-700/60 !shadow-xl [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700/60 [&>button]:!text-zinc-400 [&>button:hover]:!bg-zinc-700 [&>button:hover]:!text-zinc-200"
+          className="!bg-[var(--bg-surface)] !border-[var(--border-subtle)] !shadow-xl [&>button]:!bg-[var(--bg-surface)] [&>button]:!border-[var(--border-subtle)] [&>button]:!text-[var(--text-tertiary)] [&>button:hover]:!bg-[var(--bg-surface-hover)] [&>button:hover]:!text-[var(--text-primary)]"
         />
 
         <MiniMap
@@ -306,8 +306,8 @@ function TeamCanvasInner({
             const data = node.data as unknown as AgentNodeData;
             return data?.agent?.color ?? "#555";
           }}
-          maskColor="rgba(0, 0, 0, 0.7)"
-          className="!bg-zinc-900/90 !border-zinc-700/60"
+          maskColor="rgba(128, 128, 128, 0.15)"
+          className="!bg-[var(--bg-surface)] !border-[var(--border-subtle)]"
           pannable
           zoomable
         />
@@ -316,14 +316,14 @@ function TeamCanvasInner({
         <Panel position="top-right" className="flex items-center gap-2">
           <button
             onClick={handleToggleDirection}
-            className="rounded-lg border border-zinc-700/60 bg-zinc-900/90 px-3 py-1.5 text-[10px] tracking-wider text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 backdrop-blur-sm"
+            className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/90 px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] backdrop-blur-sm"
             title={direction === "TB" ? "Switch to horizontal" : "Switch to vertical"}
           >
             {direction === "TB" ? "↕ VERTICAL" : "↔ HORIZONTAL"}
           </button>
           <button
             onClick={handleAutoLayout}
-            className="rounded-lg border border-zinc-700/60 bg-zinc-900/90 px-3 py-1.5 text-[10px] tracking-wider text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 backdrop-blur-sm"
+            className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/90 px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] backdrop-blur-sm"
             title="Auto-arrange nodes"
           >
             ⊞ AUTO-ARRANGE

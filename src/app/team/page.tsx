@@ -634,7 +634,7 @@ export default function TeamPage() {
 
         {/* Content */}
         {viewMode === "canvas" && agents.length > 0 ? (
-          <div className="flex-1 -mx-4 sm:-mx-6 -mb-5 rounded-t-xl border border-[var(--border-subtle)] overflow-hidden" style={{ minHeight: "calc(100vh - 220px)" }}>
+          <div className="-mx-4 sm:-mx-6 -mb-5 rounded-t-xl border border-[var(--border-subtle)] overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
             <Suspense fallback={<div className="flex items-center justify-center h-full text-sm text-[var(--text-tertiary)]">Loading canvas...</div>}>
               <TeamCanvas
                 agents={filtered}

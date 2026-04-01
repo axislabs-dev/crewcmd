@@ -19,7 +19,7 @@ const statusDotClass: Record<string, string> = {
   active: "bg-emerald-400",
   running: "bg-emerald-400 animate-pulse",
   idle: "bg-amber-400",
-  offline: "bg-zinc-500/40",
+  offline: "bg-[var(--text-tertiary)]/40",
 };
 
 const statusLabels: Record<string, string> = {
@@ -49,16 +49,16 @@ function AgentNodeComponent({ data }: NodeProps) {
 
   return (
     <div className="group relative">
-      {/* Target handle (top) — for incoming reporting lines */}
+      {/* Target handle (top) */}
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !bg-transparent !border-2 !border-zinc-600 hover:!border-[var(--accent)] !-top-1.5 transition-colors"
+        className="!w-3 !h-3 !bg-[var(--bg-surface)] !border-2 !border-[var(--border-medium)] hover:!border-[var(--accent)] !-top-1.5 transition-colors"
       />
 
       {/* Card */}
       <div
-        className="relative w-[220px] rounded-xl border border-zinc-700/60 bg-zinc-900/95 backdrop-blur-sm shadow-xl transition-all duration-200 hover:border-zinc-500/60 hover:shadow-2xl cursor-pointer overflow-hidden"
+        className="relative w-[220px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-lg transition-all duration-200 hover:border-[var(--border-medium)] hover:shadow-xl cursor-pointer overflow-hidden"
         onDoubleClick={() => onNavigate(agent.callsign.toLowerCase())}
       >
         {/* Color accent bar */}
@@ -69,11 +69,11 @@ function AgentNodeComponent({ data }: NodeProps) {
 
         {/* Content */}
         <div className="p-3">
-          {/* Header row: emoji + callsign + status */}
+          {/* Header row */}
           <div className="flex items-center gap-2 mb-1.5">
             <div
               className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-base"
-              style={{ backgroundColor: agent.color + "20" }}
+              style={{ backgroundColor: agent.color + "18" }}
             >
               {agent.emoji}
             </div>
@@ -87,9 +87,9 @@ function AgentNodeComponent({ data }: NodeProps) {
                 </span>
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${statusDotClass[agent.status] ?? statusDotClass.offline}`} />
               </div>
-              <p className="text-[10px] text-zinc-400 truncate">{agent.title}</p>
+              <p className="text-[10px] text-[var(--text-tertiary)] truncate">{agent.title}</p>
             </div>
-            <span className="text-[8px] tracking-wider text-zinc-500">
+            <span className="text-[8px] tracking-wider text-[var(--text-tertiary)]">
               {statusLabels[agent.status] ?? "OFFLINE"}
             </span>
           </div>
@@ -97,15 +97,15 @@ function AgentNodeComponent({ data }: NodeProps) {
           {/* Role + adapter badges */}
           <div className="flex items-center gap-1 mb-1.5 flex-wrap">
             {agent.role && (
-              <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[8px] tracking-wider text-zinc-400 uppercase">
+              <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[8px] tracking-wider text-[var(--text-tertiary)] uppercase">
                 {agent.role}
               </span>
             )}
-            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[8px] tracking-wider text-zinc-400">
+            <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[8px] tracking-wider text-[var(--text-tertiary)]">
               {adapterLabels[agent.adapterType] || agent.adapterType?.toUpperCase()}
             </span>
             {agent.model && (
-              <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[7px] text-zinc-500 truncate max-w-[80px]">
+              <span className="rounded bg-[var(--bg-surface-hover)] px-1 py-0.5 font-mono text-[7px] text-[var(--text-tertiary)] truncate max-w-[80px]">
                 {agent.model}
               </span>
             )}
@@ -117,22 +117,22 @@ function AgentNodeComponent({ data }: NodeProps) {
               {skills.slice(0, 3).map((s) => (
                 <span
                   key={s.slug}
-                  className="inline-flex items-center gap-0.5 rounded-full bg-zinc-800/80 px-1.5 py-0.5 text-[7px] tracking-wider text-zinc-400"
+                  className="inline-flex items-center gap-0.5 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[7px] tracking-wider text-[var(--accent)]"
                 >
                   <span className="text-[8px]">{s.icon}</span>
                   {s.name}
                 </span>
               ))}
               {skills.length > 3 && (
-                <span className="text-[7px] text-zinc-500 self-center">+{skills.length - 3}</span>
+                <span className="text-[7px] text-[var(--text-tertiary)] self-center">+{skills.length - 3}</span>
               )}
             </div>
           )}
 
           {/* Current task */}
           {agent.currentTask && (
-            <div className="rounded bg-zinc-800/60 px-2 py-1 mb-1.5">
-              <p className="text-[8px] text-zinc-400 line-clamp-1">{agent.currentTask}</p>
+            <div className="rounded bg-[var(--bg-surface-hover)] px-2 py-1 mb-1.5">
+              <p className="text-[8px] text-[var(--text-secondary)] line-clamp-1">{agent.currentTask}</p>
             </div>
           )}
 
@@ -140,7 +140,7 @@ function AgentNodeComponent({ data }: NodeProps) {
           <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <button
               onClick={(e) => { e.stopPropagation(); onAssignTask(agent); }}
-              className="rounded bg-zinc-800 p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
+              className="rounded bg-[var(--bg-surface-hover)] p-1 text-[var(--text-tertiary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] transition-colors"
               title="Assign task"
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -149,7 +149,7 @@ function AgentNodeComponent({ data }: NodeProps) {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onAddChild(agent.callsign); }}
-              className="rounded bg-zinc-800 p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
+              className="rounded bg-[var(--bg-surface-hover)] p-1 text-[var(--text-tertiary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] transition-colors"
               title="Add direct report"
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -158,7 +158,7 @@ function AgentNodeComponent({ data }: NodeProps) {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(agent.callsign); }}
-              className="rounded bg-zinc-800 p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
+              className="rounded bg-[var(--bg-surface-hover)] p-1 text-[var(--text-tertiary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] transition-colors"
               title="Edit agent"
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -169,11 +169,11 @@ function AgentNodeComponent({ data }: NodeProps) {
         </div>
       </div>
 
-      {/* Source handle (bottom) — for outgoing reporting lines to children */}
+      {/* Source handle (bottom) */}
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!w-3 !h-3 !bg-transparent !border-2 !border-zinc-600 hover:!border-[var(--accent)] !-bottom-1.5 transition-colors"
+        className="!w-3 !h-3 !bg-[var(--bg-surface)] !border-2 !border-[var(--border-medium)] hover:!border-[var(--accent)] !-bottom-1.5 transition-colors"
       />
     </div>
   );

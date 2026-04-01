@@ -202,7 +202,6 @@ function NodeCard({
               <span
                 className="font-mono text-xs font-bold tracking-wider cursor-pointer transition-colors hover:underline"
                 style={{ color: agent.color }}
-                onClick={(e) => e.stopPropagation()}
               >
                 {agent.callsign.toUpperCase()}
               </span>
@@ -350,7 +349,6 @@ function GridCard({
               <span
                 className="font-mono text-sm font-bold tracking-wider cursor-pointer transition-colors hover:underline"
                 style={{ color: agent.color }}
-                onClick={(e) => e.stopPropagation()}
               >
                 {agent.callsign.toUpperCase()}
               </span>

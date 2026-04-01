@@ -6,6 +6,7 @@ import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { CompanySwitcher } from "@/components/company-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useCompany } from "@/components/company-context";
 
 // Grouped nav structure: section → items
 const navSections = [
@@ -132,6 +133,41 @@ const settingsItem = {
   ),
 };
 
+function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
+  const { company } = useCompany();
+  const logoSize = size === "sm" ? "h-6 w-6" : "h-8 w-8";
+
+  if (company?.logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={company.logoUrl}
+        alt={company.name}
+        className={`${logoSize} rounded-md object-contain`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} rounded-full bg-neo`}
+      style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
+    />
+  );
+}
+
+function BrandName() {
+  const { company } = useCompany();
+  const name = company?.name || "CREWCMD";
+  const displayName = name.length > 12 ? name.slice(0, 12) : name;
+
+  return (
+    <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
+      {displayName.toUpperCase()}
+    </span>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -256,13 +292,8 @@ export function Sidebar() {
       {/* Mobile top bar */}
       <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-2.5">
-          <div
-            className="h-2.5 w-2.5 rounded-full bg-neo"
-            style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
-          />
-          <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-            CREWCMD
-          </span>
+          <BrandLogo size="sm" />
+          <BrandName />
         </div>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
@@ -295,13 +326,8 @@ export function Sidebar() {
         }`}
       >
         <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-5 py-4">
-          <div
-            className="h-2.5 w-2.5 rounded-full bg-neo"
-            style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
-          />
-          <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-            CREWCMD
-          </span>
+          <BrandLogo size="sm" />
+          <BrandName />
         </div>
         <CompanySwitcher />
         <nav className="flex-1 px-3 py-4">
@@ -320,14 +346,9 @@ export function Sidebar() {
       {/* Desktop sidebar */}
       <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[220px] flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl lg:flex">
         <div className="flex items-center gap-3 px-5 py-5">
-          <div
-            className="h-3 w-3 rounded-full bg-neo"
-            style={{ boxShadow: "0 0 12px rgba(0, 240, 255, 0.6)" }}
-          />
+          <BrandLogo size="md" />
           <div className="flex flex-col">
-            <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-              CREWCMD
-            </span>
+            <BrandName />
             <span className="font-mono text-[10px] tracking-[0.3em] text-[var(--text-tertiary)]">
               YOUR CREW. YOUR COMMAND.
             </span>

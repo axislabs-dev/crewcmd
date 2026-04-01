@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { resolveAgent } from "@/lib/resolve-agent";
 import { runtime, type AgentTask, type AgentConfig } from "@/lib/agent-runtime";
 import { getExecutor, type AdapterConfig } from "@/lib/adapters";
+import { resolveAdapterFromSkills } from "@/lib/resolve-adapter-from-skills";
 import { randomUUID } from "node:crypto";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +35,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Missing required field: prompt" }, { status: 400 });
   }
 
-  const adapter = getExecutor(agent.adapterType);
+  // Resolve adapter from installed CLI skills, falling back to adapter_type
+  const resolution = await resolveAdapterFromSkills(agent.id, agent.adapterType);
+  const effectiveAdapterType = resolution.adapterType;
+
+  const adapter = getExecutor(effectiveAdapterType);
   if (!adapter) {
     return NextResponse.json(
-      { error: `Unknown adapter type: ${agent.adapterType}` },
+      { error: `Unknown adapter type: ${effectiveAdapterType}` },
       { status: 400 }
     );
   }
@@ -62,7 +67,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const config: AgentConfig = {
       agentId: agent.id,
       callsign: agent.callsign,
-      adapterType: agent.adapterType,
+      adapterType: effectiveAdapterType,
       adapterConfig,
       model: agent.model ?? undefined,
       workspacePath: agent.workspacePath ?? undefined,

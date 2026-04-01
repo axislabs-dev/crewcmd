@@ -35,6 +35,23 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     const hasMediaRecorder = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
     const hasBrowserSpeech = !!getBrowserSpeechRecognition();
     setIsSupported(hasMediaRecorder || hasBrowserSpeech);
+
+    // Probe server STT availability on mount
+    fetch("/api/stt")
+      .then((res) => {
+        if (res.status === 503) {
+          console.log("[VoiceRecorder] Server STT unavailable, using browser speech");
+          setSttMode("browser");
+        } else if (res.ok) {
+          setSttMode("server");
+        } else {
+          // 401 or other — fall back to browser if available
+          setSttMode(hasBrowserSpeech ? "browser" : "server");
+        }
+      })
+      .catch(() => {
+        setSttMode(hasBrowserSpeech ? "browser" : "server");
+      });
   }, []);
 
   // Browser Speech API fallback (used when server STT is unavailable)

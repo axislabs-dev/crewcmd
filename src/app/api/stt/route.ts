@@ -16,6 +16,28 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
  * 2. OpenAI Whisper API (if OPENAI_API_KEY set) — cloud fallback
  * 3. Returns 503 with fallback hint — frontend falls back to Web Speech API
  */
+/**
+ * GET /api/stt — probe endpoint to check if server-side STT is available.
+ * Returns { available: true, provider: "local" | "openai" } or { available: false, fallback: "browser" }.
+ */
+export async function GET(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
+  // Check local whisper
+  const whisperBin = await findWhisperBin();
+  if (whisperBin) {
+    return Response.json({ available: true, provider: whisperBin.type === "cpp" ? "whisper-cpp" : "whisper" });
+  }
+
+  // Check OpenAI key
+  if (OPENAI_API_KEY) {
+    return Response.json({ available: true, provider: "openai" });
+  }
+
+  return Response.json({ available: false, fallback: "browser" }, { status: 503 });
+}
+
 export async function POST(request: NextRequest) {
   const authError = await requireAuth(request);
   if (authError) return authError;

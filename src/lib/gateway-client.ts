@@ -16,8 +16,8 @@ import WebSocket from "ws";
 
 const PROTOCOL_VERSION = 3;
 const DEFAULT_SCOPES = ["operator.read", "operator.write"];
-const CLIENT_ID = "crewcmd";
-const CLIENT_VERSION = "1.0.0";
+const CLIENT_ID = "gateway-client";
+const CLIENT_VERSION = "crewcmd/1.0.0";
 const CLIENT_MODE = "backend";
 const DEFAULT_ROLE = "operator";
 
@@ -291,7 +291,7 @@ export class GatewayClient {
             });
             const signature = signPayload(this.device.privateKeyPem, payloadStr);
 
-            const connectId = `crewcmd-connect-${++this.requestId}`;
+            const connectId = `gc-connect-${++this.requestId}`;
 
             this.pending.set(connectId, {
               resolve: (value) => {
@@ -353,7 +353,7 @@ export class GatewayClient {
       throw new Error("Not connected to gateway");
     }
 
-    const reqId = `crewcmd-${++this.requestId}`;
+    const reqId = `gc-${++this.requestId}`;
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {

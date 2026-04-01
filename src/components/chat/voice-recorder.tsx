@@ -2,6 +2,16 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SpeechRecognitionInstance = any;
+
+function getBrowserSpeechRecognition(): (new () => SpeechRecognitionInstance) | null {
+  if (typeof window === "undefined") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
+
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void;
   isDisabled?: boolean;
@@ -13,20 +23,70 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
+  const [sttMode, setSttMode] = useState<"server" | "browser" | "unknown">("unknown");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const startTimeRef = useRef<number>(0);
+  const browserRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   useEffect(() => {
-    // MediaRecorder is available in all modern browsers, no HTTPS required for getUserMedia on localhost
-    setIsSupported(typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia);
+    const hasMediaRecorder = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+    const hasBrowserSpeech = !!getBrowserSpeechRecognition();
+    setIsSupported(hasMediaRecorder || hasBrowserSpeech);
   }, []);
 
-  const startRecording = useCallback(async () => {
-    if (isDisabled || isTranscribing) return;
+  // Browser Speech API fallback (used when server STT is unavailable)
+  const startBrowserRecording = useCallback(() => {
+    const SpeechRecognitionClass = getBrowserSpeechRecognition();
+    if (!SpeechRecognitionClass) return;
 
+    const recognition = new SpeechRecognitionClass();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    let transcript = "";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript;
+        }
+      }
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
+      console.error("[VoiceRecorder] Browser speech error:", event.error);
+      // If browser speech also fails, there's nothing we can do
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      if (transcript.trim()) {
+        onTranscript(transcript.trim());
+      }
+    };
+
+    browserRecognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  }, [onTranscript]);
+
+  const stopBrowserRecording = useCallback(() => {
+    if (browserRecognitionRef.current) {
+      browserRecognitionRef.current.stop();
+      browserRecognitionRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
+
+  // Server-side recording (MediaRecorder + /api/stt)
+  const startServerRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -46,7 +106,6 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       };
 
       recorder.onstop = async () => {
-        // Release mic immediately
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
@@ -72,6 +131,10 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
             if (text?.trim()) {
               onTranscript(text.trim());
             }
+          } else if (response.status === 503) {
+            // Server has no STT backend, switch to browser mode permanently
+            console.log("[VoiceRecorder] Server STT unavailable, switching to browser speech");
+            setSttMode("browser");
           } else {
             console.error("[VoiceRecorder] STT error:", response.status);
           }
@@ -88,15 +151,28 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     } catch (err) {
       console.error("[VoiceRecorder] Mic error:", err);
     }
-  }, [isDisabled, isTranscribing, onTranscript]);
+  }, [onTranscript]);
+
+  const startRecording = useCallback(async () => {
+    if (isDisabled || isTranscribing) return;
+
+    if (sttMode === "browser") {
+      startBrowserRecording();
+    } else {
+      // Default: try server first. If it 503s, sttMode flips to "browser" for next time.
+      await startServerRecording();
+    }
+  }, [isDisabled, isTranscribing, sttMode, startBrowserRecording, startServerRecording]);
 
   const stopRecording = useCallback(() => {
     setIsRecording(false);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (sttMode === "browser") {
+      stopBrowserRecording();
+    } else if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current = null;
     }
-  }, []);
+  }, [sttMode, stopBrowserRecording]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -4,6 +4,8 @@ export type TaskPriority = "low" | "medium" | "high" | "critical";
 export type TaskSource = "manual" | "error_log" | "test_failure" | "ui_scan" | "ci_failure" | "agent_initiative";
 export type ProjectStatus = "active" | "completed" | "archived";
 export type DocCategory = "Architecture" | "Strategy" | "Research" | "Guide" | "Report" | "Meeting Notes";
+export type DocType = "sop" | "guide" | "reference" | "runbook" | "general";
+export type DocVisibility = "company" | "project" | "agents_only";
 
 export interface Agent {
   id: string;
@@ -67,9 +69,14 @@ export interface Doc {
   title: string;
   content: string;
   category: DocCategory;
+  docType: DocType;
+  visibility: DocVisibility;
   authorAgentId: string | null;
+  authorUserId: string | null;
   projectId: string | null;
+  taskId: string | null;
   tags: string[];
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 }

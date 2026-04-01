@@ -50,6 +50,13 @@
       "when": 1774999990282,
       "tag": "0006_faulty_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775009711915,
+      "tag": "0007_past_omega_red",
+      "breakpoints": true
     }
   ]
 }

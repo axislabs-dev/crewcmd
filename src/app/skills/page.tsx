@@ -441,10 +441,13 @@ export default function SkillsPage() {
               {filteredMarketplace.map((ms) => {
                 const isInstalled = installedSlugs.has(ms.slug);
                 return (
-                  <button
+                  <div
                     key={`${ms.source}-${ms.slug}`}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => selectMarketplaceSkill(ms)}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") selectMarketplaceSkill(ms); }}
+                    className={`w-full cursor-pointer rounded-lg border p-3 text-left transition-colors ${
                       selectedMarketplace?.slug === ms.slug && selectedMarketplace?.source === ms.source
                         ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]"
                         : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
@@ -474,7 +477,7 @@ export default function SkillsPage() {
                     </div>
                     <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-2">{ms.description}</p>
                     <span className="mt-1 inline-block font-mono text-[9px] text-[var(--text-tertiary)]">v{ms.version}</span>
-                  </button>
+                  </div>
                 );
               })}
             </>

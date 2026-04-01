@@ -43,6 +43,10 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
           name: data.name,
           logoUrl: data.logoUrl,
         });
+      } else if (res.status === 404) {
+        // Company no longer exists (e.g. fresh DB) — clear stale cookie
+        document.cookie = "active_company=; path=/; max-age=0";
+        setCompany(null);
       }
     } catch {
       // ignore

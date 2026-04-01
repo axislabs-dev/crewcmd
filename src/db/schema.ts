@@ -193,6 +193,8 @@ export const agents = pgTable("agents", {
   runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().default({}),
   visibility: text("visibility").notNull().default("team"), // private | assigned | team
   canvasPosition: jsonb("canvas_position").$type<{ x: number; y: number } | null>(),
+  runtimeId: uuid("runtime_id").references(() => companyRuntimes.id, { onDelete: "set null" }),
+  runtimeRef: text("runtime_ref"), // agent ID on the runtime side (e.g. "cipher")
 });
 
 export const projects = pgTable("projects", {
@@ -561,6 +563,26 @@ export const agentSkills = pgTable("agent_skills", {
   enabled: boolean("enabled").notNull().default(true),
   config: jsonb("config").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Company Runtimes ───────────────────────────────────────────────
+
+export const companyRuntimes = pgTable("company_runtimes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  runtimeType: text("runtime_type").notNull().default("openclaw"), // openclaw | nanoclaw | custom
+  name: text("name").notNull(),
+  gatewayUrl: text("gateway_url").notNull(), // ws://localhost:18789
+  httpUrl: text("http_url").notNull(), // http://localhost:18789
+  authToken: text("auth_token"), // encrypted gateway auth token
+  isPrimary: boolean("is_primary").notNull().default(false),
+  status: text("status").notNull().default("disconnected"), // connected | disconnected | error
+  lastPing: timestamp("last_ping", { withTimezone: true }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ─── Company Provider Keys ──────────────────────────────────────────

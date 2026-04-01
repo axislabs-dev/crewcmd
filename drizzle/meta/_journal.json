@@ -57,6 +57,13 @@
       "when": 1775009711915,
       "tag": "0007_past_omega_red",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1775021494890,
+      "tag": "0008_overconfident_sinister_six",
+      "breakpoints": true
     }
   ]
 }

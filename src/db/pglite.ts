@@ -29,6 +29,8 @@ async function applySchema() {
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS workspace_path text`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_config JSONB DEFAULT '{}'`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS canvas_position JSONB`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_id UUID`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_ref TEXT`,
   ];
   for (const stmt of incrementalAlters) {
     try {
@@ -121,6 +123,27 @@ async function applySchema() {
         snooze_until TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+  } catch { /* table may already exist */ }
+
+  // Company Runtimes table
+  try {
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS company_runtimes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        runtime_type TEXT NOT NULL DEFAULT 'openclaw',
+        name TEXT NOT NULL,
+        gateway_url TEXT NOT NULL,
+        http_url TEXT NOT NULL,
+        auth_token TEXT,
+        is_primary BOOLEAN NOT NULL DEFAULT false,
+        status TEXT NOT NULL DEFAULT 'disconnected',
+        last_ping TIMESTAMPTZ,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
   } catch { /* table may already exist */ }

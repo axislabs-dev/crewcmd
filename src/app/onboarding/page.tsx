@@ -28,8 +28,8 @@ export default function OnboardingPage() {
   const [companyMission, setCompanyMission] = useState("");
   const [companyId, setCompanyId] = useState<string | null>(null);
 
-  // Step 2: Team (blueprint or scratch)
-  const [teamMode, setTeamMode] = useState<"choose" | "blueprint" | "scratch" | null>(null);
+  // Step 2: Team (blueprint, scratch, or connect runtime)
+  const [teamMode, setTeamMode] = useState<"choose" | "blueprint" | "scratch" | "connect" | null>(null);
   const [selectedBlueprint, setSelectedBlueprint] = useState<BuiltInBlueprint | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
 
@@ -37,6 +37,20 @@ export default function OnboardingPage() {
   const [agentName, setAgentName] = useState("");
   const [agentEmoji, setAgentEmoji] = useState("🤖");
   const [agentRole, setAgentRole] = useState("engineer");
+
+  // Step 2c: Connect runtime
+  const [gatewayUrl, setGatewayUrl] = useState("localhost:18789");
+  const [authToken, setAuthToken] = useState("");
+  const [probeResult, setProbeResult] = useState<{
+    ok: boolean;
+    error?: string;
+    version?: string;
+    agents: { id: string; name: string; emoji: string; title: string; description: string }[];
+    models: { id: string; name: string; provider: string }[];
+  } | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
 
   // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
@@ -115,6 +129,101 @@ export default function OnboardingPage() {
     } finally {
       setLoading(false);
       setStep(3);
+    }
+  }
+
+  async function handleProbeGateway() {
+    setProbing(true);
+    setProbeResult(null);
+    try {
+      const res = await fetch("/api/runtimes/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gatewayUrl: gatewayUrl.trim(),
+          authToken: authToken.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProbeResult({ ok: false, error: data.error || "Connection failed", agents: [], models: [] });
+      } else {
+        setProbeResult(data);
+        // Select all agents by default
+        setSelectedAgentIds(new Set(data.agents.map((a: { id: string }) => a.id)));
+      }
+    } catch {
+      setProbeResult({ ok: false, error: "Network error — is the gateway reachable?", agents: [], models: [] });
+    } finally {
+      setProbing(false);
+    }
+  }
+
+  function toggleAgentSelection(agentId: string) {
+    setSelectedAgentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) {
+        next.delete(agentId);
+      } else {
+        next.add(agentId);
+      }
+      return next;
+    });
+  }
+
+  async function handleImportAgents() {
+    if (!probeResult || !companyId || selectedAgentIds.size === 0) return;
+    setImporting(true);
+    try {
+      // First, create the runtime connection
+      let httpUrl = gatewayUrl.trim();
+      if (!httpUrl.startsWith("http")) {
+        httpUrl = `http://${httpUrl}`;
+      }
+      let wsUrl = gatewayUrl.trim();
+      if (!wsUrl.startsWith("ws")) {
+        wsUrl = `ws://${wsUrl}`;
+      }
+
+      const runtimeRes = await fetch("/api/runtimes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "OpenClaw Gateway",
+          gatewayUrl: wsUrl,
+          httpUrl,
+          authToken: authToken.trim(),
+          runtimeType: "openclaw",
+          metadata: { version: probeResult.version, agentCount: probeResult.agents.length },
+        }),
+      });
+
+      if (!runtimeRes.ok) {
+        return;
+      }
+
+      const runtime = await runtimeRes.json();
+
+      // Import selected agents
+      const selectedAgents = probeResult.agents.filter((a) => selectedAgentIds.has(a.id));
+
+      const importRes = await fetch("/api/runtimes/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          runtimeId: runtime.id,
+          agents: selectedAgents,
+          models: probeResult.models,
+        }),
+      });
+
+      if (importRes.ok) {
+        setStep(3);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -253,7 +362,7 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {/* Blueprint option */}
                 <button
                   onClick={() => setTeamMode("blueprint")}
@@ -265,6 +374,20 @@ export default function OnboardingPage() {
                   </h3>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                     Pre-configured teams with roles, hierarchy, and prompts. Deploy a whole crew in one click.
+                  </p>
+                </button>
+
+                {/* Connect runtime option */}
+                <button
+                  onClick={() => setTeamMode("connect")}
+                  className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
+                >
+                  <div className="text-2xl">🔌</div>
+                  <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
+                    CONNECT RUNTIME
+                  </h3>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Import your existing agent team from an OpenClaw gateway. Local or remote.
                   </p>
                 </button>
 
@@ -426,6 +549,204 @@ export default function OnboardingPage() {
                   className={`flex-1 ${btnPrimary}`}
                 >
                   {loading ? "DEPLOYING..." : `DEPLOY ${selectedBlueprint.agentCount} AGENTS`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2c: Connect runtime — enter URL ── */}
+          {step === 2 && teamMode === "connect" && !probeResult?.ok && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                    CONNECT YOUR RUNTIME
+                  </h2>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Enter your OpenClaw gateway address. Defaults to localhost for local setups.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setTeamMode(null); setProbeResult(null); }}
+                  className="text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                >
+                  ← BACK
+                </button>
+              </div>
+
+              <div>
+                <label className={labelClass}>GATEWAY URL</label>
+                <input
+                  type="text"
+                  value={gatewayUrl}
+                  onChange={(e) => setGatewayUrl(e.target.value)}
+                  placeholder="localhost:18789"
+                  className={inputClass}
+                  autoFocus
+                />
+                <p className="mt-1 text-[9px] text-[var(--text-tertiary)]">
+                  Local: localhost:18789 · Remote: your-server.com:18789 or Tailscale IP
+                </p>
+              </div>
+
+              <div>
+                <label className={labelClass}>AUTH TOKEN</label>
+                <input
+                  type="password"
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                  placeholder="Your gateway auth token"
+                  className={inputClass}
+                />
+                <p className="mt-1 text-[9px] text-[var(--text-tertiary)]">
+                  Found in ~/.openclaw/openclaw.json → gateway.auth.token
+                </p>
+              </div>
+
+              {probeResult && !probeResult.ok && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                  <p className="text-[11px] text-red-400">
+                    {probeResult.error || "Connection failed"}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setTeamMode(null); setProbeResult(null); }}
+                  className={`flex-1 ${btnSecondary}`}
+                >
+                  BACK
+                </button>
+                <button
+                  onClick={handleProbeGateway}
+                  disabled={probing || !gatewayUrl.trim() || !authToken.trim()}
+                  className={`flex-1 ${btnPrimary}`}
+                >
+                  {probing ? "CONNECTING..." : "CONNECT"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2c: Connect runtime — agent preview ── */}
+          {step === 2 && teamMode === "connect" && probeResult?.ok && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                    FOUND {probeResult.agents.length} AGENTS
+                  </h2>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Connected to OpenClaw {probeResult.version}. Select which agents to import.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setProbeResult(null)}
+                  className="text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                >
+                  ← BACK
+                </button>
+              </div>
+
+              {/* Agent list */}
+              <div className="max-h-[40vh] space-y-1.5 overflow-y-auto pr-1">
+                {probeResult.agents.map((agent) => {
+                  const isSelected = selectedAgentIds.has(agent.id);
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => toggleAgentSelection(agent.id)}
+                      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                        isSelected
+                          ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20"
+                          : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <div
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                          isSelected
+                            ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                            : "border-[var(--border-medium)]"
+                        }`}
+                      >
+                        {isSelected && (
+                          <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Agent info */}
+                      <span className="text-base shrink-0">{agent.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] font-bold text-[var(--text-primary)]">
+                            {agent.name}
+                          </span>
+                          <span className="text-[9px] text-[var(--text-tertiary)] font-mono">
+                            {agent.id}
+                          </span>
+                        </div>
+                        {agent.title !== "Agent" && (
+                          <p className="text-[10px] text-[var(--text-tertiary)] line-clamp-1">
+                            {agent.title}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Status dot */}
+                      <div className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Models info */}
+              {probeResult.models.length > 0 && (
+                <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] px-3 py-2">
+                  <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
+                    MODELS: {probeResult.models.length} available
+                  </span>
+                  <p className="mt-0.5 text-[9px] text-[var(--text-tertiary)] line-clamp-1">
+                    {probeResult.models.map((m) => m.name || m.id).join(", ")}
+                  </p>
+                </div>
+              )}
+
+              {/* Select all / none */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSelectedAgentIds(new Set(probeResult.agents.map((a) => a.id)))}
+                  className="text-[10px] text-[var(--accent)] hover:underline"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setSelectedAgentIds(new Set())}
+                  className="text-[10px] text-[var(--text-tertiary)] hover:underline"
+                >
+                  Select none
+                </button>
+                <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">
+                  {selectedAgentIds.size} of {probeResult.agents.length} selected
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setProbeResult(null)}
+                  className={`flex-1 ${btnSecondary}`}
+                >
+                  BACK
+                </button>
+                <button
+                  onClick={handleImportAgents}
+                  disabled={importing || selectedAgentIds.size === 0}
+                  className={`flex-1 ${btnPrimary}`}
+                >
+                  {importing ? "IMPORTING..." : `IMPORT ${selectedAgentIds.size} AGENTS`}
                 </button>
               </div>
             </div>

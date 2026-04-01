@@ -290,9 +290,9 @@ function TeamCanvasInner({
         className="bg-[var(--bg-primary)]"
       >
         <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
+          variant={BackgroundVariant.Lines}
+          gap={40}
+          lineWidth={0.5}
           color="var(--border-subtle)"
         />
 

@@ -20,15 +20,25 @@ const pool = new Map<string, PoolEntry>();
 const MAX_CONNECTION_AGE_MS = 300_000; // 5 minutes
 
 export async function getGatewayClient(): Promise<GatewayClient> {
+  if (!db) {
+    throw new Error("Database not initialized");
+  }
+
   const runtime = await withRetry(() =>
     db!.query.companyRuntimes.findFirst({
       where: eq(companyRuntimes.isPrimary, true),
     })
   );
 
-  if (!runtime?.gatewayUrl) {
+  if (!runtime) {
     throw new Error("No runtime configured");
   }
+
+  if (!runtime.gatewayUrl) {
+    throw new Error("Runtime has no gateway URL configured");
+  }
+
+  console.log("[gateway-pool] Runtime:", runtime.id, "URL:", runtime.gatewayUrl, "hasToken:", !!runtime.authToken);
 
   const key = runtime.id;
   const existing = pool.get(key);
@@ -45,8 +55,10 @@ export async function getGatewayClient(): Promise<GatewayClient> {
   }
 
   // Create new connection with device key from runtime metadata
-  const deviceKeyPem = (runtime.metadata as Record<string, unknown>)?.devicePrivateKeyPem as string | undefined;
+  const meta = runtime.metadata as Record<string, unknown> | null;
+  const deviceKeyPem = meta?.devicePrivateKeyPem as string | undefined;
   const device = resolveDeviceIdentity(deviceKeyPem);
+  console.log("[gateway-pool] Device source:", device.source, "hasStoredKey:", !!deviceKeyPem);
 
   const client = new GatewayClient(
     runtime.gatewayUrl,
@@ -55,7 +67,13 @@ export async function getGatewayClient(): Promise<GatewayClient> {
     30000 // 30s timeout for chat
   );
 
-  await client.connect();
+  try {
+    await client.connect();
+    console.log("[gateway-pool] Connected successfully");
+  } catch (err) {
+    console.error("[gateway-pool] Connection failed:", err instanceof Error ? err.message : err);
+    throw err;
+  }
   pool.set(key, { client, connectedAt: Date.now() });
 
   return client;

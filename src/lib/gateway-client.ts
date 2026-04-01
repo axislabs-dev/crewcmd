@@ -1,13 +1,27 @@
 /**
  * OpenClaw Gateway WebSocket RPC Client
  *
- * Connects to an OpenClaw gateway via WebSocket, performs the handshake,
+ * Connects to an OpenClaw gateway via WebSocket with Ed25519 device auth,
+ * performs challenge-response handshake, auto-pairs on first connect,
  * and provides typed RPC methods for agent/model/skill discovery.
  *
+ * Based on Paperclip's openclaw-gateway adapter pattern.
  * Used server-side only (API routes). Never runs in the browser.
  */
 
+import crypto from "node:crypto";
 import WebSocket from "ws";
+
+// ─── Constants ──────────────────────────────────────────────────────
+
+const PROTOCOL_VERSION = 3;
+const DEFAULT_SCOPES = ["operator.read", "operator.write"];
+const CLIENT_ID = "crewcmd";
+const CLIENT_VERSION = "1.0.0";
+const CLIENT_MODE = "backend";
+const DEFAULT_ROLE = "operator";
+
+const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -71,6 +85,7 @@ export interface DiscoveredAgent {
   description: string;
   model?: string;
   workspace?: string;
+  reportsTo?: string;
   identityRaw?: string;
   soulRaw?: string;
 }
@@ -82,31 +97,146 @@ export interface ProbeResult {
   agents: DiscoveredAgent[];
   models: GatewayModel[];
   defaultAgentId?: string;
+  devicePrivateKeyPem?: string;
 }
 
-// ─── RPC Client ─────────────────────────────────────────────────────
+export interface DeviceIdentity {
+  deviceId: string;
+  publicKeyRawBase64Url: string;
+  privateKeyPem: string;
+  source: "configured" | "generated";
+}
+
+// ─── Crypto Helpers ─────────────────────────────────────────────────
+
+function base64UrlEncode(buf: Buffer): string {
+  return buf.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+}
+
+function derivePublicKeyRaw(publicKeyPem: string): Buffer {
+  const key = crypto.createPublicKey(publicKeyPem);
+  const spki = key.export({ type: "spki", format: "der" }) as Buffer;
+  if (
+    spki.length === ED25519_SPKI_PREFIX.length + 32 &&
+    spki.subarray(0, ED25519_SPKI_PREFIX.length).equals(ED25519_SPKI_PREFIX)
+  ) {
+    return spki.subarray(ED25519_SPKI_PREFIX.length);
+  }
+  return spki;
+}
+
+function signPayload(privateKeyPem: string, payload: string): string {
+  const key = crypto.createPrivateKey(privateKeyPem);
+  const sig = crypto.sign(null, Buffer.from(payload, "utf8"), key);
+  return base64UrlEncode(sig);
+}
+
+/**
+ * Build v3 device auth payload string for signing.
+ */
+function buildDeviceAuthPayloadV3(params: {
+  deviceId: string;
+  role: string;
+  scopes: string[];
+  signedAtMs: number;
+  token?: string | null;
+  nonce: string;
+}): string {
+  return [
+    "v3",
+    params.deviceId,
+    CLIENT_ID,
+    CLIENT_MODE,
+    params.role,
+    params.scopes.join(","),
+    String(params.signedAtMs),
+    params.token ?? "",
+    params.nonce,
+    process.platform,
+    "", // deviceFamily
+  ].join("|");
+}
+
+/**
+ * Generate or restore a device identity (Ed25519 keypair).
+ */
+export function resolveDeviceIdentity(existingPrivateKeyPem?: string): DeviceIdentity {
+  if (existingPrivateKeyPem) {
+    const privateKey = crypto.createPrivateKey(existingPrivateKeyPem);
+    const publicKey = crypto.createPublicKey(privateKey);
+    const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+    const raw = derivePublicKeyRaw(publicKeyPem);
+    return {
+      deviceId: crypto.createHash("sha256").update(raw).digest("hex"),
+      publicKeyRawBase64Url: base64UrlEncode(raw),
+      privateKeyPem: existingPrivateKeyPem,
+      source: "configured",
+    };
+  }
+
+  const generated = crypto.generateKeyPairSync("ed25519");
+  const publicKeyPem = generated.publicKey.export({ type: "spki", format: "pem" }).toString();
+  const privateKeyPem = generated.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const raw = derivePublicKeyRaw(publicKeyPem);
+  return {
+    deviceId: crypto.createHash("sha256").update(raw).digest("hex"),
+    publicKeyRawBase64Url: base64UrlEncode(raw),
+    privateKeyPem,
+    source: "generated",
+  };
+}
+
+// ─── WebSocket Frame Types ──────────────────────────────────────────
+
+interface ResponseFrame {
+  type: "res";
+  id: string;
+  ok: boolean;
+  payload?: Record<string, unknown>;
+  error?: { code?: string; message?: string; details?: Record<string, unknown> };
+}
+
+interface EventFrame {
+  type: "event";
+  event: string;
+  payload?: Record<string, unknown>;
+}
+
+type PendingRequest = {
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+// ─── Gateway Client ─────────────────────────────────────────────────
 
 export class GatewayClient {
   private ws: WebSocket | null = null;
   private requestId = 0;
-  private pendingRequests = new Map<
-    string,
-    { resolve: (value: unknown) => void; reject: (err: Error) => void }
-  >();
+  private pending = new Map<string, PendingRequest>();
   private connected = false;
   private serverVersion?: string;
-  private grantedScopes: string[] = [];
+  private challengeResolve?: (nonce: string) => void;
+  private challengeReject?: (err: Error) => void;
 
   constructor(
     private gatewayUrl: string,
-    private authToken: string,
+    private authToken: string | null,
+    private device: DeviceIdentity,
     private timeoutMs = 15000
   ) {}
 
   /**
-   * Connect to the gateway and perform the handshake.
+   * Connect to the gateway with device auth challenge-response.
    */
   async connect(): Promise<{ version: string }> {
+    const challengePromise = new Promise<string>((resolve, reject) => {
+      this.challengeResolve = resolve;
+      this.challengeReject = reject;
+    });
+    // Prevent unhandled rejection if challenge promise is never awaited
+    challengePromise.catch(() => {});
+
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.close();
@@ -114,7 +244,11 @@ export class GatewayClient {
       }, this.timeoutMs);
 
       try {
-        this.ws = new WebSocket(this.gatewayUrl);
+        const headers: Record<string, string> = {};
+        if (this.authToken) {
+          headers.authorization = `Bearer ${this.authToken}`;
+        }
+        this.ws = new WebSocket(this.gatewayUrl, { headers });
       } catch (err) {
         clearTimeout(timer);
         reject(new Error(`Failed to create WebSocket: ${err instanceof Error ? err.message : String(err)}`));
@@ -123,100 +257,90 @@ export class GatewayClient {
 
       this.ws.on("error", (err) => {
         clearTimeout(timer);
+        this.challengeReject?.(err);
         reject(new Error(`WebSocket error: ${err.message}`));
       });
 
-      this.ws.on("close", () => {
+      this.ws.on("close", (code, reason) => {
         this.connected = false;
-        // Reject any pending requests
-        for (const [, pending] of this.pendingRequests) {
-          pending.reject(new Error("Connection closed"));
+        const err = new Error(`Connection closed (${code}): ${reason?.toString() || ""}`);
+        this.challengeReject?.(err);
+        for (const [, p] of this.pending) {
+          if (p.timer) clearTimeout(p.timer);
+          p.reject(err);
         }
-        this.pendingRequests.clear();
+        this.pending.clear();
       });
 
-      // Gateway protocol: wait for connect.challenge event, then send connect frame
       this.ws.on("message", (data) => {
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(data.toString());
-        } catch {
-          return;
-        }
+        this.handleMessage(data.toString());
+      });
 
-        // Step 1: Gateway sends connect.challenge event with a nonce
-        if (msg.type === "event") {
-          const event = msg.event as string;
-          if (event === "connect.challenge") {
-            const payload = msg.payload as { nonce?: string } | undefined;
-            const nonce = payload?.nonce;
-            if (!nonce) {
-              clearTimeout(timer);
-              reject(new Error("Gateway challenge missing nonce"));
-              return;
-            }
-            // Send connect as an RPC request (type: "req", method: "connect")
+      // Wait for challenge, then send signed connect
+      this.ws.on("open", () => {
+        challengePromise
+          .then((nonce) => {
+            const signedAtMs = Date.now();
+            const payloadStr = buildDeviceAuthPayloadV3({
+              deviceId: this.device.deviceId,
+              role: DEFAULT_ROLE,
+              scopes: DEFAULT_SCOPES,
+              signedAtMs,
+              token: this.authToken,
+              nonce,
+            });
+            const signature = signPayload(this.device.privateKeyPem, payloadStr);
+
             const connectId = `crewcmd-connect-${++this.requestId}`;
-            // Register handler for the connect response
-            this.pendingRequests.set(connectId, {
+
+            this.pending.set(connectId, {
               resolve: (value) => {
                 clearTimeout(timer);
                 this.connected = true;
                 const helloOk = value as Record<string, unknown>;
-                const server = helloOk.server as { version?: string } | undefined;
+                const server = helloOk?.server as { version?: string } | undefined;
                 this.serverVersion = server?.version || "unknown";
-                const authInfo = helloOk.auth as { scopes?: string[] } | undefined;
-                this.grantedScopes = authInfo?.scopes ?? [];
                 resolve({ version: this.serverVersion });
               },
               reject: (err) => {
                 clearTimeout(timer);
                 reject(err);
               },
+              timer: null,
             });
+
             const connectFrame = {
               type: "req",
               id: connectId,
               method: "connect",
               params: {
-                minProtocol: 1,
-                maxProtocol: 1,
+                minProtocol: PROTOCOL_VERSION,
+                maxProtocol: PROTOCOL_VERSION,
                 client: {
-                  id: "gateway-client" as const,
-                  displayName: "CrewCmd",
-                  version: "1.0.0",
-                  platform: "server",
-                  mode: "backend" as const,
+                  id: CLIENT_ID,
+                  version: CLIENT_VERSION,
+                  platform: process.platform,
+                  mode: CLIENT_MODE,
                 },
-                scopes: ["operator.read", "operator.write"],
-                auth: {
-                  token: this.authToken,
+                role: DEFAULT_ROLE,
+                scopes: DEFAULT_SCOPES,
+                auth: this.authToken ? { token: this.authToken } : undefined,
+                device: {
+                  id: this.device.deviceId,
+                  publicKey: this.device.publicKeyRawBase64Url,
+                  signature,
+                  signedAt: signedAtMs,
+                  nonce,
                 },
               },
             };
-            this.ws!.send(JSON.stringify(connectFrame));
-            return;
-          }
-          // Ignore other events during handshake
-          return;
-        }
 
-        // Handle RPC responses (gateway uses type: "res")
-        // This handles both the connect response and subsequent RPC calls
-        if (msg.type === "res") {
-          const reqId = msg.id as string;
-          const pending = this.pendingRequests.get(reqId);
-          if (pending) {
-            this.pendingRequests.delete(reqId);
-            if (msg.ok === false || msg.error) {
-              const errObj = msg.error as { message?: string; code?: string } | undefined;
-              const errDetail = errObj?.message || JSON.stringify(msg.error) || "RPC error";
-              pending.reject(new Error(errDetail));
-            } else {
-              pending.resolve(msg.payload ?? msg);
-            }
-          }
-        }
+            this.ws!.send(JSON.stringify(connectFrame));
+          })
+          .catch((err) => {
+            clearTimeout(timer);
+            reject(err);
+          });
       });
     });
   }
@@ -224,20 +348,20 @@ export class GatewayClient {
   /**
    * Send an RPC request and wait for the response.
    */
-  private async rpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  async rpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (!this.connected || !this.ws) {
       throw new Error("Not connected to gateway");
     }
 
-    const requestId = `crewcmd-${++this.requestId}`;
+    const reqId = `crewcmd-${++this.requestId}`;
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
+        this.pending.delete(reqId);
         reject(new Error(`RPC timeout: ${method}`));
       }, this.timeoutMs);
 
-      this.pendingRequests.set(requestId, {
+      this.pending.set(reqId, {
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value as T);
@@ -246,116 +370,321 @@ export class GatewayClient {
           clearTimeout(timer);
           reject(err);
         },
+        timer,
       });
 
-      // OpenClaw gateway uses RequestFrameSchema: { type: "req", id, method, params }
-      const frame = {
+      this.ws!.send(JSON.stringify({
         type: "req",
-        id: requestId,
+        id: reqId,
         method,
         params,
-      };
-
-      this.ws!.send(JSON.stringify(frame));
+      }));
     });
   }
 
-  /**
-   * List all agents on the gateway.
-   */
   async listAgents(): Promise<GatewayAgentsListResult> {
     return this.rpc<GatewayAgentsListResult>("agents.list", {});
   }
 
-  /**
-   * List available models.
-   */
   async listModels(): Promise<GatewayModelsListResult> {
     return this.rpc<GatewayModelsListResult>("models.list", {});
   }
 
-  /**
-   * List workspace files for an agent.
-   */
   async listAgentFiles(agentId: string): Promise<GatewayFilesListResult> {
     return this.rpc<GatewayFilesListResult>("agents.files.list", { agentId });
   }
 
-  /**
-   * Get a specific workspace file for an agent.
-   */
   async getAgentFile(agentId: string, name: string): Promise<GatewayFileGetResult> {
     return this.rpc<GatewayFileGetResult>("agents.files.get", { agentId, name });
   }
 
-  /**
-   * Create an agent on the gateway.
-   */
-  async createAgent(params: {
-    name: string;
-    workspace: string;
-    emoji?: string;
-    avatar?: string;
-  }): Promise<{ ok: true; agentId: string; name: string; workspace: string }> {
-    return this.rpc("agents.create", params);
-  }
-
-  /**
-   * Update an agent on the gateway.
-   */
-  async updateAgent(params: {
-    agentId: string;
-    name?: string;
-    workspace?: string;
-    model?: string;
-    avatar?: string;
-  }): Promise<{ ok: true; agentId: string }> {
-    return this.rpc("agents.update", params);
-  }
-
-  /**
-   * Write a workspace file for an agent.
-   */
-  async setAgentFile(
-    agentId: string,
-    name: string,
-    content: string
-  ): Promise<{ ok: true }> {
-    return this.rpc("agents.files.set", { agentId, name, content });
-  }
-
-  /**
-   * Close the WebSocket connection.
-   */
   close(): void {
     if (this.ws) {
-      try {
-        this.ws.close();
-      } catch {
-        // ignore
-      }
+      try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
     this.connected = false;
   }
+
+  private handleMessage(raw: string): void {
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    // Handle challenge event
+    if (msg.type === "event") {
+      const event = msg.event as string;
+      if (event === "connect.challenge") {
+        const payload = msg.payload as { nonce?: string } | undefined;
+        const nonce = payload?.nonce;
+        if (nonce && this.challengeResolve) {
+          this.challengeResolve(nonce);
+        }
+      }
+      return;
+    }
+
+    // Handle RPC responses
+    if (msg.type === "res") {
+      const frame = msg as unknown as ResponseFrame;
+      const p = this.pending.get(frame.id);
+      if (!p) return;
+
+      if (p.timer) clearTimeout(p.timer);
+      this.pending.delete(frame.id);
+
+      if (frame.ok) {
+        p.resolve(frame.payload ?? {});
+      } else {
+        const errMsg = frame.error?.message || frame.error?.code || "RPC error";
+        const err = new Error(errMsg) as Error & { gatewayCode?: string; gatewayDetails?: Record<string, unknown> };
+        if (frame.error?.code) err.gatewayCode = frame.error.code;
+        if (frame.error?.details) err.gatewayDetails = frame.error.details;
+        p.reject(err);
+      }
+    }
+  }
+}
+
+// ─── Auto-Pairing ───────────────────────────────────────────────────
+
+/**
+ * Attempt to auto-approve a pending device pairing request.
+ * Opens a second WS connection using the shared token (no device auth)
+ * to call device.pair.list + device.pair.approve.
+ */
+async function autoApproveDevicePairing(params: {
+  gatewayUrl: string;
+  authToken: string;
+  deviceId: string;
+  requestId?: string | null;
+  timeoutMs?: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const timeout = params.timeoutMs || 15000;
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const done = (result: { ok: boolean; error?: string }) => {
+      if (resolved) return;
+      resolved = true;
+      try { ws?.close(); } catch { /* ignore */ }
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => done({ ok: false, error: "Pairing approval timeout" }), timeout);
+
+    let ws: WebSocket;
+    let challengeNonce: string | null = null;
+    let wsConnected = false;
+    let reqCounter = 0;
+
+    try {
+      ws = new WebSocket(params.gatewayUrl, {
+        headers: { authorization: `Bearer ${params.authToken}` },
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      resolve({ ok: false, error: `Failed to connect: ${err instanceof Error ? err.message : String(err)}` });
+      return;
+    }
+
+    const sendReq = (method: string, reqParams: Record<string, unknown> = {}): string => {
+      const id = `pair-${++reqCounter}`;
+      ws.send(JSON.stringify({ type: "req", id, method, params: reqParams }));
+      return id;
+    };
+
+    const pendingCallbacks = new Map<string, (frame: ResponseFrame) => void>();
+
+    ws.on("error", (err) => {
+      clearTimeout(timer);
+      done({ ok: false, error: `WebSocket error: ${err.message}` });
+    });
+
+    ws.on("close", () => {
+      clearTimeout(timer);
+      if (!resolved) done({ ok: false, error: "Connection closed during pairing" });
+    });
+
+    ws.on("message", (data) => {
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+
+      // Handle challenge
+      if (msg.type === "event" && (msg as unknown as EventFrame).event === "connect.challenge") {
+        const payload = msg.payload as { nonce?: string } | undefined;
+        challengeNonce = payload?.nonce || null;
+        if (!challengeNonce) {
+          clearTimeout(timer);
+          done({ ok: false, error: "Challenge missing nonce" });
+          return;
+        }
+
+        // Connect with token-only auth (no device signing) + operator.pairing scope
+        const connectId = `pair-connect-${++reqCounter}`;
+        pendingCallbacks.set(connectId, () => {
+          wsConnected = true;
+          // Now list pending pairing requests
+          doListAndApprove();
+        });
+
+        ws.send(JSON.stringify({
+          type: "req",
+          id: connectId,
+          method: "connect",
+          params: {
+            minProtocol: PROTOCOL_VERSION,
+            maxProtocol: PROTOCOL_VERSION,
+            client: {
+              id: CLIENT_ID,
+              version: CLIENT_VERSION,
+              platform: process.platform,
+              mode: CLIENT_MODE,
+            },
+            role: DEFAULT_ROLE,
+            scopes: ["operator.admin", "operator.pairing"],
+            auth: { token: params.authToken },
+          },
+        }));
+        return;
+      }
+
+      // Handle responses
+      if (msg.type === "res") {
+        const frame = msg as unknown as ResponseFrame;
+        const cb = pendingCallbacks.get(frame.id);
+        if (cb) {
+          pendingCallbacks.delete(frame.id);
+          if (!frame.ok) {
+            clearTimeout(timer);
+            done({ ok: false, error: frame.error?.message || "RPC failed" });
+            return;
+          }
+          cb(frame);
+        }
+      }
+    });
+
+    function doListAndApprove() {
+      if (params.requestId) {
+        // Already know the request ID, approve directly
+        const approveId = sendReq("device.pair.approve", { requestId: params.requestId });
+        pendingCallbacks.set(approveId, () => {
+          clearTimeout(timer);
+          done({ ok: true });
+        });
+        return;
+      }
+
+      // List pending requests and find ours
+      const listId = sendReq("device.pair.list", {});
+      pendingCallbacks.set(listId, (frame) => {
+        const payload = frame.payload as { pending?: Array<Record<string, unknown>> } | undefined;
+        const pending = payload?.pending || [];
+
+        // Find our device or take the latest
+        const match = pending.find((p) => p.deviceId === params.deviceId) || pending[pending.length - 1];
+        if (!match?.requestId) {
+          clearTimeout(timer);
+          done({ ok: false, error: "No pending pairing request found" });
+          return;
+        }
+
+        const approveId = sendReq("device.pair.approve", { requestId: match.requestId as string });
+        pendingCallbacks.set(approveId, () => {
+          clearTimeout(timer);
+          done({ ok: true });
+        });
+      });
+    }
+  });
 }
 
 // ─── High-Level Probe ───────────────────────────────────────────────
 
 /**
- * Probe a gateway: connect, discover agents + models, read identity files.
- * Returns a structured ProbeResult. Always closes the connection.
+ * Probe a gateway via WebSocket with device auth.
+ * Handles auto-pairing on first connect.
+ * Returns discovered agents, models, and the device private key for persistence.
  */
 export async function probeGateway(
   gatewayUrl: string,
-  authToken: string
+  authToken: string,
+  existingDeviceKeyPem?: string
 ): Promise<ProbeResult> {
-  const client = new GatewayClient(gatewayUrl, authToken);
+  const device = resolveDeviceIdentity(existingDeviceKeyPem);
 
+  // First attempt
+  let client = new GatewayClient(gatewayUrl, authToken, device);
   try {
     const { version } = await client.connect();
+    return await discoverFromClient(client, version, device.privateKeyPem);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const isPairingRequired = message.toLowerCase().includes("pairing required");
 
-    // Fetch agents and models in parallel
+    if (!isPairingRequired || !authToken) {
+      return { ok: false, error: message, agents: [], models: [] };
+    }
+
+    // Extract requestId from error if available
+    let requestId: string | null = null;
+    if (err && typeof err === "object" && "gatewayDetails" in err) {
+      const details = (err as { gatewayDetails?: Record<string, unknown> }).gatewayDetails;
+      requestId = typeof details?.requestId === "string" ? details.requestId : null;
+    }
+    if (!requestId && message.includes("requestId")) {
+      const match = message.match(/requestId\s*[:=]\s*([A-Za-z0-9_-]+)/i);
+      requestId = match?.[1] ?? null;
+    }
+
+    // Auto-approve pairing
+    const pairResult = await autoApproveDevicePairing({
+      gatewayUrl,
+      authToken,
+      deviceId: device.deviceId,
+      requestId,
+    });
+
+    if (!pairResult.ok) {
+      return {
+        ok: false,
+        error: `Pairing required but auto-approve failed: ${pairResult.error}. Run: openclaw nodes approve --latest`,
+        agents: [],
+        models: [],
+      };
+    }
+
+    // Retry after pairing
+    client = new GatewayClient(gatewayUrl, authToken, device);
+    try {
+      const { version } = await client.connect();
+      return await discoverFromClient(client, version, device.privateKeyPem);
+    } catch (retryErr) {
+      return {
+        ok: false,
+        error: `Connected after pairing but discovery failed: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+        agents: [],
+        models: [],
+      };
+    }
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * After a successful connection, discover agents and models.
+ */
+async function discoverFromClient(
+  client: GatewayClient,
+  version: string,
+  devicePrivateKeyPem: string
+): Promise<ProbeResult> {
+  try {
     const [agentsResult, modelsResult] = await Promise.all([
       client.listAgents().catch(() => null),
       client.listModels().catch(() => null),
@@ -365,10 +694,9 @@ export async function probeGateway(
       return { ok: false, error: "Failed to list agents", agents: [], models: [] };
     }
 
-    // For each agent, try to read IDENTITY.md and SOUL.md
     const discoveredAgents: DiscoveredAgent[] = [];
 
-    // Batch file reads (but don't fail if some are missing)
+    // Read identity files for each agent in parallel
     const fileReads = agentsResult.agents.map(async (agent) => {
       let identityRaw: string | undefined;
       let soulRaw: string | undefined;
@@ -378,22 +706,16 @@ export async function probeGateway(
         if (identityResult.file && !identityResult.file.missing) {
           identityRaw = identityResult.file.content;
         }
-      } catch {
-        // Identity file doesn't exist, that's fine
-      }
+      } catch { /* file doesn't exist */ }
 
       try {
         const soulResult = await client.getAgentFile(agent.id, "SOUL.md");
         if (soulResult.file && !soulResult.file.missing) {
           soulRaw = soulResult.file.content;
         }
-      } catch {
-        // Soul file doesn't exist, that's fine
-      }
+      } catch { /* file doesn't exist */ }
 
-      // Parse identity data
-      const parsed = parseAgentIdentity(agent, identityRaw, soulRaw);
-      discoveredAgents.push(parsed);
+      discoveredAgents.push(parseAgentIdentity(agent, identityRaw, soulRaw));
     });
 
     await Promise.all(fileReads);
@@ -404,12 +726,15 @@ export async function probeGateway(
       agents: discoveredAgents,
       models: modelsResult?.models ?? [],
       defaultAgentId: agentsResult.defaultId,
+      devicePrivateKeyPem,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message, agents: [], models: [] };
-  } finally {
-    client.close();
+    return {
+      ok: false,
+      error: `Discovery failed: ${err instanceof Error ? err.message : String(err)}`,
+      agents: [],
+      models: [],
+    };
   }
 }
 
@@ -424,8 +749,9 @@ function parseAgentIdentity(
   let emoji = agent.identity?.emoji || "🤖";
   let title = "Agent";
   let description = "";
+  let reportsTo: string | undefined;
 
-  // Parse IDENTITY.md for structured data
+  // Parse IDENTITY.md
   if (identityRaw) {
     const nameMatch = identityRaw.match(/\*\*Name:\*\*\s*(.+)/);
     const emojiMatch = identityRaw.match(/\*\*Emoji:\*\*\s*(.+)/);
@@ -435,7 +761,7 @@ function parseAgentIdentity(
     if (nameMatch?.[1]?.trim() && !nameMatch[1].includes("pick something")) {
       name = nameMatch[1].trim();
     }
-    if (emojiMatch?.[1]?.trim()) {
+    if (emojiMatch?.[1]?.trim() && !emojiMatch[1].includes("pick one") && !emojiMatch[1].includes("_(")) {
       emoji = emojiMatch[1].trim();
     }
     if (creatureMatch?.[1]?.trim() && !creatureMatch[1].includes("_")) {
@@ -446,25 +772,29 @@ function parseAgentIdentity(
     }
   }
 
-  // Parse SOUL.md for richer description
+  // Parse SOUL.md (fallback + reportsTo)
   if (soulRaw) {
-    // Look for the first paragraph after any header
-    const lines = soulRaw.split("\n").filter((l) => l.trim());
-    const descLine = lines.find(
-      (l) => !l.startsWith("#") && !l.startsWith("_") && !l.startsWith("-") && l.length > 20
-    );
-    if (descLine && !description) {
-      description = descLine.trim().slice(0, 200);
+    const emojiMatch = soulRaw.match(/\*\*Emoji:\*\*\s*(.+)/);
+    const titleMatch = soulRaw.match(/\*\*Title:\*\*\s*(.+)/);
+    const reportsMatch = soulRaw.match(/\*\*Reports to:\*\*\s*(.+)/);
+    const taglineMatch = soulRaw.match(/^#.+\n+_(.+)_$/m);
+
+    if (emoji === "🤖" && emojiMatch?.[1]?.trim()) emoji = emojiMatch[1].trim();
+    if (title === "Agent" && titleMatch?.[1]?.trim()) title = titleMatch[1].trim();
+    if (reportsMatch?.[1]?.trim()) reportsTo = reportsMatch[1].trim().split(/\s/)[0];
+
+    if (!description) {
+      if (taglineMatch?.[1]?.trim() && !taglineMatch[1].includes("not a chatbot")) {
+        description = taglineMatch[1].trim().slice(0, 200);
+      } else {
+        const lines = soulRaw.split("\n").filter((l) => l.trim());
+        const descLine = lines.find(
+          (l) => !l.startsWith("#") && !l.startsWith("_") && !l.startsWith("-") && l.length > 20
+        );
+        if (descLine) description = descLine.trim().slice(0, 200);
+      }
     }
   }
 
-  return {
-    id: agent.id,
-    name,
-    emoji,
-    title,
-    description,
-    identityRaw,
-    soulRaw,
-  };
+  return { id: agent.id, name, emoji, title, description, reportsTo, identityRaw, soulRaw };
 }

@@ -12,6 +12,7 @@ interface ImportBody {
   agents: DiscoveredAgent[];
   models?: GatewayModel[];
   defaultAgentId?: string;
+  devicePrivateKeyPem?: string;
 }
 
 // Color palette for imported agents
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
     }
 
     const body: ImportBody = await request.json();
-    const { runtimeId, agents: importAgents } = body;
+    const { runtimeId, agents: importAgents, devicePrivateKeyPem } = body;
 
     if (!runtimeId || !importAgents?.length) {
       return NextResponse.json(
@@ -59,6 +60,19 @@ export async function POST(request: Request) {
 
     if (!runtime || runtime.companyId !== companyId) {
       return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
+    }
+
+    // Store device private key in the runtime metadata for persistent device auth
+    if (devicePrivateKeyPem) {
+      await withRetry(() => db!
+        .update(companyRuntimes)
+        .set({
+          metadata: {
+            ...((runtime.metadata || {}) as Record<string, unknown>),
+            devicePrivateKeyPem,
+          },
+        })
+        .where(eq(companyRuntimes.id, runtimeId)));
     }
 
     // Get existing agents to avoid duplicates

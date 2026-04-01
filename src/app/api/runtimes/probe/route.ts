@@ -1,28 +1,74 @@
 import { NextResponse } from "next/server";
+import { probeGateway } from "@/lib/gateway-client";
 import { parseOpenClawConfig } from "@/lib/openclaw-config-parser";
 
 /**
  * POST /api/runtimes/probe
  *
- * Probe an OpenClaw installation: discover agents, models, gateway config.
+ * Probe an OpenClaw installation to discover agents, models, and config.
  *
- * Supports two modes:
- * 1. Local config file: reads ~/.openclaw/openclaw.json directly + workspace files
- * 2. Pasted config: accepts raw JSON content (user copies from their remote machine)
+ * Supports three modes:
+ * 1. "gateway" — Connect via WebSocket with device auth (works local + remote)
+ * 2. "local"   — Read ~/.openclaw/openclaw.json directly (same-machine only)
+ * 3. "paste"   — Accept raw JSON content (deprecated, kept for compatibility)
  *
- * Body: { mode: "local" } | { mode: "paste", config: string }
+ * Gateway mode is the preferred path. It handles:
+ * - Ed25519 keypair generation
+ * - Challenge-response handshake
+ * - Auto-pairing on first connect
+ * - Agent/model discovery via RPC
+ * - Returns devicePrivateKeyPem for persistent auth
  *
- * The gateway WebSocket protocol requires device identity (crypto keypair signing)
- * to grant operator scopes. Token-only auth connects but with zero scopes.
- * So for discovery, we read the config file directly instead.
+ * Body:
+ *   { mode: "gateway", url: string, token: string, deviceKeyPem?: string }
+ *   { mode: "local" }
+ *   { mode: "paste", config: string }
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const mode = body.mode || "local";
+    const mode = body.mode || "gateway";
 
+    // ── Gateway mode (preferred) ──
+    if (mode === "gateway") {
+      const url = body.url;
+      const token = body.token;
+
+      if (!url || typeof url !== "string") {
+        return NextResponse.json(
+          { error: "Gateway URL is required" },
+          { status: 400 }
+        );
+      }
+      if (!token || typeof token !== "string") {
+        return NextResponse.json(
+          { error: "Gateway auth token is required" },
+          { status: 400 }
+        );
+      }
+
+      // Normalize the URL to ws:// or wss://
+      let wsUrl = url.trim();
+      if (wsUrl.startsWith("http://")) wsUrl = wsUrl.replace("http://", "ws://");
+      else if (wsUrl.startsWith("https://")) wsUrl = wsUrl.replace("https://", "wss://");
+      else if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) wsUrl = `ws://${wsUrl}`;
+
+      const existingKeyPem = typeof body.deviceKeyPem === "string" ? body.deviceKeyPem : undefined;
+
+      const result = await probeGateway(wsUrl, token.trim(), existingKeyPem);
+
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error || "Failed to connect to gateway" },
+          { status: 502 }
+        );
+      }
+
+      return NextResponse.json(result);
+    }
+
+    // ── Local config file mode (same-machine fallback) ──
     if (mode === "local") {
-      // Read from default path or specified path
       const configPath = typeof body.configPath === "string" ? body.configPath : undefined;
       const result = await parseOpenClawConfig({ path: configPath });
 
@@ -36,6 +82,7 @@ export async function POST(request: Request) {
       return NextResponse.json(result);
     }
 
+    // ── Paste mode (deprecated) ──
     if (mode === "paste") {
       const config = body.config;
       if (!config || typeof config !== "string") {
@@ -58,7 +105,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: `Unknown mode: ${mode}. Use "local" or "paste".` },
+      { error: `Unknown mode: ${mode}. Use "gateway", "local", or "paste".` },
       { status: 400 }
     );
   } catch (err) {

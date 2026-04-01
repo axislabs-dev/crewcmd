@@ -58,9 +58,9 @@ export default function ChatPage() {
   useEffect(() => {
     async function fetchAgents() {
       try {
-        const res = await fetch("/api/openclaw/agents");
+        const res = await fetch("/api/agents");
         const data = await res.json();
-        const fetched: Agent[] = data.agents || [];
+        const fetched: Agent[] = Array.isArray(data) ? data : data.agents || [];
         setAgents(fetched);
         if (fetched.length > 0) {
           setSelectedAgent(fetched[0]);

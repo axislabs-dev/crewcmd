@@ -2,8 +2,15 @@ import Link from "next/link";
 import type { Agent } from "@/lib/data";
 import { timeAgo } from "@/lib/utils";
 
+export interface AgentSkillBadge {
+  slug: string;
+  name: string;
+  icon: string;
+}
+
 interface AgentCardProps {
   agent: Agent;
+  skills?: AgentSkillBadge[];
 }
 
 const glowTextClass: Record<string, string> = {
@@ -36,7 +43,7 @@ const adapterLabels: Record<string, string> = {
   http: "HTTP",
 };
 
-export function AgentCard({ agent }: AgentCardProps) {
+export function AgentCard({ agent, skills }: AgentCardProps) {
   return (
     <Link
       href={`/agents/${agent.callsign.toLowerCase()}`}
@@ -91,6 +98,21 @@ export function AgentCard({ agent }: AgentCardProps) {
             </span>
           )}
         </div>
+
+        {skills && skills.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-1">
+            {skills.map((s) => (
+              <span
+                key={s.slug}
+                className="inline-flex items-center gap-0.5 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[9px] tracking-wider text-[var(--accent)]"
+                title={s.name}
+              >
+                <span className="text-[10px] leading-none">{s.icon}</span>
+                {s.name}
+              </span>
+            ))}
+          </div>
+        )}
 
         {agent.currentTask && (
           <div className="mb-3 rounded-lg bg-[var(--bg-surface)] px-3 py-2">

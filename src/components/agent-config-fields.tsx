@@ -143,6 +143,13 @@ export interface CompanySkill {
   slug: string;
   source: string;
   description?: string;
+  metadata?: {
+    category?: string;
+    runtime?: string;
+    command?: string | null;
+    icon?: string;
+    compatibleProviders?: string[] | null;
+  };
 }
 
 export function defaultAgentConfigValues(): AgentConfigValues {
@@ -662,11 +669,146 @@ function NumberInput({
 // ─── Main Component ─────────────────────────────────────────────────────
 
 const SKILL_SOURCE_STYLES: Record<string, { icon: string; color: string }> = {
+  "built-in": { icon: "\u26A1", color: "text-[#00f0ff]" },
   clawhub: { icon: "\u{1F43E}", color: "text-[#00f0ff]" },
   skills_sh: { icon: "\u25B2", color: "text-[var(--text-primary)]" },
   github: { icon: "\u2B24", color: "text-[#8b949e]" },
   custom: { icon: "\u270F\uFE0F", color: "text-amber-400" },
 };
+
+// ─── Skills Grid (fetches from API, filters by provider) ───────────
+
+function SkillsGrid({
+  values,
+  onChange,
+  companyId,
+  companySkills,
+}: {
+  values: AgentConfigValues;
+  onChange: (patch: Partial<AgentConfigValues>) => void;
+  companyId?: string | null;
+  companySkills?: CompanySkill[];
+}) {
+  const [apiSkills, setApiSkills] = useState<CompanySkill[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetch(`/api/skills?company_id=${companyId}`)
+      .then((r) => r.json())
+      .then((data: CompanySkill[]) => {
+        if (Array.isArray(data)) setApiSkills(data);
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [companyId]);
+
+  // Merge API skills with any passed-in company skills (dedup by id)
+  const allSkills = (() => {
+    const seen = new Set<string>();
+    const merged: CompanySkill[] = [];
+    for (const s of apiSkills) {
+      if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); }
+    }
+    for (const s of companySkills ?? []) {
+      if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); }
+    }
+    return merged;
+  })();
+
+  // Filter by compatible providers if agent has a provider set
+  const filtered = allSkills.filter((skill) => {
+    const providers = skill.metadata?.compatibleProviders;
+    if (!providers || providers.length === 0 || !values.provider) return true;
+    return providers.includes(values.provider);
+  });
+
+  if (!loaded && apiSkills.length === 0 && (!companySkills || companySkills.length === 0)) {
+    return null;
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <p className="text-[11px] text-[var(--text-tertiary)]">
+        No compatible skills available{values.provider ? ` for ${values.provider}` : ""}.
+      </p>
+    );
+  }
+
+  // Group by category
+  const categories = new Map<string, CompanySkill[]>();
+  for (const s of filtered) {
+    const cat = s.metadata?.category ?? "other";
+    if (!categories.has(cat)) categories.set(cat, []);
+    categories.get(cat)!.push(s);
+  }
+
+  const toggle = (id: string) => {
+    const next = values.skillIds.includes(id)
+      ? values.skillIds.filter((sid) => sid !== id)
+      : [...values.skillIds, id];
+    onChange({ skillIds: next });
+  };
+
+  return (
+    <div className="space-y-3">
+      {Array.from(categories.entries()).map(([cat, skills]) => (
+        <div key={cat}>
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+            {cat}
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {skills.map((skill) => {
+              const checked = values.skillIds.includes(skill.id);
+              const style = SKILL_SOURCE_STYLES[skill.source] || SKILL_SOURCE_STYLES.custom;
+              const icon = skill.metadata?.icon ?? style.icon;
+              return (
+                <label
+                  key={skill.id}
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${
+                    checked
+                      ? "border-[#00f0ff]/30 bg-[#00f0ff]/5"
+                      : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(skill.id)}
+                    className="sr-only"
+                  />
+                  <span className="text-base flex-shrink-0">{icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className={`text-xs font-medium ${checked ? "text-[#00f0ff]" : "text-[var(--text-primary)]"}`}>
+                      {skill.name}
+                    </span>
+                    {skill.description && (
+                      <p className="text-[9px] leading-tight text-[var(--text-tertiary)] line-clamp-1">
+                        {skill.description}
+                      </p>
+                    )}
+                  </div>
+                  {checked && (
+                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-[#00f0ff]" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <p className="text-[11px] text-[var(--text-tertiary)]">
+        Select skills this agent can use. CLI skills determine the execution adapter.
+      </p>
+    </div>
+  );
+}
 
 export function AgentConfigFields({ values, onChange, existingAgents, companySkills, companyId }: AgentConfigFieldsProps) {
   const isLocal = LOCAL_ADAPTERS.includes(values.adapterType);
@@ -1079,44 +1221,14 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
       </Section>
 
       {/* ── SKILLS ── */}
-      {companySkills && companySkills.length > 0 && (
-        <Section title="Skills">
-          <div className="space-y-1.5">
-            {companySkills.map((skill) => {
-              const checked = values.skillIds.includes(skill.id);
-              const style = SKILL_SOURCE_STYLES[skill.source] || SKILL_SOURCE_STYLES.custom;
-              return (
-                <label
-                  key={skill.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      const next = checked
-                        ? values.skillIds.filter((id) => id !== skill.id)
-                        : [...values.skillIds, skill.id];
-                      onChange({ skillIds: next });
-                    }}
-                    className="h-3.5 w-3.5 rounded border-[var(--text-tertiary)] bg-transparent accent-[#00f0ff]"
-                  />
-                  <span className={`text-[10px] ${style.color}`}>{style.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs text-[var(--text-primary)]">{skill.name}</span>
-                    {skill.description && (
-                      <p className="text-[9px] text-[var(--text-tertiary)] line-clamp-1">{skill.description}</p>
-                    )}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">
-            Toggle skills to attach or detach them from this agent.
-          </p>
-        </Section>
-      )}
+      <Section title="Skills" defaultOpen>
+        <SkillsGrid
+          values={values}
+          onChange={onChange}
+          companyId={companyId}
+          companySkills={companySkills}
+        />
+      </Section>
     </div>
   );
 }

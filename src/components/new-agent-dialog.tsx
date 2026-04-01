@@ -15,12 +15,17 @@ interface NewAgentDialogProps {
   companyId: string | null;
   onCreated: () => void;
   onClose: () => void;
+  defaultReportsTo?: string;
 }
 
-export function NewAgentDialog({ companyId, onCreated, onClose }: NewAgentDialogProps) {
+export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo }: NewAgentDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [values, setValues] = useState<AgentConfigValues>(defaultAgentConfigValues());
+  const [values, setValues] = useState<AgentConfigValues>(() => {
+    const defaults = defaultAgentConfigValues();
+    if (defaultReportsTo) defaults.reportsTo = defaultReportsTo;
+    return defaults;
+  });
   const [callsignManual, setCallsignManual] = useState(false);
   const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
 

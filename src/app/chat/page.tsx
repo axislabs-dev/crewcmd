@@ -134,14 +134,68 @@ export default function ChatPage() {
     }
   };
 
+  const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
+
+  // Probe TTS availability on mount
+  useEffect(() => {
+    fetch("/api/tts")
+      .then((res) => {
+        ttsModRef.current = res.ok ? "server" : "browser";
+      })
+      .catch(() => {
+        ttsModRef.current = "browser";
+      });
+  }, []);
+
+  const playBrowserTTS = useCallback((text: string) => {
+    if (!("speechSynthesis" in window)) {
+      setIsPlayingAudio(false);
+      return;
+    }
+
+    // Cancel any in-progress speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    // Try to pick a decent voice (prefer English, non-robotic)
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(
+      (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
+    ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
+    if (preferred) utterance.voice = preferred;
+
+    utterance.onend = () => setIsPlayingAudio(false);
+    utterance.onerror = () => setIsPlayingAudio(false);
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
   const playTTS = useCallback(async (text: string) => {
     try {
       setIsPlayingAudio(true);
+
+      // If we already know server TTS is unavailable, go straight to browser
+      if (ttsModRef.current === "browser") {
+        playBrowserTTS(text);
+        return;
+      }
+
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
+
+      if (response.status === 503) {
+        // Server has no TTS backend, switch to browser mode
+        console.log("[TTS] Server unavailable, using browser speechSynthesis");
+        ttsModRef.current = "browser";
+        playBrowserTTS(text);
+        return;
+      }
 
       if (!response.ok) {
         console.error("[TTS] Error:", response.status);
@@ -166,9 +220,10 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error("[TTS] Error:", error);
-      setIsPlayingAudio(false);
+      // Network error — try browser fallback
+      playBrowserTTS(text);
     }
-  }, []);
+  }, [playBrowserTTS]);
 
   const sendMessage = useCallback(
     async (text: string) => {

@@ -5,6 +5,7 @@ import { ChatMessage } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
+import type { Agent } from "@/lib/data";
 
 interface Message {
   id: string;
@@ -44,9 +45,43 @@ export default function ChatPage() {
   const [chatMode, setChatMode] = useState<ChatMode>("talk");
   const [streamingContent, setStreamingContent] = useState("");
 
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Fetch agents on mount
+  useEffect(() => {
+    async function fetchAgents() {
+      try {
+        const res = await fetch("/api/openclaw/agents");
+        const data = await res.json();
+        const fetched: Agent[] = data.agents || [];
+        setAgents(fetched);
+        if (fetched.length > 0) {
+          setSelectedAgent(fetched[0]);
+        }
+      } catch {
+        // Agents unavailable — leave empty
+      }
+    }
+    fetchAgents();
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Load messages from localStorage on mount
   useEffect(() => {
@@ -69,7 +104,7 @@ export default function ChatPage() {
   useEffect(() => {
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: "Neo",
+        title: selectedAgent?.callsign || "Crew Chat",
         artist: "CrewCmd",
         album: "CrewCmd",
       });
@@ -80,7 +115,24 @@ export default function ChatPage() {
         audioRef.current?.pause();
       });
     }
-  }, []);
+  }, [selectedAgent]);
+
+  const agentCallsign = selectedAgent?.callsign || "MAIN";
+  const agentEmoji = selectedAgent?.emoji || "💬";
+  const agentColor = selectedAgent?.color || "#00f0ff";
+  const agentAbbrev = agentCallsign.slice(0, 3).toUpperCase();
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case "online":
+      case "working":
+        return "bg-green-400";
+      case "idle":
+        return "bg-yellow-400";
+      default:
+        return "bg-zinc-500";
+    }
+  };
 
   const playTTS = useCallback(async (text: string) => {
     try {
@@ -193,7 +245,10 @@ export default function ChatPage() {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: chatMessages }),
+          body: JSON.stringify({
+            messages: chatMessages,
+            agent: selectedAgent?.callsign,
+          }),
         });
 
         if (!response.ok) {
@@ -258,7 +313,7 @@ export default function ChatPage() {
 
       setIsLoading(false);
     },
-    [isLoading, messages, voiceMode, chatMode, playTTS]
+    [isLoading, messages, voiceMode, chatMode, playTTS, selectedAgent]
   );
 
   const interruptAudio = useCallback(() => {
@@ -291,12 +346,73 @@ export default function ChatPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className="h-2.5 w-2.5 rounded-full bg-neo"
-              style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
+              className="h-2.5 w-2.5 rounded-full"
+              style={{
+                backgroundColor: agentColor,
+                boxShadow: `0 0 10px ${agentColor}80`,
+              }}
             />
-            <h1 className="glow-text-neo font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
-              CREW CHAT
-            </h1>
+            {/* Agent selector */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+                className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono font-bold tracking-wider transition-all hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
+                style={{ color: agentColor }}
+              >
+                <span>{agentEmoji}</span>
+                <span>{agentCallsign}</span>
+                <svg
+                  className={`h-3 w-3 transition-transform ${agentDropdownOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {agentDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-[220px] rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl backdrop-blur-xl">
+                  {agents.length === 0 ? (
+                    <div className="px-3 py-2 text-[11px] text-[var(--text-tertiary)]">
+                      No agents available
+                    </div>
+                  ) : (
+                    agents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => {
+                          setSelectedAgent(agent);
+                          setAgentDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                          selectedAgent?.id === agent.id
+                            ? "bg-[var(--bg-surface-hover)]"
+                            : ""
+                        }`}
+                      >
+                        <span className="text-base">{agent.emoji}</span>
+                        <div className="flex flex-1 items-center gap-2 overflow-hidden">
+                          <span
+                            className="font-mono font-bold tracking-wider"
+                            style={{ color: agent.color }}
+                          >
+                            {agent.callsign}
+                          </span>
+                          <span className="truncate text-[var(--text-tertiary)]">
+                            {agent.name}
+                          </span>
+                        </div>
+                        <div
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusColor(agent.status)}`}
+                        />
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -310,7 +426,7 @@ export default function ChatPage() {
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 }`}
               >
-                TALK TO NEO
+                TALK TO {agentCallsign}
               </button>
               <button
                 onClick={() => setChatMode("task")}
@@ -375,23 +491,28 @@ export default function ChatPage() {
           {messages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
-                className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-neo/20 bg-[var(--accent-soft)]"
+                className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border"
                 style={{
-                  boxShadow: "0 0 30px rgba(0, 240, 255, 0.15)",
+                  borderColor: `${agentColor}33`,
+                  backgroundColor: `${agentColor}15`,
+                  boxShadow: `0 0 30px ${agentColor}26`,
                 }}
               >
-                <span className="font-mono text-xl text-[var(--accent)]">N</span>
+                <span className="text-xl">{agentEmoji}</span>
               </div>
-              <h2 className="glow-text-neo mb-2 font-mono text-lg tracking-wider text-[var(--accent)]">
-                {chatMode === "talk" ? "TALK TO NEO" : "CREATE A TASK"}
+              <h2
+                className="mb-2 font-mono text-lg tracking-wider"
+                style={{ color: agentColor }}
+              >
+                {chatMode === "talk" ? `TALK TO ${agentCallsign}` : "CREATE A TASK"}
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
                 {chatMode === "talk"
-                  ? "Start a conversation with Neo via the OpenClaw Gateway. Your messages are stored locally in this browser."
+                  ? `Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway. Your messages are stored locally in this browser.`
                   : "Describe a task and it will be created in the task board automatically."}
               </p>
               {voiceMode === "push" && (
-                <p className="mt-2 text-[11px] text-neo/50">
+                <p className="mt-2 text-[11px]" style={{ color: `${agentColor}80` }}>
                   Voice mode active - hold the mic button to speak
                 </p>
               )}
@@ -419,18 +540,40 @@ export default function ChatPage() {
           {/* Loading indicator */}
           {isLoading && !streamingContent && (
             <div className="flex gap-3 animate-fade-in">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-xs font-mono text-[var(--accent)]">
-                NEO
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-mono"
+                style={{
+                  borderColor: `${agentColor}40`,
+                  backgroundColor: `${agentColor}15`,
+                  color: agentColor,
+                }}
+              >
+                {agentAbbrev}
               </div>
-              <div className="flex items-center gap-1.5 rounded-xl border border-neo/10 bg-neo/[0.06] px-4 py-3">
-                <span className="h-2 w-2 rounded-full bg-neo/50 animate-pulse" />
+              <div
+                className="flex items-center gap-1.5 rounded-xl border px-4 py-3"
+                style={{
+                  borderColor: `${agentColor}1a`,
+                  backgroundColor: `${agentColor}0f`,
+                }}
+              >
                 <span
-                  className="h-2 w-2 rounded-full bg-neo/50 animate-pulse"
-                  style={{ animationDelay: "0.15s" }}
+                  className="h-2 w-2 rounded-full animate-pulse"
+                  style={{ backgroundColor: `${agentColor}80` }}
                 />
                 <span
-                  className="h-2 w-2 rounded-full bg-neo/50 animate-pulse"
-                  style={{ animationDelay: "0.3s" }}
+                  className="h-2 w-2 rounded-full animate-pulse"
+                  style={{
+                    backgroundColor: `${agentColor}80`,
+                    animationDelay: "0.15s",
+                  }}
+                />
+                <span
+                  className="h-2 w-2 rounded-full animate-pulse"
+                  style={{
+                    backgroundColor: `${agentColor}80`,
+                    animationDelay: "0.3s",
+                  }}
                 />
               </div>
             </div>

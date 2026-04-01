@@ -1,11 +1,10 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
+import { db, withRetry } from "@/db";
+import { companyRuntimes } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
-
-const GATEWAY_URL =
-  process.env.OPENCLAW_GATEWAY_URL || "http://10.0.4.54:18789";
-const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 
 export async function POST(request: NextRequest) {
   const authError = await requireAuth(request);
@@ -13,7 +12,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages } = body;
+    const { messages, agent } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return Response.json(
@@ -22,14 +21,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
+    const runtime = await withRetry(() =>
+      db!.query.companyRuntimes.findFirst({
+        where: eq(companyRuntimes.isPrimary, true),
+      })
+    );
+
+    if (!runtime?.httpUrl) {
+      return Response.json(
+        { error: "No runtime configured. Connect an OpenClaw Gateway in Settings." },
+        { status: 503 }
+      );
+    }
+
+    const gatewayUrl = runtime.httpUrl.replace(/\/+$/, "");
+    const gatewayToken = runtime.authToken || "";
+
+    const model = agent ? `openclaw:${agent}` : "openclaw:main";
+
+    const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${GATEWAY_TOKEN}`,
+        Authorization: `Bearer ${gatewayToken}`,
       },
       body: JSON.stringify({
-        model: "openclaw:main",
+        model,
         messages,
         stream: true,
       }),

@@ -55,6 +55,8 @@ export default function OnboardingPage() {
   const [probing, setProbing] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  // Persist device key across retries (probeResult gets cleared on each attempt)
+  const [deviceKeyPem, setDeviceKeyPem] = useState<string | undefined>();
 
   // Step 3: Invite
   const [invites, setInvites] = useState<string[]>([""]);
@@ -148,15 +150,16 @@ export default function OnboardingPage() {
           mode: "gateway",
           url: gatewayUrl.trim(),
           token: authToken.trim(),
-          // Reuse device key from a previous pairing attempt if we have one
-          deviceKeyPem: probeResult?.devicePrivateKeyPem,
+          // Reuse device key so the gateway sees the same device on retry
+          deviceKeyPem: deviceKeyPem,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setProbeResult({ ok: false, error: data.error || "Connection failed", agents: [], models: [] });
       } else if (data.pairingRequired) {
-        // Device needs approval on the gateway host
+        // Save the device key so retries use the same identity
+        if (data.devicePrivateKeyPem) setDeviceKeyPem(data.devicePrivateKeyPem);
         setProbeResult({
           ok: false,
           pairingRequired: true,
@@ -166,6 +169,8 @@ export default function OnboardingPage() {
           models: [],
         });
       } else {
+        // Save the device key from successful connection too
+        if (data.devicePrivateKeyPem) setDeviceKeyPem(data.devicePrivateKeyPem);
         setProbeResult(data);
         setSelectedAgentIds(new Set(data.agents.map((a: { id: string }) => a.id)));
       }

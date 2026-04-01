@@ -28,6 +28,7 @@ async function applySchema() {
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS model text`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS workspace_path text`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_config JSONB DEFAULT '{}'`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS canvas_position JSONB`,
   ];
   for (const stmt of incrementalAlters) {
     try {

@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import Link from "next/link";
 import { NewAgentDialog } from "@/components/new-agent-dialog";
 import { EditAgentDialog } from "@/components/edit-agent-dialog";
 import { TaskDialog } from "@/components/task-dialog";
 import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
 import type { Agent } from "@/lib/data";
+
+const TeamCanvas = lazy(() =>
+  import("@/components/team-canvas/team-canvas").then((m) => ({ default: m.TeamCanvas }))
+);
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -117,7 +121,7 @@ const adapterLabels: Record<string, string> = {
 
 // ─── View modes ─────────────────────────────────────────────────────────
 
-type ViewMode = "tree" | "grid";
+type ViewMode = "canvas" | "tree" | "grid";
 
 // ─── Tree Node Card ─────────────────────────────────────────────────────
 
@@ -412,7 +416,7 @@ export default function TeamPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentSkills, setAgentSkills] = useState<Record<string, AgentSkillBadge[]>>({});
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("tree");
+  const [viewMode, setViewMode] = useState<ViewMode>("canvas");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -537,13 +541,26 @@ export default function TeamPage() {
             {/* View toggle */}
             <div className="flex rounded-lg border border-[var(--border-subtle)] overflow-hidden">
               <button
+                onClick={() => setViewMode("canvas")}
+                className={`px-2.5 py-1.5 text-[10px] tracking-wider transition-colors ${
+                  viewMode === "canvas"
+                    ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                    : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]"
+                }`}
+                title="Canvas org chart"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5M20.25 16.5V18A2.25 2.25 0 0118 20.25h-1.5M3.75 16.5V18A2.25 2.25 0 006 20.25h1.5M12 8.25v7.5M9 12h6" />
+                </svg>
+              </button>
+              <button
                 onClick={() => setViewMode("tree")}
                 className={`px-2.5 py-1.5 text-[10px] tracking-wider transition-colors ${
                   viewMode === "tree"
                     ? "bg-[var(--accent-soft)] text-[var(--accent)]"
                     : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]"
                 }`}
-                title="Hierarchy view"
+                title="Hierarchy list"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6Z" />
@@ -616,7 +633,20 @@ export default function TeamPage() {
         )}
 
         {/* Content */}
-        {agents.length === 0 ? (
+        {viewMode === "canvas" && agents.length > 0 ? (
+          <div className="flex-1 -mx-4 sm:-mx-6 -mb-5 rounded-t-xl border border-[var(--border-subtle)] overflow-hidden" style={{ minHeight: "calc(100vh - 220px)" }}>
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-sm text-[var(--text-tertiary)]">Loading canvas...</div>}>
+              <TeamCanvas
+                agents={filtered}
+                agentSkills={agentSkills}
+                onEdit={setEditingCallsign}
+                onAddChild={handleAddChild}
+                onAssignTask={setTaskAgent}
+                onRefresh={refresh}
+              />
+            </Suspense>
+          </div>
+        ) : agents.length === 0 ? (
           <div className="glass-card flex flex-col items-center justify-center py-20">
             <div className="text-4xl mb-4">🤖</div>
             <p className="text-sm text-[var(--text-secondary)]">No agents yet</p>

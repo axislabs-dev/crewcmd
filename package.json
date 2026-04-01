@@ -29,10 +29,12 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
+    "@dagrejs/dagre": "^3.0.0",
     "@electric-sql/pglite": "^0.4.2",
     "@neondatabase/serverless": "^0.10.4",
     "@types/bcryptjs": "^3.0.0",
     "@vercel/blob": "^2.3.1",
+    "@xyflow/react": "^12.10.2",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.38.3",

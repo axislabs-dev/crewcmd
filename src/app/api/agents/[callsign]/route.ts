@@ -56,6 +56,7 @@ export async function GET(
       role: agent.role ?? "engineer",
       model: agent.model ?? null,
       workspacePath: agent.workspacePath ?? null,
+      canvasPosition: agent.canvasPosition ?? null,
       tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
     });
   } catch (err) {
@@ -92,6 +93,7 @@ export async function PATCH(
       "name", "callsign", "title", "emoji", "color",
       "adapterType", "adapterConfig", "runtimeConfig", "role", "model",
       "workspacePath", "reportsTo", "companyId", "soulContent", "status",
+      "canvasPosition",
     ] as const;
 
     const updates: Record<string, unknown> = {};

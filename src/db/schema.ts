@@ -192,6 +192,7 @@ export const agents = pgTable("agents", {
   workspacePath: text("workspace_path"),
   runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().default({}),
   visibility: text("visibility").notNull().default("team"), // private | assigned | team
+  canvasPosition: jsonb("canvas_position").$type<{ x: number; y: number } | null>(),
 });
 
 export const projects = pgTable("projects", {

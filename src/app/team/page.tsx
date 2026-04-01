@@ -199,14 +199,12 @@ function NodeCard({
           {/* Info */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/agents/${agent.callsign.toLowerCase()}`}
-                className="font-mono text-xs font-bold tracking-wider transition-colors hover:underline"
+              <span
+                className="font-mono text-xs font-bold tracking-wider cursor-pointer transition-colors hover:underline"
                 style={{ color: agent.color }}
-                onClick={(e) => e.stopPropagation()}
               >
                 {agent.callsign.toUpperCase()}
-              </Link>
+              </span>
               <span className="text-xs text-[var(--text-secondary)] truncate">
                 {agent.name}
               </span>
@@ -348,14 +346,12 @@ function GridCard({
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">{agent.emoji}</span>
             <div>
-              <Link
-                href={`/agents/${agent.callsign.toLowerCase()}`}
-                className="font-mono text-sm font-bold tracking-wider transition-colors hover:underline"
+              <span
+                className="font-mono text-sm font-bold tracking-wider cursor-pointer transition-colors hover:underline"
                 style={{ color: agent.color }}
-                onClick={(e) => e.stopPropagation()}
               >
                 {agent.callsign.toUpperCase()}
-              </Link>
+              </span>
               <p className="text-xs text-[var(--text-tertiary)]">{agent.title}</p>
             </div>
           </div>

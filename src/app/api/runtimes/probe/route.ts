@@ -58,6 +58,16 @@ export async function POST(request: Request) {
       const result = await probeGateway(wsUrl, token.trim(), existingKeyPem);
 
       if (!result.ok) {
+        // Special case: pairing required — return 200 with status so UI can show approval instructions
+        if (result.error === "pairing_required") {
+          return NextResponse.json({
+            ok: false,
+            pairingRequired: true,
+            pairingInstructions: result.pairingInstructions,
+            devicePrivateKeyPem: result.devicePrivateKeyPem,
+          });
+        }
+
         return NextResponse.json(
           { error: result.error || "Failed to connect to gateway" },
           { status: 502 }

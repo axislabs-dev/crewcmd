@@ -93,6 +93,8 @@ export interface DiscoveredAgent {
 export interface ProbeResult {
   ok: boolean;
   error?: string;
+  /** Human-readable instructions when pairing is required */
+  pairingInstructions?: string;
   version?: string;
   agents: DiscoveredAgent[];
   models: GatewayModel[];
@@ -451,158 +453,6 @@ export class GatewayClient {
 
 // ─── Auto-Pairing ───────────────────────────────────────────────────
 
-/**
- * Attempt to auto-approve a pending device pairing request.
- * Opens a second WS connection using the shared token (no device auth)
- * to call device.pair.list + device.pair.approve.
- */
-async function autoApproveDevicePairing(params: {
-  gatewayUrl: string;
-  authToken: string;
-  deviceId: string;
-  requestId?: string | null;
-  timeoutMs?: number;
-}): Promise<{ ok: boolean; error?: string }> {
-  const timeout = params.timeoutMs || 15000;
-
-  return new Promise((resolve) => {
-    let resolved = false;
-    const done = (result: { ok: boolean; error?: string }) => {
-      if (resolved) return;
-      resolved = true;
-      try { ws?.close(); } catch { /* ignore */ }
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => done({ ok: false, error: "Pairing approval timeout" }), timeout);
-
-    let ws: WebSocket;
-    let challengeNonce: string | null = null;
-    let wsConnected = false;
-    let reqCounter = 0;
-
-    try {
-      ws = new WebSocket(params.gatewayUrl, {
-        headers: { authorization: `Bearer ${params.authToken}` },
-      });
-    } catch (err) {
-      clearTimeout(timer);
-      resolve({ ok: false, error: `Failed to connect: ${err instanceof Error ? err.message : String(err)}` });
-      return;
-    }
-
-    const sendReq = (method: string, reqParams: Record<string, unknown> = {}): string => {
-      const id = `pair-${++reqCounter}`;
-      ws.send(JSON.stringify({ type: "req", id, method, params: reqParams }));
-      return id;
-    };
-
-    const pendingCallbacks = new Map<string, (frame: ResponseFrame) => void>();
-
-    ws.on("error", (err) => {
-      clearTimeout(timer);
-      done({ ok: false, error: `WebSocket error: ${err.message}` });
-    });
-
-    ws.on("close", () => {
-      clearTimeout(timer);
-      if (!resolved) done({ ok: false, error: "Connection closed during pairing" });
-    });
-
-    ws.on("message", (data) => {
-      let msg: Record<string, unknown>;
-      try { msg = JSON.parse(data.toString()); } catch { return; }
-
-      // Handle challenge
-      if (msg.type === "event" && (msg as unknown as EventFrame).event === "connect.challenge") {
-        const payload = msg.payload as { nonce?: string } | undefined;
-        challengeNonce = payload?.nonce || null;
-        if (!challengeNonce) {
-          clearTimeout(timer);
-          done({ ok: false, error: "Challenge missing nonce" });
-          return;
-        }
-
-        // Connect with token-only auth (no device signing) + operator.pairing scope
-        const connectId = `pair-connect-${++reqCounter}`;
-        pendingCallbacks.set(connectId, () => {
-          wsConnected = true;
-          // Now list pending pairing requests
-          doListAndApprove();
-        });
-
-        ws.send(JSON.stringify({
-          type: "req",
-          id: connectId,
-          method: "connect",
-          params: {
-            minProtocol: PROTOCOL_VERSION,
-            maxProtocol: PROTOCOL_VERSION,
-            client: {
-              id: CLIENT_ID,
-              version: CLIENT_VERSION,
-              platform: process.platform,
-              mode: CLIENT_MODE,
-            },
-            role: DEFAULT_ROLE,
-            scopes: ["operator.admin", "operator.pairing"],
-            auth: { token: params.authToken },
-          },
-        }));
-        return;
-      }
-
-      // Handle responses
-      if (msg.type === "res") {
-        const frame = msg as unknown as ResponseFrame;
-        const cb = pendingCallbacks.get(frame.id);
-        if (cb) {
-          pendingCallbacks.delete(frame.id);
-          if (!frame.ok) {
-            clearTimeout(timer);
-            done({ ok: false, error: frame.error?.message || "RPC failed" });
-            return;
-          }
-          cb(frame);
-        }
-      }
-    });
-
-    function doListAndApprove() {
-      if (params.requestId) {
-        // Already know the request ID, approve directly
-        const approveId = sendReq("device.pair.approve", { requestId: params.requestId });
-        pendingCallbacks.set(approveId, () => {
-          clearTimeout(timer);
-          done({ ok: true });
-        });
-        return;
-      }
-
-      // List pending requests and find ours
-      const listId = sendReq("device.pair.list", {});
-      pendingCallbacks.set(listId, (frame) => {
-        const payload = frame.payload as { pending?: Array<Record<string, unknown>> } | undefined;
-        const pending = payload?.pending || [];
-
-        // Find our device or take the latest
-        const match = pending.find((p) => p.deviceId === params.deviceId) || pending[pending.length - 1];
-        if (!match?.requestId) {
-          clearTimeout(timer);
-          done({ ok: false, error: "No pending pairing request found" });
-          return;
-        }
-
-        const approveId = sendReq("device.pair.approve", { requestId: match.requestId as string });
-        pendingCallbacks.set(approveId, () => {
-          clearTimeout(timer);
-          done({ ok: true });
-        });
-      });
-    }
-  });
-}
-
 // ─── High-Level Probe ───────────────────────────────────────────────
 
 /**
@@ -626,51 +476,31 @@ export async function probeGateway(
     const message = err instanceof Error ? err.message : String(err);
     const isPairingRequired = message.toLowerCase().includes("pairing required");
 
-    if (!isPairingRequired || !authToken) {
+    if (!isPairingRequired) {
       return { ok: false, error: message, agents: [], models: [] };
     }
 
-    // Extract requestId from error if available
-    let requestId: string | null = null;
-    if (err && typeof err === "object" && "gatewayDetails" in err) {
-      const details = (err as { gatewayDetails?: Record<string, unknown> }).gatewayDetails;
-      requestId = typeof details?.requestId === "string" ? details.requestId : null;
-    }
-    if (!requestId && message.includes("requestId")) {
-      const match = message.match(/requestId\s*[:=]\s*([A-Za-z0-9_-]+)/i);
-      requestId = match?.[1] ?? null;
-    }
-
-    // Auto-approve pairing
-    const pairResult = await autoApproveDevicePairing({
-      gatewayUrl,
-      authToken,
-      deviceId: device.deviceId,
-      requestId,
-    });
-
-    if (!pairResult.ok) {
-      return {
-        ok: false,
-        error: `Pairing required but auto-approve failed: ${pairResult.error}. Run: openclaw nodes approve --latest`,
-        agents: [],
-        models: [],
-      };
-    }
-
-    // Retry after pairing
-    client = new GatewayClient(gatewayUrl, authToken, device);
-    try {
-      const { version } = await client.connect();
-      return await discoverFromClient(client, version, device.privateKeyPem);
-    } catch (retryErr) {
-      return {
-        ok: false,
-        error: `Connected after pairing but discovery failed: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
-        agents: [],
-        models: [],
-      };
-    }
+    // Device pairing is required. The gateway won't grant operator.pairing scope
+    // to an unbound device (by design), so auto-approve from a second WS connection
+    // is not possible. The user must approve the device on the gateway host.
+    return {
+      ok: false,
+      error: "pairing_required",
+      pairingInstructions: [
+        "Your device needs approval on the OpenClaw gateway.",
+        "Run one of these on the gateway host:",
+        "",
+        "  openclaw devices approve",
+        "",
+        "Or via Telegram: /pair pending, then approve the request.",
+        "",
+        "After approving, click 'Retry Connection' below.",
+      ].join("\n"),
+      agents: [],
+      models: [],
+      // Return the device key so the same identity is used on retry
+      devicePrivateKeyPem: device.privateKeyPem,
+    };
   } finally {
     client.close();
   }

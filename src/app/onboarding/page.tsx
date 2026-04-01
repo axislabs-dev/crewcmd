@@ -45,6 +45,8 @@ export default function OnboardingPage() {
   const [probeResult, setProbeResult] = useState<{
     ok: boolean;
     error?: string;
+    pairingRequired?: boolean;
+    pairingInstructions?: string;
     agents: { id: string; name: string; emoji: string; title: string; description: string; model?: string; reportsTo?: string }[];
     models: { id: string; name: string; provider: string }[];
     defaultAgentId?: string;
@@ -142,11 +144,27 @@ export default function OnboardingPage() {
       const res = await fetch("/api/runtimes/probe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "gateway", url: gatewayUrl.trim(), token: authToken.trim() }),
+        body: JSON.stringify({
+          mode: "gateway",
+          url: gatewayUrl.trim(),
+          token: authToken.trim(),
+          // Reuse device key from a previous pairing attempt if we have one
+          deviceKeyPem: probeResult?.devicePrivateKeyPem,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         setProbeResult({ ok: false, error: data.error || "Connection failed", agents: [], models: [] });
+      } else if (data.pairingRequired) {
+        // Device needs approval on the gateway host
+        setProbeResult({
+          ok: false,
+          pairingRequired: true,
+          pairingInstructions: data.pairingInstructions,
+          devicePrivateKeyPem: data.devicePrivateKeyPem,
+          agents: [],
+          models: [],
+        });
       } else {
         setProbeResult(data);
         setSelectedAgentIds(new Set(data.agents.map((a: { id: string }) => a.id)));
@@ -657,8 +675,51 @@ export default function OnboardingPage() {
             </div>
           )}
 
+          {/* ── Step 2c: Connect runtime — pairing required ── */}
+          {step === 2 && teamMode === "connect" && probeResult?.pairingRequired && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                    DEVICE PAIRING REQUIRED
+                  </h2>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    CrewCmd registered as a new device. Approve it on your OpenClaw gateway.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setProbeResult(null); setConnectMode("gateway"); }}
+                  className="text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                >
+                  ← BACK
+                </button>
+              </div>
+
+              {/* Pairing instructions */}
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🔐</span>
+                  <span className="text-[11px] font-bold tracking-wider text-amber-400">
+                    APPROVE ON GATEWAY HOST
+                  </span>
+                </div>
+                <pre className="mt-2 rounded-md bg-[var(--bg-tertiary)] p-3 font-mono text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap">
+                  {probeResult.pairingInstructions || "Run: openclaw devices approve"}
+                </pre>
+              </div>
+
+              <button
+                onClick={handleProbeGateway}
+                disabled={probing}
+                className={`w-full ${btnPrimary}`}
+              >
+                {probing ? "RETRYING..." : "RETRY CONNECTION"}
+              </button>
+            </div>
+          )}
+
           {/* ── Step 2c: Connect runtime — gateway connect ── */}
-          {step === 2 && teamMode === "connect" && connectMode === "gateway" && !probeResult?.ok && (
+          {step === 2 && teamMode === "connect" && connectMode === "gateway" && !probeResult?.ok && !probeResult?.pairingRequired && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>

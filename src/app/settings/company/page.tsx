@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useCompany } from "@/components/company-context";
 
 interface Company {
   id: string;
@@ -42,6 +43,10 @@ export default function CompanySettingsPage() {
   const [name, setName] = useState("");
   const [mission, setMission] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { refresh: refreshCompany } = useCompany();
   const [inviteUsername, setInviteUsername] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
@@ -116,6 +121,7 @@ export default function CompanySettingsPage() {
       if (res.ok) {
         const updated = await res.json();
         setCompany(updated);
+        refreshCompany();
         setMessage({ type: "success", text: "Company updated" });
       } else {
         setMessage({ type: "error", text: "Failed to update" });
@@ -124,6 +130,36 @@ export default function CompanySettingsPage() {
       setMessage({ type: "error", text: "Network error" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleLogoUpload(file: File) {
+    if (!company) return;
+    setUploadingLogo(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/companies/${company.id}/logo`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLogoUrl(data.logoUrl);
+        refreshCompany();
+        setMessage({ type: "success", text: "Logo uploaded" });
+      } else {
+        const err = await res.json().catch(() => ({ error: "Upload failed" }));
+        setMessage({ type: "error", text: err.error || "Upload failed" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Upload failed" });
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -288,13 +324,73 @@ export default function CompanySettingsPage() {
         </div>
 
         <div>
-          <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">LOGO URL</label>
+          <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)] mb-2">COMPANY LOGO</label>
+          {logoUrl ? (
+            <div className="flex items-center gap-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoUrl}
+                alt="Company logo"
+                className="h-16 w-16 rounded-lg border border-[var(--border-medium)] object-contain bg-[var(--bg-surface)] p-1"
+              />
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+                >
+                  Change
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!company) return;
+                    await fetch(`/api/companies/${company.id}/logo`, { method: "DELETE" });
+                    setLogoUrl("");
+                    refreshCompany();
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border-medium)] hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file) await handleLogoUpload(file);
+              }}
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 transition-colors ${
+                dragOver
+                  ? "border-neo bg-neo/5"
+                  : "border-[var(--border-medium)] hover:border-[var(--text-tertiary)]"
+              }`}
+            >
+              <svg className="h-8 w-8 text-[var(--text-tertiary)] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+              </svg>
+              <span className="text-xs text-[var(--text-tertiary)]">
+                {uploadingLogo ? "Uploading..." : "Drop logo here or click to upload"}
+              </span>
+              <span className="text-[10px] text-[var(--text-tertiary)]/50 mt-1">
+                PNG, JPEG, SVG, WebP · Max 2MB
+              </span>
+            </div>
+          )}
           <input
-            type="text"
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
-            placeholder="https://..."
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) await handleLogoUpload(file);
+              e.target.value = "";
+            }}
           />
         </div>
 

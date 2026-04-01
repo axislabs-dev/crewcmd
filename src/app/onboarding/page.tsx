@@ -311,7 +311,7 @@ export default function OnboardingPage() {
       // ignore
     } finally {
       setLoading(false);
-      router.push("/dashboard");
+      router.push("/team");
     }
   }
 
@@ -1083,7 +1083,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => router.push("/dashboard")} className={`flex-1 ${btnSecondary}`}>
+                <button onClick={() => router.push("/team")} className={`flex-1 ${btnSecondary}`}>
                   SKIP
                 </button>
                 <button

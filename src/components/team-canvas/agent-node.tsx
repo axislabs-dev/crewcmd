@@ -58,7 +58,7 @@ function AgentNodeComponent({ data }: NodeProps) {
 
       {/* Card */}
       <div
-        className="relative w-[220px] rounded-xl border border-[var(--border-medium)] bg-white dark:bg-[#1a1a2e] shadow-lg transition-all duration-200 hover:border-[var(--accent-medium)] hover:shadow-xl hover:shadow-[var(--accent)]/10 cursor-pointer overflow-hidden"
+        className="relative w-[220px] rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-lg transition-all duration-200 hover:border-[var(--accent-medium)] hover:shadow-xl hover:shadow-[var(--accent)]/10 cursor-pointer overflow-hidden"
         onDoubleClick={() => onNavigate(agent.callsign.toLowerCase())}
       >
         {/* Color accent bar */}

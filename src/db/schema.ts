@@ -304,16 +304,34 @@ export const nodeStatus = pgTable("node_status", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const docTypeEnum = pgEnum("doc_type", [
+  "sop",
+  "guide",
+  "reference",
+  "runbook",
+  "general",
+]);
+
+export const docVisibilityEnum = pgEnum("doc_visibility", [
+  "company",
+  "project",
+  "agents_only",
+]);
+
 export const docs = pgTable("docs", {
   id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   category: text("category").notNull(),
+  docType: docTypeEnum("doc_type").default("general").notNull(),
+  visibility: docVisibilityEnum("visibility").default("company").notNull(),
   authorAgentId: text("author_agent_id"),
+  authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
   projectId: uuid("project_id").references(() => projects.id),
   taskId: uuid("task_id").references(() => tasks.id),
   tags: text("tags").array(),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  pinned: boolean("pinned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

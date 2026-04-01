@@ -27,7 +27,14 @@ export function AdapterCheck() {
         } as RequestInit);
         if (res.ok && !cancelled) {
           const data = await res.json();
-          setAdapters(data.adapters || []);
+          const raw = data.adapters;
+          // API may return an object keyed by adapter or an array
+          const list = Array.isArray(raw)
+            ? raw
+            : raw && typeof raw === "object"
+              ? Object.entries(raw).map(([key, val]) => ({ key, ...(val as Record<string, unknown>) }))
+              : [];
+          setAdapters(list as AdapterAvailability[]);
         } else if (!cancelled) {
           setError(true);
         }
@@ -42,33 +49,26 @@ export function AdapterCheck() {
 
   if (error || !adapters) return null;
 
-  const hasUnavailable = adapters.some((a) => !a.available);
+  const available = adapters.filter((a) => a.available);
+
+  if (available.length === 0) return null;
 
   return (
-    <div className="glass-card p-3 space-y-1.5">
+    <div className="glass-card p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-[10px] tracking-wider text-[var(--text-tertiary)] uppercase shrink-0">
-          Detected Tools:
+        <span className="text-[10px] tracking-wider text-[var(--text-secondary)] uppercase shrink-0">
+          Available Tools:
         </span>
-        {adapters.map((adapter) => (
+        {available.map((adapter) => (
           <span
             key={adapter.key}
-            className={`inline-flex items-center gap-1 text-[11px] tracking-wider ${
-              adapter.available
-                ? "text-[var(--text-secondary)]"
-                : "text-[var(--text-tertiary)] opacity-50"
-            }`}
+            className="inline-flex items-center gap-1 text-[11px] tracking-wider text-[var(--text-primary)]"
           >
-            <span>{adapter.available ? "\u2705" : "\u274C"}</span>
+            <span>{"\u2705"}</span>
             {adapter.name}
           </span>
         ))}
       </div>
-      {hasUnavailable && (
-        <p className="text-[10px] text-[var(--text-tertiary)]">
-          Agents using unavailable tools cannot be started. Install the tool first.
-        </p>
-      )}
     </div>
   );
 }

@@ -18,6 +18,22 @@ interface Member {
   createdAt: string;
 }
 
+interface ProviderKey {
+  id: string;
+  provider: string;
+  label: string | null;
+  maskedKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const PROVIDER_INFO: Record<string, { label: string; placeholder: string }> = {
+  anthropic: { label: "Anthropic", placeholder: "sk-ant-..." },
+  openai: { label: "OpenAI", placeholder: "sk-..." },
+  google: { label: "Google", placeholder: "AIza..." },
+  openrouter: { label: "OpenRouter", placeholder: "sk-or-v1-..." },
+};
+
 export default function CompanySettingsPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -30,6 +46,12 @@ export default function CompanySettingsPage() {
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Provider keys state
+  const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([]);
+  const [newKeyProvider, setNewKeyProvider] = useState("anthropic");
+  const [newKeyValue, setNewKeyValue] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
 
   const getActiveCompanyId = () => {
     const cookie = document.cookie
@@ -46,9 +68,10 @@ export default function CompanySettingsPage() {
     }
 
     try {
-      const [companyRes, membersRes] = await Promise.all([
+      const [companyRes, membersRes, keysRes] = await Promise.all([
         fetch(`/api/companies/${companyId}`),
         fetch(`/api/companies/${companyId}/members`),
+        fetch(`/api/provider-keys?companyId=${companyId}`),
       ]);
 
       if (companyRes.ok) {
@@ -61,6 +84,11 @@ export default function CompanySettingsPage() {
 
       if (membersRes.ok) {
         setMembers(await membersRes.json());
+      }
+
+      if (keysRes.ok) {
+        const data = await keysRes.json();
+        setProviderKeys(data.keys ?? []);
       }
     } catch {
       // ignore
@@ -135,6 +163,47 @@ export default function CompanySettingsPage() {
       await fetch(`/api/companies/${company.id}/members?memberId=${memberId}`, {
         method: "DELETE",
       });
+      fetchData();
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleAddKey() {
+    if (!company || !newKeyValue.trim()) return;
+    setSavingKey(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/provider-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: company.id,
+          provider: newKeyProvider,
+          apiKey: newKeyValue.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        setNewKeyValue("");
+        setMessage({ type: "success", text: `${PROVIDER_INFO[newKeyProvider]?.label ?? newKeyProvider} key saved` });
+        fetchData();
+      } else {
+        const err = await res.json();
+        setMessage({ type: "error", text: err.error || "Failed to save key" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setSavingKey(false);
+    }
+  }
+
+  async function handleDeleteKey(keyId: string) {
+    if (!company) return;
+    try {
+      await fetch(`/api/provider-keys?id=${keyId}`, { method: "DELETE" });
       fetchData();
     } catch {
       // ignore
@@ -301,6 +370,72 @@ export default function CompanySettingsPage() {
           {members.length === 0 && (
             <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">No members yet</p>
           )}
+        </div>
+      </div>
+
+      {/* Provider API Keys */}
+      <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+        <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">PROVIDER API KEYS</h2>
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          Add API keys for AI providers. Keys are encrypted at rest and never exposed in full.
+        </p>
+
+        {/* Existing keys */}
+        <div className="mt-4 space-y-2">
+          {providerKeys.map((k) => (
+            <div
+              key={k.id}
+              className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
+                  {PROVIDER_INFO[k.provider]?.label?.toUpperCase() ?? k.provider.toUpperCase()}
+                </span>
+                <span className="font-mono text-xs text-[var(--text-secondary)]">{k.maskedKey}</span>
+                {k.label && (
+                  <span className="text-[10px] text-[var(--text-tertiary)]">{k.label}</span>
+                )}
+              </div>
+              <button
+                onClick={() => handleDeleteKey(k.id)}
+                className="font-mono text-[10px] text-red-400/60 transition-colors hover:text-red-400"
+              >
+                REMOVE
+              </button>
+            </div>
+          ))}
+          {providerKeys.length === 0 && (
+            <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">No API keys configured</p>
+          )}
+        </div>
+
+        {/* Add new key */}
+        <div className="mt-4 flex gap-2">
+          <select
+            value={newKeyProvider}
+            onChange={(e) => setNewKeyProvider(e.target.value)}
+            className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] outline-none"
+          >
+            {Object.entries(PROVIDER_INFO).map(([key, info]) => (
+              <option key={key} value={key}>
+                {info.label}
+              </option>
+            ))}
+          </select>
+          <input
+            type="password"
+            value={newKeyValue}
+            onChange={(e) => setNewKeyValue(e.target.value)}
+            placeholder={PROVIDER_INFO[newKeyProvider]?.placeholder ?? "API key"}
+            className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
+          />
+          <button
+            onClick={handleAddKey}
+            disabled={savingKey || !newKeyValue.trim()}
+            className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
+          >
+            {savingKey ? "..." : "ADD KEY"}
+          </button>
         </div>
       </div>
     </div>

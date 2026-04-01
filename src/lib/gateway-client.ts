@@ -95,6 +95,7 @@ export class GatewayClient {
   >();
   private connected = false;
   private serverVersion?: string;
+  private grantedScopes: string[] = [];
 
   constructor(
     private gatewayUrl: string,
@@ -134,28 +135,7 @@ export class GatewayClient {
         this.pendingRequests.clear();
       });
 
-      this.ws.on("open", () => {
-        // Send connect handshake
-        const connectFrame = {
-          type: "connect",
-          params: {
-            minProtocol: 1,
-            maxProtocol: 1,
-            client: {
-              id: "gateway-client",
-              displayName: "CrewCmd",
-              version: "1.0.0",
-              platform: "server",
-              mode: "backend",
-            },
-            auth: {
-              token: this.authToken,
-            },
-          },
-        };
-        this.ws!.send(JSON.stringify(connectFrame));
-      });
-
+      // Gateway protocol: wait for connect.challenge event, then send connect frame
       this.ws.on("message", (data) => {
         let msg: Record<string, unknown>;
         try {
@@ -164,41 +144,76 @@ export class GatewayClient {
           return;
         }
 
-        // Handle hello-ok (handshake response)
-        if (msg.type === "hello-ok") {
-          clearTimeout(timer);
-          this.connected = true;
-          const server = msg.server as { version?: string } | undefined;
-          this.serverVersion = server?.version || "unknown";
-          resolve({ version: this.serverVersion });
+        // Step 1: Gateway sends connect.challenge event with a nonce
+        if (msg.type === "event") {
+          const event = msg.event as string;
+          if (event === "connect.challenge") {
+            const payload = msg.payload as { nonce?: string } | undefined;
+            const nonce = payload?.nonce;
+            if (!nonce) {
+              clearTimeout(timer);
+              reject(new Error("Gateway challenge missing nonce"));
+              return;
+            }
+            // Send connect as an RPC request (type: "req", method: "connect")
+            const connectId = `crewcmd-connect-${++this.requestId}`;
+            // Register handler for the connect response
+            this.pendingRequests.set(connectId, {
+              resolve: (value) => {
+                clearTimeout(timer);
+                this.connected = true;
+                const helloOk = value as Record<string, unknown>;
+                const server = helloOk.server as { version?: string } | undefined;
+                this.serverVersion = server?.version || "unknown";
+                const authInfo = helloOk.auth as { scopes?: string[] } | undefined;
+                this.grantedScopes = authInfo?.scopes ?? [];
+                resolve({ version: this.serverVersion });
+              },
+              reject: (err) => {
+                clearTimeout(timer);
+                reject(err);
+              },
+            });
+            const connectFrame = {
+              type: "req",
+              id: connectId,
+              method: "connect",
+              params: {
+                minProtocol: 1,
+                maxProtocol: 1,
+                client: {
+                  id: "gateway-client" as const,
+                  displayName: "CrewCmd",
+                  version: "1.0.0",
+                  platform: "server",
+                  mode: "backend" as const,
+                },
+                scopes: ["operator.read", "operator.write"],
+                auth: {
+                  token: this.authToken,
+                },
+              },
+            };
+            this.ws!.send(JSON.stringify(connectFrame));
+            return;
+          }
+          // Ignore other events during handshake
           return;
         }
 
-        // Handle hello-error
-        if (msg.type === "hello-error" || msg.type === "error") {
-          clearTimeout(timer);
-          const errMsg =
-            (msg.error as { message?: string })?.message ||
-            (msg.message as string) ||
-            "Handshake failed";
-          reject(new Error(errMsg));
-          return;
-        }
-
-        // Handle RPC responses
-        if (msg.type === "response" || msg.type === "result") {
-          const reqId = msg.requestId as string;
+        // Handle RPC responses (gateway uses type: "res")
+        // This handles both the connect response and subsequent RPC calls
+        if (msg.type === "res") {
+          const reqId = msg.id as string;
           const pending = this.pendingRequests.get(reqId);
           if (pending) {
             this.pendingRequests.delete(reqId);
             if (msg.ok === false || msg.error) {
-              const errDetail =
-                (msg.error as { message?: string })?.message ||
-                JSON.stringify(msg.error) ||
-                "RPC error";
+              const errObj = msg.error as { message?: string; code?: string } | undefined;
+              const errDetail = errObj?.message || JSON.stringify(msg.error) || "RPC error";
               pending.reject(new Error(errDetail));
             } else {
-              pending.resolve(msg.result ?? msg.payload ?? msg);
+              pending.resolve(msg.payload ?? msg);
             }
           }
         }
@@ -233,10 +248,11 @@ export class GatewayClient {
         },
       });
 
+      // OpenClaw gateway uses RequestFrameSchema: { type: "req", id, method, params }
       const frame = {
-        type: "request",
+        type: "req",
+        id: requestId,
         method,
-        requestId,
         params,
       };
 

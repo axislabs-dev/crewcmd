@@ -38,15 +38,20 @@ export default function OnboardingPage() {
   const [agentEmoji, setAgentEmoji] = useState("🤖");
   const [agentRole, setAgentRole] = useState("engineer");
 
-  // Step 2c: Connect runtime
+  // Step 2c: Connect runtime (local auto-detect or paste config)
+  const [connectMode, setConnectMode] = useState<"choose" | "local" | "paste">("choose");
+  const [pastedConfig, setPastedConfig] = useState("");
   const [gatewayUrl, setGatewayUrl] = useState("localhost:18789");
   const [authToken, setAuthToken] = useState("");
   const [probeResult, setProbeResult] = useState<{
     ok: boolean;
     error?: string;
-    version?: string;
-    agents: { id: string; name: string; emoji: string; title: string; description: string }[];
-    models: { id: string; name: string; provider: string }[];
+    agents: { id: string; name: string; emoji: string; title: string; description: string; model?: string; reportsTo?: string }[];
+    models: string[];
+    gatewayUrl?: string;
+    gatewayPort?: number;
+    defaultModel?: string;
+    defaultAgentId?: string;
   } | null>(null);
   const [probing, setProbing] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
@@ -132,28 +137,48 @@ export default function OnboardingPage() {
     }
   }
 
-  async function handleProbeGateway() {
+  async function handleProbeLocal() {
     setProbing(true);
     setProbeResult(null);
     try {
       const res = await fetch("/api/runtimes/probe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          gatewayUrl: gatewayUrl.trim(),
-          authToken: authToken.trim(),
-        }),
+        body: JSON.stringify({ mode: "local" }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setProbeResult({ ok: false, error: data.error || "Connection failed", agents: [], models: [] });
+        setProbeResult({ ok: false, error: data.error || "Config not found", agents: [], models: [] });
       } else {
         setProbeResult(data);
-        // Select all agents by default
         setSelectedAgentIds(new Set(data.agents.map((a: { id: string }) => a.id)));
       }
     } catch {
-      setProbeResult({ ok: false, error: "Network error — is the gateway reachable?", agents: [], models: [] });
+      setProbeResult({ ok: false, error: "Failed to read local config", agents: [], models: [] });
+    } finally {
+      setProbing(false);
+    }
+  }
+
+  async function handleProbePaste() {
+    if (!pastedConfig.trim()) return;
+    setProbing(true);
+    setProbeResult(null);
+    try {
+      const res = await fetch("/api/runtimes/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "paste", config: pastedConfig.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProbeResult({ ok: false, error: data.error || "Invalid config", agents: [], models: [] });
+      } else {
+        setProbeResult(data);
+        setSelectedAgentIds(new Set(data.agents.map((a: { id: string }) => a.id)));
+      }
+    } catch {
+      setProbeResult({ ok: false, error: "Failed to parse config", agents: [], models: [] });
     } finally {
       setProbing(false);
     }
@@ -175,51 +200,34 @@ export default function OnboardingPage() {
     if (!probeResult || !companyId || selectedAgentIds.size === 0) return;
     setImporting(true);
     try {
-      // First, create the runtime connection
-      let httpUrl = gatewayUrl.trim();
-      if (!httpUrl.startsWith("http")) {
-        httpUrl = `http://${httpUrl}`;
-      }
-      let wsUrl = gatewayUrl.trim();
-      if (!wsUrl.startsWith("ws")) {
-        wsUrl = `ws://${wsUrl}`;
-      }
-
-      const runtimeRes = await fetch("/api/runtimes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "OpenClaw Gateway",
-          gatewayUrl: wsUrl,
-          httpUrl,
-          authToken: authToken.trim(),
-          runtimeType: "openclaw",
-          metadata: { version: probeResult.version, agentCount: probeResult.agents.length },
-        }),
-      });
-
-      if (!runtimeRes.ok) {
-        return;
-      }
-
-      const runtime = await runtimeRes.json();
-
-      // Import selected agents
+      // Create agents directly from the parsed config
       const selectedAgents = probeResult.agents.filter((a) => selectedAgentIds.has(a.id));
 
-      const importRes = await fetch("/api/runtimes/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          runtimeId: runtime.id,
-          agents: selectedAgents,
-          models: probeResult.models,
-        }),
-      });
-
-      if (importRes.ok) {
-        setStep(3);
+      for (const agent of selectedAgents) {
+        const callsign = agent.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) || "AGENT";
+        await fetch("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: agent.name,
+            callsign,
+            title: agent.title || "Agent",
+            emoji: agent.emoji || "🤖",
+            color: "#00f0ff",
+            adapterType: "openclaw_gateway",
+            adapterConfig: {
+              gatewayUrl: probeResult.gatewayUrl || `ws://127.0.0.1:${probeResult.gatewayPort || 18789}`,
+              agentId: agent.id,
+              model: agent.model,
+            },
+            role: "agent",
+            companyId,
+            reportsTo: agent.reportsTo || null,
+          }),
+        });
       }
+
+      setStep(3);
     } catch {
       // ignore
     } finally {
@@ -554,20 +562,82 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* ── Step 2c: Connect runtime — enter URL ── */}
-          {step === 2 && teamMode === "connect" && !probeResult?.ok && (
+          {/* ── Step 2c: Connect runtime — choose method ── */}
+          {step === 2 && teamMode === "connect" && connectMode === "choose" && !probeResult?.ok && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
-                    CONNECT YOUR RUNTIME
+                    IMPORT FROM OPENCLAW
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Enter your OpenClaw gateway address. Defaults to localhost for local setups.
+                    Import your existing agent team and configuration.
                   </p>
                 </div>
                 <button
-                  onClick={() => { setTeamMode(null); setProbeResult(null); }}
+                  onClick={() => { setTeamMode(null); setProbeResult(null); setConnectMode("choose"); }}
+                  className="text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                >
+                  ← BACK
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  onClick={() => {
+                    setConnectMode("local");
+                    handleProbeLocal();
+                  }}
+                  className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
+                >
+                  <div className="text-2xl">🔍</div>
+                  <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
+                    AUTO-DETECT
+                  </h3>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Reads ~/.openclaw/openclaw.json and agent workspace files on this machine.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setConnectMode("paste")}
+                  className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
+                >
+                  <div className="text-2xl">📋</div>
+                  <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
+                    PASTE CONFIG
+                  </h3>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Running OpenClaw on another machine? Paste your openclaw.json content here.
+                  </p>
+                </button>
+              </div>
+
+              {probeResult && !probeResult.ok && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                  <p className="text-[11px] text-red-400">
+                    {probeResult.error || "Detection failed"}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 2c: Connect runtime — paste config ── */}
+          {step === 2 && teamMode === "connect" && connectMode === "paste" && !probeResult?.ok && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                    PASTE YOUR CONFIG
+                  </h2>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Copy ~/.openclaw/openclaw.json from your remote machine and paste below.
+                    API keys are parsed locally and never stored.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setConnectMode("choose"); setProbeResult(null); }}
                   className="text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
                 >
                   ← BACK
@@ -575,56 +645,53 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className={labelClass}>GATEWAY URL</label>
-                <input
-                  type="text"
-                  value={gatewayUrl}
-                  onChange={(e) => setGatewayUrl(e.target.value)}
-                  placeholder="localhost:18789"
-                  className={inputClass}
+                <label className={labelClass}>OPENCLAW.JSON CONTENT</label>
+                <textarea
+                  value={pastedConfig}
+                  onChange={(e) => setPastedConfig(e.target.value)}
+                  rows={8}
+                  placeholder='{"agents":{"list":[...]},"gateway":{...}}'
+                  className={`${inputClass} font-mono text-[11px]`}
                   autoFocus
                 />
-                <p className="mt-1 text-[9px] text-[var(--text-tertiary)]">
-                  Local: localhost:18789 · Remote: your-server.com:18789 or Tailscale IP
-                </p>
-              </div>
-
-              <div>
-                <label className={labelClass}>AUTH TOKEN</label>
-                <input
-                  type="password"
-                  value={authToken}
-                  onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="Your gateway auth token"
-                  className={inputClass}
-                />
-                <p className="mt-1 text-[9px] text-[var(--text-tertiary)]">
-                  Found in ~/.openclaw/openclaw.json → gateway.auth.token
-                </p>
               </div>
 
               {probeResult && !probeResult.ok && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
                   <p className="text-[11px] text-red-400">
-                    {probeResult.error || "Connection failed"}
+                    {probeResult.error || "Failed to parse config"}
                   </p>
                 </div>
               )}
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setTeamMode(null); setProbeResult(null); }}
+                  onClick={() => { setConnectMode("choose"); setProbeResult(null); }}
                   className={`flex-1 ${btnSecondary}`}
                 >
                   BACK
                 </button>
                 <button
-                  onClick={handleProbeGateway}
-                  disabled={probing || !gatewayUrl.trim() || !authToken.trim()}
+                  onClick={handleProbePaste}
+                  disabled={probing || !pastedConfig.trim()}
                   className={`flex-1 ${btnPrimary}`}
                 >
-                  {probing ? "CONNECTING..." : "CONNECT"}
+                  {probing ? "PARSING..." : "PARSE CONFIG"}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2c: Connect runtime — auto-detect loading ── */}
+          {step === 2 && teamMode === "connect" && connectMode === "local" && probing && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="text-2xl animate-pulse">🔍</div>
+                  <p className="mt-3 text-xs tracking-wider text-[var(--text-tertiary)]">
+                    SCANNING LOCAL OPENCLAW CONFIG...
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -638,7 +705,7 @@ export default function OnboardingPage() {
                     FOUND {probeResult.agents.length} AGENTS
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Connected to OpenClaw {probeResult.version}. Select which agents to import.
+                    Detected from OpenClaw config. Select which agents to import.
                   </p>
                 </div>
                 <button
@@ -707,10 +774,10 @@ export default function OnboardingPage() {
               {probeResult.models.length > 0 && (
                 <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] px-3 py-2">
                   <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
-                    MODELS: {probeResult.models.length} available
+                    MODELS & PROVIDERS: {probeResult.models.length} detected
                   </span>
                   <p className="mt-0.5 text-[9px] text-[var(--text-tertiary)] line-clamp-1">
-                    {probeResult.models.map((m) => m.name || m.id).join(", ")}
+                    {probeResult.models.join(", ")}
                   </p>
                 </div>
               )}

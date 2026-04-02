@@ -25,7 +25,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function ImageLightbox({ src, alt }: { src: string; alt: string }) {
+function ImageThumbnail({ src, alt }: { src: string; alt: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -33,20 +33,31 @@ function ImageLightbox({ src, alt }: { src: string; alt: string }) {
       <img
         src={src}
         alt={alt}
-        className="max-w-full sm:max-w-sm rounded-lg border border-[var(--border-medium)] cursor-pointer hover:opacity-90 transition-opacity"
+        className="h-16 w-16 rounded-md border border-[var(--border-medium)] object-cover cursor-pointer hover:opacity-80 transition-opacity"
         onClick={() => setOpen(true)}
       />
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-pointer"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 backdrop-blur-sm cursor-pointer"
           onClick={() => setOpen(false)}
         >
           <img
             src={src}
             alt={alt}
-            className="max-h-[90vh] max-w-[90vw] rounded-lg"
+            className="max-h-[80vh] max-w-[90vw] rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />
+          <a
+            href={src}
+            download={alt}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 rounded-lg bg-white/10 px-4 py-2 text-xs text-white backdrop-blur-sm hover:bg-white/20 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Download
+          </a>
         </div>
       )}
     </>
@@ -112,7 +123,7 @@ export function ChatMessage({ role, content, isStreaming, metadata }: ChatMessag
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((att, i) =>
               att.mimeType.startsWith("image/") ? (
-                <ImageLightbox key={i} src={att.url} alt={att.filename} />
+                <ImageThumbnail key={i} src={att.url} alt={att.filename} />
               ) : (
                 <a
                   key={i}

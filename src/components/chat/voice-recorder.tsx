@@ -29,6 +29,14 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
   const [isSupported, setIsSupported] = useState(false);
   const [sttMode, setSttMode] = useState<"server" | "browser" | "unknown">("unknown");
   const [volumeLevel, setVolumeLevel] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showError = useCallback((msg: string) => {
+    setError(msg);
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(null), 5000);
+  }, []);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -44,7 +52,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     const hasBrowserSpeech = !!getBrowserSpeechRecognition();
     setIsSupported(hasMediaRecorder || hasBrowserSpeech);
 
-    fetch("/api/stt")
+    fetch("/api/stt", { signal: AbortSignal.timeout(5000) })
       .then((res) => {
         if (res.status === 503) {
           setSttMode("browser");
@@ -55,6 +63,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
         }
       })
       .catch(() => {
+        // STT endpoint unreachable (e.g. cross-device via Tailscale) — fall back to browser STT
         setSttMode(hasBrowserSpeech ? "browser" : "server");
       });
   }, []);
@@ -209,10 +218,10 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
           } else if (response.status === 503) {
             setSttMode("browser");
           } else {
-            console.error("[VoiceRecorder] STT error:", response.status);
+            showError("Transcription failed. Try again.");
           }
-        } catch (err) {
-          console.error("[VoiceRecorder] Transcription error:", err);
+        } catch {
+          showError("Speech server unreachable. Check your connection.");
         } finally {
           setIsTranscribing(false);
         }
@@ -221,10 +230,10 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       mediaRecorderRef.current = recorder;
       recorder.start(100);
       setIsRecording(true);
-    } catch (err) {
-      console.error("[VoiceRecorder] Mic error:", err);
+    } catch {
+      showError("Microphone access denied. Allow mic access and retry.");
     }
-  }, [onTranscript, startVUMeter, stopVUMeter]);
+  }, [onTranscript, startVUMeter, stopVUMeter, showError]);
 
   const toggleRecording = useCallback(async () => {
     if (isDisabled || isTranscribing) return;
@@ -291,6 +300,15 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
   }, [stopVUMeter]);
 
   if (!isSupported) return null;
+
+  // Error banner
+  if (error) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-red-400">{error}</span>
+      </div>
+    );
+  }
 
   // When recording: show VU meter with cancel (X) and done (checkmark) buttons
   if (isRecording) {

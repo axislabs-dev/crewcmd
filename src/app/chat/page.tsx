@@ -231,46 +231,61 @@ export default function ChatPage() {
     fetchAgents();
   }, []);
 
-  // Load messages when session changes: DB → localStorage → gateway (waterfall)
+  // Load messages when session changes: localStorage (cache) → gateway (authoritative) → DB (fallback)
   useEffect(() => {
     let cancelled = false;
     hasLoadedFromDB.current = false;
     const agentId = selectedAgent?.callsign || activeSessionKey;
 
     async function load() {
-      // 1. Instant render from localStorage cache
+      // 1. Instant render from localStorage cache (write-through cache only)
       const cached = loadMessages(activeSessionKey);
       if (cached.length > 0 && !cancelled) {
         setMessages(cached);
       }
 
-      // 2. Try loading from DB (authoritative source)
+      // 2. Gateway is the authoritative source of truth for conversation history
+      let gatewayMessages: Message[] | null = null;
+      try {
+        const res = await fetch(
+          `/api/chat/history?sessionKey=${encodeURIComponent(activeSessionKey)}&limit=50`
+        );
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          if (data?.messages?.length) {
+            gatewayMessages = data.messages;
+          }
+        }
+      } catch {
+        // Gateway unavailable — fall through to DB
+      }
+
+      if (cancelled) return;
+
+      if (gatewayMessages && gatewayMessages.length > 0) {
+        // Merge: gateway wins for any conflicts, keep local-only messages
+        const gatewayIds = new Set(gatewayMessages.map((m: Message) => m.id));
+        const localOnly = cached.filter((m) => !gatewayIds.has(m.id));
+        const merged = [...gatewayMessages, ...localOnly]
+          .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+        setMessages(merged);
+        saveMessages(activeSessionKey, merged);
+        hasLoadedFromDB.current = true;
+        return;
+      }
+
+      // 3. Fallback: try loading from DB (PGlite local store)
       const dbMessages = await loadFromDB(agentId);
       if (cancelled) return;
       hasLoadedFromDB.current = true;
 
       if (dbMessages && dbMessages.length > 0) {
         setMessages(dbMessages);
-        saveMessages(activeSessionKey, dbMessages); // sync localStorage
+        saveMessages(activeSessionKey, dbMessages);
         return;
       }
 
-      // 3. If DB empty but localStorage had messages, keep them (may need migration)
-      if (cached.length > 0) return;
-
-      // 4. Last resort: fetch from gateway (ephemeral session history)
-      try {
-        const res = await fetch(
-          `/api/chat/history?sessionKey=${encodeURIComponent(activeSessionKey)}&limit=50`
-        );
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (data?.messages?.length && !cancelled) {
-          setMessages(data.messages);
-        }
-      } catch {
-        // Gateway unavailable
-      }
+      // 4. If nothing else, keep whatever localStorage had
     }
 
     load();

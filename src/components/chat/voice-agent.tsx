@@ -57,19 +57,22 @@ export function VoiceAgent({
         });
 
         if (!response.ok) {
-          console.error("[VoiceAgent] STT error:", response.status);
+          setError(response.status === 503
+            ? "Speech server unavailable. Deactivate and retry."
+            : "Transcription failed. Try speaking again.");
           setState("listening");
           return;
         }
 
         const { text } = await response.json();
         if (text && text.trim()) {
+          setError(null);
           onTranscript(text.trim());
         } else {
           setState("listening");
         }
-      } catch (err) {
-        console.error("[VoiceAgent] Transcription error:", err);
+      } catch {
+        setError("Speech server unreachable. Check your connection.");
         setState("listening");
       }
     },

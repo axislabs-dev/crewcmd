@@ -18,7 +18,6 @@ interface Message {
   content: string;
 }
 
-type ChatMode = "talk" | "task";
 type VoiceMode = "off" | "agent";
 
 const VOICE_SYSTEM_PROMPT =
@@ -60,7 +59,6 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [chatMode, setChatMode] = useState<ChatMode>("talk");
   const [streamingContent, setStreamingContent] = useState("");
   const [speakResponses, setSpeakResponses] = useState(false);
 
@@ -257,54 +255,7 @@ export default function ChatPage() {
       const trimmed = text.trim();
       if (!trimmed || isLoading) return;
 
-      // Task mode: create a task instead
-      if (chatMode === "task") {
-        const userMsg: Message = {
-          id: crypto.randomUUID(),
-          role: "user",
-          content: trimmed,
-        };
-        setMessages((prev) => [...prev, userMsg]);
-        setInput("");
-        setIsLoading(true);
-
-        try {
-          const res = await fetch("/api/tasks", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: trimmed,
-              source: "manual",
-              status: "inbox",
-            }),
-          });
-          const task = await res.json();
-          const assistantMsg: Message = {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: res.ok
-              ? `Task created: **TSK-${task.shortId}** - "${task.title}" (${task.status})`
-              : `Failed to create task: ${task.error || "Unknown error"}`,
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
-          if (speakResponses && res.ok) {
-            playTTS(`Task created: TSK-${task.shortId}, ${task.title}`);
-          }
-        } catch {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: "Failed to create task. Please try again.",
-            },
-          ]);
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      // Chat mode: send to OpenClaw Gateway
+      // Send to OpenClaw Gateway
       const userMsg: Message = {
         id: crypto.randomUUID(),
         role: "user",
@@ -395,7 +346,7 @@ export default function ChatPage() {
 
       setIsLoading(false);
     },
-    [isLoading, messages, chatMode, playTTS, selectedAgent, speakResponses]
+    [isLoading, messages, playTTS, selectedAgent, speakResponses]
   );
 
   const interruptAudio = useCallback(() => {
@@ -463,30 +414,6 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Mode toggle: Talk / Create Task — hidden on small screens */}
-            <div className="hidden sm:flex rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
-              <button
-                onClick={() => setChatMode("talk")}
-                className={`rounded-md px-3 py-1.5 text-[10px] tracking-wider transition-all ${
-                  chatMode === "talk"
-                    ? "bg-neo/15 text-[var(--accent)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                }`}
-              >
-                TALK TO {agentCallsign}
-              </button>
-              <button
-                onClick={() => setChatMode("task")}
-                className={`rounded-md px-3 py-1.5 text-[10px] tracking-wider transition-all ${
-                  chatMode === "task"
-                    ? "bg-neo/15 text-[var(--accent)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                }`}
-              >
-                CREATE TASK
-              </button>
-            </div>
-
             {/* Clear chat */}
             <button
               onClick={clearChat}
@@ -517,18 +444,14 @@ export default function ChatPage() {
                 className="mb-2 font-mono text-lg tracking-wider"
                 style={{ color: agentColor }}
               >
-                {chatMode === "talk"
-                  ? `TALK TO ${agentCallsign}`
-                  : "CREATE A TASK"}
+                {agentCallsign}
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
-                {chatMode === "talk"
-                  ? `Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
-                      parentAgent
-                        ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
-                        : ""
-                    }`
-                  : "Describe a task and it will be created in the task board automatically."}
+                {`Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
+                  parentAgent
+                    ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
+                    : ""
+                }`}
               </p>
 
             </div>
@@ -687,9 +610,7 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                chatMode === "task"
-                  ? "Describe a task to create..."
-                  : `Message ${agentCallsign}...`
+                `Message ${agentCallsign}...`
               }
               disabled={isLoading}
               rows={1}
@@ -727,7 +648,7 @@ export default function ChatPage() {
                   : undefined
               }
             >
-              {chatMode === "task" ? "CREATE" : "SEND"}
+              SEND
             </button>
           </div>
         </div>

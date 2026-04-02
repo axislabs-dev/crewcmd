@@ -19,6 +19,10 @@ interface VoiceRecorderProps {
 
 const MIN_RECORDING_MS = 300;
 
+/**
+ * Compact inline mic button — hold to record, release to transcribe.
+ * Sits alongside the text input and send button.
+ */
 export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -40,12 +44,10 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     fetch("/api/stt")
       .then((res) => {
         if (res.status === 503) {
-          console.log("[VoiceRecorder] Server STT unavailable, using browser speech");
           setSttMode("browser");
         } else if (res.ok) {
           setSttMode("server");
         } else {
-          // 401 or other — fall back to browser if available
           setSttMode(hasBrowserSpeech ? "browser" : "server");
         }
       })
@@ -54,7 +56,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       });
   }, []);
 
-  // Browser Speech API fallback (used when server STT is unavailable)
+  // Browser Speech API fallback
   const startBrowserRecording = useCallback(() => {
     const SpeechRecognitionClass = getBrowserSpeechRecognition();
     if (!SpeechRecognitionClass) return;
@@ -78,7 +80,6 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       console.error("[VoiceRecorder] Browser speech error:", event.error);
-      // If browser speech also fails, there's nothing we can do
       setIsRecording(false);
     };
 
@@ -149,8 +150,6 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
               onTranscript(text.trim());
             }
           } else if (response.status === 503) {
-            // Server has no STT backend, switch to browser mode permanently
-            console.log("[VoiceRecorder] Server STT unavailable, switching to browser speech");
             setSttMode("browser");
           } else {
             console.error("[VoiceRecorder] STT error:", response.status);
@@ -172,11 +171,9 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
 
   const startRecording = useCallback(async () => {
     if (isDisabled || isTranscribing) return;
-
     if (sttMode === "browser") {
       startBrowserRecording();
     } else {
-      // Default: try server first. If it 503s, sttMode flips to "browser" for next time.
       await startServerRecording();
     }
   }, [isDisabled, isTranscribing, sttMode, startBrowserRecording, startServerRecording]);
@@ -203,39 +200,39 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
   if (!isSupported) return null;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      {/* Transcribing indicator */}
-      {isTranscribing && (
-        <div className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-tertiary)] text-center">
-          Transcribing...
+    <button
+      onPointerDown={startRecording}
+      onPointerUp={stopRecording}
+      onPointerLeave={() => {
+        if (isRecording) stopRecording();
+      }}
+      disabled={isDisabled || isTranscribing}
+      title={isRecording ? "Release to send" : isTranscribing ? "Transcribing..." : "Hold to speak"}
+      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 select-none touch-none ${
+        isRecording
+          ? "border-neo bg-neo/20 scale-105"
+          : isTranscribing
+            ? "border-amber-400/50 bg-amber-400/10"
+            : "border-[var(--border-medium)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]"
+      } ${isDisabled || isTranscribing ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
+      style={
+        isRecording
+          ? { boxShadow: "0 0 20px rgba(0, 240, 255, 0.25)" }
+          : undefined
+      }
+    >
+      {isTranscribing ? (
+        /* Spinner while transcribing */
+        <div className="flex items-center gap-0.5">
+          <span className="h-1 w-1 rounded-full bg-amber-400/70 animate-pulse" />
+          <span className="h-1 w-1 rounded-full bg-amber-400/70 animate-pulse" style={{ animationDelay: "0.15s" }} />
+          <span className="h-1 w-1 rounded-full bg-amber-400/70 animate-pulse" style={{ animationDelay: "0.3s" }} />
         </div>
-      )}
-
-      {/* Hold-to-record button */}
-      <button
-        onPointerDown={startRecording}
-        onPointerUp={stopRecording}
-        onPointerLeave={() => {
-          if (isRecording) stopRecording();
-        }}
-        disabled={isDisabled || isTranscribing}
-        className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-200 select-none touch-none ${
-          isRecording
-            ? "border-neo bg-neo/20 scale-110"
-            : isTranscribing
-              ? "border-amber-400/50 bg-amber-400/10"
-              : "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]"
-        } ${isDisabled || isTranscribing ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
-        style={
-          isRecording
-            ? { boxShadow: "0 0 30px rgba(0, 240, 255, 0.3), 0 0 60px rgba(0, 240, 255, 0.1)" }
-            : undefined
-        }
-      >
-        {/* Mic icon */}
+      ) : (
+        /* Mic icon */
         <svg
-          className={`h-7 w-7 transition-colors ${
-            isRecording ? "text-[var(--accent)]" : "text-[var(--text-secondary)]"
+          className={`h-4.5 w-4.5 transition-colors ${
+            isRecording ? "text-[var(--accent)]" : "text-[var(--text-tertiary)]"
           }`}
           fill="none"
           viewBox="0 0 24 24"
@@ -248,19 +245,12 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
             d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
           />
         </svg>
+      )}
 
-        {/* Pulsing ring when recording */}
-        {isRecording && (
-          <>
-            <span className="absolute inset-0 rounded-full border-2 border-neo/40 animate-ping" />
-            <span className="absolute inset-[-4px] rounded-full border border-neo/20 animate-pulse" />
-          </>
-        )}
-      </button>
-
-      <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
-        {isRecording ? "RELEASE TO SEND" : isTranscribing ? "TRANSCRIBING..." : "HOLD TO SPEAK"}
-      </span>
-    </div>
+      {/* Pulsing ring when recording */}
+      {isRecording && (
+        <span className="absolute inset-0 rounded-lg border border-neo/40 animate-ping" />
+      )}
+    </button>
   );
 }

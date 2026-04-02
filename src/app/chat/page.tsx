@@ -19,7 +19,7 @@ interface Message {
 }
 
 type ChatMode = "talk" | "task";
-type VoiceMode = "off" | "push" | "agent";
+type VoiceMode = "off" | "agent";
 
 const VOICE_SYSTEM_PROMPT =
   "Voice mode: respond in 1-3 short sentences. Be conversational and concise. No markdown, no bullet points, no code blocks.";
@@ -62,6 +62,7 @@ export default function ChatPage() {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("talk");
   const [streamingContent, setStreamingContent] = useState("");
+  const lastInputWasVoiceRef = useRef(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -286,7 +287,7 @@ export default function ChatPage() {
               : `Failed to create task: ${task.error || "Unknown error"}`,
           };
           setMessages((prev) => [...prev, assistantMsg]);
-          if (voiceMode !== "off" && res.ok) {
+          if (lastInputWasVoiceRef.current && res.ok) {
             playTTS(`Task created: TSK-${task.shortId}, ${task.title}`);
           }
         } catch {
@@ -315,7 +316,7 @@ export default function ChatPage() {
       setStreamingContent("");
 
       const chatMessages = [
-        ...(voiceMode !== "off"
+        ...(lastInputWasVoiceRef.current
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -375,7 +376,7 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingContent("");
 
-        if (voiceMode !== "off" && fullContent) {
+        if (lastInputWasVoiceRef.current && fullContent) {
           playTTS(fullContent);
         }
       } catch (error) {
@@ -394,7 +395,25 @@ export default function ChatPage() {
 
       setIsLoading(false);
     },
-    [isLoading, messages, voiceMode, chatMode, playTTS, selectedAgent]
+    [isLoading, messages, chatMode, playTTS, selectedAgent]
+  );
+
+  // Wrapper for voice input — sets the voice flag before sending
+  const sendVoiceMessage = useCallback(
+    (text: string) => {
+      lastInputWasVoiceRef.current = true;
+      sendMessage(text);
+    },
+    [sendMessage]
+  );
+
+  // Wrapper for text input — clears the voice flag
+  const sendTextMessage = useCallback(
+    (text: string) => {
+      lastInputWasVoiceRef.current = false;
+      sendMessage(text);
+    },
+    [sendMessage]
   );
 
   const interruptAudio = useCallback(() => {
@@ -408,7 +427,7 @@ export default function ChatPage() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage(input);
+      sendTextMessage(input);
     }
   };
 
@@ -486,39 +505,20 @@ export default function ChatPage() {
               </button>
             </div>
 
-            {/* Voice mode toggle: OFF / PUSH / AGENT */}
-            <div className="flex rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
-              <button
-                onClick={() => setVoiceMode("off")}
-                className={`rounded-md px-2.5 py-1.5 text-[10px] tracking-wider transition-all ${
-                  voiceMode === "off"
-                    ? "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
-                }`}
-              >
-                TEXT
-              </button>
-              <button
-                onClick={() => setVoiceMode("push")}
-                className={`rounded-md px-2.5 py-1.5 text-[10px] tracking-wider transition-all ${
-                  voiceMode === "push"
-                    ? "bg-neo/15 text-[var(--accent)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
-                }`}
-              >
-                PUSH
-              </button>
-              <button
-                onClick={() => setVoiceMode("agent")}
-                className={`rounded-md px-2.5 py-1.5 text-[10px] tracking-wider transition-all ${
-                  voiceMode === "agent"
-                    ? "bg-violet-500/15 text-violet-400"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-tertiary)]"
-                }`}
-              >
-                AGENT
-              </button>
-            </div>
+            {/* Agent mode toggle */}
+            <button
+              onClick={() => setVoiceMode(voiceMode === "agent" ? "off" : "agent")}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] tracking-wider transition-all ${
+                voiceMode === "agent"
+                  ? "border-violet-500/30 bg-violet-500/15 text-violet-400"
+                  : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
+              AGENT
+            </button>
 
             {/* Clear chat */}
             <button
@@ -563,17 +563,9 @@ export default function ChatPage() {
                     }`
                   : "Describe a task and it will be created in the task board automatically."}
               </p>
-              {voiceMode === "push" && (
-                <p
-                  className="mt-2 text-[11px]"
-                  style={{ color: `${agentColor}80` }}
-                >
-                  Voice mode active - hold the mic button to speak
-                </p>
-              )}
               {voiceMode === "agent" && (
                 <p className="mt-2 text-[11px] text-violet-400/50">
-                  Agent mode - activate and speak naturally
+                  Agent mode — activate and speak naturally
                 </p>
               )}
             </div>
@@ -650,50 +642,13 @@ export default function ChatPage() {
         <div className="mx-auto max-w-3xl">
           {voiceMode === "agent" ? (
             <VoiceAgent
-              onTranscript={sendMessage}
+              onTranscript={sendVoiceMessage}
               isPlayingAudio={isPlayingAudio}
               onInterrupt={interruptAudio}
               isLoading={isLoading}
             />
-          ) : voiceMode === "push" ? (
-            <div className="flex flex-col items-center gap-3 py-2">
-              <VoiceRecorder
-                onTranscript={sendMessage}
-                isDisabled={isLoading}
-              />
-              {/* Fallback text input in voice mode */}
-              <div className="w-full">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        sendMessage(input);
-                      }
-                    }}
-                    placeholder={
-                      chatMode === "task"
-                        ? "Or type a task..."
-                        : `Message ${agentCallsign}...`
-                    }
-                    disabled={isLoading}
-                    className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-2 text-[12px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
-                  />
-                  <button
-                    onClick={() => sendMessage(input)}
-                    disabled={isLoading || !input.trim()}
-                    className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    SEND
-                  </button>
-                </div>
-              </div>
-            </div>
           ) : (
-            <div className="flex gap-2">
+            <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -714,10 +669,14 @@ export default function ChatPage() {
                   target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
                 }}
               />
+              <VoiceRecorder
+                onTranscript={sendVoiceMessage}
+                isDisabled={isLoading}
+              />
               <button
-                onClick={() => sendMessage(input)}
+                onClick={() => sendTextMessage(input)}
                 disabled={isLoading || !input.trim()}
-                className="self-end rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
+                className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
                 style={
                   !isLoading && input.trim()
                     ? { boxShadow: "0 0 15px rgba(0, 240, 255, 0.15)" }

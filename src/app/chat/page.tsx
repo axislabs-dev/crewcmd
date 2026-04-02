@@ -62,7 +62,7 @@ export default function ChatPage() {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("talk");
   const [streamingContent, setStreamingContent] = useState("");
-  const lastInputWasVoiceRef = useRef(false);
+  const [speakResponses, setSpeakResponses] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -287,7 +287,7 @@ export default function ChatPage() {
               : `Failed to create task: ${task.error || "Unknown error"}`,
           };
           setMessages((prev) => [...prev, assistantMsg]);
-          if (lastInputWasVoiceRef.current && res.ok) {
+          if (speakResponses && res.ok) {
             playTTS(`Task created: TSK-${task.shortId}, ${task.title}`);
           }
         } catch {
@@ -316,7 +316,7 @@ export default function ChatPage() {
       setStreamingContent("");
 
       const chatMessages = [
-        ...(lastInputWasVoiceRef.current
+        ...(speakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -376,7 +376,7 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingContent("");
 
-        if (lastInputWasVoiceRef.current && fullContent) {
+        if (speakResponses && fullContent) {
           playTTS(fullContent);
         }
       } catch (error) {
@@ -395,25 +395,7 @@ export default function ChatPage() {
 
       setIsLoading(false);
     },
-    [isLoading, messages, chatMode, playTTS, selectedAgent]
-  );
-
-  // Wrapper for voice input — sets the voice flag before sending
-  const sendVoiceMessage = useCallback(
-    (text: string) => {
-      lastInputWasVoiceRef.current = true;
-      sendMessage(text);
-    },
-    [sendMessage]
-  );
-
-  // Wrapper for text input — clears the voice flag
-  const sendTextMessage = useCallback(
-    (text: string) => {
-      lastInputWasVoiceRef.current = false;
-      sendMessage(text);
-    },
-    [sendMessage]
+    [isLoading, messages, chatMode, playTTS, selectedAgent, speakResponses]
   );
 
   const interruptAudio = useCallback(() => {
@@ -427,7 +409,7 @@ export default function ChatPage() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendTextMessage(input);
+      sendMessage(input);
     }
   };
 
@@ -504,6 +486,28 @@ export default function ChatPage() {
                 CREATE TASK
               </button>
             </div>
+
+            {/* Speak responses toggle */}
+            <button
+              onClick={() => setSpeakResponses(!speakResponses)}
+              title={speakResponses ? "Mute responses" : "Speak responses"}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] tracking-wider transition-all ${
+                speakResponses
+                  ? "border-neo/30 bg-neo/15 text-[var(--accent)]"
+                  : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              {speakResponses ? (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              ) : (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              )}
+              {speakResponses ? "SPEAKING" : "MUTED"}
+            </button>
 
             {/* Agent mode toggle */}
             <button
@@ -642,7 +646,7 @@ export default function ChatPage() {
         <div className="mx-auto max-w-3xl">
           {voiceMode === "agent" ? (
             <VoiceAgent
-              onTranscript={sendVoiceMessage}
+              onTranscript={sendMessage}
               isPlayingAudio={isPlayingAudio}
               onInterrupt={interruptAudio}
               isLoading={isLoading}
@@ -670,11 +674,11 @@ export default function ChatPage() {
                 }}
               />
               <VoiceRecorder
-                onTranscript={sendVoiceMessage}
+                onTranscript={sendMessage}
                 isDisabled={isLoading}
               />
               <button
-                onClick={() => sendTextMessage(input)}
+                onClick={() => sendMessage(input)}
                 disabled={isLoading || !input.trim()}
                 className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
                 style={

@@ -164,9 +164,8 @@ async function tryLocalTTS(text: string): Promise<Response | null> {
   if (!bin) return null;
 
   const tempId = randomUUID();
-  // say outputs AIFF, espeak/piper output WAV
-  const ext = bin.name === "say" ? "aiff" : "wav";
-  const tempPath = join(tmpdir(), `crewcmd-tts-${tempId}.${ext}`);
+  // All output as WAV for browser compatibility (say uses --data-format to force WAV)
+  const tempPath = join(tmpdir(), `crewcmd-tts-${tempId}.wav`);
 
   // Sanitize text for shell (escape single quotes)
   const safeText = text.replace(/'/g, "'\\''");
@@ -175,8 +174,8 @@ async function tryLocalTTS(text: string): Promise<Response | null> {
     let cmd: string;
     switch (bin.name) {
       case "say":
-        // macOS: -o outputs to file, -r rate (default ~175 is fine)
-        cmd = `'${bin.path}' -o '${tempPath}' '${safeText}'`;
+        // macOS: -o outputs to file, --data-format=LEI16@22050 forces WAV (browser-compatible)
+        cmd = `'${bin.path}' --data-format=LEI16@22050 -o '${tempPath}' '${safeText}'`;
         break;
       case "piper":
         // piper reads from stdin
@@ -198,7 +197,7 @@ async function tryLocalTTS(text: string): Promise<Response | null> {
     const audioData = await readFile(tempPath);
     await unlink(tempPath).catch(() => {});
 
-    const contentType = ext === "aiff" ? "audio/aiff" : "audio/wav";
+    const contentType = "audio/wav";
     return new Response(audioData, {
       headers: {
         "Content-Type": contentType,

@@ -180,6 +180,13 @@ export function VoiceAgent({
 
   const activate = useCallback(async () => {
     setError(null);
+
+    // mediaDevices requires a secure context (HTTPS or localhost)
+    if (!navigator.mediaDevices) {
+      setError("Voice requires HTTPS. Access via localhost or run: npm run dev:https");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {

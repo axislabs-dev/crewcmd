@@ -105,6 +105,11 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
 
   // Server-side recording (MediaRecorder + /api/stt)
   const startServerRecording = useCallback(async () => {
+    if (!navigator.mediaDevices) {
+      console.error("[VoiceRecorder] mediaDevices unavailable — requires HTTPS");
+      setIsRecording(false);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },

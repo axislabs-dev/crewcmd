@@ -85,6 +85,7 @@ export default function ChatPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingStartRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sentence-level TTS queue for agent mode
   const ttsQueueRef = useRef<string[]>([]);
@@ -245,6 +246,23 @@ export default function ChatPage() {
     // playTTS intentionally omitted to avoid re-firing on TTS ref changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, voiceMode, thinkingAcks]);
+
+  // Escape key cancels in-flight chat request
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isLoading && abortControllerRef.current) {
+        e.preventDefault();
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        // Also stop any TTS
+        window.speechSynthesis?.cancel();
+        ttsQueueRef.current = [];
+        isSpeakingQueueRef.current = false;
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isLoading]);
 
   const playBrowserTTS = useCallback((text: string) => {
     if (!("speechSynthesis" in window)) {
@@ -439,6 +457,7 @@ export default function ChatPage() {
       setInput("");
       setIsLoading(true);
       setStreamingContent("");
+      let fullContent = "";
 
       const chatMessages = [
         ...(speakResponses
@@ -448,6 +467,9 @@ export default function ChatPage() {
         { role: "user" as const, content: trimmed },
       ];
 
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
@@ -456,6 +478,7 @@ export default function ChatPage() {
             messages: chatMessages,
             agent: selectedAgent?.callsign,
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -466,7 +489,7 @@ export default function ChatPage() {
         if (!reader) throw new Error("No reader");
 
         const decoder = new TextDecoder();
-        let fullContent = "";
+        fullContent = "";
         // Track unspoken buffer for sentence-level TTS
         let unspokenBuffer = "";
         spokenSentencesRef.current = 0;
@@ -524,19 +547,35 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingContent("");
       } catch (error) {
-        console.error("[Chat] Error:", error);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content:
-              "Connection error. Make sure the OpenClaw Gateway is reachable.",
-          },
-        ]);
-        setStreamingContent("");
+        if (error instanceof DOMException && error.name === "AbortError") {
+          // User cancelled with Escape — keep any partial content as the message
+          if (fullContent) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: fullContent + "\n\n_(cancelled)_",
+              },
+            ]);
+          }
+          setStreamingContent("");
+        } else {
+          console.error("[Chat] Error:", error);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content:
+                "Connection error. Make sure the OpenClaw Gateway is reachable.",
+            },
+          ]);
+          setStreamingContent("");
+        }
       }
 
+      abortControllerRef.current = null;
       setIsLoading(false);
     },
     [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses]
@@ -656,11 +695,22 @@ export default function ChatPage() {
 
           {/* Streaming message */}
           {streamingContent && (
-            <ChatMessage
-              role="assistant"
-              content={streamingContent}
-              isStreaming={true}
-            />
+            <div>
+              <ChatMessage
+                role="assistant"
+                content={streamingContent}
+                isStreaming={true}
+              />
+              <button
+                onClick={() => abortControllerRef.current?.abort()}
+                className="ml-11 mt-1 flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-secondary)]"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="3" y="3" width="10" height="10" rx="2" />
+                </svg>
+                Stop
+              </button>
+            </div>
           )}
 
           {/* Loading indicator */}
@@ -702,6 +752,9 @@ export default function ChatPage() {
                   }}
                 />
               </div>
+              <span className="ml-2 self-center text-[11px] text-[var(--text-tertiary)] opacity-60">
+                Esc to cancel
+              </span>
             </div>
           )}
 

@@ -37,14 +37,15 @@ export async function POST(request: NextRequest) {
     // Set up SSE stream
     const encoder = new TextEncoder();
     let streamController: ReadableStreamDefaultController | null = null;
+    const cleanupFns: Array<() => void> = [];
 
     const stream = new ReadableStream({
       start(controller) {
         streamController = controller;
       },
       cancel() {
-        // Client disconnected, clean up event listener
-        client.off("chat", chatHandler);
+        // Client disconnected, clean up event listeners
+        for (const fn of cleanupFns) fn();
       },
     });
 
@@ -138,7 +139,17 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    // Debug: log ALL gateway events to find the right event name
+    const debugHandler = (payload: unknown) => {
+      const p = payload as Record<string, string>;
+      console.log(`[api/chat] [debug-wildcard] event="${p.event}" state="${p.state}" sessionKey="${p.sessionKey}" keys=${Object.keys(p).join(",")}`);
+    };
+    client.on("*", debugHandler);
     client.on("chat", chatHandler);
+    cleanupFns.push(() => {
+      client.off("chat", chatHandler);
+      client.off("*", debugHandler);
+    });
 
     // Send the message
     try {
@@ -165,6 +176,7 @@ export async function POST(request: NextRequest) {
           streamController.close();
         } catch { /* already closed */ }
         client.off("chat", chatHandler);
+        client.off("*", debugHandler);
       }
     }, 300_000);
 

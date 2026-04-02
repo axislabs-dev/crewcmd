@@ -4,7 +4,7 @@
  * Each handler receives parsed args and returns a JSON-serializable result.
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 

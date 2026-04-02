@@ -20,8 +20,13 @@ interface Message {
 
 type VoiceMode = "off" | "agent";
 
-const VOICE_SYSTEM_PROMPT =
-  "Voice mode: respond in 1-3 short sentences. Be conversational and concise. No markdown, no bullet points, no code blocks.";
+const VOICE_SYSTEM_PROMPT = [
+  "You are in voice conversation mode. Your responses will be spoken aloud by a text to speech engine.",
+  "Respond briefly like you are talking to someone in person. One to three sentences unless asked for more detail.",
+  "Do not use emojis, special characters, markdown, bullet points, dashes, or code blocks.",
+  "Avoid acronyms. Spell out full words so they sound natural when spoken aloud on a basic text to speech engine.",
+  "Only provide detail when explicitly asked. Be genuinely helpful and conversational.",
+].join(" ");
 
 /** Per-agent localStorage key for thread messages */
 function storageKeyForSession(sessionKey: string): string {

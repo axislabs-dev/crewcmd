@@ -137,6 +137,16 @@ async function loadFromDB(agentId: string): Promise<Message[] | null> {
 }
 
 export default function ChatPage() {
+  // ?reset=1 in URL clears localStorage chat cache (for mobile debugging)
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("reset")) {
+      const keys = Object.keys(localStorage).filter((k) => k.startsWith("chat_"));
+      keys.forEach((k) => localStorage.removeItem(k));
+      window.history.replaceState({}, "", window.location.pathname);
+      window.location.reload();
+    }
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);

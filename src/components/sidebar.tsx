@@ -331,19 +331,30 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <div
-        className={`fixed top-0 left-0 z-40 flex h-full w-64 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl transition-transform duration-300 lg:hidden ${
+        className={`fixed top-0 left-0 z-40 flex h-[100dvh] w-64 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl transition-transform duration-300 lg:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-5 py-4">
-          <BrandLogo size="sm" />
-          <BrandName />
+        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <BrandLogo size="sm" />
+            <BrandName />
+          </div>
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+            aria-label="Close navigation"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
         <CompanySwitcher />
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
           <NavList onClick={() => setMobileOpen(false)} />
         </nav>
-        <div className="border-t border-[var(--border-subtle)] px-3 py-3">
+        <div className="shrink-0 border-t border-[var(--border-subtle)] px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <UserInfo />
           <SignOutButton />
           <ThemeToggle />

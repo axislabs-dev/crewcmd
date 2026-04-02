@@ -40,6 +40,36 @@ async function applySchema() {
     }
   }
 
+  // Chat persistence tables
+  try {
+    await client.exec(`
+      DO $$ BEGIN
+        CREATE TYPE chat_message_role AS ENUM ('user', 'assistant', 'system');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL,
+        title TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        chat_message_role chat_message_role NOT NULL,
+        content TEXT NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  } catch { /* tables may already exist */ }
+
   // Skills tables
   const skillsTables = [
     `CREATE TABLE IF NOT EXISTS skills (

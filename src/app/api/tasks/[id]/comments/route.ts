@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }

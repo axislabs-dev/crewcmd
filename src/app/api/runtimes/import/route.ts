@@ -4,6 +4,7 @@ import { agents, companyRuntimes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import type { DiscoveredAgent, GatewayModel } from "@/lib/gateway-client";
+import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -145,6 +146,18 @@ export async function POST(request: Request) {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         skipped.push({ id: agent.id, reason: msg });
+      }
+    }
+
+    // Auto-push CrewCmd skill to the runtime (non-blocking — failure is logged, not thrown)
+    if (created.length > 0) {
+      try {
+        await pushSkillToRuntime(runtimeId);
+      } catch (skillErr) {
+        console.warn(
+          "[api/runtimes/import] Skill push failed (non-fatal):",
+          skillErr instanceof Error ? skillErr.message : String(skillErr)
+        );
       }
     }
 

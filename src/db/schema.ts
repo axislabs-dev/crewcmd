@@ -703,6 +703,36 @@ export const agentAccessGrants = pgTable("agent_access_grants", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Chat Sessions & Messages ──────────────────────────────────────
+
+export const chatSessions = pgTable("chat_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: text("agent_id").notNull(), // callsign e.g. "neo", "sentinel"
+  title: text("title"), // auto-generated or user-set
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const chatMessageRoleEnum = pgEnum("chat_message_role", [
+  "user",
+  "assistant",
+  "system",
+]);
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .references(() => chatSessions.id, { onDelete: "cascade" })
+    .notNull(),
+  role: chatMessageRoleEnum("chat_message_role").notNull(),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Routine Template Types ────────────────────────────────────────
 
 interface TaskTemplate {

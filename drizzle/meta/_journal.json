@@ -64,6 +64,13 @@
       "when": 1775021494890,
       "tag": "0008_overconfident_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775097763015,
+      "tag": "0009_chat_persistence",
+      "breakpoints": true
     }
   ]
 }

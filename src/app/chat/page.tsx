@@ -42,6 +42,12 @@ function storageKeyForSession(sessionKey: string): string {
   return `crewcmd-chat-${sessionKey.toLowerCase()}`;
 }
 
+function getCompanyId(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)active_company=([^;]*)/);
+  return match ? match[1] : null;
+}
+
 function loadMessages(sessionKey: string): Message[] {
   if (typeof window === "undefined") return [];
   try {
@@ -64,6 +70,56 @@ function saveMessages(sessionKey: string, messages: Message[]) {
     }
   } catch {
     // localStorage unavailable
+  }
+}
+
+/** Fire-and-forget: persist a single message to the database */
+function persistMessage(
+  agentId: string,
+  role: "user" | "assistant",
+  content: string,
+) {
+  const companyId = getCompanyId();
+  if (!companyId || !content) return;
+
+  fetch("/api/chat/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentId, companyId, role, content }),
+  }).catch((err) => {
+    console.warn("[chat] Failed to persist message:", err);
+  });
+}
+
+/** Load message history from DB, returns messages or null if unavailable */
+async function loadFromDB(agentId: string): Promise<Message[] | null> {
+  const companyId = getCompanyId();
+  if (!companyId) return null;
+
+  try {
+    // Find the latest session for this agent
+    const sessRes = await fetch(
+      `/api/chat/sessions?agentId=${encodeURIComponent(agentId)}&companyId=${encodeURIComponent(companyId)}`
+    );
+    if (!sessRes.ok) return null;
+
+    const { sessions } = await sessRes.json() as {
+      sessions: { id: string; agentId: string; title: string | null }[];
+    };
+    if (!sessions?.length) return null;
+
+    // Load messages from most recent session
+    const msgRes = await fetch(
+      `/api/chat/messages?sessionId=${encodeURIComponent(sessions[0].id)}&limit=100`
+    );
+    if (!msgRes.ok) return null;
+
+    const { messages } = await msgRes.json() as {
+      messages: { id: string; role: "user" | "assistant"; content: string }[];
+    };
+    return messages?.length ? messages : null;
+  } catch {
+    return null;
   }
 }
 
@@ -120,24 +176,47 @@ export default function ChatPage() {
     fetchAgents();
   }, []);
 
-  // Load messages when session changes — try localStorage first, then fetch from gateway
+  // Load messages when session changes: DB → localStorage → gateway (waterfall)
   useEffect(() => {
-    const cached = loadMessages(activeSessionKey);
-    setMessages(cached);
+    let cancelled = false;
+    const agentId = selectedAgent?.callsign || activeSessionKey;
 
-    // If no local messages, fetch history from gateway (cron output, other sessions, etc.)
-    if (cached.length === 0) {
-      fetch(`/api/chat/history?sessionKey=${encodeURIComponent(activeSessionKey)}&limit=50`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.messages?.length) {
-            setMessages(data.messages);
-          }
-        })
-        .catch(() => {
-          // Gateway unavailable, stay with empty
-        });
+    async function load() {
+      // 1. Instant render from localStorage cache
+      const cached = loadMessages(activeSessionKey);
+      if (cached.length > 0 && !cancelled) {
+        setMessages(cached);
+      }
+
+      // 2. Try loading from DB (authoritative source)
+      const dbMessages = await loadFromDB(agentId);
+      if (cancelled) return;
+
+      if (dbMessages && dbMessages.length > 0) {
+        setMessages(dbMessages);
+        saveMessages(activeSessionKey, dbMessages); // sync localStorage
+        return;
+      }
+
+      // 3. If DB empty but localStorage had messages, keep them (may need migration)
+      if (cached.length > 0) return;
+
+      // 4. Last resort: fetch from gateway (ephemeral session history)
+      try {
+        const res = await fetch(
+          `/api/chat/history?sessionKey=${encodeURIComponent(activeSessionKey)}&limit=50`
+        );
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (data?.messages?.length && !cancelled) {
+          setMessages(data.messages);
+        }
+      } catch {
+        // Gateway unavailable
+      }
     }
+
+    load();
 
     // Clear unread for this session
     setUnreadCounts((prev) => {
@@ -146,7 +225,9 @@ export default function ChatPage() {
       delete next[activeSessionKey];
       return next;
     });
-  }, [activeSessionKey]);
+
+    return () => { cancelled = true; };
+  }, [activeSessionKey, selectedAgent?.callsign]);
 
   // Save messages when they change
   useEffect(() => {
@@ -454,6 +535,7 @@ export default function ChatPage() {
         content: trimmed,
       };
       setMessages((prev) => [...prev, userMsg]);
+      persistMessage(agentCallsign, "user", trimmed);
       setInput("");
       setIsLoading(true);
       setStreamingContent("");
@@ -545,6 +627,9 @@ export default function ChatPage() {
           content: fullContent || "No response received.",
         };
         setMessages((prev) => [...prev, assistantMsg]);
+        if (fullContent) {
+          persistMessage(agentCallsign, "assistant", fullContent);
+        }
         setStreamingContent("");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {

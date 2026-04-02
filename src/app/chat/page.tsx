@@ -931,28 +931,44 @@ export default function ChatPage() {
 
       {/* Agent mode fullscreen overlay */}
       {voiceMode === "agent" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-primary)]">
-          {/* Agent overlay header */}
-          <div className="flex items-center justify-between px-4 py-3 lg:px-6">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">{agentEmoji}</span>
-              <span className="text-[12px] font-medium tracking-wider" style={{ color: agentColor }}>
-                {agentCallsign}
-              </span>
+        <div className="fixed inset-0 z-50 flex flex-col landscape:flex-row bg-[var(--bg-primary)]">
+          {/* In landscape: left panel = agent VAD + header; right panel = messages */}
+          {/* In portrait: top header, middle messages, bottom VAD (original layout) */}
+
+          {/* Agent VAD sidebar (landscape) / bottom bar (portrait) — rendered first for landscape order */}
+          <div className="landscape:flex landscape:w-[200px] landscape:shrink-0 landscape:flex-col landscape:border-r landscape:border-[var(--border-subtle)] portrait:contents">
+            {/* Agent overlay header */}
+            <div className="flex items-center justify-between px-4 py-3 landscape:py-2 lg:px-6 landscape:lg:px-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg landscape:text-base">{agentEmoji}</span>
+                <span className="text-[12px] landscape:text-[11px] font-medium tracking-wider" style={{ color: agentColor }}>
+                  {agentCallsign}
+                </span>
+              </div>
+              <button
+                onClick={() => setVoiceMode("off")}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 landscape:px-2 landscape:py-1 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:text-[var(--text-secondary)]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+                EXIT
+              </button>
             </div>
-            <button
-              onClick={() => setVoiceMode("off")}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:text-[var(--text-secondary)]"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-              </svg>
-              EXIT
-            </button>
+
+            {/* Agent VAD interface — bottom in portrait, in sidebar in landscape */}
+            <div className="shrink-0 portrait:order-last portrait:border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 backdrop-blur-xl px-4 py-4 landscape:py-2 landscape:flex-1 landscape:flex landscape:items-center landscape:justify-center lg:px-6 landscape:lg:px-4">
+              <VoiceAgent
+                onTranscript={sendMessage}
+                isPlayingAudio={isPlayingAudio}
+                onInterrupt={interruptAudio}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
 
           {/* Messages — only show completed messages in agent mode (no streaming text, user is hands-free) */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+          <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 portrait:order-2">
             <div className="mx-auto max-w-3xl space-y-4">
               {messages.map((msg) => (
                 <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
@@ -968,16 +984,6 @@ export default function ChatPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
-          </div>
-
-          {/* Agent VAD interface at bottom */}
-          <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 backdrop-blur-xl px-4 py-4 lg:px-6">
-            <VoiceAgent
-              onTranscript={sendMessage}
-              isPlayingAudio={isPlayingAudio}
-              onInterrupt={interruptAudio}
-              isLoading={isLoading}
-            />
           </div>
         </div>
       )}

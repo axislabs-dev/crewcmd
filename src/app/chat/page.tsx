@@ -463,8 +463,8 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Mode toggle: Talk / Create Task */}
-            <div className="flex rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
+            {/* Mode toggle: Talk / Create Task — hidden on small screens */}
+            <div className="hidden sm:flex rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
               <button
                 onClick={() => setChatMode("talk")}
                 className={`rounded-md px-3 py-1.5 text-[10px] tracking-wider transition-all ${
@@ -490,7 +490,7 @@ export default function ChatPage() {
             {/* Clear chat */}
             <button
               onClick={clearChat}
-              className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:border-[var(--border-medium)] hover:text-[var(--text-tertiary)]"
+              className="hidden sm:block rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:border-[var(--border-medium)] hover:text-[var(--text-tertiary)]"
             >
               CLEAR
             </button>
@@ -657,14 +657,14 @@ export default function ChatPage() {
       )}
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-4 py-3 lg:px-6">
+      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-2 py-3 sm:px-4 lg:px-6">
         <div className="mx-auto max-w-3xl">
-          <div className="flex items-end gap-2">
-            {/* Mute/unmute toggle */}
+          <div className="flex items-end gap-1.5 sm:gap-2">
+            {/* Mute/unmute toggle — hidden on small screens */}
             <button
               onClick={() => setSpeakResponses(!speakResponses)}
               title={speakResponses ? "Mute responses" : "Speak responses"}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all ${
+              className={`hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all ${
                 speakResponses
                   ? "border-neo/30 bg-neo/15 text-[var(--accent)]"
                   : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
@@ -706,11 +706,11 @@ export default function ChatPage() {
               isDisabled={isLoading}
             />
 
-            {/* Agent mode button — waveform icon */}
+            {/* Agent mode button — hidden on small screens */}
             <button
               onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
               title="Enter agent mode (hands-free)"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10 text-violet-400 transition-all hover:bg-violet-500/20 hover:border-violet-500/30"
+              className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10 text-violet-400 transition-all hover:bg-violet-500/20 hover:border-violet-500/30"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
@@ -720,7 +720,7 @@ export default function ChatPage() {
             <button
               onClick={() => sendMessage(input)}
               disabled={isLoading || !input.trim()}
-              className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
+              className="shrink-0 rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-3 py-3 sm:px-4 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
               style={
                 !isLoading && input.trim()
                   ? { boxShadow: "0 0 15px rgba(0, 240, 255, 0.15)" }

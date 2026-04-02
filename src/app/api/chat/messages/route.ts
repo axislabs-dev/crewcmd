@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 
 /**
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       const existing = await withRetry(() =>
         db!.select().from(chatSessions)
           .where(eq(chatSessions.agentId, agentLower))
-          .orderBy(asc(chatSessions.updatedAt))
+          .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
       );
 

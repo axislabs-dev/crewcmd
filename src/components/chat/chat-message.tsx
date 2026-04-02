@@ -62,7 +62,20 @@ function MessageActions({ content, showSpeak, mobileVisible }: { content: string
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(content);
+      // Modern clipboard API (requires HTTPS on mobile)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        // Fallback for HTTP / older browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = content;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard not available */ }
@@ -101,10 +114,15 @@ function MessageActions({ content, showSpeak, mobileVisible }: { content: string
   }, [speaking]);
 
   const btnClass =
-    "p-1 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-white/5 transition-colors cursor-pointer";
+    "p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer";
 
   return (
-    <div className={`absolute -top-3 right-2 flex items-center gap-0.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-1 py-0.5 transition-opacity duration-150 z-10 ${mobileVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"} group-hover:opacity-100 group-hover:pointer-events-auto`}>
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div
+      className={`absolute -top-3 right-2 flex items-center gap-0.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-1 py-0.5 transition-opacity duration-150 z-10 ${mobileVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"} group-hover:opacity-100 group-hover:pointer-events-auto`}
+      onTouchEnd={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       <button onClick={handleCopy} aria-label="Copy message" className={btnClass}>
         {copied ? <CheckIcon className="h-4 w-4 text-green-400" /> : <CopyIcon className="h-4 w-4" />}
       </button>

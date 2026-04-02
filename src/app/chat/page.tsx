@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ChatMessage } from "@/components/chat/chat-message";
+import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
@@ -16,6 +17,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  metadata?: { attachments?: Attachment[] } | null;
 }
 
 type VoiceMode = "off" | "agent";
@@ -71,6 +73,7 @@ function persistMessage(
   agentId: string,
   role: "user" | "assistant",
   content: string,
+  metadata?: Record<string, unknown> | null,
 ) {
   const companyId = getCompanyId();
   if (!companyId || !content) return;
@@ -78,7 +81,7 @@ function persistMessage(
   fetch("/api/chat/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agentId, companyId, role, content }),
+    body: JSON.stringify({ agentId, companyId, role, content, metadata }),
   }).catch((err) => {
     console.warn("[chat] Failed to persist message:", err);
   });
@@ -108,7 +111,7 @@ async function loadFromDB(agentId: string): Promise<Message[] | null> {
     if (!msgRes.ok) return null;
 
     const { messages } = await msgRes.json() as {
-      messages: { id: string; role: "user" | "assistant"; content: string }[];
+      messages: { id: string; role: "user" | "assistant"; content: string; metadata?: Message["metadata"] }[];
     };
     return messages?.length ? messages : null;
   } catch {
@@ -130,6 +133,9 @@ export default function ChatPage() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -591,10 +597,31 @@ export default function ChatPage() {
   // Patterns that indicate the user is checking if we heard them
   const busyPatterns = /\b(did you hear|are you there|hello|hey|still there|you there|can you hear|listening)\b/i;
 
+  const ACCEPTED_TYPES = "image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv";
+
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const allowed = Array.from(files).filter((f) => ACCEPTED_TYPES.includes(f.type) && f.size <= 10 * 1024 * 1024);
+    if (allowed.length) setPendingFiles((prev) => [...prev, ...allowed]);
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  /** Upload a single file and return attachment metadata */
+  async function uploadFile(file: File): Promise<Attachment> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/chat/upload", { method: "POST", body: formData });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  }
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      const hasFiles = pendingFiles.length > 0;
+      if (!trimmed && !hasFiles) return;
 
       // Agent mode: if loading and user speaks, give a reassurance instead of blocking
       if (isLoading && voiceMode === "agent") {
@@ -607,14 +634,43 @@ export default function ChatPage() {
       }
       if (isLoading) return;
 
+      // Upload pending files
+      let attachments: Attachment[] = [];
+      const filesToUpload = [...pendingFiles];
+      setPendingFiles([]);
+
+      if (filesToUpload.length > 0) {
+        try {
+          attachments = await Promise.all(filesToUpload.map(uploadFile));
+        } catch (err) {
+          console.error("[chat] File upload failed:", err);
+          setPendingFiles(filesToUpload); // restore on failure
+          return;
+        }
+      }
+
+      // Build message content — append attachment refs as markdown for the gateway
+      let messageContent = trimmed;
+      if (attachments.length > 0) {
+        const refs = attachments.map((a) =>
+          a.mimeType.startsWith("image/")
+            ? `![${a.filename}](${a.url})`
+            : `[${a.filename}](${a.url})`
+        ).join("\n");
+        messageContent = messageContent ? `${messageContent}\n\n${refs}` : refs;
+      }
+
+      const metadata = attachments.length > 0 ? { attachments } : null;
+
       // Send to OpenClaw Gateway
       const userMsg: Message = {
         id: crypto.randomUUID(),
         role: "user",
-        content: trimmed,
+        content: trimmed || "(attachments)",
+        metadata,
       };
       setMessages((prev) => [...prev, userMsg]);
-      persistMessage(agentCallsign, "user", trimmed);
+      persistMessage(agentCallsign, "user", messageContent, metadata);
       setInput("");
       setIsLoading(true);
       setStreamingContent("");
@@ -625,7 +681,7 @@ export default function ChatPage() {
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
         ...messages.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user" as const, content: trimmed },
+        { role: "user" as const, content: messageContent },
       ];
 
       const controller = new AbortController();
@@ -742,7 +798,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles]
   );
 
   const interruptAudio = useCallback(() => {
@@ -854,7 +910,7 @@ export default function ChatPage() {
           )}
 
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
+            <ChatMessage key={msg.id} role={msg.role} content={msg.content} metadata={msg.metadata} />
           ))}
 
           {/* Streaming message */}
@@ -985,7 +1041,7 @@ export default function ChatPage() {
           <div ref={agentScrollContainerRef} className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6 portrait:order-2">
             <div className="mx-auto max-w-3xl space-y-4">
               {messages.map((msg) => (
-                <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
+                <ChatMessage key={msg.id} role={msg.role} content={msg.content} metadata={msg.metadata} />
               ))}
               {isLoading && (
                 <div className="flex justify-center py-4">
@@ -1018,13 +1074,89 @@ export default function ChatPage() {
       {/* Input area — container style (Claude/ChatGPT layout) */}
       <div className="shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-3 pt-2 sm:px-4 lg:px-6">
         <div className="mx-auto max-w-3xl">
-          <div className="rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-surface)] transition-colors focus-within:border-neo/30 focus-within:bg-[var(--bg-surface-hover)]">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.txt,.md,.csv"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <div
+            className={`rounded-2xl border bg-[var(--bg-surface)] transition-colors focus-within:border-neo/30 focus-within:bg-[var(--bg-surface-hover)] ${
+              isDragOver
+                ? "border-[var(--accent)] bg-neo/[0.04]"
+                : "border-[var(--border-medium)]"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+              if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+            }}
+          >
+            {/* Attachment previews */}
+            {pendingFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-4 pt-3">
+                {pendingFiles.map((file, i) => (
+                  <div key={i} className="group relative">
+                    {file.type.startsWith("image/") ? (
+                      <div className="relative h-16 w-16 rounded-lg overflow-hidden border border-[var(--border-medium)]">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-2.5 py-1.5 text-[11px] text-[var(--text-secondary)]">
+                        <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                        <span className="max-w-[100px] truncate">{file.name}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removeFile(i)}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--bg-primary)] border border-[var(--border-medium)] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Drag overlay indicator */}
+            {isDragOver && (
+              <div className="flex items-center justify-center py-3 px-4">
+                <span className="text-[12px] text-[var(--accent)]">Drop files to attach</span>
+              </div>
+            )}
+
             {/* Textarea — top section of container */}
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData.items)
+                  .filter((item) => item.kind === "file")
+                  .map((item) => item.getAsFile())
+                  .filter((f): f is File => f !== null);
+                if (files.length) {
+                  e.preventDefault();
+                  addFiles(files);
+                }
+              }}
               placeholder={`Message ${agentCallsign}...`}
               disabled={isLoading}
               rows={2}
@@ -1040,6 +1172,17 @@ export default function ChatPage() {
             {/* Action buttons — bottom row inside container */}
             <div className="flex items-center justify-between px-2 pb-2 pt-1">
               <div className="flex items-center gap-1">
+                {/* Attach file */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-all hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                >
+                  <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                  </svg>
+                </button>
+
                 {/* Mute/unmute toggle */}
                 <button
                   onClick={() => setSpeakResponses(!speakResponses)}
@@ -1082,10 +1225,10 @@ export default function ChatPage() {
               {/* Send button */}
               <button
                 onClick={() => sendMessage(input)}
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
                 style={
-                  !isLoading && input.trim()
+                  !isLoading && (input.trim() || pendingFiles.length > 0)
                     ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.25)" }
                     : undefined
                 }

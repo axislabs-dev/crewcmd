@@ -14,7 +14,7 @@ interface VoiceAgentProps {
 // VAD configuration
 const SILENCE_THRESHOLD = 0.015; // RMS threshold for "silence"
 const SPEECH_START_MS = 200; // ms of sound to trigger recording
-const SILENCE_END_MS = 1200; // ms of silence to stop recording
+const SILENCE_END_MS = 2000; // ms of silence to stop recording (2s for natural pauses)
 const MIN_RECORDING_MS = 500; // minimum recording length to send
 
 export function VoiceAgent({

@@ -82,11 +82,13 @@ export async function POST(request: NextRequest) {
       // Gateway may use full session keys like "agent:main:neo" while we send "NEO"
       const eventSession = ((p.sessionKey as string) || (p.session as string) || "").toLowerCase();
       const ourSession = sessionKey.toLowerCase();
+      console.log(`[api/chat] Event received: state="${p.state}" eventSession="${eventSession}" ourSession="${ourSession}" keys=${Object.keys(p).join(",")}`);
+
       if (eventSession && eventSession !== ourSession) {
         // Check if our sessionKey is a suffix of the gateway's full session key
         const isMatch = eventSession.endsWith(`:${ourSession}`) || eventSession === ourSession;
         if (!isMatch) {
-          console.log(`[api/chat] Skipping event for session "${eventSession}" (ours: "${sessionKey}")`);
+          console.log(`[api/chat] Skipping event for session "${eventSession}" (ours: "${ourSession}")`);
           return;
         }
       }

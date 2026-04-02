@@ -487,43 +487,6 @@ export default function ChatPage() {
               </button>
             </div>
 
-            {/* Speak responses toggle */}
-            <button
-              onClick={() => setSpeakResponses(!speakResponses)}
-              title={speakResponses ? "Mute responses" : "Speak responses"}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] tracking-wider transition-all ${
-                speakResponses
-                  ? "border-neo/30 bg-neo/15 text-[var(--accent)]"
-                  : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              {speakResponses ? (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                </svg>
-              ) : (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                </svg>
-              )}
-              {speakResponses ? "SPEAKING" : "MUTED"}
-            </button>
-
-            {/* Agent mode toggle */}
-            <button
-              onClick={() => setVoiceMode(voiceMode === "agent" ? "off" : "agent")}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] tracking-wider transition-all ${
-                voiceMode === "agent"
-                  ? "border-violet-500/30 bg-violet-500/15 text-violet-400"
-                  : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-              </svg>
-              AGENT
-            </button>
-
             {/* Clear chat */}
             <button
               onClick={clearChat}
@@ -567,11 +530,7 @@ export default function ChatPage() {
                     }`
                   : "Describe a task and it will be created in the task board automatically."}
               </p>
-              {voiceMode === "agent" && (
-                <p className="mt-2 text-[11px] text-violet-400/50">
-                  Agent mode — activate and speak naturally
-                </p>
-              )}
+
             </div>
           )}
 
@@ -641,56 +600,136 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-4 py-3 lg:px-6">
-        <div className="mx-auto max-w-3xl">
-          {voiceMode === "agent" ? (
+      {/* Agent mode fullscreen overlay */}
+      {voiceMode === "agent" && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-primary)]">
+          {/* Agent overlay header */}
+          <div className="flex items-center justify-between px-4 py-3 lg:px-6">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{agentEmoji}</span>
+              <span className="text-[12px] font-medium tracking-wider" style={{ color: agentColor }}>
+                {agentCallsign}
+              </span>
+            </div>
+            <button
+              onClick={() => setVoiceMode("off")}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:text-[var(--text-secondary)]"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+              EXIT
+            </button>
+          </div>
+
+          {/* Scrollable messages behind the viz */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+            <div className="mx-auto max-w-3xl space-y-4">
+              {messages.map((msg) => (
+                <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
+              ))}
+              {streamingContent && (
+                <ChatMessage role="assistant" content={streamingContent} isStreaming={true} />
+              )}
+              {isLoading && !streamingContent && (
+                <div className="flex justify-center py-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80` }} />
+                    <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80`, animationDelay: "0.15s" }} />
+                    <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80`, animationDelay: "0.3s" }} />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* Agent VAD interface at bottom */}
+          <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 backdrop-blur-xl px-4 py-4 lg:px-6">
             <VoiceAgent
               onTranscript={sendMessage}
               isPlayingAudio={isPlayingAudio}
               onInterrupt={interruptAudio}
               isLoading={isLoading}
             />
-          ) : (
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  chatMode === "task"
-                    ? "Describe a task to create..."
-                    : `Message ${agentCallsign}...`
-                }
-                disabled={isLoading}
-                rows={1}
-                className="flex-1 resize-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-3 text-[13px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
-                style={{ maxHeight: "120px" }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = "auto";
-                  target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-                }}
-              />
-              <VoiceRecorder
-                onTranscript={sendMessage}
-                isDisabled={isLoading}
-              />
-              <button
-                onClick={() => sendMessage(input)}
-                disabled={isLoading || !input.trim()}
-                className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
-                style={
-                  !isLoading && input.trim()
-                    ? { boxShadow: "0 0 15px rgba(0, 240, 255, 0.15)" }
-                    : undefined
-                }
-              >
-                {chatMode === "task" ? "CREATE" : "SEND"}
-              </button>
-            </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-4 py-3 lg:px-6">
+        <div className="mx-auto max-w-3xl">
+          <div className="flex items-end gap-2">
+            {/* Mute/unmute toggle */}
+            <button
+              onClick={() => setSpeakResponses(!speakResponses)}
+              title={speakResponses ? "Mute responses" : "Speak responses"}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all ${
+                speakResponses
+                  ? "border-neo/30 bg-neo/15 text-[var(--accent)]"
+                  : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              {speakResponses ? (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              )}
+            </button>
+
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                chatMode === "task"
+                  ? "Describe a task to create..."
+                  : `Message ${agentCallsign}...`
+              }
+              disabled={isLoading}
+              rows={1}
+              className="flex-1 resize-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-3 text-[13px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
+              style={{ maxHeight: "120px" }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = "auto";
+                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+              }}
+            />
+            <VoiceRecorder
+              onTranscript={sendMessage}
+              isDisabled={isLoading}
+            />
+
+            {/* Agent mode button — waveform icon */}
+            <button
+              onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
+              title="Enter agent mode (hands-free)"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10 text-violet-400 transition-all hover:bg-violet-500/20 hover:border-violet-500/30"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+              </svg>
+            </button>
+
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={isLoading || !input.trim()}
+              className="rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-4 py-3 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
+              style={
+                !isLoading && input.trim()
+                  ? { boxShadow: "0 0 15px rgba(0, 240, 255, 0.15)" }
+                  : undefined
+              }
+            >
+              {chatMode === "task" ? "CREATE" : "SEND"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -12,6 +12,29 @@ import {
   findParentAgent,
 } from "@/components/chat/agent-tree-selector";
 import type { Agent } from "@/lib/data";
+import { parseTaskReferences } from "@/lib/parse-task-references";
+
+/** Append <!--task_card --> markers for parsed task references not already embedded. */
+function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
+  if (refs.length === 0) return content;
+  // Don't re-inject if markers already present
+  if (content.includes("<!--task_card")) return content;
+
+  const markers = refs.map((ref) => {
+    const data: Record<string, unknown> = {};
+    if (ref.taskId) data.id = ref.taskId;
+    if (ref.shortId) data.shortId = ref.shortId;
+    if (ref.title) data.title = ref.title;
+    if (ref.status) data.status = ref.status;
+    data.priority = "medium";
+    // Only include if we have enough to render
+    if (!data.id && !data.title) return "";
+    return `<!--task_card ${JSON.stringify(data)} -->`;
+  }).filter(Boolean);
+
+  if (markers.length === 0) return content;
+  return content + "\n\n" + markers.join("\n");
+}
 
 interface Message {
   id: string;
@@ -698,6 +721,69 @@ export default function ChatPage() {
       }
       if (isLoading) return;
 
+      // Slash command: /task <title>
+      if (trimmed.startsWith("/task ")) {
+        const taskTitle = trimmed.slice(6).trim();
+        if (!taskTitle) return;
+
+        const userMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: trimmed,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        wasAtBottomRef.current = true;
+        setInput("");
+        setIsLoading(true);
+
+        try {
+          const res = await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: taskTitle,
+              status: "queued",
+              priority: "medium",
+              source: "manual",
+              createdBy: "chat",
+            }),
+          });
+          const task = await res.json();
+          const marker = `<!--task_card ${JSON.stringify({
+            id: task.id,
+            shortId: task.shortId,
+            title: task.title,
+            status: task.status,
+            priority: task.priority,
+            assignedAgentId: task.assignedAgentId,
+          })} -->`;
+
+          const assistantContent = `Task created: "${task.title}"\n\n${marker}`;
+          const aMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: assistantContent,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, aMsg]);
+          persistMessage(agentCallsign, "user", trimmed);
+          persistMessage(agentCallsign, "assistant", assistantContent);
+        } catch {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: "Failed to create task. Check your connection.",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+        setIsLoading(false);
+        return;
+      }
+
       // Upload pending files
       let attachments: Attachment[] = [];
       const filesToUpload = [...pendingFiles];
@@ -826,15 +912,20 @@ export default function ChatPage() {
           queueSentenceForTTS(unspokenBuffer.trim());
         }
 
+        // Parse task references and inject inline card markers
+        const enrichedContent = fullContent
+          ? injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent))
+          : "No response received.";
+
         const assistantMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: fullContent || "No response received.",
+          content: enrichedContent,
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
         if (fullContent) {
-          persistMessage(agentCallsign, "assistant", fullContent);
+          persistMessage(agentCallsign, "assistant", enrichedContent);
         }
         setStreamingContent("");
       } catch (error) {

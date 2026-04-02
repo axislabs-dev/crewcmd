@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ChatMessage } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
+import {
+  AgentTreeSelector,
+  findDefaultAgent,
+  findParentAgent,
+} from "@/components/chat/agent-tree-selector";
 import type { Agent } from "@/lib/data";
 
 interface Message {
@@ -16,24 +21,37 @@ interface Message {
 type ChatMode = "talk" | "task";
 type VoiceMode = "off" | "push" | "agent";
 
-const STORAGE_KEY = "neo-chat-messages";
 const VOICE_SYSTEM_PROMPT =
   "Voice mode: respond in 1-3 short sentences. Be conversational and concise. No markdown, no bullet points, no code blocks.";
 
-function loadMessages(): Message[] {
+/** Per-agent localStorage key for thread messages */
+function storageKeyForSession(sessionKey: string): string {
+  return `crewcmd-chat-${sessionKey.toLowerCase()}`;
+}
+
+function loadMessages(sessionKey: string): Message[] {
   if (typeof window === "undefined") return [];
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKeyForSession(sessionKey));
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
   }
 }
 
-function saveMessages(messages: Message[]) {
+function saveMessages(sessionKey: string, messages: Message[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-  } catch {}
+    if (messages.length > 0) {
+      localStorage.setItem(
+        storageKeyForSession(sessionKey),
+        JSON.stringify(messages)
+      );
+    } else {
+      localStorage.removeItem(storageKeyForSession(sessionKey));
+    }
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export default function ChatPage() {
@@ -47,12 +65,17 @@ export default function ChatPage() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Derive session key from selected agent
+  const activeSessionKey = useMemo(
+    () => selectedAgent?.callsign.toLowerCase() || "main",
+    [selectedAgent]
+  );
 
   // Fetch agents on mount
   useEffect(() => {
@@ -60,40 +83,38 @@ export default function ChatPage() {
       try {
         const res = await fetch("/api/agents");
         const data = await res.json();
-        const fetched: Agent[] = Array.isArray(data) ? data : data.agents || [];
+        const fetched: Agent[] = Array.isArray(data)
+          ? data
+          : data.agents || [];
         setAgents(fetched);
-        if (fetched.length > 0) {
-          setSelectedAgent(fetched[0]);
+        // Default to team lead (top-level agent)
+        const defaultAgent = findDefaultAgent(fetched);
+        if (defaultAgent) {
+          setSelectedAgent(defaultAgent);
         }
       } catch {
-        // Agents unavailable — leave empty
+        // Agents unavailable
       }
     }
     fetchAgents();
   }, []);
 
-  // Close dropdown on outside click
+  // Load messages when session changes
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setAgentDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Load messages from localStorage on mount
-  useEffect(() => {
-    setMessages(loadMessages());
-  }, []);
+    setMessages(loadMessages(activeSessionKey));
+    // Clear unread for this session
+    setUnreadCounts((prev) => {
+      if (!prev[activeSessionKey]) return prev;
+      const next = { ...prev };
+      delete next[activeSessionKey];
+      return next;
+    });
+  }, [activeSessionKey]);
 
   // Save messages when they change
   useEffect(() => {
-    if (messages.length > 0) {
-      saveMessages(messages);
-    }
-  }, [messages]);
+    saveMessages(activeSessionKey, messages);
+  }, [messages, activeSessionKey]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -122,17 +143,22 @@ export default function ChatPage() {
   const agentColor = selectedAgent?.color || "#00f0ff";
   const agentAbbrev = agentCallsign.slice(0, 3).toUpperCase();
 
-  const statusColor = (status: string) => {
-    switch (status) {
-      case "online":
-      case "working":
-        return "bg-green-400";
-      case "idle":
-        return "bg-yellow-400";
-      default:
-        return "bg-zinc-500";
-    }
-  };
+  // Find parent agent for header display
+  const parentAgent = useMemo(
+    () => (selectedAgent ? findParentAgent(selectedAgent, agents) : null),
+    [selectedAgent, agents]
+  );
+
+  const handleAgentSelect = useCallback(
+    (agent: Agent) => {
+      if (agent.id === selectedAgent?.id) return;
+      // Save current messages before switching
+      saveMessages(activeSessionKey, messages);
+      setStreamingContent("");
+      setSelectedAgent(agent);
+    },
+    [selectedAgent, activeSessionKey, messages]
+  );
 
   const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
 
@@ -388,7 +414,7 @@ export default function ChatPage() {
 
   const clearChat = () => {
     setMessages([]);
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKeyForSession(activeSessionKey));
   };
 
   return (
@@ -407,67 +433,32 @@ export default function ChatPage() {
                 boxShadow: `0 0 10px ${agentColor}80`,
               }}
             />
-            {/* Agent selector */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
-                className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono font-bold tracking-wider transition-all hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
-                style={{ color: agentColor }}
-              >
-                <span>{agentEmoji}</span>
-                <span>{agentCallsign}</span>
-                <svg
-                  className={`h-3 w-3 transition-transform ${agentDropdownOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
 
-              {agentDropdownOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 min-w-[220px] rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl backdrop-blur-xl">
-                  {agents.length === 0 ? (
-                    <div className="px-3 py-2 text-[11px] text-[var(--text-tertiary)]">
-                      No agents available
-                    </div>
+            {/* Hierarchy-aware agent tree selector */}
+            <AgentTreeSelector
+              agents={agents}
+              selectedAgent={selectedAgent}
+              onSelect={handleAgentSelect}
+              unreadCounts={unreadCounts}
+            />
+
+            {/* Thread context: agent info + reporting chain */}
+            {selectedAgent && (
+              <div className="hidden sm:flex flex-col ml-2">
+                <span className="text-[11px] text-[var(--text-secondary)] font-medium">
+                  {selectedAgent.title || selectedAgent.name}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">
+                  {parentAgent ? (
+                    <>
+                      Reports to: {parentAgent.emoji} {parentAgent.callsign}
+                    </>
                   ) : (
-                    agents.map((agent) => (
-                      <button
-                        key={agent.id}
-                        onClick={() => {
-                          setSelectedAgent(agent);
-                          setAgentDropdownOpen(false);
-                        }}
-                        className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] ${
-                          selectedAgent?.id === agent.id
-                            ? "bg-[var(--bg-surface-hover)]"
-                            : ""
-                        }`}
-                      >
-                        <span className="text-base">{agent.emoji}</span>
-                        <div className="flex flex-1 items-center gap-2 overflow-hidden">
-                          <span
-                            className="font-mono font-bold tracking-wider"
-                            style={{ color: agent.color }}
-                          >
-                            {agent.callsign}
-                          </span>
-                          <span className="truncate text-[var(--text-tertiary)]">
-                            {agent.name}
-                          </span>
-                        </div>
-                        <div
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusColor(agent.status)}`}
-                        />
-                      </button>
-                    ))
+                    "Team Lead"
                   )}
-                </div>
-              )}
-            </div>
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -559,15 +550,24 @@ export default function ChatPage() {
                 className="mb-2 font-mono text-lg tracking-wider"
                 style={{ color: agentColor }}
               >
-                {chatMode === "talk" ? `TALK TO ${agentCallsign}` : "CREATE A TASK"}
+                {chatMode === "talk"
+                  ? `TALK TO ${agentCallsign}`
+                  : "CREATE A TASK"}
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
                 {chatMode === "talk"
-                  ? `Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway. Your messages are stored locally in this browser.`
+                  ? `Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
+                      parentAgent
+                        ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
+                        : ""
+                    }`
                   : "Describe a task and it will be created in the task board automatically."}
               </p>
               {voiceMode === "push" && (
-                <p className="mt-2 text-[11px]" style={{ color: `${agentColor}80` }}>
+                <p
+                  className="mt-2 text-[11px]"
+                  style={{ color: `${agentColor}80` }}
+                >
                   Voice mode active - hold the mic button to speak
                 </p>
               )}
@@ -677,7 +677,7 @@ export default function ChatPage() {
                     placeholder={
                       chatMode === "task"
                         ? "Or type a task..."
-                        : "Or type a message..."
+                        : `Message ${agentCallsign}...`
                     }
                     disabled={isLoading}
                     className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-2 text-[12px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
@@ -702,7 +702,7 @@ export default function ChatPage() {
                 placeholder={
                   chatMode === "task"
                     ? "Describe a task to create..."
-                    : "Message your crew..."
+                    : `Message ${agentCallsign}...`
                 }
                 disabled={isLoading}
                 rows={1}

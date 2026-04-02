@@ -246,12 +246,26 @@ export default function ChatPage() {
     return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
 
-  // Auto-scroll to bottom only when already near bottom
+  // Track whether user was at bottom before new content arrives
+  const wasAtBottomRef = useRef(true);
+
+  // Update wasAtBottom on scroll events (before React re-renders with new messages)
   useEffect(() => {
-    if (isNearBottom()) {
+    const els = [scrollContainerRef.current, agentScrollContainerRef.current].filter(Boolean) as HTMLDivElement[];
+    if (els.length === 0) return;
+    const trackPosition = () => {
+      wasAtBottomRef.current = isNearBottom();
+    };
+    els.forEach((el) => el.addEventListener("scroll", trackPosition, { passive: true }));
+    return () => els.forEach((el) => el.removeEventListener("scroll", trackPosition));
+  }, [isNearBottom, voiceMode]);
+
+  // Auto-scroll to bottom when new content arrives (if user was already at bottom)
+  useEffect(() => {
+    if (wasAtBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, streamingContent, isNearBottom]);
+  }, [messages, streamingContent]);
 
   // Track scroll position to show/hide scroll-to-bottom button
   useEffect(() => {
@@ -672,6 +686,11 @@ export default function ChatPage() {
         metadata,
       };
       setMessages((prev) => [...prev, userMsg]);
+      // Always scroll to bottom when user sends a message
+      wasAtBottomRef.current = true;
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
       persistMessage(agentCallsign, "user", messageContent, metadata);
       setInput("");
       setIsLoading(true);

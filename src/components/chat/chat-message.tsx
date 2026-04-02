@@ -180,7 +180,43 @@ interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  timestamp?: string | null;
   metadata?: { attachments?: Attachment[] } | null;
+}
+
+/** Day separator shown between messages on different dates */
+export function DateSeparator({ date }: { date: string }) {
+  const d = new Date(date);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const isToday = d.toDateString() === today.toDateString();
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const label = isToday
+    ? "Today"
+    : isYesterday
+      ? "Yesterday"
+      : d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined });
+
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <div className="h-px flex-1 bg-[var(--border-subtle)]" />
+      <span className="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">{label}</span>
+      <div className="h-px flex-1 bg-[var(--border-subtle)]" />
+    </div>
+  );
+}
+
+/** Get the date key (YYYY-MM-DD) from a timestamp */
+export function getDateKey(timestamp?: string | null): string | null {
+  if (!timestamp) return null;
+  try {
+    return new Date(timestamp).toLocaleDateString("sv"); // sv locale gives YYYY-MM-DD
+  } catch {
+    return null;
+  }
 }
 
 function formatFileSize(bytes: number): string {
@@ -228,7 +264,16 @@ function ImageThumbnail({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-export function ChatMessage({ role, content, isStreaming, metadata }: ChatMessageProps) {
+function formatTime(timestamp?: string | null): string | null {
+  if (!timestamp) return null;
+  try {
+    return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return null;
+  }
+}
+
+export function ChatMessage({ role, content, isStreaming, timestamp, metadata }: ChatMessageProps) {
   const isUser = role === "user";
   const attachments = metadata?.attachments;
   const [showActions, setShowActions] = useState(false);
@@ -336,6 +381,12 @@ export function ChatMessage({ role, content, isStreaming, metadata }: ChatMessag
           <span className="inline-block w-2 h-4 ml-1 bg-neo/60 animate-pulse rounded-sm" />
         )}
         </div>
+        {/* Timestamp */}
+        {timestamp && (
+          <span className={`mt-1 block text-[10px] text-[var(--text-tertiary)] ${isUser ? "text-right" : "text-left"}`}>
+            {formatTime(timestamp)}
+          </span>
+        )}
       </div>
     </div>
   );

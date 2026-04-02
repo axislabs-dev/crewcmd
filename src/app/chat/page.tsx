@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { ChatMessage } from "@/components/chat/chat-message";
+import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
@@ -17,6 +17,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  createdAt?: string;
   metadata?: { attachments?: Attachment[] } | null;
 }
 
@@ -715,6 +716,7 @@ export default function ChatPage() {
         id: crypto.randomUUID(),
         role: "user",
         content: trimmed || "(attachments)",
+        createdAt: new Date().toISOString(),
         metadata,
       };
       setMessages((prev) => [...prev, userMsg]);
@@ -813,6 +815,7 @@ export default function ChatPage() {
           id: crypto.randomUUID(),
           role: "assistant",
           content: fullContent || "No response received.",
+          createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
         if (fullContent) {
@@ -962,9 +965,17 @@ export default function ChatPage() {
             </div>
           )}
 
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} role={msg.role} content={msg.content} metadata={msg.metadata} />
-          ))}
+          {messages.map((msg, i) => {
+            const prevDate = i > 0 ? getDateKey(messages[i - 1].createdAt) : null;
+            const currDate = getDateKey(msg.createdAt);
+            const showSeparator = currDate && currDate !== prevDate;
+            return (
+              <div key={msg.id}>
+                {showSeparator && <DateSeparator date={msg.createdAt!} />}
+                <ChatMessage role={msg.role} content={msg.content} timestamp={msg.createdAt} metadata={msg.metadata} />
+              </div>
+            );
+          })}
 
           {/* Streaming message */}
           {streamingContent && (
@@ -1093,9 +1104,17 @@ export default function ChatPage() {
           {/* Messages — only show completed messages in agent mode */}
           <div ref={agentScrollContainerRef} className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6 portrait:order-2">
             <div className="mx-auto max-w-3xl space-y-4">
-              {messages.map((msg) => (
-                <ChatMessage key={msg.id} role={msg.role} content={msg.content} metadata={msg.metadata} />
-              ))}
+              {messages.map((msg, i) => {
+                const prevDate = i > 0 ? getDateKey(messages[i - 1].createdAt) : null;
+                const currDate = getDateKey(msg.createdAt);
+                const showSeparator = currDate && currDate !== prevDate;
+                return (
+                  <div key={msg.id}>
+                    {showSeparator && <DateSeparator date={msg.createdAt!} />}
+                    <ChatMessage role={msg.role} content={msg.content} timestamp={msg.createdAt} metadata={msg.metadata} />
+                  </div>
+                );
+              })}
               {isLoading && (
                 <div className="flex justify-center py-4">
                   <div className="flex items-center gap-1.5">

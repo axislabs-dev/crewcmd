@@ -117,7 +117,7 @@ export function AgentTreeSelector({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 min-w-[260px] rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl backdrop-blur-xl">
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[260px] rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] py-1 shadow-2xl">
           {flatNodes.length === 0 ? (
             <div className="px-3 py-2 text-[11px] text-[var(--text-tertiary)]">
               No agents available

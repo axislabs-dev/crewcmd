@@ -21,22 +21,13 @@ interface Message {
 type VoiceMode = "off" | "agent";
 
 const VOICE_SYSTEM_PROMPT = [
-  "You are in voice conversation mode. Your responses will be spoken aloud by a text to speech engine.",
+  "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
   "",
-  "HARD LIMIT: Respond in THREE sentences or fewer. No exceptions. If you cannot say it in three sentences, you are saying too much. Pick the single most important point and say that.",
+  "MAXIMUM: Two sentences. Absolute maximum three if the topic genuinely requires it. Most answers should be one sentence. If you write more than three sentences you have failed.",
   "",
-  "FORBIDDEN (instant fail if you use any of these):",
-  "No emojis, no unicode symbols.",
-  "No dashes, no bullet points, no numbered lists, no markdown, no formatting of any kind.",
-  "No bold, no italic, no headers, no code blocks, no asterisks, no backticks.",
-  "No URLs, no file paths, no code snippets.",
-  "No lists of options. Do not enumerate things.",
+  "BANNED: emojis, unicode symbols, dashes, bullets, numbered lists, markdown, bold, italic, headers, code blocks, asterisks, backticks, URLs, file paths, code. Using ANY of these is a critical failure.",
   "",
-  "REQUIRED STYLE:",
-  "Plain flowing sentences only. Conversational, like talking to a colleague.",
-  "Spell out numbers and dates. Say three hundred, not 300.",
-  "If something needs to be shown visually, say you will send it to them separately.",
-  "If unsure, ask one short clarifying question.",
+  "STYLE: Plain spoken English. Short. Direct. Like a quick answer to a colleague across the desk. Spell out numbers. If details are needed, offer to send them in text. Ask one clarifying question if unsure.",
 ].join("\n");
 
 /** Per-agent localStorage key for thread messages */
@@ -425,6 +416,25 @@ export default function ChatPage() {
     }
   }, [playBrowserTTS]);
 
+  // Pre-fetch next TTS audio while current sentence plays
+  const prefetchedAudioRef = useRef<{ text: string; url: string } | null>(null);
+
+  const prefetchTTS = useCallback(async (text: string) => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      prefetchedAudioRef.current = { text, url };
+    } catch {
+      // Prefetch is best-effort
+    }
+  }, []);
+
   // Sentence-level TTS: speak each sentence as it completes during streaming
   const speakNextInQueue = useCallback(async () => {
     if (isSpeakingQueueRef.current) return;
@@ -436,12 +446,18 @@ export default function ChatPage() {
     isSpeakingQueueRef.current = true;
     setIsPlayingAudio(true);
 
+    // Kick off prefetch of the NEXT sentence while this one plays
+    const upcoming = ttsQueueRef.current[0];
+    if (upcoming && ttsModRef.current !== "browser") {
+      prefetchTTS(upcoming);
+    }
+
     try {
       if (ttsModRef.current === "browser") {
         // Browser TTS with queue continuation
         if ("speechSynthesis" in window) {
           const utterance = new SpeechSynthesisUtterance(next);
-          utterance.rate = 1;
+          utterance.rate = 1.15;
           utterance.onend = () => {
             isSpeakingQueueRef.current = false;
             if (ttsQueueRef.current.length > 0) {
@@ -459,23 +475,32 @@ export default function ChatPage() {
         return;
       }
 
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: next }),
-      });
+      // Check if we have a prefetched audio for this exact sentence
+      let url: string;
+      if (prefetchedAudioRef.current?.text === next) {
+        url = prefetchedAudioRef.current.url;
+        prefetchedAudioRef.current = null;
+      } else {
+        // Fetch fresh
+        const response = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: next }),
+        });
 
-      if (!response.ok) {
-        isSpeakingQueueRef.current = false;
-        setIsPlayingAudio(false);
-        return;
+        if (!response.ok) {
+          isSpeakingQueueRef.current = false;
+          setIsPlayingAudio(false);
+          return;
+        }
+
+        const blob = await response.blob();
+        url = URL.createObjectURL(blob);
       }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
 
       if (audioRef.current) {
         audioRef.current.src = url;
+        audioRef.current.playbackRate = 1.15;
         audioRef.current.onended = () => {
           URL.revokeObjectURL(url);
           isSpeakingQueueRef.current = false;

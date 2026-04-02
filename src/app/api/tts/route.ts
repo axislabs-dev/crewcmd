@@ -167,15 +167,33 @@ async function tryLocalTTS(text: string): Promise<Response | null> {
   // All output as WAV for browser compatibility (say uses --data-format to force WAV)
   const tempPath = join(tmpdir(), `crewcmd-tts-${tempId}.wav`);
 
+  // Pre-process text for better prosody with macOS `say`
+  let processed = text
+    // Add micro-pauses after sentence-ending punctuation for natural rhythm
+    .replace(/([.!?])\s+/g, "$1 [[slnc 150]] ")
+    // Add slight pause after colons and semicolons
+    .replace(/([;:])\s+/g, "$1 [[slnc 100]] ")
+    // Remove markdown-style formatting that `say` would read literally
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/`/g, "")
+    .replace(/#{1,6}\s/g, "")
+    // Expand common abbreviations for clearer pronunciation
+    .replace(/\be\.g\./gi, "for example")
+    .replace(/\bi\.e\./gi, "that is")
+    .replace(/\betc\./gi, "etcetera")
+    .replace(/\bvs\./gi, "versus");
+
   // Sanitize text for shell (escape single quotes)
-  const safeText = text.replace(/'/g, "'\\''");
+  const safeText = processed.replace(/'/g, "'\\''");
 
   try {
     let cmd: string;
     switch (bin.name) {
       case "say":
-        // macOS: -o outputs to file, --data-format=LEI16@22050 forces WAV (browser-compatible)
-        cmd = `'${bin.path}' --data-format=LEI16@22050 -o '${tempPath}' '${safeText}'`;
+        // macOS: -o outputs to file, --data-format=LEI16@44100 forces 44.1kHz WAV
+        // Use "Samantha" voice for better prosody (falls back to default if unavailable)
+        cmd = `'${bin.path}' -v Samantha -r 195 --data-format=LEI16@44100 -o '${tempPath}' '${safeText}'`;
         break;
       case "piper":
         // piper reads from stdin

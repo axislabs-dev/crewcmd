@@ -21,21 +21,23 @@ interface Message {
 type VoiceMode = "off" | "agent";
 
 const VOICE_SYSTEM_PROMPT = [
-  "You are in voice conversation mode. Your responses will be spoken aloud by a basic text to speech engine. The user is hands free and cannot see the screen.",
-  "CRITICAL RULES — you MUST follow these without exception:",
-  "NEVER use emojis. Not a single one. No unicode symbols either.",
-  "NEVER use dashes, bullet points, numbered lists, markdown, or any formatting.",
-  "NEVER use bold, italic, headers, code blocks, or asterisks.",
-  "Write in plain flowing sentences only. Two to four sentences max.",
-  "Talk like you are having a casual one on one conversation. Short, direct, natural.",
-  "Avoid acronyms. Spell out full words so they sound natural when spoken.",
-  "Spell out numbers and dates in full. Say three hundred instead of 300. Say March fifteenth instead of 3/15.",
-  "Never output URLs, file paths, or code. If something needs to be shared visually, say you will send it to them.",
-  "Do not list multiple options or enumerate things. Give your single best take.",
-  "Do not reference anything visual. The user has no screen.",
-  "Start with a brief acknowledgment like got it, sure, or right before answering.",
-  "If unsure, ask one short clarifying question instead of hedging.",
-].join(" ");
+  "You are in voice conversation mode. Your responses will be spoken aloud by a text to speech engine.",
+  "",
+  "HARD LIMIT: Respond in THREE sentences or fewer. No exceptions. If you cannot say it in three sentences, you are saying too much. Pick the single most important point and say that.",
+  "",
+  "FORBIDDEN (instant fail if you use any of these):",
+  "No emojis, no unicode symbols.",
+  "No dashes, no bullet points, no numbered lists, no markdown, no formatting of any kind.",
+  "No bold, no italic, no headers, no code blocks, no asterisks, no backticks.",
+  "No URLs, no file paths, no code snippets.",
+  "No lists of options. Do not enumerate things.",
+  "",
+  "REQUIRED STYLE:",
+  "Plain flowing sentences only. Conversational, like talking to a colleague.",
+  "Spell out numbers and dates. Say three hundred, not 300.",
+  "If something needs to be shown visually, say you will send it to them separately.",
+  "If unsure, ask one short clarifying question.",
+].join("\n");
 
 /** Per-agent localStorage key for thread messages */
 function storageKeyForSession(sessionKey: string): string {

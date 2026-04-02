@@ -13,7 +13,9 @@ interface VoiceAgentProps {
 
 // VAD configuration
 const SILENCE_THRESHOLD = 0.015; // RMS threshold for "silence"
+const BARGEIN_THRESHOLD = 0.06; // Higher threshold during TTS playback (ignore fridge, etc.)
 const SPEECH_START_MS = 200; // ms of sound to trigger recording
+const BARGEIN_START_MS = 600; // ms of sustained loud sound to interrupt TTS
 const SILENCE_END_MS = 2000; // ms of silence to stop recording (2s for natural pauses)
 const MIN_RECORDING_MS = 500; // minimum recording length to send
 
@@ -137,7 +139,10 @@ export function VoiceAgent({
       setVolumeLevel(Math.min(rms * 10, 1)); // normalize for UI
 
       const now = Date.now();
-      const isSpeech = rms > SILENCE_THRESHOLD;
+      // Use higher threshold during TTS to prevent ambient noise (fridge, etc.) from barging in
+      const activeThreshold = isPlayingAudio ? BARGEIN_THRESHOLD : SILENCE_THRESHOLD;
+      const activeStartMs = isPlayingAudio ? BARGEIN_START_MS : SPEECH_START_MS;
+      const isSpeech = rms > activeThreshold;
 
       if (isSpeech) {
         silenceStartTimeRef.current = 0;
@@ -146,7 +151,7 @@ export function VoiceAgent({
           // Detecting potential speech start
           if (speechStartTimeRef.current === 0) {
             speechStartTimeRef.current = now;
-          } else if (now - speechStartTimeRef.current >= SPEECH_START_MS) {
+          } else if (now - speechStartTimeRef.current >= activeStartMs) {
             // Barge-in: if Neo is speaking, interrupt
             if (isPlayingAudio) {
               onInterrupt();

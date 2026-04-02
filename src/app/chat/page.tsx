@@ -402,15 +402,24 @@ export default function ChatPage() {
         e.preventDefault();
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
-        // Also stop any TTS
-        window.speechSynthesis?.cancel();
-        ttsQueueRef.current = [];
-        isSpeakingQueueRef.current = false;
+        stopAllAudio();
       }
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [isLoading]);
+
+  // Stop all audio playback (server TTS, browser TTS, queued sentences)
+  const stopAllAudio = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    ttsQueueRef.current = [];
+    isSpeakingQueueRef.current = false;
+    prefetchedAudioRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, []);
 
   const playBrowserTTS = useCallback((text: string) => {
     if (!("speechSynthesis" in window)) {
@@ -1222,7 +1231,10 @@ export default function ChatPage() {
 
                 {/* Mute/unmute toggle */}
                 <button
-                  onClick={() => setSpeakResponses(!speakResponses)}
+                  onClick={() => {
+                    if (speakResponses) stopAllAudio();
+                    setSpeakResponses(!speakResponses);
+                  }}
                   title={speakResponses ? "Mute responses" : "Speak responses"}
                   className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
                     speakResponses

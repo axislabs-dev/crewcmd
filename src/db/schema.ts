@@ -11,6 +11,15 @@ import {
   numeric,
 } from "drizzle-orm/pg-core";
 
+// ─── System Settings ──────────────────────────────────────────────────
+
+export const systemSettings = pgTable("system_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Multi-tenancy enums ───────────────────────────────────────────────
 
 export const companyRoleEnum = pgEnum("company_role", [

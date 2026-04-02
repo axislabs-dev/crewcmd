@@ -40,6 +40,18 @@ async function applySchema() {
     }
   }
 
+  // System settings table (zero-config startup)
+  try {
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  } catch { /* table may already exist */ }
+
   // Chat persistence tables
   try {
     await client.exec(`

@@ -71,6 +71,13 @@
       "when": 1775097763015,
       "tag": "0009_chat_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1775103993303,
+      "tag": "0010_lonely_king_cobra",
+      "breakpoints": true
     }
   ]
 }

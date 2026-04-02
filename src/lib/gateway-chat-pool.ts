@@ -19,6 +19,20 @@ const pool = new Map<string, PoolEntry>();
 
 const MAX_CONNECTION_AGE_MS = 300_000; // 5 minutes
 
+/**
+ * Mark a client as "in use" so the pool won't recycle it mid-request.
+ * Call release() when done.
+ */
+const activeClients = new Set<GatewayClient>();
+
+export function holdClient(client: GatewayClient) {
+  activeClients.add(client);
+}
+
+export function releaseClient(client: GatewayClient) {
+  activeClients.delete(client);
+}
+
 export async function getGatewayClient(): Promise<GatewayClient> {
   if (!db) {
     throw new Error("Database not initialized");
@@ -48,8 +62,12 @@ export async function getGatewayClient(): Promise<GatewayClient> {
     return existing.client;
   }
 
-  // Close stale connection
+  // Close stale connection — but only if no active request is using it
   if (existing) {
+    if (activeClients.has(existing.client)) {
+      // Client is mid-request, return it anyway (don't recycle under its feet)
+      return existing.client;
+    }
     existing.client.close();
     pool.delete(key);
   }

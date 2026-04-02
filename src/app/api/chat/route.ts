@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
-import { getGatewayClient } from "@/lib/gateway-chat-pool";
+import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = await getGatewayClient();
+    holdClient(client);
 
     // Use the agent's session key — "main" for default, agent callsign for specific agents
     const agentId = agent || "main";
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       cancel() {
         // Client disconnected, clean up event listeners
         for (const fn of cleanupFns) fn();
+        releaseClient(client);
       },
     });
 
@@ -122,11 +124,13 @@ export async function POST(request: NextRequest) {
         streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
         streamController.close();
         client.off("chat", chatHandler);
+        releaseClient(client);
       } else if (state === "aborted") {
         done = true;
         streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
         streamController.close();
         client.off("chat", chatHandler);
+        releaseClient(client);
       } else if (state === "error") {
         const errorMsg = (p.errorMessage as string) || "Chat error";
         const chunk = JSON.stringify({
@@ -137,6 +141,7 @@ export async function POST(request: NextRequest) {
         streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
         streamController.close();
         client.off("chat", chatHandler);
+        releaseClient(client);
       }
     };
 
@@ -160,6 +165,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       client.off("chat", chatHandler);
+      releaseClient(client);
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[api/chat] chat.send failed:", msg);
       return Response.json(
@@ -178,6 +184,7 @@ export async function POST(request: NextRequest) {
         } catch { /* already closed */ }
         client.off("chat", chatHandler);
         client.off("*", debugHandler);
+        releaseClient(client);
       }
     }, 300_000);
 

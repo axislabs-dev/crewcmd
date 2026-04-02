@@ -93,7 +93,7 @@ async function loadFromDB(agentId: string): Promise<Message[] | null> {
   if (!companyId) return null;
 
   try {
-    // Find the latest session for this agent
+    // Find ALL sessions for this agent (messages may be scattered due to earlier bug)
     const sessRes = await fetch(
       `/api/chat/sessions?agentId=${encodeURIComponent(agentId)}&companyId=${encodeURIComponent(companyId)}`
     );
@@ -104,16 +104,32 @@ async function loadFromDB(agentId: string): Promise<Message[] | null> {
     };
     if (!sessions?.length) return null;
 
-    // Load messages from most recent session
-    const msgRes = await fetch(
-      `/api/chat/messages?sessionId=${encodeURIComponent(sessions[0].id)}&limit=100`
-    );
-    if (!msgRes.ok) return null;
+    // Load messages from all sessions and merge by date
+    const allMessages: { id: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[] = [];
+    for (const session of sessions) {
+      const msgRes = await fetch(
+        `/api/chat/messages?sessionId=${encodeURIComponent(session.id)}&limit=100`
+      );
+      if (!msgRes.ok) continue;
+      const { messages } = await msgRes.json() as {
+        messages: { id: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[];
+      };
+      if (messages?.length) allMessages.push(...messages);
+    }
 
-    const { messages } = await msgRes.json() as {
-      messages: { id: string; role: "user" | "assistant"; content: string; metadata?: Message["metadata"] }[];
-    };
-    return messages?.length ? messages : null;
+    if (!allMessages.length) return null;
+
+    // Sort by createdAt ascending and deduplicate by id
+    const seen = new Set<string>();
+    const sorted = allMessages
+      .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
+      .filter((m) => {
+        if (seen.has(m.id)) return false;
+        seen.add(m.id);
+        return true;
+      });
+
+    return sorted;
   } catch {
     return null;
   }
@@ -184,6 +200,7 @@ export default function ChatPage() {
   // Load messages when session changes: DB → localStorage → gateway (waterfall)
   useEffect(() => {
     let cancelled = false;
+    hasLoadedFromDB.current = false;
     const agentId = selectedAgent?.callsign || activeSessionKey;
 
     async function load() {
@@ -196,6 +213,7 @@ export default function ChatPage() {
       // 2. Try loading from DB (authoritative source)
       const dbMessages = await loadFromDB(agentId);
       if (cancelled) return;
+      hasLoadedFromDB.current = true;
 
       if (dbMessages && dbMessages.length > 0) {
         setMessages(dbMessages);
@@ -234,9 +252,14 @@ export default function ChatPage() {
     return () => { cancelled = true; };
   }, [activeSessionKey, selectedAgent?.callsign]);
 
-  // Save messages when they change
+  // Save messages when they change (only if we have more than what's cached)
+  const hasLoadedFromDB = useRef(false);
   useEffect(() => {
-    saveMessages(activeSessionKey, messages);
+    // Don't save the initial localStorage cache back (it may be stale);
+    // only save once DB load has completed or when user sends/receives messages
+    if (hasLoadedFromDB.current || messages.length === 0) {
+      saveMessages(activeSessionKey, messages);
+    }
   }, [messages, activeSessionKey]);
 
   // Check if user is near bottom of scroll container

@@ -141,18 +141,6 @@ export function AgentTreeSelector({
                   }`}
                   style={{ paddingLeft: `${12 + depth * 16}px` }}
                 >
-                  {/* Indent guide line for children */}
-                  {depth > 0 && (
-                    <span
-                      className="absolute border-l border-[var(--border-subtle)]"
-                      style={{
-                        left: `${4 + depth * 16}px`,
-                        height: "100%",
-                        top: 0,
-                      }}
-                    />
-                  )}
-
                   <span className="text-base shrink-0">{agent.emoji}</span>
 
                   <div className="flex flex-1 items-center gap-2 overflow-hidden">

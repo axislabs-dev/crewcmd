@@ -58,7 +58,8 @@ function StopIcon({ className }: { className?: string }) {
 function MessageActions({ content, showSpeak, mobileVisible }: { content: string; showSpeak: boolean; mobileVisible: boolean }) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsModRef = useRef<"server" | "browser">("server");
 
   const handleCopy = useCallback(async () => {
     try {
@@ -81,37 +82,70 @@ function MessageActions({ content, showSpeak, mobileVisible }: { content: string
     } catch { /* clipboard not available */ }
   }, [content]);
 
-  const handleSpeak = useCallback(() => {
+  const stopSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
+  }, []);
+
+  const handleSpeak = useCallback(async () => {
     if (speaking) {
-      window.speechSynthesis?.cancel();
-      setSpeaking(false);
+      stopSpeaking();
       return;
     }
 
-    if (!("speechSynthesis" in window)) return;
-
-    window.speechSynthesis.cancel();
     const text = stripMarkdown(content);
+    setSpeaking(true);
+
+    // Try server TTS first (same as main chat)
+    if (ttsModRef.current === "server") {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+
+        if (res.status === 503) {
+          ttsModRef.current = "browser";
+        } else if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          audio.onended = () => { setSpeaking(false); URL.revokeObjectURL(url); };
+          audio.onerror = () => { setSpeaking(false); URL.revokeObjectURL(url); };
+          await audio.play();
+          return;
+        }
+      } catch {
+        ttsModRef.current = "browser";
+      }
+    }
+
+    // Browser speechSynthesis fallback
+    if (!("speechSynthesis" in window)) { setSpeaking(false); return; }
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.15;
-
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /samantha|karen|daniel/i.test(v.name));
+    const preferred = voices.find((v) => /samantha|karen|daniel/i.test(v.name))
+      || voices.find((v) => v.lang.startsWith("en") && v.localService);
     if (preferred) utterance.voice = preferred;
-
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
-    utteranceRef.current = utterance;
-    setSpeaking(true);
     window.speechSynthesis.speak(utterance);
-  }, [content, speaking]);
+  }, [content, speaking, stopSpeaking]);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (speaking) window.speechSynthesis?.cancel();
+      stopSpeaking();
     };
-  }, [speaking]);
+  }, [stopSpeaking]);
 
   const btnClass =
     "p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer";

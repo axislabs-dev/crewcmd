@@ -21,18 +21,20 @@ interface Message {
 type VoiceMode = "off" | "agent";
 
 const VOICE_SYSTEM_PROMPT = [
-  "You are in voice conversation mode. Your responses will be spoken aloud by a text to speech engine. The user is hands free and cannot see the screen.",
-  "Respond briefly like you are talking to someone in person. One to three sentences unless asked for more detail.",
-  "Do not use emojis, special characters, markdown, bullet points, dashes, or code blocks.",
-  "Avoid acronyms. Spell out full words so they sound natural when spoken aloud on a basic text to speech engine.",
+  "You are in voice conversation mode. Your responses will be spoken aloud by a basic text to speech engine. The user is hands free and cannot see the screen.",
+  "CRITICAL RULES — you MUST follow these without exception:",
+  "NEVER use emojis. Not a single one. No unicode symbols either.",
+  "NEVER use dashes, bullet points, numbered lists, markdown, or any formatting.",
+  "NEVER use bold, italic, headers, code blocks, or asterisks.",
+  "Write in plain flowing sentences only. Two to four sentences max.",
+  "Talk like you are having a casual one on one conversation. Short, direct, natural.",
+  "Avoid acronyms. Spell out full words so they sound natural when spoken.",
   "Spell out numbers and dates in full. Say three hundred instead of 300. Say March fifteenth instead of 3/15.",
   "Never output URLs, file paths, or code. If something needs to be shared visually, say you will send it to them.",
-  "Do not list multiple options. Give your single best recommendation. Lists are hard to follow when listening.",
-  "Do not reference anything visual. The user has no screen. Never say as shown above or similar.",
-  "End your response with a short question or prompt to keep the conversation going naturally.",
-  "Start with a brief acknowledgment like got it, sure, or right before answering. It feels more like a real conversation.",
-  "If you are unsure, ask one short clarifying question instead of giving a long hedged answer.",
-  "Only provide detail when explicitly asked. Be genuinely helpful and conversational.",
+  "Do not list multiple options or enumerate things. Give your single best take.",
+  "Do not reference anything visual. The user has no screen.",
+  "Start with a brief acknowledgment like got it, sure, or right before answering.",
+  "If unsure, ask one short clarifying question instead of hedging.",
 ].join(" ");
 
 /** Per-agent localStorage key for thread messages */
@@ -83,6 +85,11 @@ export default function ChatPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingStartRef = useRef<number>(0);
+
+  // Sentence-level TTS queue for agent mode
+  const ttsQueueRef = useRef<string[]>([]);
+  const isSpeakingQueueRef = useRef(false);
+  const spokenSentencesRef = useRef<number>(0);
 
   // Derive session key from selected agent
   const activeSessionKey = useMemo(
@@ -301,6 +308,92 @@ export default function ChatPage() {
     }
   }, [playBrowserTTS]);
 
+  // Sentence-level TTS: speak each sentence as it completes during streaming
+  const speakNextInQueue = useCallback(async () => {
+    if (isSpeakingQueueRef.current) return;
+    const next = ttsQueueRef.current.shift();
+    if (!next) {
+      isSpeakingQueueRef.current = false;
+      return;
+    }
+    isSpeakingQueueRef.current = true;
+    setIsPlayingAudio(true);
+
+    try {
+      if (ttsModRef.current === "browser") {
+        // Browser TTS with queue continuation
+        if ("speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(next);
+          utterance.rate = 1;
+          utterance.onend = () => {
+            isSpeakingQueueRef.current = false;
+            if (ttsQueueRef.current.length > 0) {
+              speakNextInQueue();
+            } else {
+              setIsPlayingAudio(false);
+            }
+          };
+          utterance.onerror = () => {
+            isSpeakingQueueRef.current = false;
+            setIsPlayingAudio(false);
+          };
+          speechSynthesis.speak(utterance);
+        }
+        return;
+      }
+
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: next }),
+      });
+
+      if (!response.ok) {
+        isSpeakingQueueRef.current = false;
+        setIsPlayingAudio(false);
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        audioRef.current.onended = () => {
+          URL.revokeObjectURL(url);
+          isSpeakingQueueRef.current = false;
+          if (ttsQueueRef.current.length > 0) {
+            speakNextInQueue();
+          } else {
+            setIsPlayingAudio(false);
+          }
+        };
+        audioRef.current.onerror = () => {
+          URL.revokeObjectURL(url);
+          isSpeakingQueueRef.current = false;
+          setIsPlayingAudio(false);
+        };
+        await audioRef.current.play();
+      }
+    } catch {
+      isSpeakingQueueRef.current = false;
+      setIsPlayingAudio(false);
+    }
+  }, []);
+
+  /** Queue a sentence for TTS and start speaking if idle */
+  const queueSentenceForTTS = useCallback(
+    (sentence: string) => {
+      const cleaned = sentence.trim();
+      if (!cleaned) return;
+      ttsQueueRef.current.push(cleaned);
+      if (!isSpeakingQueueRef.current) {
+        speakNextInQueue();
+      }
+    },
+    [speakNextInQueue]
+  );
+
   // Patterns that indicate the user is checking if we heard them
   const busyPatterns = /\b(did you hear|are you there|hello|hey|still there|you there|can you hear|listening)\b/i;
 
@@ -358,6 +451,11 @@ export default function ChatPage() {
 
         const decoder = new TextDecoder();
         let fullContent = "";
+        // Track unspoken buffer for sentence-level TTS
+        let unspokenBuffer = "";
+        spokenSentencesRef.current = 0;
+        ttsQueueRef.current = [];
+        isSpeakingQueueRef.current = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -377,11 +475,29 @@ export default function ChatPage() {
               if (delta) {
                 fullContent += delta;
                 setStreamingContent(fullContent);
+
+                // Sentence-level TTS: extract complete sentences and queue them
+                if (speakResponses) {
+                  unspokenBuffer += delta;
+                  // Split on sentence boundaries (. ! ?) followed by space or end
+                  const sentenceMatch = unspokenBuffer.match(/^([\s\S]*?[.!?])\s+([\s\S]*)/);
+                  if (sentenceMatch) {
+                    const completeSentence = sentenceMatch[1];
+                    unspokenBuffer = sentenceMatch[2];
+                    queueSentenceForTTS(completeSentence);
+                    spokenSentencesRef.current++;
+                  }
+                }
               }
             } catch {
               // Skip malformed JSON chunks
             }
           }
+        }
+
+        // Queue any remaining unspoken text
+        if (speakResponses && unspokenBuffer.trim()) {
+          queueSentenceForTTS(unspokenBuffer.trim());
         }
 
         const assistantMsg: Message = {
@@ -391,10 +507,6 @@ export default function ChatPage() {
         };
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingContent("");
-
-        if (speakResponses && fullContent) {
-          playTTS(fullContent);
-        }
       } catch (error) {
         console.error("[Chat] Error:", error);
         setMessages((prev) => [
@@ -411,7 +523,7 @@ export default function ChatPage() {
 
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, selectedAgent, speakResponses]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses]
   );
 
   const interruptAudio = useCallback(() => {
@@ -610,16 +722,13 @@ export default function ChatPage() {
             </button>
           </div>
 
-          {/* Scrollable messages behind the viz */}
+          {/* Messages — only show completed messages in agent mode (no streaming text, user is hands-free) */}
           <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
             <div className="mx-auto max-w-3xl space-y-4">
               {messages.map((msg) => (
                 <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
               ))}
-              {streamingContent && (
-                <ChatMessage role="assistant" content={streamingContent} isStreaming={true} />
-              )}
-              {isLoading && !streamingContent && (
+              {isLoading && (
                 <div className="flex justify-center py-4">
                   <div className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80` }} />

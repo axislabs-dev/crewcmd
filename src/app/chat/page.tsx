@@ -829,7 +829,7 @@ export default function ChatPage() {
       <audio ref={audioRef} className="hidden" />
 
       {/* Header */}
-      <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-4 py-3 lg:px-6">
+      <div className="shrink-0 relative z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div

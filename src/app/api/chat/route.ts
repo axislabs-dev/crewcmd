@@ -79,8 +79,16 @@ export async function POST(request: NextRequest) {
       const p = payload as Record<string, unknown>;
 
       // Filter: only handle events for THIS session (prevents cross-agent bleed)
+      // Gateway may use full session keys like "agent:main:neo" while we send "neo"
       const eventSession = (p.sessionKey as string) || (p.session as string) || "";
-      if (eventSession && eventSession !== sessionKey) return;
+      if (eventSession && eventSession !== sessionKey) {
+        // Check if our sessionKey is a suffix of the gateway's full session key
+        const isMatch = eventSession.endsWith(`:${sessionKey}`) || eventSession === sessionKey;
+        if (!isMatch) {
+          console.log(`[api/chat] Skipping event for session "${eventSession}" (ours: "${sessionKey}")`);
+          return;
+        }
+      }
 
       const state = p.state as string;
 

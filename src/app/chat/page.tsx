@@ -81,6 +81,8 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingStartRef = useRef<number>(0);
 
   // Derive session key from selected agent
   const activeSessionKey = useMemo(
@@ -184,6 +186,43 @@ export default function ChatPage() {
       });
   }, []);
 
+  // Agent mode: speak acknowledgment when thinking starts, check-in after 30s
+  const thinkingAcks = useMemo(
+    () => [
+      "Let me think about that.",
+      "Working on it.",
+      "Give me a moment.",
+      "One second.",
+      "On it.",
+    ],
+    []
+  );
+
+  useEffect(() => {
+    if (isLoading && voiceMode === "agent") {
+      loadingStartRef.current = Date.now();
+      // Speak a random thinking ack
+      const ack = thinkingAcks[Math.floor(Math.random() * thinkingAcks.length)];
+      playTTS(ack);
+
+      // Check-in after 30s if still loading
+      thinkingTimerRef.current = setTimeout(() => {
+        if (isLoading) {
+          playTTS("Still working on this. Hang tight.");
+        }
+      }, 30000);
+    }
+
+    return () => {
+      if (thinkingTimerRef.current) {
+        clearTimeout(thinkingTimerRef.current);
+        thinkingTimerRef.current = null;
+      }
+    };
+    // playTTS intentionally omitted to avoid re-firing on TTS ref changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, voiceMode, thinkingAcks]);
+
   const playBrowserTTS = useCallback((text: string) => {
     if (!("speechSynthesis" in window)) {
       setIsPlayingAudio(false);
@@ -262,10 +301,24 @@ export default function ChatPage() {
     }
   }, [playBrowserTTS]);
 
+  // Patterns that indicate the user is checking if we heard them
+  const busyPatterns = /\b(did you hear|are you there|hello|hey|still there|you there|can you hear|listening)\b/i;
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || isLoading) return;
+      if (!trimmed) return;
+
+      // Agent mode: if loading and user speaks, give a reassurance instead of blocking
+      if (isLoading && voiceMode === "agent") {
+        if (busyPatterns.test(trimmed)) {
+          playTTS("Yes, I heard you. Still working on my response.");
+        } else {
+          playTTS("I am still thinking about your last message. Give me a moment.");
+        }
+        return;
+      }
+      if (isLoading) return;
 
       // Send to OpenClaw Gateway
       const userMsg: Message = {
@@ -358,7 +411,7 @@ export default function ChatPage() {
 
       setIsLoading(false);
     },
-    [isLoading, messages, playTTS, selectedAgent, speakResponses]
+    [isLoading, voiceMode, messages, playTTS, selectedAgent, speakResponses]
   );
 
   const interruptAudio = useCallback(() => {

@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient } from "@/lib/gateway-chat-pool";
+import { getChatSystemPrompt } from "@/lib/chat-system-prompt";
+import { parseToolCall, executeToolCall } from "@/lib/chat-tool-executor";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if system prompt (with tool defs) already present
+    const hasToolPrompt = messages.some(
+      (m: { role: string; content: string }) =>
+        m.role === "system" && m.content?.includes("tool_call")
+    );
+
     const client = await getGatewayClient();
 
     // Use the agent's session key — "main" for default, agent callsign for specific agents
@@ -51,9 +59,10 @@ export async function POST(request: NextRequest) {
 
     let done = false;
     let lastStreamedText = "";
+    let fullResponseText = "";
 
     // Extract text content from a gateway chat message object
-    // Handles: string, { content: string }, { text: string }, 
+    // Handles: string, { content: string }, { text: string },
     // { content: [{ type: "text", text: "..." }] }
     function extractText(message: unknown): string {
       if (typeof message === "string") return message;
@@ -73,6 +82,53 @@ export async function POST(request: NextRequest) {
       if (typeof msg.text === "string") return msg.text;
 
       return "";
+    }
+
+    /**
+     * Handle tool calls found in completed response text.
+     * If a tool_call block is detected, execute it, send the result back
+     * to the gateway as a follow-up, and continue streaming.
+     */
+    async function handleToolCalls(text: string): Promise<boolean> {
+      const toolCall = parseToolCall(text);
+      if (!toolCall) return false;
+
+      console.log(`[api/chat] Tool call detected: ${toolCall.tool}`, toolCall.args);
+
+      // Execute the tool
+      const resultJson = await executeToolCall(toolCall);
+      console.log(`[api/chat] Tool result:`, resultJson);
+
+      // Stream a brief indicator to the client while we process
+      const indicator = `\n\n_Executing ${toolCall.tool}..._\n\n`;
+      const indicatorChunk = JSON.stringify({
+        choices: [{ delta: { content: indicator } }],
+      });
+      streamController?.enqueue(encoder.encode(`data: ${indicatorChunk}\n\n`));
+
+      // Send tool result back to gateway so the agent can summarize
+      // Reset streaming state for the follow-up response
+      lastStreamedText = "";
+      fullResponseText = "";
+
+      try {
+        await client.chatSend({
+          message: `Tool result for ${toolCall.tool}:\n${resultJson}\n\nSummarize the result for the user. If a task was created, include the task details formatted as:\n\n<!--task_card ${resultJson} -->`,
+          sessionKey,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[api/chat] Follow-up chatSend failed:", msg);
+        const errorChunk = JSON.stringify({
+          choices: [{ delta: { content: `\n\nError sending tool result: ${msg}` } }],
+        });
+        streamController?.enqueue(encoder.encode(`data: ${errorChunk}\n\n`));
+        done = true;
+        streamController?.enqueue(encoder.encode("data: [DONE]\n\n"));
+        streamController?.close();
+      }
+
+      return true;
     }
 
     const chatHandler = (payload: unknown) => {
@@ -102,25 +158,62 @@ export async function POST(request: NextRequest) {
         if (fullText && fullText.length > lastStreamedText.length) {
           const newContent = fullText.slice(lastStreamedText.length);
           lastStreamedText = fullText;
-          const chunk = JSON.stringify({
-            choices: [{ delta: { content: newContent } }],
-          });
-          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          fullResponseText += newContent;
+
+          // Don't stream tool_call blocks to the client — buffer them
+          if (!fullResponseText.includes("```tool_call")) {
+            const chunk = JSON.stringify({
+              choices: [{ delta: { content: newContent } }],
+            });
+            streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          }
         }
       } else if (state === "final") {
-        // Final event — send any remaining text and close
+        // Final event — check for tool calls before closing
         const finalText = extractText(p.message);
         if (finalText && finalText.length > lastStreamedText.length) {
           const remaining = finalText.slice(lastStreamedText.length);
-          const chunk = JSON.stringify({
-            choices: [{ delta: { content: remaining } }],
-          });
-          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          fullResponseText += remaining;
         }
-        done = true;
-        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
-        streamController.close();
-        client.off("chat", chatHandler);
+
+        // Check if the response contains a tool call
+        if (fullResponseText.includes("```tool_call")) {
+          // Handle tool call asynchronously — don't close the stream yet
+          handleToolCalls(fullResponseText).then((handled) => {
+            if (!handled) {
+              // No valid tool call found, stream any remaining text and close
+              if (fullResponseText.length > 0) {
+                const chunk = JSON.stringify({
+                  choices: [{ delta: { content: fullResponseText } }],
+                });
+                streamController?.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+              }
+              done = true;
+              streamController?.enqueue(encoder.encode("data: [DONE]\n\n"));
+              streamController?.close();
+              client.off("chat", chatHandler);
+            }
+            // If handled, the follow-up will produce another final event
+          });
+        } else {
+          // No tool call — stream remaining text and close normally
+          if (finalText && finalText.length > (fullResponseText.length - (finalText.length - lastStreamedText.length))) {
+            // Stream any content we buffered
+            const remaining = finalText.slice(
+              finalText.length - (fullResponseText.length - lastStreamedText.length + (finalText.length - lastStreamedText.length))
+            );
+            if (remaining) {
+              const chunk = JSON.stringify({
+                choices: [{ delta: { content: remaining } }],
+              });
+              streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            }
+          }
+          done = true;
+          streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
+          streamController.close();
+          client.off("chat", chatHandler);
+        }
       } else if (state === "aborted") {
         done = true;
         streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -151,10 +244,14 @@ export async function POST(request: NextRequest) {
       client.off("*", debugHandler);
     });
 
-    // Send the message
+    // Send the message — prepend system prompt on first exchange
     try {
+      const messageContent = hasToolPrompt
+        ? lastUserMessage.content
+        : `${getChatSystemPrompt()}\n\n---\n\nUser message: ${lastUserMessage.content}`;
+
       await client.chatSend({
-        message: lastUserMessage.content,
+        message: messageContent,
         sessionKey,
       });
     } catch (err) {

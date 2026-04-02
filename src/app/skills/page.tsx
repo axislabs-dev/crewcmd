@@ -51,6 +51,7 @@ const SOURCE_STYLES: Record<string, { label: string; icon: string; color: string
   clawhub: { label: "ClawHub", icon: "\u{1F43E}", color: "text-[#00f0ff]", border: "border-[#00f0ff]/30", bg: "bg-[#00f0ff]/10" },
   skills_sh: { label: "skills.sh", icon: "\u25B2", color: "text-[var(--text-primary)]", border: "border-[var(--border-medium)]", bg: "bg-[var(--bg-surface-hover)]" },
   github: { label: "GitHub", icon: "\u2B24", color: "text-[#8b949e]", border: "border-[#8b949e]/30", bg: "bg-[#8b949e]/10" },
+  system: { label: "System", icon: "\u{1F512}", color: "text-violet-400", border: "border-violet-400/30", bg: "bg-violet-400/10" },
   custom: { label: "Custom", icon: "\u270F\uFE0F", color: "text-amber-400", border: "border-amber-400/30", bg: "bg-amber-400/10" },
 };
 
@@ -605,17 +606,19 @@ export default function SkillsPage() {
                     EDIT
                   </button>
                 )}
-                {selectedSkill.source !== "custom" && (
+                {selectedSkill.source !== "custom" && selectedSkill.source !== "system" && (
                   <button className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]">
                     CHECK FOR UPDATES
                   </button>
                 )}
-                <button
-                  onClick={() => handleDeleteSkill(selectedSkill.id)}
-                  className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                >
-                  REMOVE
-                </button>
+                {selectedSkill.source !== "system" && (
+                  <button
+                    onClick={() => handleDeleteSkill(selectedSkill.id)}
+                    className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                  >
+                    REMOVE
+                  </button>
+                )}
               </div>
             </div>
 

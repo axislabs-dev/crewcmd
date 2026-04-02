@@ -77,6 +77,11 @@ export async function POST(request: NextRequest) {
     const chatHandler = (payload: unknown) => {
       if (!streamController || done) return;
       const p = payload as Record<string, unknown>;
+
+      // Filter: only handle events for THIS session (prevents cross-agent bleed)
+      const eventSession = (p.sessionKey as string) || (p.session as string) || "";
+      if (eventSession && eventSession !== sessionKey) return;
+
       const state = p.state as string;
 
       if (state === "delta") {

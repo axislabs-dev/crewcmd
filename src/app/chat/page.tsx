@@ -878,7 +878,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages area */}
-      <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+      <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">

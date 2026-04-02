@@ -32,7 +32,7 @@ function ImageLightbox({ src, alt }: { src: string; alt: string }) {
       <img
         src={src}
         alt={alt}
-        className="max-w-sm rounded-lg border border-[var(--border-medium)] cursor-pointer hover:opacity-90 transition-opacity"
+        className="max-w-full rounded-lg border border-[var(--border-medium)] cursor-pointer hover:opacity-90 transition-opacity"
         onClick={() => setOpen(true)}
       />
       {open && (
@@ -78,7 +78,7 @@ export function ChatMessage({ role, content, isStreaming, metadata }: ChatMessag
 
       {/* Message bubble */}
       <div
-        className={`max-w-[85%] rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
+        className={`max-w-[85%] overflow-hidden rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
           isUser
             ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] border border-[var(--border-medium)]"
             : "bg-neo/[0.06] text-[var(--text-primary)] border border-neo/10"

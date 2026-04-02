@@ -633,8 +633,13 @@ export default function ChatPage() {
           setIsPlayingAudio(false);
         };
         await audioRef.current.play();
+      } else {
+        console.error("[TTS Queue] No audioRef.current available");
+        isSpeakingQueueRef.current = false;
+        setIsPlayingAudio(false);
       }
-    } catch {
+    } catch (err) {
+      console.error("[TTS Queue] Playback error:", err);
       isSpeakingQueueRef.current = false;
       setIsPlayingAudio(false);
     }
@@ -1333,7 +1338,14 @@ export default function ChatPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
+                    onClick={() => {
+                      // Unlock audio on iOS — must happen in user gesture handler
+                      if (audioRef.current) {
+                        audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                        audioRef.current.play().catch(() => {});
+                      }
+                      setVoiceMode("agent"); setSpeakResponses(true);
+                    }}
                     title="Enter agent mode (hands-free)"
                     className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-primary)] border border-[var(--border-medium)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                   >

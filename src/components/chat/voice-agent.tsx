@@ -183,7 +183,7 @@ export function VoiceAgent({
 
     // mediaDevices requires a secure context (HTTPS or localhost)
     if (!navigator.mediaDevices) {
-      setError("Voice requires HTTPS. Access via localhost or run: npm run dev:https");
+      setError("Voice requires HTTPS. Access via localhost or run: pnpm dev:https");
       return;
     }
 

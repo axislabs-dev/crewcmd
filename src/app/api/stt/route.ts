@@ -98,12 +98,24 @@ async function tryLocalWhisper(
   try {
     await writeFile(tempAudioPath, audioBuffer);
 
-    const outputPath = tempAudioPath.replace(/\.[^.]+$/, "");
+    // Convert webm/ogg to wav for reliable whisper processing
+    const wavPath = tempAudioPath.replace(/\.[^.]+$/, ".wav");
+    const converted = await new Promise<boolean>((resolve) => {
+      exec(
+        `ffmpeg -y -i "${tempAudioPath}" -ar 16000 -ac 1 -c:a pcm_s16le "${wavPath}" 2>/dev/null`,
+        { timeout: 10000 },
+        (error) => resolve(!error)
+      );
+    });
+
+    const inputPath = converted ? wavPath : tempAudioPath;
+    const outputPath = inputPath.replace(/\.[^.]+$/, "");
+
     const text = await new Promise<string | null>((resolve) => {
       // Use base model for speed. Output as plain text.
       const args = whisperBin.type === "cpp"
-        ? `"${whisperBin.path}" -m "${whisperBin.modelPath}" -f "${tempAudioPath}" --no-timestamps -otxt -of "${outputPath}"`
-        : `"${whisperBin.path}" "${tempAudioPath}" --model base --language en --output_format txt --output_dir "${tmpdir()}"`;
+        ? `"${whisperBin.path}" -m "${whisperBin.modelPath}" -f "${inputPath}" --no-timestamps -otxt -of "${outputPath}"`
+        : `"${whisperBin.path}" "${inputPath}" --model base --language en --output_format txt --output_dir "${tmpdir()}"`;
 
       exec(args, { timeout: 30000 }, async (error) => {
         if (error) {
@@ -130,7 +142,10 @@ async function tryLocalWhisper(
     console.error("[api/stt] Local whisper failed:", err);
     return null;
   } finally {
+    // Clean up temp files
     await unlink(tempAudioPath).catch(() => {});
+    const wavCleanup = tempAudioPath.replace(/\.[^.]+$/, ".wav");
+    await unlink(wavCleanup).catch(() => {});
   }
 }
 

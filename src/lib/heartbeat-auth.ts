@@ -3,11 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 export function validateHeartbeatAuth(req: NextRequest): NextResponse | null {
   const expectedToken = process.env.HEARTBEAT_SECRET;
 
+  // Local dev: no secret configured = allow all heartbeats (zero-config)
   if (!expectedToken) {
-    return NextResponse.json(
-      { error: "Server not configured" },
-      { status: 500 }
-    );
+    return null;
   }
 
   const authHeader = req.headers.get("authorization");

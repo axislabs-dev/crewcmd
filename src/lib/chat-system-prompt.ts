@@ -1,8 +1,9 @@
 /**
  * Chat-to-task bridge: system prompt that tells the agent about its tools.
  *
- * Injected before the conversation messages so the LLM knows it can
- * create/list/update/get tasks by emitting structured tool_call blocks.
+ * NOTE: No longer injected into the OpenClaw gateway route. The gateway agent
+ * has its own system prompt and tools. Preserved for potential use with
+ * non-OpenClaw agents or direct LLM chat sessions.
  */
 
 import { chatTools } from "./chat-tools";

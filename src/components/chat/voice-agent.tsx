@@ -178,6 +178,27 @@ export function VoiceAgent({
     rafRef.current = requestAnimationFrame(tick);
   }, [isPlayingAudio, onInterrupt, startRecording, stopRecording]);
 
+  // Screen Wake Lock — keeps screen on during agent mode (mobile)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  const requestWakeLock = useCallback(async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+        wakeLockRef.current.addEventListener("release", () => {
+          wakeLockRef.current = null;
+        });
+      }
+    } catch {
+      // Wake lock can fail if battery is low or OS denies it — non-critical
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    wakeLockRef.current?.release();
+    wakeLockRef.current = null;
+  }, []);
+
   const activate = useCallback(async () => {
     setError(null);
 
@@ -207,13 +228,16 @@ export function VoiceAgent({
       source.connect(analyser);
       analyserRef.current = analyser;
 
+      // Keep screen awake on mobile
+      await requestWakeLock();
+
       setIsActive(true);
       setState("listening");
     } catch (err) {
       console.error("[VoiceAgent] Mic error:", err);
       setError("Microphone access denied. Please allow mic access and retry.");
     }
-  }, []);
+  }, [requestWakeLock]);
 
   const deactivate = useCallback(() => {
     // Stop VAD loop
@@ -244,10 +268,25 @@ export function VoiceAgent({
     }
     analyserRef.current = null;
 
+    // Release wake lock
+    releaseWakeLock();
+
     setIsActive(false);
     setState("idle");
     setVolumeLevel(0);
-  }, []);
+  }, [releaseWakeLock]);
+
+  // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
+  useEffect(() => {
+    if (!isActive) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [isActive, requestWakeLock]);
 
   // Start/stop VAD loop when active
   useEffect(() => {

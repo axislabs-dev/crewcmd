@@ -119,9 +119,25 @@ export default function ChatPage() {
     fetchAgents();
   }, []);
 
-  // Load messages when session changes
+  // Load messages when session changes — try localStorage first, then fetch from gateway
   useEffect(() => {
-    setMessages(loadMessages(activeSessionKey));
+    const cached = loadMessages(activeSessionKey);
+    setMessages(cached);
+
+    // If no local messages, fetch history from gateway (cron output, other sessions, etc.)
+    if (cached.length === 0) {
+      fetch(`/api/chat/history?sessionKey=${encodeURIComponent(activeSessionKey)}&limit=50`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.messages?.length) {
+            setMessages(data.messages);
+          }
+        })
+        .catch(() => {
+          // Gateway unavailable, stay with empty
+        });
+    }
+
     // Clear unread for this session
     setUnreadCounts((prev) => {
       if (!prev[activeSessionKey]) return prev;

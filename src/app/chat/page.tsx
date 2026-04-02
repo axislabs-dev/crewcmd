@@ -135,6 +135,8 @@ export default function ChatPage() {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1071,10 +1073,10 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Input area — container style (Claude/ChatGPT layout) */}
+      {/* Input area — Claude-style layout */}
       <div className="shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-3 pt-2 sm:px-4 lg:px-6">
         <div className="mx-auto max-w-3xl">
-          {/* Hidden file input */}
+          {/* Hidden file inputs */}
           <input
             ref={fileInputRef}
             type="file"
@@ -1086,8 +1088,19 @@ export default function ChatPage() {
               e.target.value = "";
             }}
           />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
           <div
-            className={`rounded-2xl border bg-[var(--bg-surface)] transition-colors focus-within:border-neo/30 focus-within:bg-[var(--bg-surface-hover)] ${
+            className={`relative rounded-2xl border bg-[var(--bg-surface)] transition-colors focus-within:border-neo/30 focus-within:bg-[var(--bg-surface-hover)] ${
               isDragOver
                 ? "border-[var(--accent)] bg-neo/[0.04]"
                 : "border-[var(--border-medium)]"
@@ -1141,11 +1154,11 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Textarea — top section of container */}
+            {/* Textarea */}
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => { setInput(e.target.value); setShowAddMenu(false); }}
               onKeyDown={handleKeyDown}
               onPaste={(e) => {
                 const files = Array.from(e.clipboardData.items)
@@ -1159,7 +1172,7 @@ export default function ChatPage() {
               }}
               placeholder={`Message ${agentCallsign}...`}
               disabled={isLoading}
-              rows={2}
+              rows={1}
               className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base sm:text-[14px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none disabled:opacity-40"
               style={{ maxHeight: "140px" }}
               onInput={(e) => {
@@ -1169,17 +1182,22 @@ export default function ChatPage() {
               }}
             />
 
-            {/* Action buttons — bottom row inside container */}
+            {/* Action buttons — bottom row */}
             <div className="flex items-center justify-between px-2 pb-2 pt-1">
+              {/* Left: + button and mute */}
               <div className="flex items-center gap-1">
-                {/* Attach file */}
+                {/* Add to Chat (+) button */}
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Attach files"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-all hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  onClick={() => setShowAddMenu(!showAddMenu)}
+                  title="Add to Chat"
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                    showAddMenu
+                      ? "bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  }`}
                 >
                   <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
                 </button>
 
@@ -1203,41 +1221,96 @@ export default function ChatPage() {
                     </svg>
                   )}
                 </button>
+              </div>
 
-                {/* Mic (hold-to-talk) */}
+              {/* Right: Mic + contextual Agent/Send button */}
+              <div className="flex items-center gap-1">
+                {/* Mic (toggle to record) */}
                 <VoiceRecorder
                   onTranscript={sendMessage}
                   isDisabled={isLoading}
                 />
 
-                {/* Agent mode button (hands-free voice) */}
-                <button
-                  onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
-                  title="Enter agent mode (hands-free)"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-400 transition-all hover:bg-violet-500/15"
-                >
-                  <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                  </svg>
-                </button>
+                {/* Contextual button: Send (when text) or Agent mode (when empty) */}
+                {input.trim() || pendingFiles.length > 0 ? (
+                  <button
+                    onClick={() => sendMessage(input)}
+                    disabled={isLoading}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
+                    title="Send message"
+                    style={
+                      !isLoading
+                        ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.25)" }
+                        : undefined
+                    }
+                  >
+                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
+                    title="Enter agent mode (hands-free)"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-primary)] border border-[var(--border-medium)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  >
+                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                    </svg>
+                  </button>
+                )}
               </div>
-
-              {/* Send button */}
-              <button
-                onClick={() => sendMessage(input)}
-                disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
-                style={
-                  !isLoading && (input.trim() || pendingFiles.length > 0)
-                    ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.25)" }
-                    : undefined
-                }
-              >
-                <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
-                </svg>
-              </button>
             </div>
+
+            {/* "Add to Chat" popover menu */}
+            {showAddMenu && (
+              <div className="absolute bottom-full left-2 mb-2 z-20 w-64 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-xl backdrop-blur-xl animate-fade-in">
+                <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                  <span className="text-sm font-medium text-[var(--text-primary)]">Add to Chat</span>
+                  <button
+                    onClick={() => setShowAddMenu(false)}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] transition-all"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex gap-2 px-4 pb-3">
+                  {/* Camera */}
+                  <button
+                    onClick={() => { cameraInputRef.current?.click(); setShowAddMenu(false); }}
+                    className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
+                    </svg>
+                    <span className="text-[11px] font-medium">Camera</span>
+                  </button>
+                  {/* Photos */}
+                  <button
+                    onClick={() => { fileInputRef.current?.setAttribute("accept", "image/*"); fileInputRef.current?.click(); setShowAddMenu(false); setTimeout(() => fileInputRef.current?.setAttribute("accept", "image/*,.pdf,.txt,.md,.csv"), 100); }}
+                    className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                    </svg>
+                    <span className="text-[11px] font-medium">Photos</span>
+                  </button>
+                  {/* Files */}
+                  <button
+                    onClick={() => { fileInputRef.current?.click(); setShowAddMenu(false); }}
+                    className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <span className="text-[11px] font-medium">Files</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

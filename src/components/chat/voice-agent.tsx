@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useOrientationLock } from "@/hooks/use-orientation-lock";
 
 type AgentState = "listening" | "processing" | "speaking" | "idle";
 
@@ -276,6 +277,9 @@ export function VoiceAgent({
     setVolumeLevel(0);
   }, [releaseWakeLock]);
 
+  // Lock screen orientation while voice agent is active (prevents rotation issues)
+  useOrientationLock(isActive);
+
   // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
   useEffect(() => {
     if (!isActive) return;
@@ -287,6 +291,41 @@ export function VoiceAgent({
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [isActive, requestWakeLock]);
+
+  // Survive orientation changes: resume suspended AudioContext, re-acquire wake lock,
+  // and restart VAD loop if it was interrupted by the browser during rotation.
+  useEffect(() => {
+    if (!isActive) return;
+
+    const handleOrientationChange = async () => {
+      // AudioContext may be suspended by the browser during orientation animation
+      if (audioContextRef.current?.state === "suspended") {
+        try {
+          await audioContextRef.current.resume();
+        } catch {
+          // Non-critical — VAD will restart when context resumes naturally
+        }
+      }
+
+      // Wake lock is released by some browsers on orientation change
+      if (!wakeLockRef.current) {
+        requestWakeLock();
+      }
+
+      // If the VAD rAF loop died (rafRef is 0 but we're still active), restart it
+      if (rafRef.current === 0 && analyserRef.current) {
+        runVAD();
+      }
+    };
+
+    window.addEventListener("orientationchange", handleOrientationChange);
+    window.addEventListener("resize", handleOrientationChange);
+
+    return () => {
+      window.removeEventListener("orientationchange", handleOrientationChange);
+      window.removeEventListener("resize", handleOrientationChange);
+    };
+  }, [isActive, requestWakeLock, runVAD]);
 
   // Start/stop VAD loop when active
   useEffect(() => {

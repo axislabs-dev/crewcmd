@@ -213,12 +213,12 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       }}
       disabled={isDisabled || isTranscribing}
       title={isRecording ? "Release to send" : isTranscribing ? "Transcribing..." : "Hold to speak"}
-      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 select-none touch-none ${
+      className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-200 select-none touch-none ${
         isRecording
-          ? "border-neo bg-neo/20 scale-105"
+          ? "bg-neo/20 scale-105"
           : isTranscribing
-            ? "border-amber-400/50 bg-amber-400/10"
-            : "border-[var(--border-medium)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]"
+            ? "bg-amber-400/10"
+            : "hover:bg-[var(--bg-surface-hover)]"
       } ${isDisabled || isTranscribing ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
       style={
         isRecording
@@ -236,7 +236,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       ) : (
         /* Mic icon */
         <svg
-          className={`h-4.5 w-4.5 transition-colors ${
+          className={`h-[18px] w-[18px] transition-colors ${
             isRecording ? "text-[var(--accent)]" : "text-[var(--text-tertiary)]"
           }`}
           fill="none"

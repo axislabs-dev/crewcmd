@@ -934,77 +934,86 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 backdrop-blur-xl px-2 py-3 sm:px-4 lg:px-6">
+      {/* Input area — container style (Claude/ChatGPT layout) */}
+      <div className="shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-3 pt-2 sm:px-4 lg:px-6">
         <div className="mx-auto max-w-3xl">
-          <div className="flex items-end gap-1.5 sm:gap-2">
-            {/* Mute/unmute toggle */}
-            <button
-              onClick={() => setSpeakResponses(!speakResponses)}
-              title={speakResponses ? "Mute responses" : "Speak responses"}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all ${
-                speakResponses
-                  ? "border-neo/30 bg-neo/15 text-[var(--accent)]"
-                  : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              {speakResponses ? (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                </svg>
-              ) : (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                </svg>
-              )}
-            </button>
-
+          <div className="rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-surface)] transition-colors focus-within:border-neo/30 focus-within:bg-[var(--bg-surface-hover)]">
+            {/* Textarea — top section of container */}
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={
-                `Message ${agentCallsign}...`
-              }
+              placeholder={`Message ${agentCallsign}...`}
               disabled={isLoading}
-              rows={1}
-              className="flex-1 resize-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-3 text-[13px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none transition-colors focus:border-neo/30 focus:bg-[var(--bg-surface-hover)] disabled:opacity-40"
-              style={{ maxHeight: "120px" }}
+              rows={2}
+              className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base sm:text-[14px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none disabled:opacity-40"
+              style={{ maxHeight: "140px" }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 target.style.height = "auto";
-                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                target.style.height = `${Math.min(target.scrollHeight, 140)}px`;
               }}
             />
-            <VoiceRecorder
-              onTranscript={sendMessage}
-              isDisabled={isLoading}
-            />
 
-            {/* Agent mode button (hands-free voice) */}
-            <button
-              onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
-              title="Enter agent mode (hands-free)"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10 text-violet-400 transition-all hover:bg-violet-500/20 hover:border-violet-500/30"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-              </svg>
-            </button>
+            {/* Action buttons — bottom row inside container */}
+            <div className="flex items-center justify-between px-2 pb-2 pt-1">
+              <div className="flex items-center gap-1">
+                {/* Mute/unmute toggle */}
+                <button
+                  onClick={() => setSpeakResponses(!speakResponses)}
+                  title={speakResponses ? "Mute responses" : "Speak responses"}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                    speakResponses
+                      ? "bg-neo/15 text-[var(--accent)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  }`}
+                >
+                  {speakResponses ? (
+                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                    </svg>
+                  ) : (
+                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                    </svg>
+                  )}
+                </button>
 
-            <button
-              onClick={() => sendMessage(input)}
-              disabled={isLoading || !input.trim()}
-              className="shrink-0 rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-3 py-3 sm:px-4 text-[11px] tracking-wider text-[var(--accent)] transition-all hover:bg-[var(--accent-soft)] disabled:opacity-30 disabled:cursor-not-allowed"
-              style={
-                !isLoading && input.trim()
-                  ? { boxShadow: "0 0 15px rgba(0, 240, 255, 0.15)" }
-                  : undefined
-              }
-            >
-              SEND
-            </button>
+                {/* Mic (hold-to-talk) */}
+                <VoiceRecorder
+                  onTranscript={sendMessage}
+                  isDisabled={isLoading}
+                />
+
+                {/* Agent mode button (hands-free voice) */}
+                <button
+                  onClick={() => { setVoiceMode("agent"); setSpeakResponses(true); }}
+                  title="Enter agent mode (hands-free)"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-400 transition-all hover:bg-violet-500/15"
+                >
+                  <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Send button */}
+              <button
+                onClick={() => sendMessage(input)}
+                disabled={isLoading || !input.trim()}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
+                style={
+                  !isLoading && input.trim()
+                    ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.25)" }
+                    : undefined
+                }
+              >
+                <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>

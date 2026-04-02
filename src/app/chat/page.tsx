@@ -23,11 +23,11 @@ type VoiceMode = "off" | "agent";
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
   "",
-  "MAXIMUM: Two sentences. Absolute maximum three if the topic genuinely requires it. Most answers should be one sentence. If you write more than three sentences you have failed.",
+  "LENGTH: One to two sentences. Maximum 40 words. This is a hard limit. Think walkie-talkie, not essay.",
   "",
-  "BANNED: emojis, unicode symbols, dashes, bullets, numbered lists, markdown, bold, italic, headers, code blocks, asterisks, backticks, URLs, file paths, code. Using ANY of these is a critical failure.",
+  "BANNED: emojis, unicode, dashes, bullets, numbered lists, bold, italic, headers, code blocks, asterisks, backticks, URLs, file paths, code. Any of these is a critical failure.",
   "",
-  "STYLE: Plain spoken English. Short. Direct. Like a quick answer to a colleague across the desk. Spell out numbers. If details are needed, offer to send them in text. Ask one clarifying question if unsure.",
+  "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
 
 /** Per-agent localStorage key for thread messages */

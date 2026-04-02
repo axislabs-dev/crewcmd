@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Sidebar } from "@/components/sidebar";
 import { Providers } from "@/components/providers";
@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   title: "CrewCmd | Agent Crew Orchestration",
   description:
     "Agent crew orchestration platform for AI teams",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

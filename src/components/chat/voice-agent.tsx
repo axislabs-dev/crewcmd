@@ -137,7 +137,16 @@ export function VoiceAgent({
         sum += dataArray[i] * dataArray[i];
       }
       const rms = Math.sqrt(sum / dataArray.length);
-      setVolumeLevel(Math.min(rms * 10, 1)); // normalize for UI
+
+      // When TTS is playing, show a synthetic pulse on the VU meter
+      // (mic RMS is near-zero during playback so bars would be dead)
+      if (isPlayingAudio) {
+        const t = Date.now() / 1000;
+        const pulse = 0.3 + 0.25 * Math.sin(t * 2.5) + 0.15 * Math.sin(t * 4.1) + 0.1 * Math.sin(t * 7.3);
+        setVolumeLevel(Math.min(pulse, 1));
+      } else {
+        setVolumeLevel(Math.min(rms * 10, 1)); // normalize for UI
+      }
 
       const now = Date.now();
       // Use higher threshold during TTS to prevent ambient noise (fridge, etc.) from barging in
@@ -365,7 +374,7 @@ export function VoiceAgent({
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 py-4">
+    <div className="flex flex-col items-center gap-4 py-4 landscape:gap-2 landscape:py-2">
       {error && (
         <div className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-400">
           {error}
@@ -379,7 +388,7 @@ export function VoiceAgent({
       >
         {/* Outer glow ring */}
         <div
-          className={`absolute rounded-full transition-all duration-500 ${
+          className={`absolute rounded-full transition-all duration-500 landscape:scale-[0.55] ${
             isActive ? "opacity-100" : "opacity-0"
           }`}
           style={{
@@ -398,7 +407,7 @@ export function VoiceAgent({
 
         {/* Main orb */}
         <div
-          className={`relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition-all duration-300 ${
+          className={`relative flex h-20 w-20 landscape:h-12 landscape:w-12 items-center justify-center rounded-full border-2 transition-all duration-300 ${
             state === "idle"
               ? "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] cursor-pointer"
               : state === "listening"
@@ -429,7 +438,7 @@ export function VoiceAgent({
           {state === "idle" ? (
             // Power icon
             <svg
-              className="h-8 w-8 text-[var(--text-tertiary)]"
+              className="h-8 w-8 landscape:h-5 landscape:w-5 text-[var(--text-tertiary)]"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -445,7 +454,7 @@ export function VoiceAgent({
             // Mic icon with pulse
             <>
               <svg
-                className="h-8 w-8 text-neo"
+                className="h-8 w-8 landscape:h-5 landscape:w-5 text-neo"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -477,7 +486,7 @@ export function VoiceAgent({
           ) : (
             // Speaker icon for speaking
             <svg
-              className="h-8 w-8 text-violet-400"
+              className="h-8 w-8 landscape:h-5 landscape:w-5 text-violet-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -494,9 +503,9 @@ export function VoiceAgent({
       </button>
 
       {/* State label */}
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-1 landscape:gap-0.5">
         <span
-          className={`text-[11px] tracking-[0.2em] font-medium transition-colors duration-300 ${
+          className={`text-[11px] landscape:text-[9px] tracking-[0.2em] font-medium transition-colors duration-300 ${
             state === "idle"
               ? "text-[var(--text-tertiary)]"
               : state === "listening"
@@ -521,7 +530,7 @@ export function VoiceAgent({
 
       {/* Volume meter */}
       {isActive && (
-        <div className="flex items-center gap-[2px] h-4">
+        <div className="flex items-center gap-[2px] h-4 landscape:h-3">
           {Array.from({ length: 20 }).map((_, i) => (
             <div
               key={i}

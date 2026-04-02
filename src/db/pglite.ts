@@ -12,7 +12,56 @@ mkdirSync(dataDir, { recursive: true });
 
 const client = new PGlite(dataDir);
 
-const pgliteDb = drizzle(client, { schema });
+/**
+ * Write serialization queue for PGlite.
+ * PGlite only allows a single write operation at a time. Concurrent writes
+ * (e.g. from gateway health/tick events) cause "Another write batch or
+ * compaction is already active" errors. This queue serializes all operations.
+ */
+class WriteQueue {
+  private queue: Array<{ run: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void }> = [];
+  private running = false;
+
+  async enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push({ run: fn as () => Promise<unknown>, resolve: resolve as (v: unknown) => void, reject });
+      this.flush();
+    });
+  }
+
+  private async flush() {
+    if (this.running) return;
+    this.running = true;
+    while (this.queue.length > 0) {
+      const item = this.queue.shift()!;
+      try {
+        const result = await item.run();
+        item.resolve(result);
+      } catch (err) {
+        item.reject(err);
+      }
+    }
+    this.running = false;
+  }
+}
+
+const writeQueue = new WriteQueue();
+
+/** Proxied PGlite client that serializes all operations through a queue */
+const queuedClient = new Proxy(client, {
+  get(target, prop, receiver) {
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value !== "function") return value;
+
+    // Wrap methods that perform DB operations
+    if (prop === "query" || prop === "exec" || prop === "transaction") {
+      return (...args: unknown[]) => writeQueue.enqueue(() => (value as Function).apply(target, args));
+    }
+    return value.bind(target);
+  },
+});
+
+const pgliteDb = drizzle(queuedClient as PGlite, { schema });
 
 /**
  * Apply full schema from schema.ts via raw SQL generated from all migration files.
@@ -34,7 +83,7 @@ async function applySchema() {
   ];
   for (const stmt of incrementalAlters) {
     try {
-      await client.exec(stmt);
+      await queuedClient.exec(stmt);
     } catch {
       // Safe to ignore — column may already exist
     }
@@ -42,7 +91,7 @@ async function applySchema() {
 
   // System settings table (zero-config startup)
   try {
-    await client.exec(`
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS system_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
@@ -54,13 +103,13 @@ async function applySchema() {
 
   // Chat persistence tables
   try {
-    await client.exec(`
+    await queuedClient.exec(`
       DO $$ BEGIN
         CREATE TYPE chat_message_role AS ENUM ('user', 'assistant', 'system');
       EXCEPTION WHEN duplicate_object THEN null;
       END $$
     `);
-    await client.exec(`
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS chat_sessions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -70,7 +119,7 @@ async function applySchema() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
-    await client.exec(`
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS chat_messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
@@ -111,7 +160,7 @@ async function applySchema() {
   ];
   for (const stmt of skillsTables) {
     try {
-      await client.exec(stmt);
+      await queuedClient.exec(stmt);
     } catch {
       // Safe to ignore — table may already exist
     }
@@ -137,7 +186,7 @@ async function applySchema() {
   ];
   for (const stmt of blueprintTables) {
     try {
-      await client.exec(stmt);
+      await queuedClient.exec(stmt);
     } catch {
       // Safe to ignore — table may already exist
     }
@@ -145,7 +194,7 @@ async function applySchema() {
 
   // Inbox Messages table
   try {
-    await client.exec(`
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS inbox_messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -171,7 +220,7 @@ async function applySchema() {
 
   // Company Runtimes table
   try {
-    await client.exec(`
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS company_runtimes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -192,8 +241,8 @@ async function applySchema() {
 
   // Agent Access Grants table
   try {
-    await client.exec(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'team'`);
-    await client.exec(`
+    await queuedClient.exec(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'team'`);
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS agent_access_grants (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -245,7 +294,7 @@ async function applySchema() {
   // Execute CREATEs first (types, then tables), then ALTERs
   for (const stmt of createStatements) {
     try {
-      await client.exec(stmt);
+      await queuedClient.exec(stmt);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       // Skip "already exists" errors (idempotent)
@@ -257,7 +306,7 @@ async function applySchema() {
 
   for (const stmt of alterStatements) {
     try {
-      await client.exec(stmt);
+      await queuedClient.exec(stmt);
     } catch {
       // Silently ignore ALTER failures — expected on fresh installs
       // when referenced tables/columns don't yet exist

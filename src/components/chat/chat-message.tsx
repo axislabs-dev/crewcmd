@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { TaskCard, extractTaskCards } from "./task-card";
+import { TaskCard, CreateTaskCard, extractTaskCards } from "./task-card";
 
 export interface Attachment {
   url: string;
@@ -100,13 +100,15 @@ export function ChatMessage({ role, content, isStreaming, metadata }: ChatMessag
           <p className="whitespace-pre-wrap">{content}</p>
         ) : (
           <div className="prose prose-invert prose-sm max-w-none [&_p]:my-1 [&_pre]:bg-black/30 [&_pre]:border [&_pre]:border-[var(--border-medium)] [&_pre]:rounded-lg [&_code]:text-neo/80 [&_code]:text-[12px] [&_a]:text-neo [&_a]:no-underline hover:[&_a]:underline [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
-            {content.includes("<!--task_card") ? (
+            {content.includes("<!--task_card") || content.includes("<!--action:create_task:") ? (
               extractTaskCards(content).segments.map((seg, i) =>
                 seg.type === "task" ? (
                   <TaskCard key={i} task={seg.task} />
+                ) : seg.type === "action_create_task" ? (
+                  <CreateTaskCard key={i} suggestion={seg.suggestion} />
                 ) : (
                   <ReactMarkdown key={i} remarkPlugins={[remarkGfm]}>
-                    {seg.content}
+                    {(seg as { type: "text"; content: string }).content}
                   </ReactMarkdown>
                 )
               )

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { TaskReference } from "@/lib/parse-task-references";
 
 interface TaskCardData {
   id: string;
@@ -183,6 +184,98 @@ export function CreateTaskCard({ suggestion }: { suggestion: ActionableTask }) {
           {state === "creating" ? "Creating..." : state === "error" ? "Retry" : "Create Task"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Renders a task reference parsed from agent text.
+ * If we only have an ID, fetches the full task from the API.
+ */
+export function TaskReferenceCard({ reference }: { reference: TaskReference }) {
+  const [task, setTask] = useState<TaskCardData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const hasEnoughData = !!(reference.title && reference.taskId);
+
+  useEffect(() => {
+    if (hasEnoughData) return;
+
+    const identifier = reference.taskId || (reference.shortId ? `TSK-${reference.shortId}` : null);
+    if (!identifier) return;
+
+    let cancelled = false;
+    setLoading(true);
+
+    fetch(`/api/tasks/${identifier}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Not found"))))
+      .then((data) => {
+        if (!cancelled) {
+          setTask(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [hasEnoughData, reference.taskId, reference.shortId]);
+
+  if (hasEnoughData) {
+    return (
+      <TaskCard
+        task={{
+          id: reference.taskId!,
+          shortId: reference.shortId,
+          title: reference.title!,
+          status: reference.status || "queued",
+          priority: "medium",
+        }}
+      />
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="my-2 flex items-center gap-2 rounded-lg border border-[var(--border-medium)] p-3 text-[11px] text-[var(--text-tertiary)]">
+        <span className="h-2 w-2 rounded-full bg-[var(--accent)] animate-pulse" />
+        Loading task{reference.shortId ? ` TSK-${reference.shortId}` : ""}…
+      </div>
+    );
+  }
+
+  if (task) {
+    return <TaskCard task={task} />;
+  }
+
+  if (error) {
+    return (
+      <div className="my-2 rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-[11px] text-red-400">
+        Could not load task{reference.shortId ? ` TSK-${reference.shortId}` : reference.taskId ? ` ${reference.taskId.slice(0, 8)}` : ""}.
+      </div>
+    );
+  }
+
+  // No identifier to fetch — show a minimal inline reference
+  return (
+    <div className="my-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)]/50 p-2 text-[11px]">
+      <span className="font-semibold text-[var(--text-primary)]">{reference.title || "Task"}</span>
+      {reference.status && (
+        <span
+          className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+          style={{
+            backgroundColor: `${STATUS_COLORS[reference.status] || "#6b7280"}25`,
+            color: STATUS_COLORS[reference.status] || "#6b7280",
+          }}
+        >
+          {reference.status.replace("_", " ")}
+        </span>
+      )}
     </div>
   );
 }

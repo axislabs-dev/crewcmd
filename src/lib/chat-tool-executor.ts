@@ -120,11 +120,56 @@ async function getTask(args: Record<string, unknown>): Promise<ToolResult> {
   return { success: true, data: task };
 }
 
+async function addComment(args: Record<string, unknown>): Promise<ToolResult> {
+  if (!db) return { success: false, error: "Database not configured" };
+
+  const taskId = args.taskId as string;
+  if (!taskId) return { success: false, error: "taskId is required" };
+
+  const content = args.content as string;
+  if (!content) return { success: false, error: "content is required" };
+
+  const agentId = (args.agentId as string) || null;
+
+  const [comment] = await withRetry(() =>
+    db!.insert(schema.taskComments).values({
+      taskId,
+      agentId,
+      content,
+    }).returning()
+  );
+
+  return { success: true, data: comment };
+}
+
+async function getMyTasks(args: Record<string, unknown>): Promise<ToolResult> {
+  if (!db) return { success: false, error: "Database not configured" };
+
+  const agentId = args.agentId as string;
+  if (!agentId) return { success: false, error: "agentId is required" };
+
+  const result = await withRetry(() =>
+    db!.select().from(schema.tasks).where(eq(schema.tasks.assignedAgentId, agentId))
+  );
+
+  const summary = result.map((t) => ({
+    id: t.id,
+    shortId: t.shortId,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+  }));
+
+  return { success: true, data: { count: summary.length, tasks: summary } };
+}
+
 const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> = {
   createTask,
   listTasks,
   updateTask,
   getTask,
+  addComment,
+  getMyTasks,
 };
 
 /**

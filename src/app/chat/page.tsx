@@ -419,7 +419,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-[calc(100dvh-3.5rem)] lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 

@@ -129,7 +129,10 @@ export default function ChatPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -227,10 +230,42 @@ export default function ChatPage() {
     saveMessages(activeSessionKey, messages);
   }, [messages, activeSessionKey]);
 
-  // Auto-scroll to bottom
+  // Check if user is near bottom of scroll container
+  const isNearBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
+  // Auto-scroll to bottom only when already near bottom
   useEffect(() => {
+    if (isNearBottom()) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, streamingContent, isNearBottom]);
+
+  // Track scroll position to show/hide scroll-to-bottom button
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      setShowScrollButton(!isNearBottom());
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [isNearBottom]);
+
+  // Scroll to bottom on initial load / session switch
+  useEffect(() => {
+    // Use requestAnimationFrame to wait for DOM to render messages
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView();
+    });
+  }, [activeSessionKey]);
+
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent]);
+  }, []);
 
   // Media Session API for background audio
   useEffect(() => {
@@ -770,7 +805,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+      <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -879,6 +914,19 @@ export default function ChatPage() {
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Scroll to bottom floating button */}
+        {showScrollButton && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-3 py-1.5 text-[11px] text-[var(--text-secondary)] shadow-lg transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)] animate-fade-in"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+            </svg>
+            New messages
+          </button>
+        )}
       </div>
 
       {/* Agent mode fullscreen overlay */}

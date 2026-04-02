@@ -58,6 +58,15 @@ export default function CompanySettingsPage() {
   const [newKeyValue, setNewKeyValue] = useState("");
   const [savingKey, setSavingKey] = useState(false);
 
+  // API Access state
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const [apiTokenRevealed, setApiTokenRevealed] = useState(false);
+  const [apiTokenLoading, setApiTokenLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isOwnerOrAdmin, setIsOwnerOrAdmin] = useState(false);
+
   const getActiveCompanyId = () => {
     const cookie = document.cookie
       .split("; ")
@@ -88,7 +97,21 @@ export default function CompanySettingsPage() {
       }
 
       if (membersRes.ok) {
-        setMembers(await membersRes.json());
+        const membersData = await membersRes.json();
+        setMembers(membersData);
+
+        // Check if current user is owner/admin (by matching session user)
+        const sessionRes = await fetch("/api/auth/session");
+        if (sessionRes.ok) {
+          const session = await sessionRes.json();
+          const userId = session?.user?.id;
+          if (userId) {
+            const currentMember = membersData.find((m: Member) => m.userId === userId);
+            if (currentMember?.role === "owner" || currentMember?.role === "admin") {
+              setIsOwnerOrAdmin(true);
+            }
+          }
+        }
       }
 
       if (keysRes.ok) {
@@ -105,6 +128,11 @@ export default function CompanySettingsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (isOwnerOrAdmin) fetchApiToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwnerOrAdmin]);
 
   async function handleSave() {
     if (!company) return;
@@ -233,6 +261,61 @@ export default function CompanySettingsPage() {
       setMessage({ type: "error", text: "Network error" });
     } finally {
       setSavingKey(false);
+    }
+  }
+
+  async function fetchApiToken() {
+    const companyId = getActiveCompanyId();
+    if (!companyId) return;
+    setApiTokenLoading(true);
+    try {
+      const res = await fetch(`/api/system-settings?companyId=${companyId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setApiToken(data.token);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setApiTokenLoading(false);
+    }
+  }
+
+  async function handleRegenerateToken() {
+    const companyId = getActiveCompanyId();
+    if (!companyId) return;
+    setRegenerating(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/system-settings?companyId=${companyId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "regenerate" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApiToken(data.token);
+        setApiTokenRevealed(true);
+        setMessage({ type: "success", text: "API token regenerated" });
+      } else {
+        setMessage({ type: "error", text: "Failed to regenerate token" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setRegenerating(false);
+      setShowRegenConfirm(false);
+    }
+  }
+
+  async function handleCopyToken() {
+    if (!apiToken) return;
+    try {
+      await navigator.clipboard.writeText(apiToken);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
     }
   }
 
@@ -534,6 +617,85 @@ export default function CompanySettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* API Access — owner/admin only */}
+      {isOwnerOrAdmin && (
+        <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">API ACCESS</h2>
+          <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+            Use this token to authenticate external systems (agents, CI/CD, webhooks) with the CrewCmd API. Include it as a Bearer token in the Authorization header.
+          </p>
+
+          <div className="mt-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
+            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">CREWCMD API TOKEN</label>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-secondary)] select-all overflow-hidden">
+                {apiTokenLoading
+                  ? "Loading..."
+                  : apiToken
+                    ? apiTokenRevealed
+                      ? apiToken
+                      : "\u2022".repeat(48)
+                    : "Not configured"}
+              </code>
+              {apiToken && (
+                <>
+                  <button
+                    onClick={() => setApiTokenRevealed(!apiTokenRevealed)}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {apiTokenRevealed ? "HIDE" : "REVEAL"}
+                  </button>
+                  <button
+                    onClick={handleCopyToken}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {copied ? "COPIED" : "COPY"}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setShowRegenConfirm(true)}
+                disabled={regenerating}
+                className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
+              >
+                {regenerating ? "..." : "REGENERATE"}
+              </button>
+            </div>
+
+            <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">
+              Example: <code className="text-[var(--text-secondary)]">Authorization: Bearer &lt;token&gt;</code>
+            </p>
+          </div>
+
+          {/* Regenerate confirmation dialog */}
+          {showRegenConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <div className="mx-4 w-full max-w-sm rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-xl">
+                <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">REGENERATE API TOKEN?</h3>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  This will invalidate the current token. All external integrations using the old token will stop working immediately.
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowRegenConfirm(false)}
+                    className="rounded-lg border border-[var(--border-medium)] px-4 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    onClick={handleRegenerateToken}
+                    disabled={regenerating}
+                    className="rounded-lg bg-red-500/20 px-4 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-colors hover:bg-red-500/30 disabled:opacity-50"
+                  >
+                    {regenerating ? "REGENERATING..." : "CONFIRM REGENERATE"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

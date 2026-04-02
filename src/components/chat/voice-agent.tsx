@@ -137,7 +137,16 @@ export function VoiceAgent({
         sum += dataArray[i] * dataArray[i];
       }
       const rms = Math.sqrt(sum / dataArray.length);
-      setVolumeLevel(Math.min(rms * 10, 1)); // normalize for UI
+
+      // When TTS is playing, show a synthetic pulse on the VU meter
+      // (mic RMS is near-zero during playback so bars would be dead)
+      if (isPlayingAudio) {
+        const t = Date.now() / 1000;
+        const pulse = 0.3 + 0.25 * Math.sin(t * 2.5) + 0.15 * Math.sin(t * 4.1) + 0.1 * Math.sin(t * 7.3);
+        setVolumeLevel(Math.min(pulse, 1));
+      } else {
+        setVolumeLevel(Math.min(rms * 10, 1)); // normalize for UI
+      }
 
       const now = Date.now();
       // Use higher threshold during TTS to prevent ambient noise (fridge, etc.) from barging in

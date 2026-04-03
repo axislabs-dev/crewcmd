@@ -30,12 +30,11 @@ interface MarketplaceSkill {
   sourceUrl: string;
 }
 
-interface AgentSkillRow {
-  id: string;
+interface AgentSkillAssignment {
+  agentSkillId: string;
   agentId: string;
   skillId: string;
   enabled: boolean;
-  skill: { name: string; slug: string } | null;
 }
 
 interface Agent {
@@ -101,8 +100,10 @@ export default function SkillsPage() {
   const [editContent, setEditContent] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Agent skills for detail view
-  const [skillAgents, setSkillAgents] = useState<{ callsign: string; name: string; emoji: string }[]>([]);
+  // Agent skill assignments for detail view
+  const [skillAssignments, setSkillAssignments] = useState<AgentSkillAssignment[]>([]);
+  const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
+  const [importingBuiltIn, setImportingBuiltIn] = useState(false);
 
   const fetchSkills = useCallback(async (cId: string) => {
     try {
@@ -153,38 +154,130 @@ export default function SkillsPage() {
     init();
   }, [fetchSkills, fetchMarketplace, fetchAgents]);
 
-  // Find which agents use a skill
-  const findAgentsForSkill = useCallback(async (skillId: string) => {
-    const matched: { callsign: string; name: string; emoji: string }[] = [];
-    for (const agent of agents) {
-      try {
-        const res = await fetch(`/api/agents/${agent.callsign}/skills`);
-        if (res.ok) {
-          const rows: AgentSkillRow[] = await res.json();
-          if (rows.some((r) => r.skillId === skillId)) {
-            matched.push({ callsign: agent.callsign, name: agent.name, emoji: agent.emoji || "\u{1F916}" });
-          }
-        }
-      } catch {
-        // ignore
+  // Fetch agent assignments for a skill via batch endpoint
+  const fetchSkillAssignments = useCallback(async (skillId: string) => {
+    try {
+      const res = await fetch(`/api/skills/${skillId}/agents`);
+      if (res.ok) {
+        setSkillAssignments(await res.json());
+      } else {
+        setSkillAssignments([]);
       }
+    } catch {
+      setSkillAssignments([]);
     }
-    setSkillAgents(matched);
-  }, [agents]);
+  }, []);
+
+  // Ensure a built-in skill has a DB record, returns the real DB skill ID
+  const ensureBuiltInSkill = useCallback(async (skill: Skill): Promise<string | null> => {
+    if (!companyId) return null;
+    // Check if a DB record already exists for this slug
+    const existing = skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"));
+    if (existing) return existing.id;
+
+    // Create DB record from built-in metadata
+    setImportingBuiltIn(true);
+    try {
+      const res = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: skill.name,
+          slug: skill.slug,
+          description: skill.description,
+          source: "built-in",
+          companyId,
+          metadata: skill.metadata || {},
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        await fetchSkills(companyId);
+        return created.id;
+      }
+    } catch {
+      // ignore
+    } finally {
+      setImportingBuiltIn(false);
+    }
+    return null;
+  }, [companyId, skills, fetchSkills]);
+
+  // Toggle agent assignment for the selected skill
+  const toggleAgentAssignment = useCallback(async (skill: Skill, agentId: string) => {
+    setTogglingAgent(agentId);
+    try {
+      let realSkillId = skill.id;
+
+      // Built-in skills need a DB record before assignment
+      if (skill.id.startsWith("built-in:")) {
+        const dbId = await ensureBuiltInSkill(skill);
+        if (!dbId) {
+          setTogglingAgent(null);
+          return;
+        }
+        realSkillId = dbId;
+        // Update selectedSkill to point to the real DB record
+        const updated = skills.find((s) => s.id === dbId);
+        if (updated) {
+          setSelectedSkill(updated);
+        }
+      }
+
+      const res = await fetch(`/api/skills/${realSkillId}/agents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId }),
+      });
+
+      if (res.ok) {
+        await fetchSkillAssignments(realSkillId);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setTogglingAgent(null);
+    }
+  }, [ensureBuiltInSkill, skills, fetchSkillAssignments]);
+
+  // Toggle enabled/disabled for an existing assignment
+  const toggleAgentEnabled = useCallback(async (agentCallsign: string, skillId: string, enabled: boolean) => {
+    setTogglingAgent(agentCallsign);
+    try {
+      const res = await fetch(`/api/agents/${agentCallsign}/skills/${skillId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (res.ok) {
+        await fetchSkillAssignments(skillId);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setTogglingAgent(null);
+    }
+  }, [fetchSkillAssignments]);
 
   function selectSkill(skill: Skill) {
     setSelectedSkill(skill);
     setSelectedMarketplace(null);
     setEditing(false);
-    setSkillAgents([]);
-    findAgentsForSkill(skill.id);
+    setSkillAssignments([]);
+    // For built-in skills, check if a DB record exists and use its ID for fetching
+    const realSkillId = skill.id.startsWith("built-in:")
+      ? skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"))?.id
+      : skill.id;
+    if (realSkillId) {
+      fetchSkillAssignments(realSkillId);
+    }
   }
 
   function selectMarketplaceSkill(ms: MarketplaceSkill) {
     setSelectedMarketplace(ms);
     setSelectedSkill(null);
     setEditing(false);
-    setSkillAgents([]);
+    setSkillAssignments([]);
   }
 
   async function handleInstall(ms: MarketplaceSkill) {
@@ -686,22 +779,76 @@ export default function SkillsPage() {
               </div>
             )}
 
-            {/* Agents using this skill */}
+            {/* Agent assignment panel */}
             <div className="mt-6">
               <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
-                AGENTS USING THIS SKILL
+                AGENTS
               </label>
-              {skillAgents.length === 0 ? (
-                <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">No agents have this skill attached.</p>
+              {agents.length === 0 ? (
+                <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">No agents found. Create agents first.</p>
               ) : (
                 <div className="mt-2 space-y-1">
-                  {skillAgents.map((a) => (
-                    <div key={a.callsign} className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2">
-                      <span className="text-sm">{a.emoji}</span>
-                      <span className="font-mono text-xs text-[var(--text-primary)]">{a.name}</span>
-                      <span className="font-mono text-[10px] text-[var(--text-tertiary)]">{a.callsign}</span>
-                    </div>
-                  ))}
+                  {agents.map((agent) => {
+                    const assignment = skillAssignments.find((a) => a.agentId === agent.id);
+                    const isAssigned = !!assignment;
+                    const isEnabled = assignment?.enabled ?? false;
+                    const isBusy = togglingAgent === agent.id || togglingAgent === agent.callsign || importingBuiltIn;
+
+                    return (
+                      <div
+                        key={agent.id}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors ${
+                          isAssigned
+                            ? "border-[var(--accent-medium)]/30 bg-[var(--accent-soft)]"
+                            : "border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{agent.emoji || "\u{1F916}"}</span>
+                          <span className="font-mono text-xs text-[var(--text-primary)]">{agent.name}</span>
+                          <span className="font-mono text-[10px] text-[var(--text-tertiary)]">{agent.callsign}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Enable/disable toggle (only shown when assigned) */}
+                          {isAssigned && (
+                            <button
+                              onClick={() => {
+                                const realSkillId = selectedSkill!.id.startsWith("built-in:")
+                                  ? skills.find((s) => s.slug === selectedSkill!.slug && !s.id.startsWith("built-in:"))?.id
+                                  : selectedSkill!.id;
+                                if (realSkillId) toggleAgentEnabled(agent.callsign, realSkillId, !isEnabled);
+                              }}
+                              disabled={isBusy}
+                              className={`rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wider transition-colors border ${
+                                isEnabled
+                                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                  : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                              } disabled:opacity-50`}
+                              title={isEnabled ? "Click to disable" : "Click to enable"}
+                            >
+                              {isEnabled ? "ON" : "OFF"}
+                            </button>
+                          )}
+                          {/* Assign/unassign toggle switch */}
+                          <button
+                            onClick={() => toggleAgentAssignment(selectedSkill!, agent.id)}
+                            disabled={isBusy}
+                            className="group relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50"
+                            style={{
+                              backgroundColor: isAssigned ? "var(--accent)" : "var(--bg-surface-hover)",
+                              border: `1px solid ${isAssigned ? "var(--accent-medium)" : "var(--border-medium)"}`,
+                            }}
+                            title={isAssigned ? "Unassign skill" : "Assign skill"}
+                          >
+                            <span
+                              className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
+                              style={{ transform: isAssigned ? "translateX(16px)" : "translateX(2px)" }}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

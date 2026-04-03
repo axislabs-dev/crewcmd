@@ -71,6 +71,37 @@ function SourceBadge({ source }: { source: string }) {
 const inputClass =
   "w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-white placeholder:text-[var(--text-tertiary)] outline-none focus:border-[#00f0ff]/40 transition-colors";
 
+// ─── Toast Component ────────────────────────────────────────────────────
+
+interface Toast {
+  id: number;
+  message: string;
+  type: "error" | "success";
+}
+
+let toastId = 0;
+
+function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-xs shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 ${
+            t.type === "error"
+              ? "border-red-500/30 bg-red-950/80 text-red-300"
+              : "border-emerald-500/30 bg-emerald-950/80 text-emerald-300"
+          }`}
+        >
+          <span>{t.message}</span>
+          <button onClick={() => onDismiss(t.id)} className="ml-2 opacity-60 hover:opacity-100">&times;</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────
 
 export default function SkillsPage() {
@@ -85,6 +116,17 @@ export default function SkillsPage() {
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [installing, setInstalling] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = useCallback((message: string, type: "error" | "success" = "error") => {
+    const id = ++toastId;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Custom skill form
   const [showCustomForm, setShowCustomForm] = useState(false);
@@ -112,9 +154,9 @@ export default function SkillsPage() {
         setSkills(await res.json());
       }
     } catch {
-      // ignore
+      addToast("Failed to load skills");
     }
-  }, []);
+  }, [addToast]);
 
   const fetchMarketplace = useCallback(async () => {
     try {
@@ -123,9 +165,9 @@ export default function SkillsPage() {
         setMarketplace(await res.json());
       }
     } catch {
-      // ignore
+      addToast("Failed to load marketplace");
     }
-  }, []);
+  }, [addToast]);
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -135,9 +177,9 @@ export default function SkillsPage() {
         setAgents(data.agents || []);
       }
     } catch {
-      // ignore
+      addToast("Failed to load agents");
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     const cookie = document.cookie
@@ -196,7 +238,7 @@ export default function SkillsPage() {
         return created.id;
       }
     } catch {
-      // ignore
+      addToast("Failed to import built-in skill");
     } finally {
       setImportingBuiltIn(false);
     }
@@ -232,13 +274,15 @@ export default function SkillsPage() {
 
       if (res.ok) {
         await fetchSkillAssignments(realSkillId);
+      } else {
+        addToast("Failed to toggle agent assignment");
       }
     } catch {
-      // ignore
+      addToast("Failed to toggle agent assignment");
     } finally {
       setTogglingAgent(null);
     }
-  }, [ensureBuiltInSkill, skills, fetchSkillAssignments]);
+  }, [ensureBuiltInSkill, skills, fetchSkillAssignments, addToast]);
 
   // Toggle enabled/disabled for an existing assignment
   const toggleAgentEnabled = useCallback(async (agentCallsign: string, skillId: string, enabled: boolean) => {
@@ -251,13 +295,15 @@ export default function SkillsPage() {
       });
       if (res.ok) {
         await fetchSkillAssignments(skillId);
+      } else {
+        addToast("Failed to toggle agent assignment");
       }
     } catch {
-      // ignore
+      addToast("Failed to toggle agent assignment");
     } finally {
       setTogglingAgent(null);
     }
-  }, [fetchSkillAssignments]);
+  }, [fetchSkillAssignments, addToast]);
 
   function selectSkill(skill: Skill) {
     setSelectedSkill(skill);
@@ -299,9 +345,12 @@ export default function SkillsPage() {
       });
       if (res.ok) {
         await fetchSkills(companyId);
+        addToast(`Installed ${ms.name}`, "success");
+      } else {
+        addToast(`Failed to install ${ms.name}`);
       }
     } catch {
-      // ignore
+      addToast(`Failed to install ${ms.name}`);
     } finally {
       setInstalling(null);
     }
@@ -330,9 +379,12 @@ export default function SkillsPage() {
         setCustomDescription("");
         setCustomContent("");
         await fetchSkills(companyId);
+        addToast("Custom skill created", "success");
+      } else {
+        addToast("Failed to create custom skill");
       }
     } catch {
-      // ignore
+      addToast("Failed to create custom skill");
     } finally {
       setSavingCustom(false);
     }
@@ -356,9 +408,12 @@ export default function SkillsPage() {
         setSelectedSkill(updated);
         setEditing(false);
         if (companyId) await fetchSkills(companyId);
+        addToast("Skill updated", "success");
+      } else {
+        addToast("Failed to save skill edits");
       }
     } catch {
-      // ignore
+      addToast("Failed to save skill edits");
     } finally {
       setSavingEdit(false);
     }
@@ -366,11 +421,15 @@ export default function SkillsPage() {
 
   async function handleDeleteSkill(skillId: string) {
     try {
-      await fetch(`/api/skills/${skillId}`, { method: "DELETE" });
-      setSelectedSkill(null);
-      if (companyId) await fetchSkills(companyId);
+      const res = await fetch(`/api/skills/${skillId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSelectedSkill(null);
+        if (companyId) await fetchSkills(companyId);
+      } else {
+        addToast("Failed to delete skill");
+      }
     } catch {
-      // ignore
+      addToast("Failed to delete skill");
     }
   }
 
@@ -912,6 +971,8 @@ export default function SkillsPage() {
           </div>
         )}
       </div>
+
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

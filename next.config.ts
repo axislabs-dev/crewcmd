@@ -26,6 +26,8 @@ function getDevOrigins(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  // Standalone output bundles node_modules into .next/standalone for Docker
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   allowedDevOrigins: getDevOrigins(),
   env: {
     NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version || "0.1.0",

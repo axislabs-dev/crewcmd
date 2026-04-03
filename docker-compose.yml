@@ -1,25 +1,54 @@
+# ── CrewCmd Docker Compose ────────────────────────────────────────
+#
+# Quick start:
+#   cp .env.example .env.local
+#   docker compose up
+#
+# This runs CrewCmd with a local Postgres database.
+# For PGlite mode (no database), use: docker compose up app
+# ──────────────────────────────────────────────────────────────────
+
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: crewcmd
       POSTGRES_USER: crewcmd
-      POSTGRES_PASSWORD: crewcmd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crewcmd}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crewcmd -d crewcmd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://crewcmd:crewcmd@db:5432/crewcmd
-      AUTH_SECRET: dev-secret-change-me
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://crewcmd:${POSTGRES_PASSWORD:-crewcmd}@db:5432/crewcmd
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+      HEARTBEAT_SECRET: ${HEARTBEAT_SECRET:-}
+      OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/auth/session || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   pgdata:

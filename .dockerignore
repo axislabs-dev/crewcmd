@@ -1,7 +1,12 @@
 node_modules
 .next
 .data
+.git
 .env
 .env.*
 !.env.example
-.git
+*.md
+!README.md
+.vscode
+.idea
+.DS_Store

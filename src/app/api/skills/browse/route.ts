@@ -11,8 +11,15 @@ interface MarketplaceSkill {
   sourceUrl: string;
 }
 
-const MARKETPLACE_SKILLS: MarketplaceSkill[] = [
-  // ClawHub skills
+// ─── In-memory cache ─────────────────────────────────────────────────
+
+let cachedSkills: MarketplaceSkill[] | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// ─── Hardcoded fallback ──────────────────────────────────────────────
+
+const FALLBACK_SKILLS: MarketplaceSkill[] = [
   {
     name: "Weather",
     slug: "weather",
@@ -77,8 +84,6 @@ const MARKETPLACE_SKILLS: MarketplaceSkill[] = [
     version: "1.0.0",
     sourceUrl: "https://clawhub.com/skills/blogwatcher",
   },
-
-  // skills.sh skills
   {
     name: "Web Search",
     slug: "web-search",
@@ -119,8 +124,6 @@ const MARKETPLACE_SKILLS: MarketplaceSkill[] = [
     version: "1.0.4",
     sourceUrl: "https://skills.sh/docs-writer",
   },
-
-  // GitHub community skills
   {
     name: "SQL Query",
     slug: "sql-query",
@@ -163,6 +166,56 @@ const MARKETPLACE_SKILLS: MarketplaceSkill[] = [
   },
 ];
 
+// ─── Fetch from ClawHub with validation ──────────────────────────────
+
+async function fetchFromClawHub(): Promise<MarketplaceSkill[] | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch("https://clawhub.com/api/skills", {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!Array.isArray(data)) return null;
+
+    return data.map((s: Record<string, unknown>) => ({
+      name: String(s.name || ""),
+      slug: String(s.slug || ""),
+      description: String(s.description || ""),
+      source: String(s.source || "clawhub"),
+      version: String(s.version || "0.0.0"),
+      sourceUrl: String(s.sourceUrl || s.source_url || ""),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+// ─── Route handler ───────────────────────────────────────────────────
+
 export async function GET() {
-  return NextResponse.json(MARKETPLACE_SKILLS);
+  const now = Date.now();
+
+  // Return cached if fresh
+  if (cachedSkills && now - cacheTimestamp < CACHE_TTL_MS) {
+    return NextResponse.json(cachedSkills);
+  }
+
+  // Try ClawHub API
+  const remote = await fetchFromClawHub();
+  if (remote && remote.length > 0) {
+    cachedSkills = remote;
+    cacheTimestamp = now;
+    return NextResponse.json(remote);
+  }
+
+  // Fallback to hardcoded list
+  cachedSkills = FALLBACK_SKILLS;
+  cacheTimestamp = now;
+  return NextResponse.json(FALLBACK_SKILLS);
 }

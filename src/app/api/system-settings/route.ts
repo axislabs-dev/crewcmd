@@ -32,12 +32,32 @@ async function isOwnerOrAdmin(req: NextRequest): Promise<boolean> {
   return membership?.role === "owner" || membership?.role === "admin";
 }
 
-/** GET /api/system-settings — return heartbeat_secret (owner/admin only) */
+/** Keys that any authenticated user can read (non-sensitive) */
+const PUBLIC_KEYS = new Set(["chat.stopWords"]);
+
+/** GET /api/system-settings — return a setting by key (or heartbeat_secret for legacy) */
 export async function GET(request: NextRequest) {
   const authError = await requireAuth(request);
   if (authError) return authError;
   if (!db) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
 
+  const key = request.nextUrl.searchParams.get("key");
+
+  // Generic key lookup
+  if (key) {
+    // Non-public keys require owner/admin
+    if (!PUBLIC_KEYS.has(key) && !(await isOwnerOrAdmin(request))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const [row] = await db
+      .select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, key))
+      .limit(1);
+    return NextResponse.json({ key, value: row?.value ?? null });
+  }
+
+  // Legacy: return heartbeat_secret (owner/admin only)
   if (!(await isOwnerOrAdmin(request))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

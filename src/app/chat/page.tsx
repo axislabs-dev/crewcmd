@@ -181,6 +181,10 @@ export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [isPaused, setIsPaused] = useState(false);
+  const [stopWords, setStopWords] = useState<string[]>([
+    "stop", "pause", "shut up", "be quiet", "hold on", "wait", "enough", "stop talking",
+  ]);
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -229,6 +233,27 @@ export default function ChatPage() {
       }
     }
     fetchAgents();
+  }, []);
+
+  // Load configurable stop words from system settings
+  useEffect(() => {
+    fetch("/api/system-settings?key=chat.stopWords")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.value) {
+          try {
+            const parsed = JSON.parse(data.value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setStopWords(parsed);
+            }
+          } catch {
+            // Keep defaults
+          }
+        }
+      })
+      .catch(() => {
+        // Keep defaults
+      });
   }, []);
 
   // Load messages when session changes: localStorage (cache) → gateway (authoritative) → DB (fallback)
@@ -736,6 +761,81 @@ export default function ChatPage() {
       }
       if (isLoading) return;
 
+      // --- Wake word detection: check if user is addressing a specific agent ---
+      const lowerTrimmed = trimmed.toLowerCase();
+      let wakeAgent: Agent | null = null;
+      for (const agent of agents) {
+        const callsign = agent.callsign.toLowerCase();
+        const name = agent.name.toLowerCase();
+        // Match patterns: @callsign, "callsign," , "callsign " at start, "hey callsign", "hey name"
+        const patterns = [
+          new RegExp(`^@${callsign}\\b`, "i"),
+          new RegExp(`^@${name}\\b`, "i"),
+          new RegExp(`^${callsign}[,:\\s]`, "i"),
+          new RegExp(`^${name}[,:\\s]`, "i"),
+          new RegExp(`^hey\\s+${callsign}\\b`, "i"),
+          new RegExp(`^hey\\s+${name}\\b`, "i"),
+          new RegExp(`\\b@${callsign}\\b`, "i"),
+          new RegExp(`\\b@${name}\\b`, "i"),
+        ];
+        if (patterns.some((p) => p.test(trimmed))) {
+          wakeAgent = agent;
+          break;
+        }
+      }
+
+      // If wake word detected, switch agent and/or unpause
+      if (wakeAgent) {
+        if (wakeAgent.id !== selectedAgent?.id) {
+          saveMessages(activeSessionKey, messages);
+          setStreamingContent("");
+          setSelectedAgent(wakeAgent);
+        }
+        if (isPaused) {
+          setIsPaused(false);
+        }
+        // Don't return — continue sending the message to the (now-active) agent
+      }
+
+      // --- Stop word detection: check if entire message is a stop phrase ---
+      if (!wakeAgent && stopWords.some((sw) => lowerTrimmed === sw.toLowerCase())) {
+        // Show user message in chat
+        const userMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: trimmed,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        setInput("");
+
+        // Show system-style pause message
+        const pauseMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Agent paused. Type a message or say their name to resume.",
+          createdAt: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, pauseMsg]);
+        setIsPaused(true);
+        return;
+      }
+
+      // --- Paused state: show message locally but don't forward to gateway ---
+      if (isPaused && !wakeAgent) {
+        const userMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: trimmed,
+          createdAt: new Date().toISOString(),
+          metadata: pendingFiles.length > 0 ? { attachments: [] } : null,
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        setInput("");
+        persistMessage(agentCallsign, "user", trimmed);
+        return;
+      }
+
       // Slash command: /task <title>
       if (trimmed.startsWith("/task ")) {
         const taskTitle = trimmed.slice(6).trim();
@@ -975,7 +1075,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1008,12 +1108,19 @@ export default function ChatPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className="h-2.5 w-2.5 rounded-full"
+              className={`h-2.5 w-2.5 rounded-full transition-opacity ${isPaused ? "opacity-30" : ""}`}
               style={{
-                backgroundColor: agentColor,
-                boxShadow: `0 0 10px ${agentColor}80`,
+                backgroundColor: isPaused ? "var(--text-tertiary)" : agentColor,
+                boxShadow: isPaused ? "none" : `0 0 10px ${agentColor}80`,
               }}
             />
+
+            {/* Paused badge */}
+            {isPaused && (
+              <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400">
+                PAUSED
+              </span>
+            )}
 
             {/* Hierarchy-aware agent tree selector */}
             <AgentTreeSelector
@@ -1265,7 +1372,7 @@ export default function ChatPage() {
       )}
 
       {/* Input area — Claude-style layout */}
-      <div className="shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-3 pt-2 sm:px-4 lg:px-6">
+      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-3 pt-2 sm:px-4 lg:px-6 transition-opacity ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           {/* Hidden file inputs */}
           <input
@@ -1361,7 +1468,7 @@ export default function ChatPage() {
                   addFiles(files);
                 }
               }}
-              placeholder={`Message ${agentCallsign}...`}
+              placeholder={isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
               disabled={isLoading}
               rows={1}
               className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base sm:text-[14px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none disabled:opacity-40"

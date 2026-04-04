@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 
 /**
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       // Find most recent session for this agent
       const existing = await withRetry(() =>
         db!.select().from(chatSessions)
-          .where(eq(chatSessions.agentId, agentLower))
+          .where(and(eq(chatSessions.agentId, agentLower), eq(chatSessions.companyId, body.companyId!)))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
       );

@@ -33,6 +33,7 @@
     "@dagrejs/dagre": "^3.0.0",
     "@electric-sql/pglite": "^0.4.2",
     "@neondatabase/serverless": "^0.10.4",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/bcryptjs": "^3.0.0",
     "@types/ws": "^8.18.1",
     "@vercel/blob": "^2.3.1",

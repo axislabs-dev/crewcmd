@@ -156,8 +156,19 @@ export default function ChatPage() {
     [selectedAgent]
   );
 
-  // No unmount persistence needed — server-side /api/chat route persists
-  // partial content on client disconnect via the cancel handler.
+  // Abort in-flight streaming on unmount (navigation away).
+  // This signals the server to stop sending to this client while the
+  // gateway continues — the server persists the full response once
+  // the gateway finishes, and ChatEventProvider (layout-level SSE)
+  // feeds it into the Zustand store so it appears when the user returns.
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   // Fetch agents on mount
   useEffect(() => {

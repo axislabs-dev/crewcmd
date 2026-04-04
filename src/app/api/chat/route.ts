@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { publishChatEvent } from "@/lib/chat-pubsub";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ async function resolveSessionId(agentId: string, companyId: string): Promise<str
 
   const existing = await withRetry(() =>
     db!.select().from(chatSessions)
-      .where(eq(chatSessions.agentId, agentLower))
+      .where(and(eq(chatSessions.agentId, agentLower), eq(chatSessions.companyId, companyId)))
       .orderBy(desc(chatSessions.updatedAt))
       .limit(1)
   );
@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
     const cleanupFns: Array<() => void> = [];
 
     let done = false;
+    let clientDisconnected = false;
     let lastStreamedText = "";
     let fullAssistantText = "";
     let assistantPersisted = false;
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest) {
           interrupted,
         );
         // Send assistant message ID to client as a meta event
-        if (streamController && !done) {
+        if (streamController && !done && !clientDisconnected) {
           const meta = JSON.stringify({ type: "meta", messageId: msg.id, role: "assistant" });
           try {
             streamController.enqueue(encoder.encode(`data: ${meta}\n\n`));
@@ -192,10 +193,11 @@ export async function POST(request: NextRequest) {
         }
       },
       cancel() {
-        // Client disconnected — persist whatever was streamed so far
-        persistAssistant(true);
-        for (const fn of cleanupFns) fn();
-        releaseClient(client);
+        // Client disconnected (navigation away, abort, etc.)
+        // Don't persist or cleanup yet — let the gateway finish naturally.
+        // The final/abort/error/timeout handlers will persist the complete
+        // response and publish it via SSE so the client sees it on return.
+        clientDisconnected = true;
       },
     });
 
@@ -240,56 +242,74 @@ export async function POST(request: NextRequest) {
           lastStreamedText = fullText;
           fullAssistantText = fullText;
 
-          const chunk = JSON.stringify({
-            choices: [{ delta: { content: newContent } }],
-          });
-          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          if (!clientDisconnected) {
+            const chunk = JSON.stringify({
+              choices: [{ delta: { content: newContent } }],
+            });
+            try {
+              streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            } catch { /* stream closed */ }
+          }
         }
       } else if (state === "final") {
         const finalText = extractText(p.message);
         if (finalText && finalText.length > lastStreamedText.length) {
           const remaining = finalText.slice(lastStreamedText.length);
-          const chunk = JSON.stringify({
-            choices: [{ delta: { content: remaining } }],
-          });
-          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          if (!clientDisconnected) {
+            const chunk = JSON.stringify({
+              choices: [{ delta: { content: remaining } }],
+            });
+            try {
+              streamController!.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            } catch { /* stream closed */ }
+          }
         }
         if (finalText) fullAssistantText = finalText;
 
         // Persist the complete assistant response
         persistAssistant(false).then(() => {
           done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
+          if (!clientDisconnected) {
+            try {
+              streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+              streamController!.close();
+            } catch { /* already closed */ }
+          }
           client.off("chat", chatHandler);
           releaseClient(client);
         });
       } else if (state === "aborted") {
         persistAssistant(true).then(() => {
           done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
+          if (!clientDisconnected) {
+            try {
+              streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+              streamController!.close();
+            } catch { /* already closed */ }
+          }
           client.off("chat", chatHandler);
           releaseClient(client);
         });
       } else if (state === "error") {
         const errorMsg = (p.errorMessage as string) || "Chat error";
-        const chunk = JSON.stringify({
-          choices: [{ delta: { content: `\n\nError: ${errorMsg}` } }],
-        });
-        streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+        if (!clientDisconnected) {
+          const chunk = JSON.stringify({
+            choices: [{ delta: { content: `\n\nError: ${errorMsg}` } }],
+          });
+          try {
+            streamController!.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          } catch { /* stream closed */ }
+        }
         fullAssistantText += `\n\nError: ${errorMsg}`;
 
         persistAssistant(true).then(() => {
           done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
+          if (!clientDisconnected) {
+            try {
+              streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+              streamController!.close();
+            } catch { /* already closed */ }
+          }
           client.off("chat", chatHandler);
           releaseClient(client);
         });
@@ -320,13 +340,15 @@ export async function POST(request: NextRequest) {
 
     // Safety timeout - if no [DONE] in 5 minutes, close the stream
     setTimeout(() => {
-      if (!done && streamController) {
+      if (!done) {
         persistAssistant(true).then(() => {
           done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
+          if (!clientDisconnected) {
+            try {
+              streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+              streamController!.close();
+            } catch { /* already closed */ }
+          }
           client.off("chat", chatHandler);
           releaseClient(client);
         });

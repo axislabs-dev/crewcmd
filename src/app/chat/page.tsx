@@ -56,40 +56,10 @@ const VOICE_SYSTEM_PROMPT = [
   "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
 
-/** Per-agent localStorage key for thread messages */
-function storageKeyForSession(sessionKey: string): string {
-  return `crewcmd-chat-${sessionKey.toLowerCase()}`;
-}
-
 function getCompanyId(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(?:^|;\s*)active_company=([^;]*)/);
   return match ? match[1] : null;
-}
-
-function loadMessages(sessionKey: string): Message[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const stored = localStorage.getItem(storageKeyForSession(sessionKey));
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMessages(sessionKey: string, messages: Message[]) {
-  try {
-    if (messages.length > 0) {
-      localStorage.setItem(
-        storageKeyForSession(sessionKey),
-        JSON.stringify(messages)
-      );
-    } else {
-      localStorage.removeItem(storageKeyForSession(sessionKey));
-    }
-  } catch {
-    // localStorage unavailable
-  }
 }
 
 /** Fire-and-forget: persist a single message to the database */
@@ -160,16 +130,6 @@ async function loadFromDB(agentId: string): Promise<Message[] | null> {
 }
 
 export default function ChatPage() {
-  // ?reset=1 in URL clears localStorage chat cache (for mobile debugging)
-  useEffect(() => {
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("reset")) {
-      const keys = Object.keys(localStorage).filter((k) => k.startsWith("crewcmd-chat-"));
-      keys.forEach((k) => localStorage.removeItem(k));
-      window.history.replaceState({}, "", window.location.pathname);
-      window.location.reload();
-    }
-  }, []);
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -226,21 +186,6 @@ export default function ChatPage() {
       if (content && agent) {
         // Persist the partial response to DB so it's available when user navigates back
         persistMessage(agent, "assistant", content + "\n\n_(interrupted)_");
-        // Also update localStorage cache so instant render shows the message
-        try {
-          const key = storageKeyForSession(agent.toLowerCase());
-          const raw = localStorage.getItem(key);
-          const cached: Message[] = raw ? JSON.parse(raw) : [];
-          cached.push({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: content + "\n\n_(interrupted)_",
-            createdAt: new Date().toISOString(),
-          });
-          localStorage.setItem(key, JSON.stringify(cached));
-        } catch {
-          // localStorage unavailable
-        }
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
       }
@@ -290,20 +235,13 @@ export default function ChatPage() {
       });
   }, []);
 
-  // Load messages when session changes: localStorage (cache) → gateway (authoritative) → DB (fallback)
+  // Load messages when session changes: gateway (authoritative) → DB (fallback)
   useEffect(() => {
     let cancelled = false;
-    hasLoadedFromDB.current = false;
     const agentId = selectedAgent?.callsign || activeSessionKey;
 
     async function load() {
-      // 1. Instant render from localStorage cache (write-through cache only)
-      const cached = loadMessages(activeSessionKey);
-      if (cached.length > 0 && !cancelled) {
-        setMessages(cached);
-      }
-
-      // 2. Gateway is the authoritative source of truth for conversation history
+      // 1. Gateway is the authoritative source of truth for conversation history
       let gatewayMessages: Message[] | null = null;
       try {
         const res = await fetch(
@@ -321,16 +259,13 @@ export default function ChatPage() {
 
       if (cancelled) return;
 
-      // 3. Always load from DB — messages persisted locally must not be lost
+      // 2. Load from DB — messages persisted locally must not be lost
       const dbMessages = await loadFromDB(agentId);
       if (cancelled) return;
-      hasLoadedFromDB.current = true;
-
-      // 4. Merge all sources: gateway + DB + localStorage-only, deduplicate by id
+      // 3. Merge gateway + DB, deduplicate by id
       const allMessages: Message[] = [
         ...(gatewayMessages || []),
         ...(dbMessages || []),
-        ...cached,
       ];
 
       if (allMessages.length > 0) {
@@ -343,14 +278,6 @@ export default function ChatPage() {
             return true;
           });
         setMessages(deduped);
-        saveMessages(activeSessionKey, deduped);
-        return;
-      }
-
-      // 4. DB is empty — this is a fresh database; discard stale localStorage cache
-      if (cached.length > 0) {
-        setMessages([]);
-        saveMessages(activeSessionKey, []);
       }
     }
 
@@ -366,16 +293,6 @@ export default function ChatPage() {
 
     return () => { cancelled = true; };
   }, [activeSessionKey, selectedAgent?.callsign]);
-
-  // Save messages when they change (only if we have more than what's cached)
-  const hasLoadedFromDB = useRef(false);
-  useEffect(() => {
-    // Don't save the initial localStorage cache back (it may be stale);
-    // only save once DB load has completed or when user sends/receives messages
-    if (hasLoadedFromDB.current || messages.length === 0) {
-      saveMessages(activeSessionKey, messages);
-    }
-  }, [messages, activeSessionKey]);
 
   // Check if user is near bottom of scroll container
   const isNearBottom = useCallback(() => {
@@ -475,14 +392,12 @@ export default function ChatPage() {
   const handleAgentSelect = useCallback(
     (agent: Agent) => {
       if (agent.id === selectedAgent?.id) return;
-      // Save current messages before switching
-      saveMessages(activeSessionKey, messages);
       setStreamingContent("");
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       setSelectedAgent(agent);
     },
-    [selectedAgent, activeSessionKey, messages]
+    [selectedAgent]
   );
 
   const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
@@ -830,7 +745,6 @@ export default function ChatPage() {
       // If wake word detected, switch agent and/or unpause
       if (wakeAgent) {
         if (wakeAgent.id !== selectedAgent?.id) {
-          saveMessages(activeSessionKey, messages);
           setStreamingContent("");
           setSelectedAgent(wakeAgent);
         }
@@ -1149,7 +1063,6 @@ export default function ChatPage() {
 
   const clearChat = () => {
     setMessages([]);
-    localStorage.removeItem(storageKeyForSession(activeSessionKey));
   };
 
   return (

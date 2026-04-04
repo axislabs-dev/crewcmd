@@ -47,10 +47,12 @@ export default function CompanySettingsPage() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { refresh: refreshCompany } = useCompany();
-  const [inviteUsername, setInviteUsername] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
 
   // Provider keys state
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([]);
@@ -203,27 +205,34 @@ export default function CompanySettingsPage() {
   }
 
   async function handleInvite() {
-    if (!company || !inviteUsername.trim()) return;
+    if (!company) return;
     setInviting(true);
     setMessage(null);
+    setInviteLink(null);
 
     try {
-      const res = await fetch(`/api/companies/${company.id}/members`, {
+      const res = await fetch(`/api/companies/${company.id}/invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          githubUsername: inviteUsername.trim(),
+          email: inviteEmail.trim() || null,
           role: inviteRole,
         }),
       });
 
       if (res.ok) {
-        setInviteUsername("");
-        setMessage({ type: "success", text: `Invited ${inviteUsername.trim()}` });
-        fetchData();
+        const data = await res.json();
+        setInviteLink(data.inviteLink);
+        setInviteEmail("");
+        setMessage({
+          type: "success",
+          text: inviteEmail.trim()
+            ? `Invite link generated for ${inviteEmail.trim()}`
+            : "Invite link generated",
+        });
       } else {
         const err = await res.json();
-        setMessage({ type: "error", text: err.error || "Failed to invite" });
+        setMessage({ type: "error", text: err.error || "Failed to generate invite" });
       }
     } catch {
       setMessage({ type: "error", text: "Network error" });
@@ -559,10 +568,10 @@ export default function CompanySettingsPage() {
         {/* Invite form */}
         <div className="mt-4 flex gap-2">
           <input
-            type="text"
-            value={inviteUsername}
-            onChange={(e) => setInviteUsername(e.target.value)}
-            placeholder="GitHub username"
+            type="email"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            placeholder="Email (optional — leave blank for open link)"
             className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-neo/50"
           />
           <select
@@ -576,12 +585,37 @@ export default function CompanySettingsPage() {
           </select>
           <button
             onClick={handleInvite}
-            disabled={inviting || !inviteUsername.trim()}
+            disabled={inviting}
             className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
           >
-            {inviting ? "..." : "INVITE"}
+            {inviting ? "..." : "GENERATE LINK"}
           </button>
         </div>
+
+        {/* Generated invite link */}
+        {inviteLink && (
+          <div className="mt-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-3">
+            <p className="mb-1 text-[10px] tracking-wider text-[var(--text-tertiary)]">INVITE LINK</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 truncate text-[11px] text-[var(--text-secondary)]">
+                {inviteLink}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteLink);
+                  setCopiedInviteLink(true);
+                  setTimeout(() => setCopiedInviteLink(false), 2000);
+                }}
+                className="shrink-0 rounded border border-[var(--border-medium)] px-2 py-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+              >
+                {copiedInviteLink ? "COPIED" : "COPY"}
+              </button>
+            </div>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+              Share this link with the team member. No email is sent — copy and share manually.
+            </p>
+          </div>
+        )}
 
         {/* Member list */}
         <div className="mt-4 space-y-2">
@@ -592,12 +626,12 @@ export default function CompanySettingsPage() {
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-surface-hover)] font-mono text-xs text-[var(--text-secondary)]">
-                  {m.githubUsername[0]?.toUpperCase()}
+                  {(m.email || m.githubUsername || "?")[0]?.toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-mono text-xs text-[var(--text-primary)]">{m.githubUsername}</p>
-                  {m.email && (
-                    <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{m.email}</p>
+                  <p className="font-mono text-xs text-[var(--text-primary)]">{m.email || m.githubUsername}</p>
+                  {m.githubUsername && m.email && (
+                    <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{m.githubUsername}</p>
                   )}
                 </div>
                 {roleBadge(m.role)}

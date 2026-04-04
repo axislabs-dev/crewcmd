@@ -60,7 +60,9 @@ export default function OnboardingPage() {
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   // Step 3: Invite
-  const [invites, setInvites] = useState<string[]>([""]);
+  const [invites, setInvites] = useState<{ email: string; role: string }[]>([{ email: "", role: "member" }]);
+  const [generatedLinks, setGeneratedLinks] = useState<{ email: string; link: string }[]>([]);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // ── Handlers ──
 
@@ -296,22 +298,25 @@ export default function OnboardingPage() {
   async function handleInviteMembers() {
     if (!companyId) return;
     setLoading(true);
-    const validInvites = invites.filter((u) => u.trim());
+    const validInvites = invites.filter((inv) => inv.email.trim());
+    const links: { email: string; link: string }[] = [];
     try {
-      await Promise.all(
-        validInvites.map((username) =>
-          fetch(`/api/companies/${companyId}/members`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ githubUsername: username.trim(), role: "member" }),
-          })
-        )
-      );
+      for (const inv of validInvites) {
+        const res = await fetch(`/api/companies/${companyId}/invite`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: inv.email.trim(), role: inv.role }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          links.push({ email: inv.email.trim(), link: data.inviteLink });
+        }
+      }
+      setGeneratedLinks(links);
     } catch {
       // ignore
     } finally {
       setLoading(false);
-      router.push("/team");
     }
   }
 
@@ -1046,54 +1051,91 @@ export default function OnboardingPage() {
                   INVITE YOUR TEAM
                 </h2>
                 <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                  Add team members by their GitHub username. You can skip this step.
+                  {generatedLinks.length > 0
+                    ? "Share these invite links with your team members."
+                    : "Add team members by email. You can skip this step."}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                {invites.map((username, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => {
-                        const next = [...invites];
-                        next[i] = e.target.value;
-                        setInvites(next);
-                      }}
-                      placeholder="GitHub username"
-                      className={`flex-1 ${inputClass}`}
-                    />
-                    {invites.length > 1 && (
-                      <button
-                        onClick={() => setInvites(invites.filter((_, j) => j !== i))}
-                        className="rounded-lg border border-[var(--border-subtle)] px-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+              {generatedLinks.length > 0 ? (
+                <>
+                  <div className="space-y-2">
+                    {generatedLinks.map((gl, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3"
                       >
-                        &times;
-                      </button>
-                    )}
+                        <p className="text-[11px] text-[var(--text-tertiary)]">{gl.email}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <code className="flex-1 truncate rounded bg-[var(--bg-surface-hover)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">
+                            {gl.link}
+                          </code>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(gl.link);
+                              setCopiedLink(gl.link);
+                              setTimeout(() => setCopiedLink(null), 2000);
+                            }}
+                            className="shrink-0 rounded border border-[var(--border-medium)] px-2 py-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                          >
+                            {copiedLink === gl.link ? "COPIED" : "COPY"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-                <button
-                  onClick={() => setInvites([...invites, ""])}
-                  className="text-[11px] text-[var(--accent)] transition-colors hover:text-[var(--accent)]"
-                >
-                  + ADD ANOTHER
-                </button>
-              </div>
+                  <button onClick={() => router.push("/team")} className={`w-full ${btnPrimary}`}>
+                    CONTINUE TO TEAM
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {invites.map((inv, i) => (
+                      <div key={i} className="flex gap-2">
+                        <input
+                          type="email"
+                          value={inv.email}
+                          onChange={(e) => {
+                            const next = [...invites];
+                            next[i] = { ...next[i], email: e.target.value };
+                            setInvites(next);
+                          }}
+                          placeholder="team@example.com"
+                          className={`flex-1 ${inputClass}`}
+                        />
+                        {invites.length > 1 && (
+                          <button
+                            onClick={() => setInvites(invites.filter((_, j) => j !== i))}
+                            className="rounded-lg border border-[var(--border-subtle)] px-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setInvites([...invites, { email: "", role: "member" }])}
+                      className="text-[11px] text-[var(--accent)] transition-colors hover:text-[var(--accent)]"
+                    >
+                      + ADD ANOTHER
+                    </button>
+                  </div>
 
-              <div className="flex gap-2">
-                <button onClick={() => router.push("/team")} className={`flex-1 ${btnSecondary}`}>
-                  SKIP
-                </button>
-                <button
-                  onClick={handleInviteMembers}
-                  disabled={loading || invites.every((u) => !u.trim())}
-                  className={`flex-1 ${btnPrimary}`}
-                >
-                  {loading ? "INVITING..." : "INVITE & CONTINUE"}
-                </button>
-              </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => router.push("/team")} className={`flex-1 ${btnSecondary}`}>
+                      SKIP
+                    </button>
+                    <button
+                      onClick={handleInviteMembers}
+                      disabled={loading || invites.every((inv) => !inv.email.trim())}
+                      className={`flex-1 ${btnPrimary}`}
+                    >
+                      {loading ? "GENERATING LINKS..." : "GENERATE INVITE LINKS"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

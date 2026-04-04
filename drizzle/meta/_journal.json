@@ -78,6 +78,13 @@
       "when": 1775103993303,
       "tag": "0010_lonely_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1775336622889,
+      "tag": "0011_condemned_mandroid",
+      "breakpoints": true
     }
   ]
 }

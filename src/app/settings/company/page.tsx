@@ -618,16 +618,20 @@ export default function CompanySettingsPage() {
         </div>
       </div>
 
-      {/* API Access — owner/admin only */}
+      {/* Integrations — owner/admin only */}
       {isOwnerOrAdmin && (
         <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">API ACCESS</h2>
+          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">INTEGRATIONS</h2>
           <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-            Use this token to authenticate external systems (agents, CI/CD, webhooks) with the CrewCmd API. Include it as a Bearer token in the Authorization header.
+            Manage tokens and secrets for connecting external systems to CrewCmd.
           </p>
 
+          {/* API Token */}
           <div className="mt-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
             <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">CREWCMD API TOKEN</label>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+              Authenticate external systems (agents, CI/CD, webhooks) with the CrewCmd API.
+            </p>
             <div className="mt-2 flex items-center gap-2">
               <code className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-secondary)] select-all overflow-hidden">
                 {apiTokenLoading
@@ -662,19 +666,74 @@ export default function CompanySettingsPage() {
                 {regenerating ? "..." : "REGENERATE"}
               </button>
             </div>
-
             <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">
               Example: <code className="text-[var(--text-secondary)]">Authorization: Bearer &lt;token&gt;</code>
             </p>
+          </div>
+
+          {/* Heartbeat Secret */}
+          <div className="mt-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
+            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">HEARTBEAT SECRET</label>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+              Used by OpenClaw agents to authenticate heartbeat check-ins.
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-secondary)] select-all overflow-hidden">
+                {apiTokenLoading
+                  ? "Loading..."
+                  : apiToken
+                    ? apiTokenRevealed
+                      ? apiToken
+                      : "\u2022".repeat(48)
+                    : "Not configured"}
+              </code>
+              {apiToken && (
+                <>
+                  <button
+                    onClick={() => setApiTokenRevealed(!apiTokenRevealed)}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {apiTokenRevealed ? "HIDE" : "REVEAL"}
+                  </button>
+                  <button
+                    onClick={handleCopyToken}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {copied ? "COPIED" : "COPY"}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setShowRegenConfirm(true)}
+                disabled={regenerating}
+                className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
+              >
+                {regenerating ? "..." : "ROTATE"}
+              </button>
+            </div>
+
+            {/* Local discovery note */}
+            <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+              <p className="text-[10px] text-emerald-400">
+                <span className="font-bold tracking-wider">LOCAL:</span> Auto-written to <code className="text-emerald-300">~/.crewcmd/heartbeat-secret</code> — local OpenClaw agents discover it automatically (zero config).
+              </p>
+            </div>
+
+            {/* Remote runtime note */}
+            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+              <p className="text-[10px] text-amber-400">
+                <span className="font-bold tracking-wider">REMOTE:</span> For OpenClaw instances on other machines, copy this secret and set it as the <code className="text-amber-300">HEARTBEAT_SECRET</code> environment variable on the remote host.
+              </p>
+            </div>
           </div>
 
           {/* Regenerate confirmation dialog */}
           {showRegenConfirm && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
               <div className="mx-4 w-full max-w-sm rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-xl">
-                <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">REGENERATE API TOKEN?</h3>
+                <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">REGENERATE TOKEN?</h3>
                 <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                  This will invalidate the current token. All external integrations using the old token will stop working immediately.
+                  This will invalidate the current token and heartbeat secret. All external integrations and OpenClaw agents using the old token will stop working immediately. The local secret file will also be updated.
                 </p>
                 <div className="mt-4 flex justify-end gap-2">
                   <button

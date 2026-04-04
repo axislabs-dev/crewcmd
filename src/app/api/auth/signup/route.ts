@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, inviteTokens } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
@@ -84,20 +84,45 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, 12);
     const isFirstUser = totalUsers === 0;
 
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        name,
-        email,
-        passwordHash,
-        role: isFirstUser ? "super_admin" : "viewer",
-        invitedBy: isFirstUser ? "system" : "invite",
-        acceptedAt: new Date(),
-      })
-      .returning({ id: users.id });
+    const result = await db.transaction(async (tx) => {
+      const [newUser] = await tx
+        .insert(users)
+        .values({
+          name,
+          email,
+          passwordHash,
+          role: isFirstUser ? "super_admin" : "viewer",
+          invitedBy: isFirstUser ? "system" : "invite",
+          acceptedAt: new Date(),
+        })
+        .returning({ id: users.id });
+
+      // Atomically mark the invite as accepted so the token cannot be reused
+      if (inviteToken) {
+        const [updated] = await tx
+          .update(inviteTokens)
+          .set({
+            acceptedAt: new Date(),
+            acceptedBy: newUser.id,
+          })
+          .where(
+            and(
+              eq(inviteTokens.token, inviteToken),
+              sql`${inviteTokens.acceptedAt} IS NULL`
+            )
+          )
+          .returning({ id: inviteTokens.id });
+
+        if (!updated) {
+          throw new Error("Invite token was already used");
+        }
+      }
+
+      return newUser;
+    });
 
     return NextResponse.json({
-      id: newUser.id,
+      id: result.id,
       role: isFirstUser ? "super_admin" : "viewer",
     });
   } catch (err: unknown) {

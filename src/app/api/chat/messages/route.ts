@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json() as {
+      id?: string;
       sessionId?: string;
       agentId?: string;
       companyId?: string;
@@ -113,14 +114,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Insert message
+    // Insert message (use client-provided id for dedup when supplied)
+    const insertValues: Record<string, unknown> = {
+      sessionId,
+      role: body.role,
+      content: body.content,
+      metadata: body.metadata || null,
+    };
+    if (body.id) {
+      insertValues.id = body.id;
+    }
     const [message] = await withRetry(() =>
-      db!.insert(chatMessages).values({
-        sessionId,
-        role: body.role,
-        content: body.content,
-        metadata: body.metadata || null,
-      }).returning()
+      db!.insert(chatMessages).values(insertValues as typeof chatMessages.$inferInsert)
+        .onConflictDoNothing({ target: chatMessages.id })
+        .returning()
     );
 
     // Touch session updatedAt
@@ -130,7 +137,8 @@ export async function POST(request: NextRequest) {
         .where(eq(chatSessions.id, sessionId!))
     );
 
-    return Response.json({ message, sessionId }, { status: 201 });
+    // onConflictDoNothing returns empty when id already exists — still 201
+    return Response.json({ message: message || { id: body.id }, sessionId }, { status: 201 });
   } catch (error) {
     console.error("[api/chat/messages] Save error:", error);
     return Response.json({ error: "Failed to save message" }, { status: 500 });

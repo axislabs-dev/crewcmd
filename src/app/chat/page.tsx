@@ -92,20 +92,26 @@ function saveMessages(sessionKey: string, messages: Message[]) {
   }
 }
 
-/** Fire-and-forget: persist a single message to the database */
+/** Fire-and-forget: persist a single message to the database.
+ *  When `id` is provided the DB uses it as the primary key, enabling dedup
+ *  between client-side (crypto.randomUUID) and server-side records. */
 function persistMessage(
   agentId: string,
   role: "user" | "assistant",
   content: string,
   metadata?: Record<string, unknown> | null,
+  id?: string,
 ) {
   const companyId = getCompanyId();
   if (!companyId || !content) return;
 
+  const payload: Record<string, unknown> = { agentId, companyId, role, content, metadata };
+  if (id) payload.id = id;
+
   fetch("/api/chat/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agentId, companyId, role, content, metadata }),
+    body: JSON.stringify(payload),
   }).catch((err) => {
     console.warn("[chat] Failed to persist message:", err);
   });
@@ -334,12 +340,18 @@ export default function ChatPage() {
       ];
 
       if (allMessages.length > 0) {
-        const seen = new Set<string>();
+        const seenIds = new Set<string>();
+        const seenContent = new Set<string>();
         const deduped = allMessages
           .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
           .filter((m) => {
-            if (seen.has(m.id)) return false;
-            seen.add(m.id);
+            // Primary dedup: by id
+            if (seenIds.has(m.id)) return false;
+            seenIds.add(m.id);
+            // Secondary dedup: same role+content (handles client vs server id mismatch)
+            const contentKey = `${m.role}:${m.content}`;
+            if (seenContent.has(contentKey)) return false;
+            seenContent.add(contentKey);
             return true;
           });
         setMessages(deduped);
@@ -873,7 +885,7 @@ export default function ChatPage() {
         };
         setMessages((prev) => [...prev, userMsg]);
         setInput("");
-        persistMessage(agentCallsign, "user", trimmed);
+        persistMessage(agentCallsign, "user", trimmed, null, userMsg.id);
         return;
       }
 
@@ -923,8 +935,8 @@ export default function ChatPage() {
             createdAt: new Date().toISOString(),
           };
           setMessages((prev) => [...prev, aMsg]);
-          persistMessage(agentCallsign, "user", trimmed);
-          persistMessage(agentCallsign, "assistant", assistantContent);
+          persistMessage(agentCallsign, "user", trimmed, null, userMsg.id);
+          persistMessage(agentCallsign, "assistant", assistantContent, null, aMsg.id);
         } catch {
           setMessages((prev) => [
             ...prev,
@@ -982,7 +994,7 @@ export default function ChatPage() {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       });
-      persistMessage(agentCallsign, "user", messageContent, metadata);
+      persistMessage(agentCallsign, "user", messageContent, metadata, userMsg.id);
       setInput("");
       setIsLoading(true);
       setStreamingContent("");
@@ -1082,9 +1094,14 @@ export default function ChatPage() {
           content: enrichedContent,
           createdAt: new Date().toISOString(),
         };
+        // Persist to localStorage synchronously FIRST — survives unmount/navigation
+        const updatedMessages = [...messages, userMsg, assistantMsg];
+        saveMessages(activeSessionKey, updatedMessages);
+        // Then update React state
         setMessages((prev) => [...prev, assistantMsg]);
+        // Then async DB persist with the same id for dedup
         if (fullContent) {
-          persistMessage(agentCallsign, "assistant", enrichedContent);
+          persistMessage(agentCallsign, "assistant", enrichedContent, null, assistantMsg.id);
         }
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
@@ -1094,15 +1111,17 @@ export default function ChatPage() {
           // User cancelled with Escape — keep any partial content as the message
           if (fullContent) {
             const cancelledContent = fullContent + "\n\n_(cancelled)_";
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: cancelledContent,
-              },
-            ]);
-            persistMessage(agentCallsign, "assistant", cancelledContent);
+            const cancelledMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: cancelledContent,
+              createdAt: new Date().toISOString(),
+            };
+            // Sync localStorage write before state update
+            const updatedMsgs = [...messages, userMsg, cancelledMsg];
+            saveMessages(activeSessionKey, updatedMsgs);
+            setMessages((prev) => [...prev, cancelledMsg]);
+            persistMessage(agentCallsign, "assistant", cancelledContent, null, cancelledMsg.id);
           }
           streamingContentRef.current = "";
           streamingAgentRef.current = null;

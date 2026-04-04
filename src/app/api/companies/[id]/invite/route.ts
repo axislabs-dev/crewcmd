@@ -49,8 +49,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
 
   // Build invite link using request origin (self-hosted friendly)
-  const origin = request.headers.get("origin") || request.headers.get("x-forwarded-host")
-    ? `${request.headers.get("x-forwarded-proto") || "https"}://${request.headers.get("x-forwarded-host")}`
+  const xHost = request.headers.get("x-forwarded-host");
+  const origin = xHost
+    ? `${request.headers.get("x-forwarded-proto") || "https"}://${xHost}`
     : new URL(request.url).origin;
   const inviteLink = `${origin}/join?token=${token}`;
 

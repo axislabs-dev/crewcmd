@@ -1,5 +1,5 @@
 /**
- * Push the CrewCmd Task Management skill to all agents on a runtime.
+ * Push the CrewCmd Management skill to all agents on a runtime.
  *
  * Strategy (in order):
  * 1. Try agents.files.put RPC (may not exist in all gateway versions)
@@ -19,8 +19,8 @@ import { detectCallbackUrl } from "./detect-callback-url";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const SYSTEM_SKILL_SLUG = "crewcmd-task-management";
-const SYSTEM_SKILL_NAME = "CrewCmd Task Management";
+const SYSTEM_SKILL_SLUG = "crewcmd-management";
+const SYSTEM_SKILL_NAME = "CrewCmd Management";
 
 export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   if (!db) throw new Error("Database not available");
@@ -33,16 +33,11 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
 
   // Detect callback URL based on gateway network
   const baseUrl = detectCallbackUrl(runtime.gatewayUrl);
-  const authToken = process.env.HEARTBEAT_SECRET || "";
-
-  if (!authToken) {
-    console.warn("[push-skill] No HEARTBEAT_SECRET configured, skill will have empty auth token");
-  }
 
   // Generate the SKILL.md content
+  // Auth token is NOT embedded — agents read $HEARTBEAT_SECRET from their environment at runtime
   const skillContent = generateCrewCmdSkill({
     baseUrl,
-    authToken,
     companyId: runtime.companyId,
   });
 
@@ -196,7 +191,7 @@ async function upsertSystemSkill(
         name: SYSTEM_SKILL_NAME,
         slug: SYSTEM_SKILL_SLUG,
         description:
-          "Allows agents to manage tasks, report progress, and collaborate through CrewCmd's task board API.",
+          "Full workspace management — tasks, projects, agents, inbox, blueprints, budgets, docs, org chart, and activity.",
         source: "system",
         content,
         installed: true,

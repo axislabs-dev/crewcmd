@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { users, inviteTokens } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
   try {
-    const { name, email, password } = await request.json();
+    const { name, email, password, inviteToken } = await request.json();
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -35,15 +35,54 @@ export async function POST(request: Request) {
       .from(users);
     const totalUsers = Number(countResult[0]?.count ?? 0);
 
-    if (totalUsers > 0) {
-      // Not first user — reject (invite-only for subsequent users)
+    if (totalUsers > 0 && !inviteToken) {
+      // Not first user and no invite token — reject
       return NextResponse.json(
         { error: "Registration is invite-only. Contact your admin." },
         { status: 403 }
       );
     }
 
+    // If invite token provided, validate it
+    if (inviteToken) {
+      const [invite] = await db
+        .select()
+        .from(inviteTokens)
+        .where(eq(inviteTokens.token, inviteToken))
+        .limit(1);
+
+      if (!invite) {
+        return NextResponse.json(
+          { error: "Invalid invite token" },
+          { status: 400 }
+        );
+      }
+
+      if (invite.acceptedAt) {
+        return NextResponse.json(
+          { error: "This invite has already been used" },
+          { status: 400 }
+        );
+      }
+
+      if (invite.expiresAt < new Date()) {
+        return NextResponse.json(
+          { error: "This invite has expired" },
+          { status: 400 }
+        );
+      }
+
+      // If invite has a specific email, verify it matches
+      if (invite.email && invite.email.toLowerCase() !== email.toLowerCase()) {
+        return NextResponse.json(
+          { error: "This invite is for a different email address" },
+          { status: 403 }
+        );
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
+    const isFirstUser = totalUsers === 0;
 
     const [newUser] = await db
       .insert(users)
@@ -51,13 +90,16 @@ export async function POST(request: Request) {
         name,
         email,
         passwordHash,
-        role: "super_admin",
-        invitedBy: "system",
+        role: isFirstUser ? "super_admin" : "viewer",
+        invitedBy: isFirstUser ? "system" : "invite",
         acceptedAt: new Date(),
       })
       .returning({ id: users.id });
 
-    return NextResponse.json({ id: newUser.id, role: "super_admin" });
+    return NextResponse.json({
+      id: newUser.id,
+      role: isFirstUser ? "super_admin" : "viewer",
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     if (msg.includes("unique") || msg.includes("duplicate")) {

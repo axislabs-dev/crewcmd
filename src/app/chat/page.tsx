@@ -478,6 +478,8 @@ export default function ChatPage() {
       // Save current messages before switching
       saveMessages(activeSessionKey, messages);
       setStreamingContent("");
+      // Clear messages immediately so previous agent's thread doesn't bleed
+      setMessages([]);
       setSelectedAgent(agent);
     },
     [selectedAgent, activeSessionKey, messages]

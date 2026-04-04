@@ -13,6 +13,8 @@ import {
 } from "@/components/chat/agent-tree-selector";
 import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
+import { useChatStore } from "@/lib/chat-store";
+import { useCompany } from "@/components/company-context";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -56,80 +58,20 @@ const VOICE_SYSTEM_PROMPT = [
   "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
 
-/** Per-agent localStorage key for thread messages */
-function storageKeyForSession(sessionKey: string): string {
-  return `crewcmd-chat-${sessionKey.toLowerCase()}`;
-}
-
-function getCompanyId(): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|;\s*)active_company=([^;]*)/);
-  return match ? match[1] : null;
-}
-
-function loadMessages(sessionKey: string): Message[] {
-  if (typeof window === "undefined") return [];
+/** Load message history from DB into the Zustand store for an agent */
+async function loadFromDBIntoStore(agentId: string, companyId: string) {
   try {
-    const stored = localStorage.getItem(storageKeyForSession(sessionKey));
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMessages(sessionKey: string, messages: Message[]) {
-  try {
-    if (messages.length > 0) {
-      localStorage.setItem(
-        storageKeyForSession(sessionKey),
-        JSON.stringify(messages)
-      );
-    } else {
-      localStorage.removeItem(storageKeyForSession(sessionKey));
-    }
-  } catch {
-    // localStorage unavailable
-  }
-}
-
-/** Fire-and-forget: persist a single message to the database */
-function persistMessage(
-  agentId: string,
-  role: "user" | "assistant",
-  content: string,
-  metadata?: Record<string, unknown> | null,
-) {
-  const companyId = getCompanyId();
-  if (!companyId || !content) return;
-
-  fetch("/api/chat/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agentId, companyId, role, content, metadata }),
-  }).catch((err) => {
-    console.warn("[chat] Failed to persist message:", err);
-  });
-}
-
-/** Load message history from DB, returns messages or null if unavailable */
-async function loadFromDB(agentId: string): Promise<Message[] | null> {
-  const companyId = getCompanyId();
-  if (!companyId) return null;
-
-  try {
-    // Find ALL sessions for this agent (messages may be scattered due to earlier bug)
     const sessRes = await fetch(
       `/api/chat/sessions?agentId=${encodeURIComponent(agentId)}&companyId=${encodeURIComponent(companyId)}`
     );
-    if (!sessRes.ok) return null;
+    if (!sessRes.ok) return;
 
     const { sessions } = await sessRes.json() as {
       sessions: { id: string; agentId: string; title: string | null }[];
     };
-    if (!sessions?.length) return null;
+    if (!sessions?.length) return;
 
-    // Load messages from all sessions and merge by date
-    const allMessages: { id: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[] = [];
+    const allMessages: { id: string; sessionId: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[] = [];
     for (const session of sessions) {
       const msgRes = await fetch(
         `/api/chat/messages?sessionId=${encodeURIComponent(session.id)}&limit=100`
@@ -138,37 +80,34 @@ async function loadFromDB(agentId: string): Promise<Message[] | null> {
       const { messages } = await msgRes.json() as {
         messages: { id: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[];
       };
-      if (messages?.length) allMessages.push(...messages);
+      if (messages?.length) {
+        allMessages.push(...messages.map((m) => ({ ...m, sessionId: session.id })));
+      }
     }
 
-    if (!allMessages.length) return null;
+    if (!allMessages.length) return;
 
-    // Sort by createdAt ascending and deduplicate by id
-    const seen = new Set<string>();
-    const sorted = allMessages
-      .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
-      .filter((m) => {
-        if (seen.has(m.id)) return false;
-        seen.add(m.id);
-        return true;
-      });
-
-    return sorted;
+    useChatStore.getState().loadSession(
+      agentId,
+      allMessages.map((m) => ({
+        id: m.id,
+        sessionId: m.sessionId,
+        agentId: agentId.toLowerCase(),
+        role: m.role,
+        content: m.content,
+        metadata: m.metadata,
+        createdAt: m.createdAt || new Date().toISOString(),
+      }))
+    );
   } catch {
-    return null;
+    // DB unavailable
   }
 }
 
 export default function ChatPage() {
-  // ?reset=1 in URL clears localStorage chat cache (for mobile debugging)
-  useEffect(() => {
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("reset")) {
-      const keys = Object.keys(localStorage).filter((k) => k.startsWith("crewcmd-chat-"));
-      keys.forEach((k) => localStorage.removeItem(k));
-      window.history.replaceState({}, "", window.location.pathname);
-      window.location.reload();
-    }
-  }, []);
+  const { company } = useCompany();
+  const storeMarkRead = useChatStore((s) => s.markRead);
+  const storeClearAgent = useChatStore((s) => s.clearAgent);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -180,7 +119,7 @@ export default function ChatPage() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const unreadCounts = useChatStore((s) => s.unreadByAgent);
   const [isPaused, setIsPaused] = useState(false);
   const [stopWords, setStopWords] = useState<string[]>([
     "stop", "pause", "shut up", "be quiet", "hold on", "wait", "enough", "stop talking",
@@ -217,35 +156,8 @@ export default function ChatPage() {
     [selectedAgent]
   );
 
-  // Persist in-flight streaming content when component unmounts (e.g. navigation away)
-  // This prevents losing assistant responses that were still streaming
-  useEffect(() => {
-    return () => {
-      const content = streamingContentRef.current;
-      const agent = streamingAgentRef.current;
-      if (content && agent) {
-        // Persist the partial response to DB so it's available when user navigates back
-        persistMessage(agent, "assistant", content + "\n\n_(interrupted)_");
-        // Also update localStorage cache so instant render shows the message
-        try {
-          const key = storageKeyForSession(agent.toLowerCase());
-          const raw = localStorage.getItem(key);
-          const cached: Message[] = raw ? JSON.parse(raw) : [];
-          cached.push({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: content + "\n\n_(interrupted)_",
-            createdAt: new Date().toISOString(),
-          });
-          localStorage.setItem(key, JSON.stringify(cached));
-        } catch {
-          // localStorage unavailable
-        }
-        streamingContentRef.current = "";
-        streamingAgentRef.current = null;
-      }
-    };
-  }, []);
+  // No unmount persistence needed — server-side /api/chat route persists
+  // partial content on client disconnect via the cancel handler.
 
   // Fetch agents on mount
   useEffect(() => {
@@ -290,92 +202,81 @@ export default function ChatPage() {
       });
   }, []);
 
-  // Load messages when session changes: localStorage (cache) → gateway (authoritative) → DB (fallback)
+  // Load messages from Zustand store; on first load for an agent, hydrate from DB
+  const loadedAgentsRef = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
-    hasLoadedFromDB.current = false;
     const agentId = selectedAgent?.callsign || activeSessionKey;
+    const companyId = company?.id;
 
-    async function load() {
-      // 1. Instant render from localStorage cache (write-through cache only)
-      const cached = loadMessages(activeSessionKey);
-      if (cached.length > 0 && !cancelled) {
-        setMessages(cached);
-      }
-
-      // 2. Gateway is the authoritative source of truth for conversation history
-      let gatewayMessages: Message[] | null = null;
-      try {
-        const res = await fetch(
-          `/api/chat/history?sessionKey=${encodeURIComponent(activeSessionKey)}&limit=50`
-        );
-        if (res.ok && !cancelled) {
-          const data = await res.json();
-          if (data?.messages?.length) {
-            gatewayMessages = data.messages;
-          }
-        }
-      } catch {
-        // Gateway unavailable — fall through to DB
-      }
-
-      if (cancelled) return;
-
-      // 3. Always load from DB — messages persisted locally must not be lost
-      const dbMessages = await loadFromDB(agentId);
-      if (cancelled) return;
-      hasLoadedFromDB.current = true;
-
-      // 4. Merge all sources: gateway + DB + localStorage-only, deduplicate by id
-      const allMessages: Message[] = [
-        ...(gatewayMessages || []),
-        ...(dbMessages || []),
-        ...cached,
-      ];
-
-      if (allMessages.length > 0) {
-        const seen = new Set<string>();
-        const deduped = allMessages
-          .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
-          .filter((m) => {
-            if (seen.has(m.id)) return false;
-            seen.add(m.id);
-            return true;
-          });
-        setMessages(deduped);
-        saveMessages(activeSessionKey, deduped);
-        return;
-      }
-
-      // 4. DB is empty — this is a fresh database; discard stale localStorage cache
-      if (cached.length > 0) {
-        setMessages([]);
-        saveMessages(activeSessionKey, []);
-      }
+    // Read whatever the store already has (from SSE)
+    const storeMessages = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
+    if (storeMessages.length > 0 && !cancelled) {
+      setMessages(storeMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        createdAt: m.createdAt,
+        metadata: m.metadata,
+      })));
+    } else {
+      setMessages([]);
     }
 
-    load();
+    // If we haven't loaded from DB for this agent yet, do so
+    if (companyId && !loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
+      loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
+      loadFromDBIntoStore(agentId, companyId).then(() => {
+        if (cancelled) return;
+        const updated = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
+        setMessages(updated.map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          createdAt: m.createdAt,
+          metadata: m.metadata,
+        })));
+      });
+    }
 
-    // Clear unread for this session
-    setUnreadCounts((prev) => {
-      if (!prev[activeSessionKey]) return prev;
-      const next = { ...prev };
-      delete next[activeSessionKey];
-      return next;
-    });
+    // Mark as read
+    storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign]);
+  }, [activeSessionKey, selectedAgent?.callsign, company?.id, storeMarkRead]);
 
-  // Save messages when they change (only if we have more than what's cached)
-  const hasLoadedFromDB = useRef(false);
+  // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
-    // Don't save the initial localStorage cache back (it may be stale);
-    // only save once DB load has completed or when user sends/receives messages
-    if (hasLoadedFromDB.current || messages.length === 0) {
-      saveMessages(activeSessionKey, messages);
-    }
-  }, [messages, activeSessionKey]);
+    const unsub = useChatStore.subscribe((state) => {
+      const storeMessages = state.messagesByAgent[activeSessionKey.toLowerCase()] || [];
+      setMessages((prev) => {
+        // Only update if store has messages we don't have
+        if (storeMessages.length <= prev.length) {
+          // Check if the last message IDs match — if so, no update needed
+          const lastStore = storeMessages[storeMessages.length - 1];
+          const lastLocal = prev[prev.length - 1];
+          if (lastStore?.id === lastLocal?.id) return prev;
+        }
+
+        // Merge: keep local optimistic messages, add store messages, deduplicate
+        const storeIds = new Set(storeMessages.map((m) => m.id));
+        const optimistic = prev.filter((m) => !storeIds.has(m.id) && m.id.startsWith("optimistic-"));
+        const merged = [
+          ...storeMessages.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            createdAt: m.createdAt,
+            metadata: m.metadata,
+          })),
+          ...optimistic,
+        ].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+
+        return merged;
+      });
+    });
+    return unsub;
+  }, [activeSessionKey]);
 
   // Check if user is near bottom of scroll container
   const isNearBottom = useCallback(() => {
@@ -475,14 +376,12 @@ export default function ChatPage() {
   const handleAgentSelect = useCallback(
     (agent: Agent) => {
       if (agent.id === selectedAgent?.id) return;
-      // Save current messages before switching
-      saveMessages(activeSessionKey, messages);
       setStreamingContent("");
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       setSelectedAgent(agent);
     },
-    [selectedAgent, activeSessionKey, messages]
+    [selectedAgent]
   );
 
   const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
@@ -830,7 +729,6 @@ export default function ChatPage() {
       // If wake word detected, switch agent and/or unpause
       if (wakeAgent) {
         if (wakeAgent.id !== selectedAgent?.id) {
-          saveMessages(activeSessionKey, messages);
           setStreamingContent("");
           setSelectedAgent(wakeAgent);
         }
@@ -875,7 +773,7 @@ export default function ChatPage() {
         };
         setMessages((prev) => [...prev, userMsg]);
         setInput("");
-        persistMessage(agentCallsign, "user", trimmed);
+        // Server will persist via /api/chat — no client-side persistMessage needed
         return;
       }
 
@@ -925,8 +823,19 @@ export default function ChatPage() {
             createdAt: new Date().toISOString(),
           };
           setMessages((prev) => [...prev, aMsg]);
-          persistMessage(agentCallsign, "user", trimmed);
-          persistMessage(agentCallsign, "assistant", assistantContent);
+          // Persist slash command messages via API (not going through /api/chat SSE)
+          if (company?.id) {
+            fetch("/api/chat/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ agentId: agentCallsign, companyId: company.id, role: "user", content: trimmed }),
+            }).catch(() => {});
+            fetch("/api/chat/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ agentId: agentCallsign, companyId: company.id, role: "assistant", content: assistantContent }),
+            }).catch(() => {});
+          }
         } catch {
           setMessages((prev) => [
             ...prev,
@@ -970,9 +879,9 @@ export default function ChatPage() {
 
       const metadata = attachments.length > 0 ? { attachments } : null;
 
-      // Send to OpenClaw Gateway
+      // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const userMsg: Message = {
-        id: crypto.randomUUID(),
+        id: `optimistic-${crypto.randomUUID()}`,
         role: "user",
         content: trimmed || "(attachments)",
         createdAt: new Date().toISOString(),
@@ -984,7 +893,7 @@ export default function ChatPage() {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       });
-      persistMessage(agentCallsign, "user", messageContent, metadata);
+      // User message persisted server-side in /api/chat route
       setInput("");
       setIsLoading(true);
       setStreamingContent("");
@@ -1010,6 +919,8 @@ export default function ChatPage() {
           body: JSON.stringify({
             messages: chatMessages,
             agent: selectedAgent?.callsign,
+            companyId: company?.id,
+            metadata,
           }),
           signal: controller.signal,
         });
@@ -1043,6 +954,20 @@ export default function ChatPage() {
 
             try {
               const parsed = JSON.parse(data);
+
+              // Handle meta events (message IDs from server-side persistence)
+              if (parsed.type === "meta" && parsed.role === "user") {
+                // Replace optimistic user message with server-confirmed one
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id.startsWith("optimistic-") && m.role === "user"
+                      ? { ...m, id: parsed.messageId }
+                      : m
+                  )
+                );
+                continue;
+              }
+
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) {
                 fullContent += delta;
@@ -1085,9 +1010,7 @@ export default function ChatPage() {
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
-        if (fullContent) {
-          persistMessage(agentCallsign, "assistant", enrichedContent);
-        }
+        // Assistant message persisted server-side in /api/chat route
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
         setStreamingContent("");
@@ -1104,7 +1027,7 @@ export default function ChatPage() {
                 content: cancelledContent,
               },
             ]);
-            persistMessage(agentCallsign, "assistant", cancelledContent);
+            // Partial content persisted server-side via cancel handler
           }
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
@@ -1129,7 +1052,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1149,7 +1072,7 @@ export default function ChatPage() {
 
   const clearChat = () => {
     setMessages([]);
-    localStorage.removeItem(storageKeyForSession(activeSessionKey));
+    storeClearAgent(activeSessionKey);
   };
 
   return (

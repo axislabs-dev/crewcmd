@@ -202,6 +202,10 @@ export default function ChatPage() {
   const loadingStartRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Track in-flight streaming so we can persist on unmount (navigation away)
+  const streamingContentRef = useRef("");
+  const streamingAgentRef = useRef<string | null>(null);
+
   // Sentence-level TTS queue for agent mode
   const ttsQueueRef = useRef<string[]>([]);
   const isSpeakingQueueRef = useRef(false);
@@ -212,6 +216,36 @@ export default function ChatPage() {
     () => selectedAgent?.callsign.toLowerCase() || "main",
     [selectedAgent]
   );
+
+  // Persist in-flight streaming content when component unmounts (e.g. navigation away)
+  // This prevents losing assistant responses that were still streaming
+  useEffect(() => {
+    return () => {
+      const content = streamingContentRef.current;
+      const agent = streamingAgentRef.current;
+      if (content && agent) {
+        // Persist the partial response to DB so it's available when user navigates back
+        persistMessage(agent, "assistant", content + "\n\n_(interrupted)_");
+        // Also update localStorage cache so instant render shows the message
+        try {
+          const key = storageKeyForSession(agent.toLowerCase());
+          const raw = localStorage.getItem(key);
+          const cached: Message[] = raw ? JSON.parse(raw) : [];
+          cached.push({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: content + "\n\n_(interrupted)_",
+            createdAt: new Date().toISOString(),
+          });
+          localStorage.setItem(key, JSON.stringify(cached));
+        } catch {
+          // localStorage unavailable
+        }
+        streamingContentRef.current = "";
+        streamingAgentRef.current = null;
+      }
+    };
+  }, []);
 
   // Fetch agents on mount
   useEffect(() => {
@@ -287,26 +321,29 @@ export default function ChatPage() {
 
       if (cancelled) return;
 
-      if (gatewayMessages && gatewayMessages.length > 0) {
-        // Merge: gateway wins for any conflicts, keep local-only messages
-        const gatewayIds = new Set(gatewayMessages.map((m: Message) => m.id));
-        const localOnly = cached.filter((m) => !gatewayIds.has(m.id));
-        const merged = [...gatewayMessages, ...localOnly]
-          .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-        setMessages(merged);
-        saveMessages(activeSessionKey, merged);
-        hasLoadedFromDB.current = true;
-        return;
-      }
-
-      // 3. Fallback: try loading from DB (PGlite local store)
+      // 3. Always load from DB — messages persisted locally must not be lost
       const dbMessages = await loadFromDB(agentId);
       if (cancelled) return;
       hasLoadedFromDB.current = true;
 
-      if (dbMessages && dbMessages.length > 0) {
-        setMessages(dbMessages);
-        saveMessages(activeSessionKey, dbMessages);
+      // 4. Merge all sources: gateway + DB + localStorage-only, deduplicate by id
+      const allMessages: Message[] = [
+        ...(gatewayMessages || []),
+        ...(dbMessages || []),
+        ...cached,
+      ];
+
+      if (allMessages.length > 0) {
+        const seen = new Set<string>();
+        const deduped = allMessages
+          .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
+          .filter((m) => {
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+          });
+        setMessages(deduped);
+        saveMessages(activeSessionKey, deduped);
         return;
       }
 
@@ -951,6 +988,8 @@ export default function ChatPage() {
       setInput("");
       setIsLoading(true);
       setStreamingContent("");
+      streamingContentRef.current = "";
+      streamingAgentRef.current = agentCallsign;
       let fullContent = "";
 
       const chatMessages = [
@@ -1007,6 +1046,7 @@ export default function ChatPage() {
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) {
                 fullContent += delta;
+                streamingContentRef.current = fullContent;
                 setStreamingContent(fullContent);
 
                 // Sentence-level TTS: extract complete sentences and queue them
@@ -1048,20 +1088,26 @@ export default function ChatPage() {
         if (fullContent) {
           persistMessage(agentCallsign, "assistant", enrichedContent);
         }
+        streamingContentRef.current = "";
+        streamingAgentRef.current = null;
         setStreamingContent("");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           // User cancelled with Escape — keep any partial content as the message
           if (fullContent) {
+            const cancelledContent = fullContent + "\n\n_(cancelled)_";
             setMessages((prev) => [
               ...prev,
               {
                 id: crypto.randomUUID(),
                 role: "assistant",
-                content: fullContent + "\n\n_(cancelled)_",
+                content: cancelledContent,
               },
             ]);
+            persistMessage(agentCallsign, "assistant", cancelledContent);
           }
+          streamingContentRef.current = "";
+          streamingAgentRef.current = null;
           setStreamingContent("");
         } else {
           console.error("[Chat] Error:", error);
@@ -1074,6 +1120,8 @@ export default function ChatPage() {
                 "Connection error. Make sure the OpenClaw Gateway is reachable.",
             },
           ]);
+          streamingContentRef.current = "";
+          streamingAgentRef.current = null;
           setStreamingContent("");
         }
       }

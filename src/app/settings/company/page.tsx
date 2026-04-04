@@ -67,6 +67,14 @@ export default function CompanySettingsPage() {
   const [copied, setCopied] = useState(false);
   const [isOwnerOrAdmin, setIsOwnerOrAdmin] = useState(false);
 
+  // Heartbeat secret state (separate from API token)
+  const [heartbeatSecret, setHeartbeatSecret] = useState<string | null>(null);
+  const [heartbeatSecretRevealed, setHeartbeatSecretRevealed] = useState(false);
+  const [heartbeatSecretLoading, setHeartbeatSecretLoading] = useState(false);
+  const [heartbeatSecretCopied, setHeartbeatSecretCopied] = useState(false);
+  const [showHeartbeatRotateConfirm, setShowHeartbeatRotateConfirm] = useState(false);
+  const [heartbeatRotating, setHeartbeatRotating] = useState(false);
+
   const getActiveCompanyId = () => {
     const cookie = document.cookie
       .split("; ")
@@ -130,7 +138,10 @@ export default function CompanySettingsPage() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (isOwnerOrAdmin) fetchApiToken();
+    if (isOwnerOrAdmin) {
+      fetchApiToken();
+      fetchHeartbeatSecret();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOwnerOrAdmin]);
 
@@ -314,6 +325,61 @@ export default function CompanySettingsPage() {
       await navigator.clipboard.writeText(apiToken);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }
+
+  const fetchHeartbeatSecret = useCallback(async () => {
+    const companyId = getActiveCompanyId();
+    if (!companyId) return;
+    setHeartbeatSecretLoading(true);
+    try {
+      const res = await fetch(`/api/system-settings?companyId=${companyId}&key=heartbeat_secret`);
+      if (res.ok) {
+        const data = await res.json();
+        setHeartbeatSecret(data.value);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setHeartbeatSecretLoading(false);
+    }
+  }, []);
+
+  async function handleRotateHeartbeatSecret() {
+    const companyId = getActiveCompanyId();
+    if (!companyId) return;
+    setHeartbeatRotating(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/system-settings?companyId=${companyId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "regenerate" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHeartbeatSecret(data.token);
+        setHeartbeatSecretRevealed(true);
+        setMessage({ type: "success", text: "Heartbeat secret rotated" });
+      } else {
+        setMessage({ type: "error", text: "Failed to rotate heartbeat secret" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setHeartbeatRotating(false);
+      setShowHeartbeatRotateConfirm(false);
+    }
+  }
+
+  async function handleCopyHeartbeatSecret() {
+    if (!heartbeatSecret) return;
+    try {
+      await navigator.clipboard.writeText(heartbeatSecret);
+      setHeartbeatSecretCopied(true);
+      setTimeout(() => setHeartbeatSecretCopied(false), 2000);
     } catch {
       // ignore
     }
@@ -618,16 +684,20 @@ export default function CompanySettingsPage() {
         </div>
       </div>
 
-      {/* API Access — owner/admin only */}
+      {/* Integrations — owner/admin only */}
       {isOwnerOrAdmin && (
         <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">API ACCESS</h2>
+          <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">INTEGRATIONS</h2>
           <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-            Use this token to authenticate external systems (agents, CI/CD, webhooks) with the CrewCmd API. Include it as a Bearer token in the Authorization header.
+            Manage tokens and secrets for connecting external systems to CrewCmd.
           </p>
 
+          {/* API Token */}
           <div className="mt-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
             <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">CREWCMD API TOKEN</label>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+              Authenticate external systems (agents, CI/CD, webhooks) with the CrewCmd API.
+            </p>
             <div className="mt-2 flex items-center gap-2">
               <code className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-secondary)] select-all overflow-hidden">
                 {apiTokenLoading
@@ -662,19 +732,74 @@ export default function CompanySettingsPage() {
                 {regenerating ? "..." : "REGENERATE"}
               </button>
             </div>
-
             <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">
               Example: <code className="text-[var(--text-secondary)]">Authorization: Bearer &lt;token&gt;</code>
             </p>
           </div>
 
-          {/* Regenerate confirmation dialog */}
+          {/* Heartbeat Secret */}
+          <div className="mt-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
+            <label className="block text-[10px] tracking-wider text-[var(--text-tertiary)]">HEARTBEAT SECRET</label>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+              Used by OpenClaw agents to authenticate heartbeat check-ins.
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-secondary)] select-all overflow-hidden">
+                {heartbeatSecretLoading
+                  ? "Loading..."
+                  : heartbeatSecret
+                    ? heartbeatSecretRevealed
+                      ? heartbeatSecret
+                      : "\u2022".repeat(48)
+                    : "Not configured"}
+              </code>
+              {heartbeatSecret && (
+                <>
+                  <button
+                    onClick={() => setHeartbeatSecretRevealed(!heartbeatSecretRevealed)}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {heartbeatSecretRevealed ? "HIDE" : "REVEAL"}
+                  </button>
+                  <button
+                    onClick={handleCopyHeartbeatSecret}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {heartbeatSecretCopied ? "COPIED" : "COPY"}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setShowHeartbeatRotateConfirm(true)}
+                disabled={heartbeatRotating}
+                className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
+              >
+                {heartbeatRotating ? "..." : "ROTATE"}
+              </button>
+            </div>
+
+            {/* Local discovery note */}
+            <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+              <p className="text-[10px] text-emerald-400">
+                <span className="font-bold tracking-wider">LOCAL:</span> Auto-written to <code className="text-emerald-300">~/.crewcmd/heartbeat-secret</code> — local OpenClaw agents discover it automatically (zero config).
+              </p>
+            </div>
+
+            {/* Remote runtime note */}
+            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+              <p className="text-[10px] text-amber-400">
+                <span className="font-bold tracking-wider">REMOTE:</span> For OpenClaw instances on other machines, copy this secret and set it as the <code className="text-amber-300">HEARTBEAT_SECRET</code> environment variable on the remote host.
+              </p>
+            </div>
+          </div>
+
+          {/* Regenerate API token confirmation dialog */}
           {showRegenConfirm && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
               <div className="mx-4 w-full max-w-sm rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-xl">
                 <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">REGENERATE API TOKEN?</h3>
                 <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                  This will invalidate the current token. All external integrations using the old token will stop working immediately.
+                  This will invalidate the current API token. All external integrations using the old token will stop working immediately.
                 </p>
                 <div className="mt-4 flex justify-end gap-2">
                   <button
@@ -689,6 +814,33 @@ export default function CompanySettingsPage() {
                     className="rounded-lg bg-red-500/20 px-4 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-colors hover:bg-red-500/30 disabled:opacity-50"
                   >
                     {regenerating ? "REGENERATING..." : "CONFIRM REGENERATE"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rotate heartbeat secret confirmation dialog */}
+          {showHeartbeatRotateConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <div className="mx-4 w-full max-w-sm rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-xl">
+                <h3 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">ROTATE HEARTBEAT SECRET?</h3>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  This will invalidate the current heartbeat secret. All OpenClaw agents using the old secret will stop authenticating immediately. The local secret file (~/.crewcmd/heartbeat-secret) will also be updated.
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowHeartbeatRotateConfirm(false)}
+                    className="rounded-lg border border-[var(--border-medium)] px-4 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    onClick={handleRotateHeartbeatSecret}
+                    disabled={heartbeatRotating}
+                    className="rounded-lg bg-red-500/20 px-4 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-colors hover:bg-red-500/30 disabled:opacity-50"
+                  >
+                    {heartbeatRotating ? "ROTATING..." : "CONFIRM ROTATE"}
                   </button>
                 </div>
               </div>

@@ -369,9 +369,19 @@ export default function ChatPage() {
 
   // Save messages when they change (only if we have more than what's cached)
   const hasLoadedFromDB = useRef(false);
+  const lastLoadedSessionKey = useRef(activeSessionKey);
   useEffect(() => {
     // Don't save the initial localStorage cache back (it may be stale);
-    // only save once DB load has completed or when user sends/receives messages
+    // only save once DB load has completed or when user sends/receives messages.
+    // Guard: when both messages and activeSessionKey change simultaneously (agent
+    // switch), don't write empty messages to the NEW agent's key — that would wipe
+    // the new agent's localStorage cache before the load effect reads it.
+    if (messages.length === 0 && activeSessionKey !== lastLoadedSessionKey.current) {
+      // Agent just switched and messages were cleared — skip this save
+      lastLoadedSessionKey.current = activeSessionKey;
+      return;
+    }
+    lastLoadedSessionKey.current = activeSessionKey;
     if (hasLoadedFromDB.current || messages.length === 0) {
       saveMessages(activeSessionKey, messages);
     }
@@ -475,9 +485,17 @@ export default function ChatPage() {
   const handleAgentSelect = useCallback(
     (agent: Agent) => {
       if (agent.id === selectedAgent?.id) return;
+      // Abort any in-flight streaming request so old agent's response doesn't bleed
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       // Save current messages before switching
       saveMessages(activeSessionKey, messages);
       setStreamingContent("");
+      streamingContentRef.current = "";
+      streamingAgentRef.current = null;
+      setIsLoading(false);
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       setSelectedAgent(agent);
@@ -1093,8 +1111,10 @@ export default function ChatPage() {
         setStreamingContent("");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          // User cancelled with Escape — keep any partial content as the message
-          if (fullContent) {
+          // Only persist partial content if still on the same agent (user pressed Escape).
+          // If the agent changed (switch triggered the abort), discard silently.
+          const stillSameAgent = streamingAgentRef.current === agentCallsign;
+          if (fullContent && stillSameAgent) {
             const cancelledContent = fullContent + "\n\n_(cancelled)_";
             setMessages((prev) => [
               ...prev,

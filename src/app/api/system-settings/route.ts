@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { systemSettings, companyMembers } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { resolveCurrentUser } from "@/lib/resolve-user";
+import { writeHeartbeatSecretFile } from "@/lib/system-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
     });
 
   process.env.HEARTBEAT_SECRET = newToken;
+  writeHeartbeatSecretFile(newToken);
 
   return NextResponse.json({ token: newToken });
 }

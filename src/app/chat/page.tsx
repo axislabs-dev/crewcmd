@@ -163,7 +163,7 @@ export default function ChatPage() {
   // ?reset=1 in URL clears localStorage chat cache (for mobile debugging)
   useEffect(() => {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("reset")) {
-      const keys = Object.keys(localStorage).filter((k) => k.startsWith("chat_"));
+      const keys = Object.keys(localStorage).filter((k) => k.startsWith("crewcmd-chat-"));
       keys.forEach((k) => localStorage.removeItem(k));
       window.history.replaceState({}, "", window.location.pathname);
       window.location.reload();
@@ -310,7 +310,11 @@ export default function ChatPage() {
         return;
       }
 
-      // 4. If nothing else, keep whatever localStorage had
+      // 4. DB is empty — this is a fresh database; discard stale localStorage cache
+      if (cached.length > 0) {
+        setMessages([]);
+        saveMessages(activeSessionKey, []);
+      }
     }
 
     load();

@@ -48,7 +48,8 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.0.1",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

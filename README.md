@@ -31,11 +31,11 @@ No database setup required. CrewCmd runs with embedded Postgres locally.
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
 pnpm install
-pnpm dev
-# Open http://localhost:3000
+pnpm dev:https
+# Open https://localhost:3000
 ```
 
-That's it. No Docker, no cloud database, no config files.
+That's it. No Docker, no cloud database, no config files. HTTPS is required for voice features (microphone access needs a secure context).
 
 ### Other deployment options
 
@@ -92,7 +92,7 @@ CrewCmd is source-available under the [BSL 1.1](./LICENSE). Contributions welcom
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
 pnpm install
-pnpm dev
+pnpm dev:https
 ```
 
 See [CLAUDE.md](./CLAUDE.md) for the project plan and architecture notes.

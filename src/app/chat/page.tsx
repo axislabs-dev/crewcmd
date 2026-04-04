@@ -376,6 +376,12 @@ export default function ChatPage() {
   const handleAgentSelect = useCallback(
     (agent: Agent) => {
       if (agent.id === selectedAgent?.id) return;
+      // Abort any in-flight streaming to prevent cross-agent bleed
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
       setStreamingContent("");
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);

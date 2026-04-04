@@ -1,8 +1,81 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
+import { db, withRetry } from "@/db";
+import { chatMessages, chatSessions } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
+import { publishChatEvent } from "@/lib/chat-pubsub";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Find-or-create a chat session for an agent+company pair.
+ * Returns the session ID.
+ */
+async function resolveSessionId(agentId: string, companyId: string): Promise<string> {
+  const agentLower = agentId.toLowerCase();
+
+  const existing = await withRetry(() =>
+    db!.select().from(chatSessions)
+      .where(eq(chatSessions.agentId, agentLower))
+      .orderBy(desc(chatSessions.updatedAt))
+      .limit(1)
+  );
+
+  if (existing.length > 0) return existing[0].id;
+
+  const [newSession] = await withRetry(() =>
+    db!.insert(chatSessions).values({
+      companyId,
+      agentId: agentLower,
+    }).returning()
+  );
+  return newSession.id;
+}
+
+/**
+ * Persist a message to the DB and publish to the event bus.
+ * Returns the DB record.
+ */
+async function persistAndPublish(
+  sessionId: string,
+  agentId: string,
+  companyId: string,
+  role: "user" | "assistant",
+  content: string,
+  metadata?: Record<string, unknown> | null,
+  interrupted?: boolean,
+) {
+  const [message] = await withRetry(() =>
+    db!.insert(chatMessages).values({
+      sessionId,
+      role,
+      content,
+      metadata: metadata || null,
+    }).returning()
+  );
+
+  // Touch session updatedAt
+  await withRetry(() =>
+    db!.update(chatSessions)
+      .set({ updatedAt: new Date() })
+      .where(eq(chatSessions.id, sessionId))
+  );
+
+  publishChatEvent({
+    id: message.id,
+    sessionId,
+    agentId: agentId.toLowerCase(),
+    companyId,
+    role,
+    content,
+    metadata: metadata || null,
+    createdAt: message.createdAt.toISOString(),
+    interrupted,
+  });
+
+  return message;
+}
 
 export async function POST(request: NextRequest) {
   const authError = await requireAuth(request);
@@ -10,7 +83,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages, agent } = body;
+    const { messages, agent, companyId: bodyCompanyId } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return Response.json(
@@ -28,41 +101,110 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = await getGatewayClient();
-    holdClient(client);
-
-    // Use the agent's session key — "main" for default, agent callsign for specific agents
     const agentId = agent || "main";
     const sessionKey = agentId === "main" ? "main" : agentId;
+
+    // Resolve company ID from body or cookie
+    const companyId = bodyCompanyId ||
+      request.cookies.get("active_company")?.value ||
+      "";
+
+    // --- Server-side persistence: persist user message BEFORE sending to gateway ---
+    let userMessageId: string | null = null;
+    let sessionId: string | null = null;
+
+    if (db && companyId) {
+      try {
+        sessionId = await resolveSessionId(agentId, companyId);
+        const userMsg = await persistAndPublish(
+          sessionId,
+          agentId,
+          companyId,
+          "user",
+          lastUserMessage.content,
+          body.metadata || null,
+        );
+        userMessageId = userMsg.id;
+      } catch (err) {
+        console.error("[api/chat] Failed to persist user message:", err);
+        // Continue — gateway chat still works without DB
+      }
+    }
+
+    const client = await getGatewayClient();
+    holdClient(client);
 
     // Set up SSE stream
     const encoder = new TextEncoder();
     let streamController: ReadableStreamDefaultController | null = null;
     const cleanupFns: Array<() => void> = [];
 
+    let done = false;
+    let lastStreamedText = "";
+    let fullAssistantText = "";
+    let assistantPersisted = false;
+
+    /**
+     * Persist the assistant message (called on final, error, abort, cancel, timeout).
+     * Guarded to run at most once.
+     */
+    const persistAssistant = async (interrupted: boolean) => {
+      if (assistantPersisted || !db || !sessionId || !companyId) return;
+      assistantPersisted = true;
+      if (!fullAssistantText) return;
+
+      const content = interrupted
+        ? fullAssistantText + "\n\n_(interrupted)_"
+        : fullAssistantText;
+
+      try {
+        const msg = await persistAndPublish(
+          sessionId,
+          agentId,
+          companyId,
+          "assistant",
+          content,
+          null,
+          interrupted,
+        );
+        // Send assistant message ID to client as a meta event
+        if (streamController && !done) {
+          const meta = JSON.stringify({ type: "meta", messageId: msg.id, role: "assistant" });
+          try {
+            streamController.enqueue(encoder.encode(`data: ${meta}\n\n`));
+          } catch {
+            // Stream may already be closed
+          }
+        }
+      } catch (err) {
+        console.error("[api/chat] Failed to persist assistant message:", err);
+      }
+    };
+
     const stream = new ReadableStream({
       start(controller) {
         streamController = controller;
+
+        // Send user message meta event with DB ID
+        if (userMessageId) {
+          const meta = JSON.stringify({ type: "meta", messageId: userMessageId, role: "user" });
+          controller.enqueue(encoder.encode(`data: ${meta}\n\n`));
+        }
       },
       cancel() {
-        // Client disconnected, clean up event listeners
+        // Client disconnected — persist whatever was streamed so far
+        persistAssistant(true);
         for (const fn of cleanupFns) fn();
         releaseClient(client);
       },
     });
 
-    let done = false;
-    let lastStreamedText = "";
-
     // Extract text content from a gateway chat message object
-    // Handles: string, { content: string }, { text: string },
-    // { content: [{ type: "text", text: "..." }] }
     function extractText(message: unknown): string {
       if (typeof message === "string") return message;
       if (!message || typeof message !== "object") return "";
       const msg = message as Record<string, unknown>;
 
-      // Try content array format: { role, content: [{ type: "text", text: "..." }] }
       if (Array.isArray(msg.content)) {
         return (msg.content as Array<Record<string, unknown>>)
           .filter((c) => c.type === "text" && typeof c.text === "string")
@@ -70,7 +212,6 @@ export async function POST(request: NextRequest) {
           .join("");
       }
 
-      // Try plain text/content field
       if (typeof msg.content === "string") return msg.content;
       if (typeof msg.text === "string") return msg.text;
 
@@ -81,19 +222,13 @@ export async function POST(request: NextRequest) {
       if (!streamController || done) return;
       const p = payload as Record<string, unknown>;
 
-      // Filter: only handle events for THIS session (prevents cross-agent bleed)
-      // Gateway may use full session keys like "agent:main:neo" while we send "NEO"
+      // Filter: only handle events for THIS session
       const eventSession = ((p.sessionKey as string) || (p.session as string) || "").toLowerCase();
       const ourSession = sessionKey.toLowerCase();
-      console.log(`[api/chat] Event received: state="${p.state}" eventSession="${eventSession}" ourSession="${ourSession}" keys=${Object.keys(p).join(",")}`);
 
       if (eventSession && eventSession !== ourSession) {
-        // Check if our sessionKey is a suffix of the gateway's full session key
         const isMatch = eventSession.endsWith(`:${ourSession}`) || eventSession === ourSession;
-        if (!isMatch) {
-          console.log(`[api/chat] Skipping event for session "${eventSession}" (ours: "${ourSession}")`);
-          return;
-        }
+        if (!isMatch) return;
       }
 
       const state = p.state as string;
@@ -103,6 +238,7 @@ export async function POST(request: NextRequest) {
         if (fullText && fullText.length > lastStreamedText.length) {
           const newContent = fullText.slice(lastStreamedText.length);
           lastStreamedText = fullText;
+          fullAssistantText = fullText;
 
           const chunk = JSON.stringify({
             choices: [{ delta: { content: newContent } }],
@@ -113,51 +249,59 @@ export async function POST(request: NextRequest) {
         const finalText = extractText(p.message);
         if (finalText && finalText.length > lastStreamedText.length) {
           const remaining = finalText.slice(lastStreamedText.length);
-
           const chunk = JSON.stringify({
             choices: [{ delta: { content: remaining } }],
           });
           streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         }
+        if (finalText) fullAssistantText = finalText;
 
-        done = true;
-        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
-        streamController.close();
-        client.off("chat", chatHandler);
-        releaseClient(client);
+        // Persist the complete assistant response
+        persistAssistant(false).then(() => {
+          done = true;
+          try {
+            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+            streamController!.close();
+          } catch { /* already closed */ }
+          client.off("chat", chatHandler);
+          releaseClient(client);
+        });
       } else if (state === "aborted") {
-        done = true;
-        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
-        streamController.close();
-        client.off("chat", chatHandler);
-        releaseClient(client);
+        persistAssistant(true).then(() => {
+          done = true;
+          try {
+            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+            streamController!.close();
+          } catch { /* already closed */ }
+          client.off("chat", chatHandler);
+          releaseClient(client);
+        });
       } else if (state === "error") {
         const errorMsg = (p.errorMessage as string) || "Chat error";
         const chunk = JSON.stringify({
           choices: [{ delta: { content: `\n\nError: ${errorMsg}` } }],
         });
         streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-        done = true;
-        streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
-        streamController.close();
-        client.off("chat", chatHandler);
-        releaseClient(client);
+        fullAssistantText += `\n\nError: ${errorMsg}`;
+
+        persistAssistant(true).then(() => {
+          done = true;
+          try {
+            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+            streamController!.close();
+          } catch { /* already closed */ }
+          client.off("chat", chatHandler);
+          releaseClient(client);
+        });
       }
     };
 
-    // Debug: log ALL gateway events to find the right event name
-    const debugHandler = (payload: unknown) => {
-      const p = payload as Record<string, string>;
-      console.log(`[api/chat] [debug-wildcard] event="${p.event}" state="${p.state}" sessionKey="${p.sessionKey}" keys=${Object.keys(p).join(",")}`);
-    };
-    client.on("*", debugHandler);
     client.on("chat", chatHandler);
     cleanupFns.push(() => {
       client.off("chat", chatHandler);
-      client.off("*", debugHandler);
     });
 
-    // Send the user's message to the gateway as-is
+    // Send the user's message to the gateway
     try {
       await client.chatSend({
         message: lastUserMessage.content,
@@ -177,14 +321,15 @@ export async function POST(request: NextRequest) {
     // Safety timeout - if no [DONE] in 5 minutes, close the stream
     setTimeout(() => {
       if (!done && streamController) {
-        done = true;
-        try {
-          streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
-          streamController.close();
-        } catch { /* already closed */ }
-        client.off("chat", chatHandler);
-        client.off("*", debugHandler);
-        releaseClient(client);
+        persistAssistant(true).then(() => {
+          done = true;
+          try {
+            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+            streamController!.close();
+          } catch { /* already closed */ }
+          client.off("chat", chatHandler);
+          releaseClient(client);
+        });
       }
     }, 300_000);
 

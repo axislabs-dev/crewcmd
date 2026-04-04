@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -13,6 +13,21 @@ interface InviteInfo {
 }
 
 export default function JoinPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
+          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
+          <p className="text-sm text-[var(--text-tertiary)]">Loading...</p>
+        </div>
+      }
+    >
+      <JoinPageContent />
+    </Suspense>
+  );
+}
+
+function JoinPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");

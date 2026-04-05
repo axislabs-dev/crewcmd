@@ -1,18 +1,68 @@
 import "dotenv/config";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import { agents, tasks, activityLog, projects, docs } from "./schema";
+import {
+  agents,
+  tasks,
+  activityLog,
+  projects,
+  docs,
+  orgChartNodes,
+  teamBlueprints,
+  companies,
+} from "./schema";
+import type { BlueprintTemplate } from "./schema";
 
-async function seed() {
-  if (!process.env.DATABASE_URL) {
-    console.error("DATABASE_URL not set. Skipping seed.");
-    process.exit(1);
+/**
+ * Resolve the correct Drizzle DB instance for the current environment.
+ *
+ * - DATABASE_URL set → Neon or standard Postgres via ./index
+ * - No DATABASE_URL  → PGlite (local dev); we bootstrap it directly here
+ *   because instrumentation.ts doesn't run when executing via `tsx`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getDb(): Promise<any> {
+  if (process.env.DATABASE_URL) {
+    const isNeon =
+      process.env.DATABASE_URL.includes("neon.tech") ||
+      process.env.DATABASE_URL.includes("neon.") ||
+      !!process.env.USE_NEON_DRIVER;
+    console.log(
+      `[seed] Using ${isNeon ? "Neon (serverless)" : "Postgres (standard)"} — DATABASE_URL is set`
+    );
+    const { db } = await import("./index");
+    return db;
   }
 
-  const sql = neon(process.env.DATABASE_URL);
-  const db = drizzle(sql);
+  console.log("[seed] Using PGlite (local dev mode) — data at .data/pglite");
+  const { pgliteDb, migrationPromise } = await import("./pglite");
+  await migrationPromise;
+  return pgliteDb;
+}
 
-  console.log("Seeding agents...");
+async function seed() {
+  const db = await getDb();
+
+  // ── Idempotency: skip if data already exists ────────────────────────
+  const existing = await db.select().from(agents).limit(1);
+  if (existing.length > 0) {
+    console.log("[seed] Data already exists — skipping. Drop the DB or delete .data/pglite to re-seed.");
+    process.exit(0);
+  }
+
+  // ── Company ─────────────────────────────────────────────────────────
+  console.log("[seed] Seeding demo company...");
+  const [company] = await db
+    .insert(companies)
+    .values([
+      {
+        name: "CrewCmd Demo",
+        mission: "Ship the future of AI-native teamwork.",
+        createdBy: "seed",
+      },
+    ])
+    .returning();
+
+  // ── Agents ──────────────────────────────────────────────────────────
+  console.log("[seed] Seeding agents...");
   const [neo, cipher, havoc, pulse, razor, ghost, viper] = await db
     .insert(agents)
     .values([
@@ -25,6 +75,7 @@ async function seed() {
         status: "online",
         currentTask: "Orchestrating Q1 revenue strategy",
         reportsTo: null,
+        companyId: company.id,
         soulContent:
           "The Orchestrator. Sees the matrix of revenue streams and connects every agent to the mission.",
       },
@@ -37,6 +88,7 @@ async function seed() {
         status: "working",
         currentTask: "Building CrewCmd dashboard",
         reportsTo: "Neo",
+        companyId: company.id,
         soulContent:
           "The Builder. Writes code that ships. Pragmatic, fast, and obsessed with clean architecture.",
       },
@@ -49,6 +101,7 @@ async function seed() {
         status: "online",
         currentTask: "Reviewing campaign performance",
         reportsTo: "Neo",
+        companyId: company.id,
         soulContent:
           "The Firestarter. Turns attention into revenue. Bold campaigns, viral content, relentless growth.",
       },
@@ -61,6 +114,7 @@ async function seed() {
         status: "idle",
         currentTask: null,
         reportsTo: "Havoc",
+        companyId: company.id,
         soulContent:
           "The Radar. Scans the horizon for emerging trends, competitor moves, and market shifts.",
       },
@@ -73,6 +127,7 @@ async function seed() {
         status: "working",
         currentTask: "Editing product demo video",
         reportsTo: "Havoc",
+        companyId: company.id,
         soulContent:
           "The Blade. Cuts through noise with sharp visuals and compelling video.",
       },
@@ -85,6 +140,7 @@ async function seed() {
         status: "online",
         currentTask: "Optimizing landing page keywords",
         reportsTo: "Havoc",
+        companyId: company.id,
         soulContent:
           "The Phantom. Invisible but everywhere. Dominates search rankings and crafts content that converts.",
       },
@@ -97,13 +153,15 @@ async function seed() {
         status: "offline",
         currentTask: null,
         reportsTo: "Havoc",
+        companyId: company.id,
         soulContent:
           "The Striker. Fast, precise outreach that converts. Builds partnerships and growth loops.",
       },
     ])
     .returning();
 
-  console.log("Seeding projects...");
+  // ── Projects ────────────────────────────────────────────────────────
+  console.log("[seed] Seeding projects...");
   const [projCC, projLaunch, projContent] = await db
     .insert(projects)
     .values([
@@ -131,7 +189,8 @@ async function seed() {
     ])
     .returning();
 
-  console.log("Seeding tasks...");
+  // ── Tasks ───────────────────────────────────────────────────────────
+  console.log("[seed] Seeding tasks...");
   await db.insert(tasks).values([
     {
       title: "Build CrewCmd Dashboard",
@@ -203,7 +262,8 @@ async function seed() {
     },
   ]);
 
-  console.log("Seeding activity log...");
+  // ── Activity Log ────────────────────────────────────────────────────
+  console.log("[seed] Seeding activity log...");
   await db.insert(activityLog).values([
     {
       agentId: cipher.id,
@@ -231,7 +291,8 @@ async function seed() {
     },
   ]);
 
-  console.log("Seeding docs...");
+  // ── Docs ────────────────────────────────────────────────────────────
+  console.log("[seed] Seeding docs...");
   await db.insert(docs).values([
     {
       title: "CrewCmd Architecture",
@@ -269,7 +330,112 @@ async function seed() {
     },
   ]);
 
-  console.log("Seed complete.");
+  // ── Org Chart Nodes ─────────────────────────────────────────────────
+  console.log("[seed] Seeding org chart nodes...");
+  const [neoNode] = await db
+    .insert(orgChartNodes)
+    .values([
+      {
+        companyId: company.id,
+        agentId: neo.callsign,
+        positionTitle: "Chief Revenue Officer",
+        parentNodeId: null,
+        canDelegate: true,
+        sortIndex: 0,
+      },
+    ])
+    .returning();
+
+  await db.insert(orgChartNodes).values([
+    {
+      companyId: company.id,
+      agentId: cipher.callsign,
+      positionTitle: "CTO & Founding Software Engineer",
+      parentNodeId: neoNode.id,
+      canDelegate: true,
+      sortIndex: 0,
+    },
+  ]);
+
+  // ── Team Blueprint ──────────────────────────────────────────────────
+  console.log("[seed] Seeding team blueprints...");
+  const startupTemplate: BlueprintTemplate = {
+    agents: [
+      {
+        callsign: "Founder",
+        name: "Founder",
+        title: "CEO & Visionary",
+        emoji: "🚀",
+        color: "#00f0ff",
+        role: "executive",
+        adapterType: "openclaw_gateway",
+        skills: ["web-browse", "shell"],
+      },
+      {
+        callsign: "Builder",
+        name: "Builder",
+        title: "Full-Stack Engineer",
+        emoji: "🔧",
+        color: "#f0ff00",
+        role: "engineer",
+        adapterType: "openclaw_gateway",
+        reportsTo: "Founder",
+        skills: ["claude-code", "github", "shell"],
+      },
+      {
+        callsign: "Hustler",
+        name: "Hustler",
+        title: "Growth & Marketing Lead",
+        emoji: "📣",
+        color: "#ff6600",
+        role: "marketing",
+        adapterType: "openclaw_gateway",
+        reportsTo: "Founder",
+        skills: ["web-browse"],
+      },
+      {
+        callsign: "Ops",
+        name: "Ops",
+        title: "Operations & Finance",
+        emoji: "📊",
+        color: "#00ff88",
+        role: "operations",
+        adapterType: "openclaw_gateway",
+        reportsTo: "Founder",
+        skills: ["file-system", "shell"],
+      },
+    ],
+    hierarchy: [
+      { callsign: "Founder", children: ["Builder", "Hustler", "Ops"] },
+    ],
+    description:
+      "A lean founding team for an early-stage startup: CEO, engineer, growth lead, and ops.",
+    useCases: [
+      "MVP development",
+      "Early-stage product launch",
+      "Bootstrapped startup operations",
+    ],
+  };
+
+  await db.insert(teamBlueprints).values([
+    {
+      name: "Startup Founding Team",
+      slug: "startup-founding-team",
+      description:
+        "A lean 4-person founding team covering engineering, growth, and operations — perfect for going from zero to one.",
+      category: "Startup",
+      icon: "🚀",
+      agentCount: 4,
+      isBuiltIn: true,
+      template: startupTemplate,
+      popularity: 0,
+    },
+  ]);
+
+  console.log("[seed] Seed complete.");
 }
 
-seed().catch(console.error);
+seed().catch((err) => {
+  console.error("[seed] Failed:", err);
+  process.exit(1);
+});

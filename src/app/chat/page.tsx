@@ -258,9 +258,20 @@ export default function ChatPage() {
           if (lastStore?.id === lastLocal?.id) return prev;
         }
 
-        // Merge: keep local optimistic messages, add store messages, deduplicate
+        // Merge: keep local optimistic messages ONLY if the store doesn't
+        // already contain their server-persisted counterpart. Match on
+        // role + content to catch the case where the SSE-delivered real
+        // message arrives before the meta event replaces the optimistic ID.
         const storeIds = new Set(storeMessages.map((m) => m.id));
-        const optimistic = prev.filter((m) => !storeIds.has(m.id) && m.id.startsWith("optimistic-"));
+        const storeContentKeys = new Set(
+          storeMessages.map((m) => `${m.role}::${m.content}`)
+        );
+        const optimistic = prev.filter(
+          (m) =>
+            !storeIds.has(m.id) &&
+            m.id.startsWith("optimistic-") &&
+            !storeContentKeys.has(`${m.role}::${m.content}`)
+        );
         const merged = [
           ...storeMessages.map((m) => ({
             id: m.id,

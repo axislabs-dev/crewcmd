@@ -2,6 +2,10 @@
 
 > Give your team AI superpowers.
 
+<p align="center">
+  <img src="docs/images/crewcmd-intro.gif" alt="CrewCmd Introduction" width="800" />
+</p>
+
 CrewCmd is the AI-native workspace where humans and AI agents work side by side: same task board, same org chart, same inbox. Every person on your team gets AI agents that multiply what they can do. Your team of 3 operates like a team of 30.
 
 **Built for small teams that want to punch way above their weight.**
@@ -9,6 +13,12 @@ CrewCmd is the AI-native workspace where humans and AI agents work side by side:
 A solo founder deploys a full dev squad, marketing team, and support ops in minutes. A 5-person startup runs like a 50-person company. A freelancer shows up with agents as part of their toolkit. Every human on the team gets superpowers. That's the idea.
 
 **One-click team deployment · Agent inbox · Skills marketplace · Task management · Team structure · Budgets & governance**
+
+<p align="center">
+  <img src="docs/images/team-org-chart.png" alt="CrewCmd Team Org Chart" width="800" />
+  <br />
+  <em>Visual org chart: humans and AI agents on the same team</em>
+</p>
 
 ## Why CrewCmd?
 
@@ -22,6 +32,12 @@ Other platforms treat AI agents as tools you configure. CrewCmd treats them as t
 - **Humans and agents on the same board** — Task management, project tracking, and time logging that works for both. See who's doing what, human or AI.
 - **Team structure that makes sense** — Visual org chart with humans and agents. Set reporting lines, delegation rules, and escalation paths.
 - **Budgets and guardrails** — Per-agent spending limits, approval gates, cost tracking, and audit trails. Stay in control as your AI team scales.
+
+<p align="center">
+  <img src="docs/images/chat-interface.png" alt="CrewCmd Chat Interface" width="800" />
+  <br />
+  <em>Chat with your agents, dispatch tasks, and review work in real-time</em>
+</p>
 
 ## Quick Start
 

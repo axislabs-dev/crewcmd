@@ -34,9 +34,9 @@ Other platforms treat AI agents as tools you configure. CrewCmd treats them as t
 - **Budgets and guardrails** — Per-agent spending limits, approval gates, cost tracking, and audit trails. Stay in control as your AI team scales.
 
 <p align="center">
-  <img src="docs/images/chat-interface.png" alt="CrewCmd Chat Interface" width="800" />
+  <img src="docs/images/chat-interface.png" alt="CrewCmd Hands-Free Chat" width="400" />
   <br />
-  <em>Chat with your agents, dispatch tasks, and review work in real-time</em>
+  <em>Hands-free voice chat with your agents, from anywhere</em>
 </p>
 
 ## Quick Start

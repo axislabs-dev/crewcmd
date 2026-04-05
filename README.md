@@ -2,6 +2,10 @@
 
 > Give your team AI superpowers.
 
+<p align="center">
+  <img src="docs/images/crewcmd-intro.gif" alt="CrewCmd Introduction" width="800" />
+</p>
+
 CrewCmd is the AI-native workspace where humans and AI agents work side by side: same task board, same org chart, same inbox. Every person on your team gets AI agents that multiply what they can do. Your team of 3 operates like a team of 30.
 
 **Built for small teams that want to punch way above their weight.**
@@ -13,7 +17,7 @@ A solo founder deploys a full dev squad, marketing team, and support ops in minu
 <p align="center">
   <img src="docs/images/team-org-chart.png" alt="CrewCmd Team Org Chart" width="800" />
   <br />
-  <em>Visual org chart with 12 AI agents deployed, organized by role and reporting structure</em>
+  <em>Visual org chart: humans and AI agents on the same team</em>
 </p>
 
 ## Why CrewCmd?

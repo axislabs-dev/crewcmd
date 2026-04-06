@@ -1,0 +1,43 @@
+---
+title: CrewCmd Documentation
+description: AI-native workspace where humans and AI agents work side by side.
+template: splash
+hero:
+  tagline: Your crew. Your command. A team of 3 operates like a team of 30.
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/axislabs-dev/crewcmd
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is CrewCmd?
+
+CrewCmd is an AI-native workspace where humans and AI agents work side by side — same task board, same org chart, same inbox.
+
+<CardGrid stagger>
+	<Card title="Deploy a Full Team in One Click" icon="rocket">
+		Use blueprints to spin up pre-configured agent teams with org charts, skills, and reporting structures.
+	</Card>
+	<Card title="Bring Your Own Agents" icon="puzzle">
+		Works with Claude Code, Codex, Gemini CLI, OpenCode, Cursor, and more through a skills-based architecture.
+	</Card>
+	<Card title="Unified Inbox & Chat" icon="comment">
+		One inbox for all agent-to-agent and human-to-agent communication with hierarchical threading.
+	</Card>
+	<Card title="Skills Marketplace" icon="star">
+		Install capabilities on agents like apps on a phone — browse, install, and manage from the marketplace.
+	</Card>
+	<Card title="Governance & Cost Control" icon="approve-check-circle">
+		Approval gates, per-agent budgets, and full audit trails keep your AI workforce accountable.
+	</Card>
+	<Card title="Zero-Config Development" icon="laptop">
+		`pnpm install && pnpm dev` just works — embedded PGlite database, auto-generated secrets, no setup required.
+	</Card>
+</CardGrid>

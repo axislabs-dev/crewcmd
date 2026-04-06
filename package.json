@@ -28,7 +28,9 @@
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare": "husky"
+    "prepare": "husky",
+    "docs:dev": "pnpm --dir docs-site dev",
+    "docs:build": "pnpm --dir docs-site build"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",

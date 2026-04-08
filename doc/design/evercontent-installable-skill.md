@@ -109,6 +109,7 @@ Notes:
 - `secretRef` is the important pattern to reuse later for other SaaS skills.
 - Avoid storing raw API keys in `skills.content` or `agent_skills.config`.
 - In v1, if CrewCMD lacks a generic secrets abstraction for non-LLM services, add one **generically** later rather than making an EverContent-only column.
+- The default operating mode should be **review-only**: agents can discover, draft, and submit content for review, but should not publish directly unless a broader permission is explicitly granted in assignment config.
 
 ## Minimal v1 API / skill surface
 

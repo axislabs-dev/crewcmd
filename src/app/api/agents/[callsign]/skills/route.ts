@@ -41,6 +41,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const enriched = rows.map((r) => ({
       ...r,
+      config: r.config ?? {},
       skill: skillMap.get(r.skillId) || null,
     }));
 
@@ -64,18 +65,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { skillId } = body;
+    const { skillId, enabled, config } = body;
 
     if (!skillId) {
       return NextResponse.json({ error: "skillId is required" }, { status: 400 });
+    }
+
+    if (enabled !== undefined && typeof enabled !== "boolean") {
+      return NextResponse.json({ error: "enabled must be a boolean when provided" }, { status: 400 });
+    }
+
+    if (config !== undefined && (!config || typeof config !== "object" || Array.isArray(config))) {
+      return NextResponse.json({ error: "config must be an object when provided" }, { status: 400 });
     }
 
     const [created] = await withRetry(() =>
       db!.insert(schema.agentSkills).values({
         agentId: agent.id,
         skillId,
-        enabled: true,
-        config: {},
+        enabled: enabled ?? true,
+        config: config ?? {},
       }).returning()
     );
 

@@ -38,6 +38,32 @@ export function isSecretRefValue(value: unknown): value is SecretRefValue {
   return isObject(secretRef) && typeof secretRef.name === "string" && secretRef.name.trim().length > 0;
 }
 
+export async function resolveSecretRef(companyId: string | null | undefined, secretRef: unknown): Promise<string | null> {
+  if (!companyId || !db) {
+    return null;
+  }
+
+  const normalized = isSecretRefValue(secretRef)
+    ? secretRef.secretRef.name.trim()
+    : isObject(secretRef) && typeof secretRef.name === "string" && secretRef.name.trim().length > 0
+      ? secretRef.name.trim()
+      : null;
+
+  if (!normalized) {
+    return null;
+  }
+
+  const [secret] = await withRetry(() =>
+    db!
+      .select({ value: serviceSecrets.value })
+      .from(serviceSecrets)
+      .where(and(eq(serviceSecrets.companyId, companyId), eq(serviceSecrets.name, normalized)))
+      .limit(1)
+  );
+
+  return secret?.value ?? null;
+}
+
 export async function validateSkillConfigSecretRefs(companyId: string | null | undefined, config: unknown) {
   const names = [...collectSecretRefNames(config)];
   if (names.length === 0) return { ok: true as const };
@@ -51,13 +77,7 @@ export async function validateSkillConfigSecretRefs(companyId: string | null | u
   }
 
   for (const name of names) {
-    const [secret] = await withRetry(() =>
-      db!
-        .select({ id: serviceSecrets.id })
-        .from(serviceSecrets)
-        .where(and(eq(serviceSecrets.companyId, companyId), eq(serviceSecrets.name, name)))
-        .limit(1)
-    );
+    const secret = await resolveSecretRef(companyId, { secretRef: { name } });
 
     if (!secret) {
       return { ok: false as const, error: `Unknown secretRef: ${name}` };

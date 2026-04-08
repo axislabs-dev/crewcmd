@@ -64,26 +64,28 @@ Use existing tables; do **not** add new tables in v1 unless required.
   "service": "evercontent",
   "version": 1,
   "auth": {
-    "type": "bearer"
+    "type": "header-api-key",
+    "header": "x-api-key"
   },
   "capabilities": [
-    "clients:list",
+    "customers:list",
     "projects:list",
     "posts:list",
     "posts:get",
     "posts:create",
     "posts:update",
-    "posts:submit"
+    "posts:save",
+    "posts:publish"
   ],
   "configSchema": {
     "type": "object",
     "properties": {
       "baseUrl": { "type": "string" },
-      "workspaceId": { "type": "string" },
-      "defaultClientId": { "type": "string" },
+      "defaultCustomerId": { "type": "string" },
       "defaultProjectId": { "type": "string" },
-      "allowedClientIds": { "type": "array", "items": { "type": "string" } },
+      "allowedCustomerIds": { "type": "array", "items": { "type": "string" } },
       "allowedProjectIds": { "type": "array", "items": { "type": "string" } },
+      "defaultScope": { "type": "string", "enum": ["v1", "project", "customer"] },
       "canPublish": { "type": "boolean" }
     }
   }
@@ -95,11 +97,11 @@ Use existing tables; do **not** add new tables in v1 unless required.
 ```json
 {
   "baseUrl": "https://app.evercontent.com",
-  "workspaceId": "ws_123",
-  "defaultClientId": "client_123",
+  "defaultCustomerId": "customer_123",
   "defaultProjectId": "project_456",
-  "allowedClientIds": ["client_123"],
+  "allowedCustomerIds": ["customer_123"],
   "allowedProjectIds": ["project_456"],
+  "defaultScope": "project",
   "canPublish": false,
   "secretRef": "company:evercontent:primary"
 }
@@ -109,7 +111,8 @@ Notes:
 - `secretRef` is the important pattern to reuse later for other SaaS skills.
 - Avoid storing raw API keys in `skills.content` or `agent_skills.config`.
 - In v1, if CrewCMD lacks a generic secrets abstraction for non-LLM services, add one **generically** later rather than making an EverContent-only column.
-- The default operating mode should be **review-only**: agents can discover, draft, and submit content for review, but should not publish directly unless a broader permission is explicitly granted in assignment config.
+- Bruno confirms two useful API shapes today: a direct API-key based `/api/v1/*` surface and authenticated customer/project scoped routes under `/api/customer/*` and `/api/projects/:projectId/*`.
+- The default operating mode should be **review-only**: agents can discover, draft, and save content for review, but should not publish directly unless a broader permission is explicitly granted in assignment config.
 
 ## Minimal v1 API / skill surface
 
@@ -117,27 +120,27 @@ Treat this as the contract exposed to the agent through the skill instructions.
 
 ### Discovery
 
-#### `clients.list`
-List clients visible to the configured EverContent account.
+#### `customers.list`
+Backed by `GET /api/customers` for broader installs, or `GET /api/customer/projects` when the credential is already customer-scoped.
 
 Suggested response:
 
 ```json
 {
   "items": [
-    { "id": "client_123", "name": "Acme" }
+    { "id": "customer_123", "name": "Acme" }
   ]
 }
 ```
 
 #### `projects.list`
-List projects, optionally filtered by client.
+Backed by `GET /api/projects` or `GET /api/customer/projects`, optionally narrowed by the assignment config.
 
 Input:
 
 ```json
 {
-  "clientId": "client_123"
+  "customerId": "customer_123"
 }
 ```
 
@@ -148,7 +151,7 @@ Response:
   "items": [
     {
       "id": "project_456",
-      "clientId": "client_123",
+      "customerId": "customer_123",
       "name": "Acme Blog"
     }
   ]
@@ -158,27 +161,29 @@ Response:
 ### Blog post operations
 
 #### `posts.list`
-List blog posts for a project.
+Prefer the scoped route `GET /api/projects/:projectId/posts` when a project is known. `GET /api/v1/posts` is useful as a simpler API-key fallback.
 
 Input:
 
 ```json
 {
   "projectId": "project_456",
-  "status": "draft",
-  "limit": 20,
-  "cursor": null
+  "scope": "project"
 }
 ```
 
 #### `posts.get`
-Fetch one post with full editable fields.
+Fetch one post using a scoped route when available.
 
 Input:
 
 ```json
-{ "postId": "post_789" }
+{ "projectId": "project_456", "postId": "post_789" }
 ```
+
+Notes:
+- Bruno exposes `GET /api/projects/:projectId/posts/:postId`
+- customer-scoped installs can also use `GET /api/customer/posts/:postId`
 
 #### `posts.create`
 Create a draft post.
@@ -191,10 +196,13 @@ Input:
   "title": "How to ...",
   "brief": "Short brief",
   "contentMarkdown": "# Draft",
-  "keywords": ["crewcmd"],
-  "status": "draft"
+  "keywords": ["crewcmd"]
 }
 ```
+
+Notes:
+- Bruno exposes both `POST /api/projects/:projectId/posts` and `POST /api/v1/posts`
+- prefer the project-scoped route when the assignment is restricted to specific projects
 
 #### `posts.update`
 Update mutable draft fields.
@@ -203,6 +211,7 @@ Input:
 
 ```json
 {
+  "projectId": "project_456",
   "postId": "post_789",
   "title": "Updated title",
   "brief": "Updated brief",
@@ -211,33 +220,40 @@ Input:
 }
 ```
 
-#### `posts.submit`
-Submit draft for review / handoff / publish pipeline.
+Notes:
+- Bruno exposes `PATCH /api/projects/:projectId/posts/:postId`
+- customer-scoped installs also expose `POST /api/customer/posts/:postId/save`; the skill can normalize both behind a single save/update action
+
+#### `posts.save`
+Persist a draft for review without publishing.
 
 Input:
 
 ```json
-{
-  "postId": "post_789"
-}
+{ "postId": "post_789" }
 ```
 
-Response:
+#### `posts.publish`
+Publish only when `canPublish === true`.
+
+Input:
 
 ```json
-{
-  "id": "post_789",
-  "status": "in_review"
-}
+{ "postId": "post_789" }
 ```
+
+Notes:
+- Bruno confirms `POST /api/v1/posts/:id/publish`
+- project-scoped publish-related routes also exist (`publish-payload`, `publish-wordpress`), but they should stay out of the initial generic skill contract until needed
 
 ## Why this is the right v1 surface
 
 It keeps the API small and useful:
 
-- enough discovery to pick the right client/project
+- enough discovery to pick the right customer/project
 - enough CRUD to create and edit drafts
-- one lifecycle transition (`submit`) instead of over-modeling publish states
+- a review-safe `save` path by default
+- a distinct `publish` capability that can stay disabled per assignment
 
 Do **not** add categories/tags/media/SEO scoring/calendar workflows until real usage demands them.
 

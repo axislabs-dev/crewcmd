@@ -743,7 +743,7 @@ function SkillsTab({
                 spellCheck={false}
               />
               <div className="mt-2 flex items-center justify-between gap-3">
-                <p className="text-[10px] text-[var(--text-tertiary)]">Example: {`{"baseUrl":"https://api.evercontent.io","secretRef":"evercontent_api_key","allowedProjectIds":["thoroughbreds"],"canPublish":false}`}</p>
+                <p className="text-[10px] text-[var(--text-tertiary)]">Example: {`{"baseUrl":"https://app.evercontent.com","secretRef":{"name":"evercontent-api-key"},"allowedProjectIds":["project_456"],"canPublish":false}`}</p>
                 <button
                   onClick={() => saveConfig(s)}
                   disabled={savingSkillId === s.skillId}

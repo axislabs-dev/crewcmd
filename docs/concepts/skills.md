@@ -75,6 +75,17 @@ Pattern:
 - CrewCmd validates that the referenced secret exists for the agent's company before saving the skill config
 - API responses only return masked secret metadata, never raw values
 
+Example EverContent assignment:
+
+```json
+{
+  "baseUrl": "https://app.evercontent.com",
+  "secretRef": { "name": "evercontent-api-key" },
+  "allowedProjectIds": ["project_456"],
+  "canPublish": false
+}
+```
+
 CrewCmd core stays generic here: it stores and validates the reference, while the skill or runtime decides how to resolve and use that secret at execution time.
 
 ## Skill Marketplace

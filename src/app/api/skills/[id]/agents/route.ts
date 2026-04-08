@@ -28,6 +28,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       agentId: a.agentId,
       skillId: a.skillId,
       enabled: a.enabled,
+      config: a.config ?? {},
     }));
 
     return NextResponse.json(result);
@@ -38,7 +39,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 // POST /api/skills/[id]/agents — assign or unassign an agent
-// Body: { agentId: string, enabled?: boolean }
+// Body: { agentId: string, enabled?: boolean, config?: Record<string, unknown> }
 // If agent is already assigned, removes the assignment. Otherwise, creates it.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!db) {
@@ -48,10 +49,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { agentId } = body;
+    const { agentId, enabled, config } = body;
 
     if (!agentId) {
       return NextResponse.json({ error: "agentId is required" }, { status: 400 });
+    }
+
+    if (enabled !== undefined && typeof enabled !== "boolean") {
+      return NextResponse.json({ error: "enabled must be a boolean when provided" }, { status: 400 });
+    }
+
+    if (config !== undefined && (!config || typeof config !== "object" || Array.isArray(config))) {
+      return NextResponse.json({ error: "config must be an object when provided" }, { status: 400 });
     }
 
     // Check if already assigned
@@ -82,8 +91,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .values({
           agentId,
           skillId: id,
-          enabled: true,
-          config: {},
+          enabled: enabled ?? true,
+          config: config ?? {},
         })
         .returning()
     );

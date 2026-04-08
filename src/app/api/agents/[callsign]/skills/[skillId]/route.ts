@@ -24,10 +24,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { enabled } = body;
+    const { enabled, config } = body;
 
-    if (typeof enabled !== "boolean") {
-      return NextResponse.json({ error: "enabled (boolean) is required" }, { status: 400 });
+    if (enabled === undefined && config === undefined) {
+      return NextResponse.json({ error: "enabled or config is required" }, { status: 400 });
+    }
+
+    if (enabled !== undefined && typeof enabled !== "boolean") {
+      return NextResponse.json({ error: "enabled must be a boolean when provided" }, { status: 400 });
+    }
+
+    if (config !== undefined && (!config || typeof config !== "object" || Array.isArray(config))) {
+      return NextResponse.json({ error: "config must be an object when provided" }, { status: 400 });
     }
 
     const [row] = await withRetry(() =>
@@ -46,10 +54,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Skill not assigned to this agent" }, { status: 404 });
     }
 
+    const updates: { enabled?: boolean; config?: Record<string, unknown> } = {};
+    if (enabled !== undefined) updates.enabled = enabled;
+    if (config !== undefined) updates.config = config as Record<string, unknown>;
+
     const [updated] = await withRetry(() =>
       db!
         .update(schema.agentSkills)
-        .set({ enabled })
+        .set(updates)
         .where(eq(schema.agentSkills.id, row.id))
         .returning()
     );

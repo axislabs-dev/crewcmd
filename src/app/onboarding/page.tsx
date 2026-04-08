@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUILT_IN_BLUEPRINTS, type BuiltInBlueprint } from "@/lib/blueprints-data";
 
@@ -58,6 +58,22 @@ export default function OnboardingPage() {
   // Persist device key across retries (probeResult gets cleared on each attempt)
   const [deviceKeyPem, setDeviceKeyPem] = useState<string | undefined>();
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const existingCompanyId = document.cookie.match(/(?:^|;\s*)active_company=([^;]*)/)?.[1] ?? null;
+    if (!existingCompanyId) return;
+
+    setCompanyId((current) => current ?? existingCompanyId);
+
+    const mode = new URLSearchParams(window.location.search).get("mode");
+    if (mode === "connect") {
+      setStep(2);
+      setTeamMode("connect");
+      setConnectMode("choose");
+    }
+  }, []);
 
   // Step 3: Invite
   const [invites, setInvites] = useState<{ email: string; role: string }[]>([{ email: "", role: "member" }]);

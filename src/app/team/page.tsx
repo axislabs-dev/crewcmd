@@ -541,7 +541,7 @@ export default function TeamPage() {
             <p className="text-[11px] tracking-wider text-[var(--text-tertiary)]">
               {agents.length > 0
                 ? `${activeCount} OF ${agents.length} ACTIVE · Build and manage your agent workforce`
-                : "NO AGENTS — Create your first agent or deploy a blueprint"}
+                : "NO AGENTS — Create your first agent, deploy a blueprint, or import from OpenClaw"}
             </p>
           </div>
 
@@ -659,9 +659,9 @@ export default function TeamPage() {
             <div className="text-4xl mb-4">🤖</div>
             <p className="text-sm text-[var(--text-secondary)]">No agents yet</p>
             <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-              Create your first agent or deploy a team blueprint to get started.
+              Create your first agent, deploy a team blueprint, or import your existing OpenClaw team.
             </p>
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={() => setShowNewAgent(true)}
                 className="rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]"
@@ -673,6 +673,12 @@ export default function TeamPage() {
                 className="rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
                 BROWSE BLUEPRINTS
+              </Link>
+              <Link
+                href="/onboarding?mode=connect"
+                className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)]/30"
+              >
+                IMPORT FROM OPENCLAW
               </Link>
             </div>
           </div>

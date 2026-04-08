@@ -611,6 +611,22 @@ Save a provider API key.
 
 Remove a provider key.
 
+### `GET /api/service-secrets?companyId=:companyId`
+
+List stored service secrets for a company. Response only includes masked metadata.
+
+### `POST /api/service-secrets`
+
+Create or update a named service secret.
+
+**Body:** `{ companyId, name, value, description? }`
+
+### `PATCH /api/service-secrets/:id`
+
+Update secret metadata and/or rotate the stored value.
+
+**Body:** `{ name?, value?, description? }`
+
 ### `GET /api/providers/:provider/models`
 
 List available models for a provider.

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { EVERCONTENT_SKILL_TEMPLATE } from "@/lib/skills/evercontent";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ interface MarketplaceSkill {
   source: string;
   version: string;
   sourceUrl: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // ─── In-memory cache ─────────────────────────────────────────────────
@@ -20,6 +23,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // ─── Hardcoded fallback ──────────────────────────────────────────────
 
 const FALLBACK_SKILLS: MarketplaceSkill[] = [
+  EVERCONTENT_SKILL_TEMPLATE,
   {
     name: "Weather",
     slug: "weather",

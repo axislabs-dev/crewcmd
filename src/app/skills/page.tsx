@@ -28,6 +28,8 @@ interface MarketplaceSkill {
   source: string;
   version: string;
   sourceUrl: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface AgentSkillAssignment {
@@ -949,8 +951,8 @@ export default function SkillsPage() {
 
             <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
-                Skill content will be fetched from the marketplace when real API integration is available.
-                For now, installing creates a skill record that can be attached to agents.
+                Installing this marketplace skill creates a real skill record in CrewCmd.
+                If the marketplace entry includes packaged instructions and metadata, those are preserved on install.
               </p>
             </div>
           </div>

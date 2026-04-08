@@ -8,6 +8,7 @@ import {
   integer,
   boolean,
   serial,
+  unique,
   numeric,
 } from "drizzle-orm/pg-core";
 
@@ -607,6 +608,22 @@ export const companyProviderKeys = pgTable("company_provider_keys", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ─── Service Secrets ────────────────────────────────────────────────
+
+export const serviceSecrets = pgTable("service_secrets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  value: text("value").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  companySecretNameUnique: unique().on(table.companyId, table.name),
+}));
 
 // ─── Routine Templates ──────────────────────────────────────────────
 

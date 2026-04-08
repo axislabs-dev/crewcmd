@@ -166,6 +166,25 @@ export default function SettingsPage() {
         )}
       </div>
 
+      <div className="glass-card mb-8 p-6" style={{ borderColor: "rgba(0, 240, 255, 0.1)" }}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
+              SERVICE SECRETS / VAULT
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+              Manage shared company secrets for skills and agent config without calling the API manually.
+            </p>
+          </div>
+          <a
+            href="/dashboard/settings/service-secrets"
+            className="inline-flex items-center justify-center rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 text-[10px] font-bold tracking-wider text-[var(--accent)] transition hover:opacity-90"
+          >
+            OPEN VAULT
+          </a>
+        </div>
+      </div>
+
       {/* Users Table */}
       <div className="glass-card p-6" style={{ borderColor: "rgba(0, 240, 255, 0.1)" }}>
         <h2 className="mb-4 text-sm font-bold tracking-wider text-[var(--text-primary)]">

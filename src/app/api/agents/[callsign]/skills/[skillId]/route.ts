@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (config !== undefined && (!config || typeof config !== "object" || Array.isArray(config))) {
       return NextResponse.json({ error: "config must be an object when provided" }, { status: 400 });
+    }
+
+    if (config !== undefined) {
+      const validation = await validateSkillConfigSecretRefs(agent.companyId, config);
+      if (!validation.ok) {
+        return NextResponse.json({ error: validation.error }, { status: 400 });
+      }
     }
 
     const [row] = await withRetry(() =>

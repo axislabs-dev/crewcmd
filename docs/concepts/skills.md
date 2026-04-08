@@ -56,6 +56,27 @@ For installable SaaS integrations, keep the core generic:
 
 That keeps CrewCmd reusable while letting product-specific skills like EverContent define their own API semantics outside the core runtime.
 
+## Secret references in skill config
+
+For service credentials, prefer storing the actual secret value in CrewCmd and referencing it from `agent_skills.config`.
+
+Example config:
+
+```json
+{
+  "workspaceId": "acme-marketing",
+  "apiKey": { "secretRef": { "name": "evercontent-api-key" } }
+}
+```
+
+Pattern:
+- create the secret once via `/api/service-secrets`
+- reference it from any skill config with `{ "secretRef": { "name": "..." } }`
+- CrewCmd validates that the referenced secret exists for the agent's company before saving the skill config
+- API responses only return masked secret metadata, never raw values
+
+CrewCmd core stays generic here: it stores and validates the reference, while the skill or runtime decides how to resolve and use that secret at execution time.
+
 ## Skill Marketplace
 
 CrewCmd integrates with ClawHub for discovering and installing community skills. Browse categories, check ratings, and install with one click.

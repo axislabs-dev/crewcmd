@@ -85,6 +85,13 @@
       "when": 1775336622889,
       "tag": "0011_condemned_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1775621277835,
+      "tag": "0012_tense_jubilee",
+      "breakpoints": true
     }
   ]
 }

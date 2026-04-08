@@ -11,10 +11,25 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { source, query, companyId, name, slug, description, version, sourceUrl, content } = body;
+    const {
+      source,
+      query,
+      companyId,
+      name,
+      slug,
+      description,
+      version,
+      sourceUrl,
+      content,
+      metadata,
+    } = body;
 
     if (!source || !companyId) {
       return NextResponse.json({ error: "source and companyId are required" }, { status: 400 });
+    }
+
+    if (metadata !== undefined && (!metadata || typeof metadata !== "object" || Array.isArray(metadata))) {
+      return NextResponse.json({ error: "metadata must be an object when provided" }, { status: 400 });
     }
 
     const skillName = name || query || "Imported Skill";
@@ -30,7 +45,7 @@ export async function POST(request: NextRequest) {
         version: version || null,
         content: content || null,
         companyId,
-        metadata: {},
+        metadata: metadata || {},
         installed: true,
       }).returning()
     );

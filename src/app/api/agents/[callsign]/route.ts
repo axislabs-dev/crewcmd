@@ -53,6 +53,7 @@ export async function GET(
       adapterType: agent.adapterType,
       adapterConfig: agent.adapterConfig ?? {},
       runtimeConfig: agent.runtimeConfig ?? {},
+      companyId: agent.companyId,
       role: agent.role ?? "engineer",
       model: agent.model ?? null,
       workspacePath: agent.workspacePath ?? null,

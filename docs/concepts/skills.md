@@ -36,6 +36,26 @@ my-skill/
 
 `SKILL.md` contains the instructions that get injected into the agent's context when the skill is active.
 
+Custom and imported skills can also carry machine-readable `metadata` alongside the human-readable markdown. CrewCmd stores that metadata in the `skills.metadata` JSON field so the same skill can expose structured hints like:
+
+- category / icon / compatible providers
+- config schema for per-agent assignment
+- service capability declarations
+- review-only or publish permission flags
+
+When importing a skill through the API, preserve that metadata instead of flattening it into markdown. The markdown remains the agent contract; the metadata is the product/runtime contract.
+
+## Service-skill pattern
+
+For installable SaaS integrations, keep the core generic:
+
+- put service-specific instructions in `content`
+- put machine-readable manifest data in `metadata`
+- put per-agent scope and defaults in `agent_skills.config`
+- default destructive or publish-style permissions to review-only unless explicitly enabled
+
+That keeps CrewCmd reusable while letting product-specific skills like EverContent define their own API semantics outside the core runtime.
+
 ## Skill Marketplace
 
 CrewCmd integrates with ClawHub for discovering and installing community skills. Browse categories, check ratings, and install with one click.

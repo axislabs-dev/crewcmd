@@ -3,8 +3,15 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { sql } from "drizzle-orm";
 
+async function ensurePgliteReady() {
+  if (process.env.DATABASE_URL) return;
+  const { migrationPromise } = await import("@/db/pglite");
+  await migrationPromise;
+}
+
 export async function GET() {
   try {
+    await ensurePgliteReady();
     if (!db) {
       return NextResponse.json({ hasUsers: false });
     }

@@ -4,8 +4,15 @@ import { users, inviteTokens } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
+async function ensurePgliteReady() {
+  if (process.env.DATABASE_URL) return;
+  const { migrationPromise } = await import("@/db/pglite");
+  await migrationPromise;
+}
+
 export async function POST(request: Request) {
   try {
+    await ensurePgliteReady();
     const { name, email, password, inviteToken } = await request.json();
 
     if (!email || !password || !name) {

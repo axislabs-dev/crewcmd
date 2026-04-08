@@ -12,7 +12,10 @@ import { AgentOutputViewer } from "@/components/agent-output-viewer";
 
 interface AgentSkillRow {
   skillId: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
   skill: {
+    id?: string;
     name: string;
     slug: string;
     description?: string;
@@ -20,9 +23,19 @@ interface AgentSkillRow {
   };
 }
 
+interface AvailableSkill {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  source?: string | null;
+  metadata?: { icon?: string; category?: string; runtime?: string; command?: string | null };
+}
+
 interface AgentDetail extends Agent {
   provider?: string;
   runtimeConfig?: Record<string, unknown>;
+  companyId?: string;
 }
 
 type Tab = "summary" | "skills" | "config" | "terminal" | "activity";
@@ -149,6 +162,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePanelProps) {
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [skills, setSkills] = useState<AgentSkillRow[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<AvailableSkill[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("summary");
@@ -232,6 +246,17 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
       .catch(() => {})
       .finally(() => setLoadingSkills(false));
   }, [callsign]);
+
+  // Fetch available skills for this agent company
+  useEffect(() => {
+    if (!agent?.companyId) return;
+    fetch(`/api/skills?company_id=${agent.companyId}`)
+      .then((r) => r.json())
+      .then((rows) => {
+        if (Array.isArray(rows)) setAvailableSkills(rows);
+      })
+      .catch(() => {});
+  }, [agent?.companyId]);
 
   // Fetch tasks when activity tab is selected (or eagerly)
   useEffect(() => {
@@ -411,10 +436,12 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
           )}
           {activeTab === "skills" && (
             <SkillsTab
+              agent={agent}
               skills={skills}
+              availableSkills={availableSkills}
               loading={loadingSkills}
               agentColor={agentColor}
-              onEdit={agent ? () => onEdit(agent.callsign) : undefined}
+              onSkillsChange={setSkills}
             />
           )}
           {activeTab === "config" && (
@@ -544,68 +571,191 @@ function SummaryTab({
 // ─── Skills Tab ─────────────────────────────────────────────────────────
 
 function SkillsTab({
+  agent,
   skills,
+  availableSkills,
   loading,
   agentColor,
-  onEdit,
+  onSkillsChange,
 }: {
+  agent: AgentDetail | null;
   skills: AgentSkillRow[];
+  availableSkills: AvailableSkill[];
   loading: boolean;
   agentColor: string;
-  onEdit?: () => void;
+  onSkillsChange: (skills: AgentSkillRow[]) => void;
 }) {
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [configDrafts, setConfigDrafts] = useState<Record<string, string>>({});
+  const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setConfigDrafts((current) => {
+      const next = { ...current };
+      for (const row of skills) {
+        if (!(row.skillId in next)) {
+          next[row.skillId] = JSON.stringify(row.config ?? {}, null, 2);
+        }
+      }
+      return next;
+    });
+  }, [skills]);
+
+  const assignedSkillIds = new Set(skills.map((row) => row.skillId));
+  const unassignedSkills = availableSkills.filter((skill) => !assignedSkillIds.has(skill.id));
+
+  async function attachSkill() {
+    if (!agent || !selectedSkillId) return;
+    setSavingSkillId(selectedSkillId);
+    setAttachError(null);
+    try {
+      const res = await fetch(`/api/agents/${agent.callsign.toLowerCase()}/skills`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skillId: selectedSkillId, enabled: true, config: {} }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to attach skill");
+
+      const picked = availableSkills.find((skill) => skill.id === selectedSkillId);
+      if (picked) {
+        onSkillsChange([
+          ...skills,
+          {
+            ...data,
+            skillId: data.skillId ?? selectedSkillId,
+            config: data.config ?? {},
+            enabled: data.enabled ?? true,
+            skill: {
+              id: picked.id,
+              name: picked.name,
+              slug: picked.slug,
+              description: picked.description ?? undefined,
+              metadata: picked.metadata,
+            },
+          },
+        ]);
+      }
+      setSelectedSkillId("");
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Failed to attach skill");
+    } finally {
+      setSavingSkillId(null);
+    }
+  }
+
+  async function saveConfig(row: AgentSkillRow) {
+    if (!agent) return;
+    setSavingSkillId(row.skillId);
+    setAttachError(null);
+    try {
+      const raw = configDrafts[row.skillId] ?? "{}";
+      const parsed = raw.trim() ? JSON.parse(raw) : {};
+      const res = await fetch(`/api/agents/${agent.callsign.toLowerCase()}/skills/${row.skillId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: parsed, enabled: row.enabled ?? true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save skill config");
+
+      onSkillsChange(skills.map((skillRow) => (
+        skillRow.skillId === row.skillId
+          ? { ...skillRow, config: parsed, enabled: data.enabled ?? skillRow.enabled }
+          : skillRow
+      )));
+      setConfigDrafts((current) => ({ ...current, [row.skillId]: JSON.stringify(parsed, null, 2) }));
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Failed to save skill config");
+    } finally {
+      setSavingSkillId(null);
+    }
+  }
+
   if (loading) return <SkillsSkeleton />;
 
   return (
-    <div className="p-5">
+    <div className="space-y-4 p-5">
+      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-[var(--text-primary)]">Assign skill</p>
+            <p className="text-[10px] text-[var(--text-tertiary)]">Attach a skill here, then configure it below. Use <code className="rounded bg-[var(--bg-surface-hover)] px-1 py-0.5">secretRef</code> for shared secrets.</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <select
+            value={selectedSkillId}
+            onChange={(e) => setSelectedSkillId(e.target.value)}
+            className="flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+          >
+            <option value="">Select a skill…</option>
+            {unassignedSkills.map((skill) => (
+              <option key={skill.id} value={skill.id}>{skill.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={attachSkill}
+            disabled={!selectedSkillId || savingSkillId === selectedSkillId}
+            className="rounded-lg px-3 py-2 text-[11px] tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: agentColor + "18", color: agentColor }}
+          >
+            {savingSkillId === selectedSkillId ? "ADDING…" : "ADD SKILL"}
+          </button>
+        </div>
+      </div>
+
+      {attachError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {attachError}
+        </div>
+      )}
+
       {skills.length === 0 ? (
         <div className="flex flex-col items-center py-10 text-center">
           <span className="mb-2 text-2xl">⚡</span>
           <p className="text-xs text-[var(--text-tertiary)]">No skills assigned</p>
-          {onEdit && (
-            <button
-              onClick={onEdit}
-              className="mt-3 rounded-lg px-3 py-1.5 text-[10px] tracking-wider transition-colors"
-              style={{ backgroundColor: agentColor + "18", color: agentColor }}
-            >
-              ASSIGN SKILLS
-            </button>
-          )}
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 gap-2">
-            {skills.map((s) => (
-              <div
-                key={s.skillId}
-                className="flex items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 transition-colors hover:border-[var(--border-medium)]"
-              >
-                <span className="text-lg leading-none">
-                  {s.skill.metadata?.icon ?? "⚡"}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-[var(--text-primary)]">
-                    {s.skill.name}
-                  </p>
-                  {s.skill.metadata?.category && (
-                    <p className="text-[10px] text-[var(--text-tertiary)]">
-                      {s.skill.metadata.category}
-                    </p>
-                  )}
+        <div className="space-y-3">
+          {skills.map((s) => (
+            <div key={s.skillId} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+              <div className="mb-3 flex items-start gap-2.5">
+                <span className="text-lg leading-none">{s.skill.metadata?.icon ?? "⚡"}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-xs font-medium text-[var(--text-primary)]">{s.skill.name}</p>
+                    <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--text-tertiary)]">{s.skill.metadata?.category ?? "skill"}</span>
+                  </div>
+                  {s.skill.description && <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{s.skill.description}</p>}
                 </div>
               </div>
-            ))}
-          </div>
 
-          {onEdit && (
-            <button
-              onClick={onEdit}
-              className="mt-4 w-full rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-            >
-              MANAGE SKILLS
-            </button>
-          )}
-        </>
+              <label className="mb-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
+                Config JSON
+              </label>
+              <textarea
+                value={configDrafts[s.skillId] ?? "{}"}
+                onChange={(e) => setConfigDrafts((current) => ({ ...current, [s.skillId]: e.target.value }))}
+                rows={8}
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
+                spellCheck={false}
+              />
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-[var(--text-tertiary)]">Example: {`{"baseUrl":"https://api.evercontent.io","secretRef":"evercontent_api_key","allowedProjectIds":["thoroughbreds"],"canPublish":false}`}</p>
+                <button
+                  onClick={() => saveConfig(s)}
+                  disabled={savingSkillId === s.skillId}
+                  className="rounded-lg px-3 py-2 text-[11px] tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ backgroundColor: agentColor + "18", color: agentColor }}
+                >
+                  {savingSkillId === s.skillId ? "SAVING…" : "SAVE CONFIG"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

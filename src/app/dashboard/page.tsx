@@ -142,65 +142,65 @@ export default function Dashboard() {
       <div className="flex-1 space-y-6 p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="glow-text-neo font-mono text-lg font-bold tracking-[0.15em] text-[var(--accent)] sm:text-xl">
-              COMMAND CENTER
+            <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)] sm:text-3xl">
+              Command center
             </h1>
             <div className="flex items-center gap-2">
               <p className="font-mono text-xs tracking-wider text-[var(--text-secondary)]">
-                TACTICAL OVERVIEW
+                Live operating overview
               </p>
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${isLive ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" : "bg-[var(--text-tertiary)]"}`}
-                title={isLive ? "LIVE — OpenClaw Connected" : "OFFLINE — No Data Source"}
+                className={`inline-block h-1.5 w-1.5 rounded-full ${isLive ? "bg-[var(--success)]" : "bg-[var(--text-tertiary)]"}`}
+                title={isLive ? "Connected — OpenClaw Connected" : "Offline — No Data Source"}
               />
-              <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
-                {isLive ? "LIVE" : "OFFLINE"}
+              <span className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-tertiary)]">
+                {isLive ? "Connected" : "Offline"}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end">
-              <span className="font-mono text-xl font-bold tabular-nums text-[var(--text-primary)]">
+              <span className="text-2xl font-semibold tabular-nums tracking-[-0.03em] text-[var(--text-primary)]">
                 {time}
               </span>
-              <span className="font-mono text-xs text-[var(--text-secondary)]">{date}</span>
+              <span className="text-sm text-[var(--text-secondary)]">{date}</span>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
-            label="AGENTS ONLINE"
+            label="Agents online"
             value={agents.length > 0 ? `${activeAgents.length}/${agents.length}` : "—"}
-            color="#00f0ff"
+            color="var(--accent)"
           />
           <StatCard
-            label="IN PROGRESS"
+            label="Tasks in progress"
             value={String(tasksInProgress.length)}
-            color="#f0ff00"
+            color="var(--warning)"
           />
           <StatCard
-            label="ACTIVE PROJECTS"
+            label="Active projects"
             value={String(activeProjects.length)}
-            color="#00ff88"
+            color="var(--success)"
           />
           <StatCard
-            label="RECENT ACTIVITY"
+            label="Recent activity"
             value={String(activities.length)}
-            color="#ff00aa"
+            color="#8f5c7f"
           />
         </div>
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
+            <h2 className="text-sm font-semibold tracking-[0.02em] text-[var(--text-secondary)]">
               Agent Status
             </h2>
             <Link
               href="/agents"
-              className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+              className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
             >
-              VIEW ALL &rarr;
+              View all &rarr;
             </Link>
           </div>
           {agents.length > 0 ? (
@@ -247,20 +247,20 @@ export default function Dashboard() {
         {(nodes.length > 0 || health) && (
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
+              <h2 className="text-sm font-semibold tracking-[0.02em] text-[var(--text-secondary)]">
                 Infrastructure
               </h2>
               {health && (
-                <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
+                <span className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-tertiary)]">
                   GATEWAY{" "}
                   <span
                     className={
                       health.source === "live"
-                        ? "text-green-400"
-                        : "text-red-400"
+                        ? "text-[var(--success)]"
+                        : "text-[var(--danger)]"
                     }
                   >
-                    {health.source === "live" ? "ONLINE" : "OFFLINE"}
+                    {health.source === "live" ? "ONLINE" : "Offline"}
                   </span>
                   {health.version && (
                     <span className="ml-2 text-[var(--text-tertiary)]">v{health.version}</span>
@@ -294,14 +294,14 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
+              <h2 className="text-sm font-semibold tracking-[0.02em] text-[var(--text-secondary)]">
                 Active Projects
               </h2>
               <Link
                 href="/projects"
-                className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+                className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
               >
-                VIEW ALL &rarr;
+                View all &rarr;
               </Link>
             </div>
             {activeProjects.length > 0 ? (
@@ -384,12 +384,12 @@ export default function Dashboard() {
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
+            <h2 className="text-sm font-semibold tracking-[0.02em] text-[var(--text-secondary)]">
               Tasks In Progress
             </h2>
             <Link
               href="/tasks"
-              className="font-mono text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+              className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
             >
               VIEW BOARD &rarr;
             </Link>
@@ -445,7 +445,7 @@ export default function Dashboard() {
         </section>
 
         <section className="glass-card p-6">
-          <h2 className="mb-4 font-mono text-sm tracking-[0.15em] text-[var(--text-secondary)] uppercase">
+          <h2 className="mb-4 text-sm font-semibold tracking-[0.02em] text-[var(--text-secondary)]">
             Quick Stats
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -459,10 +459,10 @@ export default function Dashboard() {
 
       <footer className="border-t border-[var(--border-subtle)] px-6 py-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
+          <span className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-tertiary)]">
             CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}
           </span>
-          <span className="font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
+          <span className="text-[11px] font-medium tracking-[0.08em] uppercase text-[var(--text-tertiary)]">
             crewcmd.dev
           </span>
         </div>
@@ -482,7 +482,7 @@ function StatCard({
 }) {
   return (
     <div
-      className="glass-card relative overflow-hidden p-4"
+      className="glass-card relative overflow-hidden p-5"
       style={{ borderColor: `${color}15` }}
     >
       <div
@@ -492,10 +492,10 @@ function StatCard({
         }}
       />
       <div className="relative">
-        <span className="font-mono text-[11px] tracking-widest text-[var(--text-secondary)] uppercase">
+        <span className="text-[11px] font-semibold tracking-[0.08em] text-[var(--text-secondary)] uppercase">
           {label}
         </span>
-        <p className="mt-1 font-mono text-2xl font-bold" style={{ color }}>
+        <p className="mt-2 text-3xl font-semibold tracking-[-0.04em]" style={{ color }}>
           {value}
         </p>
       </div>
@@ -505,7 +505,7 @@ function StatCard({
 
 function NodeCard({ node, nodeAgentMap }: { node: NodeInfo; nodeAgentMap: Record<string, { emoji: string; callsign: string; color: string }[]> }) {
   const isConnected = node.status === "connected";
-  const statusColor = isConnected ? "#00ff88" : "#555555";
+  const statusColor = isConnected ? "var(--success)" : "var(--text-tertiary)";
   const nodeAgents = nodeAgentMap[node.name] || [];
   const uptimeText = node.connectedAt
     ? timeAgo(node.connectedAt)

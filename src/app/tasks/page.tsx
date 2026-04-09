@@ -152,17 +152,17 @@ export default function TasksPage() {
                   <select
                     value={projectFilter}
                     onChange={(e) => setProjectFilter(e.target.value)}
-                    className="appearance-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-3 py-2 pr-8 font-mono text-[10px] tracking-wider text-[var(--accent)]/70 outline-none transition-all duration-200 focus:border-neo/30 focus:shadow-[0_0_10px_rgba(0,240,255,0.1)]"
+                    className="appearance-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-3 py-2 pr-8 font-mono text-[10px] tracking-wider text-[var(--accent)]/70 outline-none transition-all duration-200 focus:border-[var(--accent-medium)] focus:shadow-[0_0_10px_rgba(0,240,255,0.1)]"
                     style={{
                       backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(0,240,255,0.4)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
                       backgroundRepeat: "no-repeat",
                       backgroundPosition: "right 8px center",
                     }}
                   >
-                    <option value="all" style={{ backgroundColor: "#12121a", color: "rgba(255,255,255,0.5)" }}>📁 ALL PROJECTS</option>
-                    <option value="none" style={{ backgroundColor: "#12121a", color: "rgba(255,255,255,0.3)" }}>⊘ NO PROJECT</option>
+                    <option value="all" style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-secondary)" }}>📁 ALL PROJECTS</option>
+                    <option value="none" style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-tertiary)" }}>⊘ NO PROJECT</option>
                     {projects.map((p) => (
-                      <option key={p.id} value={p.id} style={{ backgroundColor: "#12121a", color: "rgba(255,255,255,0.6)" }}>📁 {p.name.toUpperCase()}</option>
+                      <option key={p.id} value={p.id} style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-secondary)" }}>📁 {p.name.toUpperCase()}</option>
                     ))}
                   </select>
                 </div>
@@ -180,12 +180,12 @@ export default function TasksPage() {
               <div className="h-4 w-px bg-[var(--border-medium)]" />
               <TaskStat label="TOTAL" value={tasks.length} />
               <div className="h-4 w-px bg-[var(--border-medium)]" />
-              <TaskStat label="BACKLOG" value={counts.backlog} color="#555" />
-              <TaskStat label="INBOX" value={counts.inbox} color="#666" />
-              <TaskStat label="QUEUED" value={counts.queued} color="#00f0ff" />
-              <TaskStat label="IN PROGRESS" value={counts.in_progress} color="#f0ff00" />
-              <TaskStat label="REVIEW" value={counts.review} color="#ff00aa" />
-              <TaskStat label="DONE" value={counts.done} color="#00ff88" />
+              <TaskStat label="BACKLOG" value={counts.backlog} color="var(--text-tertiary)" />
+              <TaskStat label="INBOX" value={counts.inbox} color="var(--text-secondary)" />
+              <TaskStat label="QUEUED" value={counts.queued} color="var(--accent)" />
+              <TaskStat label="IN PROGRESS" value={counts.in_progress} color="var(--warning)" />
+              <TaskStat label="REVIEW" value={counts.review} color="#8f5c7f" />
+              <TaskStat label="DONE" value={counts.done} color="var(--success)" />
             </div>
           </div>
         </nav>
@@ -206,7 +206,7 @@ export default function TasksPage() {
                     autoCorrect="on"
                     autoCapitalize="sentences"
                     spellCheck={true}
-                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-[var(--accent-medium)]"
                     autoFocus
                   />
                 </div>
@@ -221,7 +221,7 @@ export default function TasksPage() {
                     autoCapitalize="sentences"
                     spellCheck={true}
                     inputMode="text"
-                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-[var(--accent-medium)]"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -230,7 +230,7 @@ export default function TasksPage() {
                     <select
                       value={newTask.status}
                       onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
                     >
                       <option value="backlog">Backlog</option>
                       <option value="inbox">Inbox</option>
@@ -242,7 +242,7 @@ export default function TasksPage() {
                     <select
                       value={newTask.priority}
                       onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -255,7 +255,7 @@ export default function TasksPage() {
                     <select
                       value={newTask.projectId}
                       onChange={(e) => setNewTask({ ...newTask, projectId: e.target.value })}
-                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
                     >
                       <option value="">No project (standalone)</option>
                       {projects.map((p) => (
@@ -378,7 +378,7 @@ function ViewBtn({
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[9px] tracking-wider transition-all ${
         active
-          ? "bg-neo/15 text-[var(--accent)]"
+          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
           : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
       }`}
     >
@@ -488,7 +488,7 @@ function TableTaskModal({
           <div className="flex items-center gap-2">
             <button
               onClick={del}
-              className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-red-400/40 transition-colors hover:text-red-400"
+              className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-[var(--danger)]/40 transition-colors hover:text-[var(--danger)]"
             >
               DELETE
             </button>
@@ -507,7 +507,7 @@ function TableTaskModal({
               type="text"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
             />
           </div>
           <div>
@@ -516,7 +516,7 @@ function TableTaskModal({
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={4}
-              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -525,7 +525,7 @@ function TableTaskModal({
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as TaskStatus })}
-                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
               >
                 {(["backlog","inbox","queued","in_progress","review","done"] as TaskStatus[]).map((s) => (
                   <option key={s} value={s}>{s.replace("_", " ")}</option>
@@ -537,7 +537,7 @@ function TableTaskModal({
               <select
                 value={form.priority}
                 onChange={(e) => setForm({ ...form, priority: e.target.value as TaskPriority })}
-                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -550,7 +550,7 @@ function TableTaskModal({
               <select
                 value={form.assignedAgentId}
                 onChange={(e) => setForm({ ...form, assignedAgentId: e.target.value })}
-                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
               >
                 <option value="">Unassigned</option>
                 {agents.map((a) => (
@@ -563,7 +563,7 @@ function TableTaskModal({
               <select
                 value={form.humanAssignee}
                 onChange={(e) => setForm({ ...form, humanAssignee: e.target.value })}
-                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
               >
                 <option value="">None</option>
                 <option value="admin">👤 Admin</option>
@@ -574,7 +574,7 @@ function TableTaskModal({
               <select
                 value={form.projectId}
                 onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
               >
                 <option value="">No project</option>
                 {projects.map((p) => (

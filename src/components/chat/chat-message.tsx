@@ -332,7 +332,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
         {isUser ? (
           <p className="whitespace-pre-wrap">{content}</p>
         ) : (
-          <div className="prose prose-invert prose-sm max-w-none [&_p]:my-1 [&_pre]:bg-black/30 [&_pre]:border [&_pre]:border-[var(--border-medium)] [&_pre]:rounded-lg [&_code]:text-neo/80 [&_code]:text-[12px] [&_a]:text-neo [&_a]:no-underline hover:[&_a]:underline [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+          <div className="prose prose-sm max-w-none [&_p]:my-1 [&_pre]:bg-[var(--bg-tertiary)] [&_pre]:border [&_pre]:border-[var(--border-medium)] [&_pre]:rounded-lg [&_pre]:[&_code]:text-[var(--text-primary)] [&_code]:text-[var(--accent)] [&_code]:text-[12px] [&_a]:text-[var(--accent)] [&_a]:no-underline hover:[&_a]:underline [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
             {content.includes("<!--task_card") || content.includes("<!--action:create_task:") ? (
               extractTaskCards(content).segments.map((seg, i) =>
                 seg.type === "task" ? (

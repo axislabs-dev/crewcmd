@@ -328,7 +328,7 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <div
-        className={`fixed top-0 left-0 z-40 flex h-[100dvh] w-72 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)] backdrop-blur-xl transition-transform duration-300 lg:hidden ${
+        className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] transition-transform duration-300 lg:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >

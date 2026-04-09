@@ -391,3 +391,52 @@ body {
   opacity: 0.5;
   transform: rotate(2deg);
 }
+
+/* ─── Prose overrides (chat markdown content) ─── */
+/* Light mode prose — prose class without prose-invert */
+[data-theme="light"] .prose {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-secondary);
+  --tw-prose-bullets: var(--text-tertiary);
+  --tw-prose-hr: var(--border-subtle);
+  --tw-prose-quotes: var(--text-secondary);
+  --tw-prose-quote-borders: var(--border-medium);
+  --tw-prose-captions: var(--text-tertiary);
+  --tw-prose-code: var(--accent);
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--bg-tertiary);
+  --tw-prose-th-borders: var(--border-subtle);
+  --tw-prose-td-borders: var(--border-subtle);
+  --tw-prose-kbd: var(--text-primary);
+  --tw-prose-kbd-shadows: none;
+  --tw-prose-code-bg: var(--bg-tertiary);
+  --tw-prose-pre-border: var(--border-medium);
+}
+
+/* Dark mode prose — since prose-invert was removed */
+[data-theme="dark"] .prose {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-secondary);
+  --tw-prose-bullets: var(--text-tertiary);
+  --tw-prose-hr: var(--border-subtle);
+  --tw-prose-quotes: var(--text-secondary);
+  --tw-prose-quote-borders: var(--border-medium);
+  --tw-prose-captions: var(--text-tertiary);
+  --tw-prose-code: var(--accent);
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--bg-tertiary);
+  --tw-prose-th-borders: var(--border-subtle);
+  --tw-prose-td-borders: var(--border-subtle);
+  --tw-prose-kbd: var(--text-primary);
+  --tw-prose-kbd-shadows: none;
+  --tw-prose-code-bg: var(--bg-tertiary);
+  --tw-prose-pre-border: var(--border-medium);
+}

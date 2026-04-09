@@ -22,12 +22,12 @@ interface TaskTableProps {
 const STATUS_ORDER: TaskStatus[] = ["backlog", "inbox", "queued", "in_progress", "review", "done"];
 
 const statusColors: Record<TaskStatus, string> = {
-  backlog: "#555",
-  inbox: "#666",
-  queued: "#00f0ff",
-  in_progress: "#f0ff00",
-  review: "#ff00aa",
-  done: "#00ff88",
+  backlog: "var(--text-tertiary)",
+  inbox: "var(--text-secondary)",
+  queued: "var(--accent)",
+  in_progress: "var(--warning)",
+  review: "#8f5c7f",
+  done: "var(--success)",
 };
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -41,9 +41,9 @@ const statusLabels: Record<TaskStatus, string> = {
 
 const priorityStyles: Record<string, { text: string; bg: string }> = {
   low: { text: "text-[var(--text-tertiary)]", bg: "bg-[var(--bg-surface-hover)]" },
-  medium: { text: "text-blue-400", bg: "bg-blue-400/10" },
-  high: { text: "text-orange-400", bg: "bg-orange-400/10" },
-  critical: { text: "text-red-400", bg: "bg-red-400/10" },
+  medium: { text: "text-[var(--info)]", bg: "bg-[color-mix(in_srgb,var(--info)_12%,transparent)]" },
+  high: { text: "text-[#c77445]", bg: "bg-[color-mix(in_srgb,#c77445_12%,transparent)]" },
+  critical: { text: "text-[var(--danger)]", bg: "bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]" },
 };
 
 type SortKey = "title" | "status" | "priority" | "project" | "assignee" | "createdAt" | "updatedAt";
@@ -51,11 +51,11 @@ type SortDir = "asc" | "desc";
 
 const sourceStyles: Record<TaskSource, { label: string; cls: string }> = {
   manual: { label: "manual", cls: "text-[var(--text-tertiary)] border-[var(--border-subtle)]" },
-  error_log: { label: "error", cls: "text-red-400/70 border-red-400/20" },
-  test_failure: { label: "test", cls: "text-orange-400/70 border-orange-400/20" },
-  ui_scan: { label: "ui", cls: "text-blue-400/70 border-blue-400/20" },
-  ci_failure: { label: "ci", cls: "text-red-400/70 border-red-400/20" },
-  agent_initiative: { label: "agent", cls: "text-green-400/70 border-green-400/20" },
+  error_log: { label: "error", cls: "text-[var(--danger)]/70 border-red-400/20" },
+  test_failure: { label: "test", cls: "text-[#c77445]/70 border-orange-400/20" },
+  ui_scan: { label: "ui", cls: "text-[var(--info)]/70 border-blue-400/20" },
+  ci_failure: { label: "ci", cls: "text-[var(--danger)]/70 border-red-400/20" },
+  agent_initiative: { label: "agent", cls: "text-[var(--success)]/70 border-green-400/20" },
 };
 
 const PRIORITY_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
@@ -287,7 +287,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
             placeholder="Search tasks..."
             value={searchText}
             onChange={(e) => { setSearchText(e.target.value); resetPage(); }}
-            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-2 pl-7 pr-3 text-[11px] text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-neo/30"
+            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-2 pl-7 pr-3 text-[11px] text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--accent-medium)]"
           />
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto">
@@ -329,7 +329,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
             placeholder="Search tasks..."
             value={searchText}
             onChange={(e) => { setSearchText(e.target.value); resetPage(); }}
-            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1.5 pl-7 pr-3 text-[10px] text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-neo/30"
+            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1.5 pl-7 pr-3 text-[10px] text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--accent-medium)]"
           />
         </div>
 
@@ -403,7 +403,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neo/20 bg-neo/5 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neo/20 bg-[var(--accent-soft)] px-3 py-2">
           <span className="text-[10px] text-neo/70">
             {selected.size} selected
           </span>
@@ -465,7 +465,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
               disabled={bulkLoading}
               className={`rounded-lg px-3 py-1 text-[10px] tracking-wider transition-all ${
                 bulkAction === "delete"
-                  ? "border border-red-500/30 text-red-400 hover:bg-red-400/10"
+                  ? "border border-red-500/30 text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]"
                   : "border border-neo/30 text-[var(--accent)] hover:bg-neo/10"
               } disabled:opacity-30`}
             >
@@ -493,7 +493,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                   checked={allSelected}
                   ref={(el) => { if (el) el.indeterminate = someSelected; }}
                   onChange={toggleSelectAll}
-                  className="h-3 w-3 cursor-pointer rounded accent-[#00f0ff]"
+                  className="h-3 w-3 cursor-pointer rounded accent-[var(--accent)]"
                 />
               </th>
               <TH label="TITLE" col="title" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -524,7 +524,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                   key={task.id}
                   className={`group border-b border-[var(--border-subtle)] transition-colors ${
                     isSelected
-                      ? "bg-neo/5"
+                      ? "bg-[var(--accent-soft)]"
                       : "hover:bg-[var(--bg-surface)]"
                   }`}
                 >
@@ -534,7 +534,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleSelect(task.id)}
-                      className="h-3 w-3 cursor-pointer rounded accent-[#00f0ff]"
+                      className="h-3 w-3 cursor-pointer rounded accent-[var(--accent)]"
                     />
                   </td>
 
@@ -566,7 +566,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                     <select
                       value={task.status}
                       onChange={(e) => inlineUpdate(task.id, "status", e.target.value)}
-                      className="rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] tracking-wider outline-none focus:border-neo/30 cursor-pointer"
+                      className="rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] tracking-wider outline-none focus:border-[var(--accent-medium)] cursor-pointer"
                       style={{ color: statusColors[task.status as TaskStatus] ?? "#fff" }}
                     >
                       {STATUS_ORDER.map((s) => (
@@ -575,7 +575,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                           value={s}
                           style={{
                             color: statusColors[s],
-                            backgroundColor: "#12121a",
+                            backgroundColor: "var(--bg-surface-strong)",
                           }}
                         >
                           {statusLabels[s]}
@@ -589,13 +589,13 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                     <select
                       value={task.priority}
                       onChange={(e) => inlineUpdate(task.id, "priority", e.target.value)}
-                      className={`rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] uppercase tracking-wider outline-none focus:border-neo/30 cursor-pointer ${ps.text} ${ps.bg}`}
+                      className={`rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] uppercase tracking-wider outline-none focus:border-[var(--accent-medium)] cursor-pointer ${ps.text} ${ps.bg}`}
                     >
                       {["low", "medium", "high", "critical"].map((p) => (
                         <option
                           key={p}
                           value={p}
-                          style={{ backgroundColor: "#12121a", color: "rgba(255,255,255,0.6)" }}
+                          style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-secondary)" }}
                         >
                           {p}
                         </option>
@@ -606,7 +606,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                   {/* Project */}
                   <td className="px-3 py-2">
                     {project ? (() => {
-                      const projectColor = project.color || "#00f0ff";
+                      const projectColor = project.color || "var(--accent)";
                       return (
                         <span 
                           className="rounded-full border px-2 py-0.5 text-[9px] tracking-wider"
@@ -632,26 +632,26 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                         onChange={(e) =>
                           inlineUpdate(task.id, "assignedAgentId", e.target.value || null)
                         }
-                        className="rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] tracking-wider outline-none focus:border-neo/30 cursor-pointer"
+                        className="rounded-md border border-[var(--border-medium)] bg-[var(--bg-secondary)] px-2 py-1 text-[9px] tracking-wider outline-none focus:border-[var(--accent-medium)] cursor-pointer"
                         style={{
                           color: agent?.color ?? "rgba(255,255,255,0.3)",
                         }}
                       >
-                        <option value="" style={{ backgroundColor: "#12121a", color: "rgba(255,255,255,0.3)" }}>
+                        <option value="" style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-tertiary)" }}>
                           ⊘ Unassigned
                         </option>
                         {agents.map((a) => (
                           <option
                             key={a.id}
                             value={a.id}
-                            style={{ color: a.color, backgroundColor: "#12121a" }}
+                            style={{ color: a.color, backgroundColor: "var(--bg-surface-strong)" }}
                           >
                             {a.emoji} {a.callsign}
                           </option>
                         ))}
                       </select>
                       {task.humanAssignee && (
-                        <span className="flex items-center gap-1 rounded border border-red-400/20 bg-red-400/5 px-1.5 py-0.5 text-[8px] text-red-400/70 w-fit">
+                        <span className="flex items-center gap-1 rounded border border-red-400/20 bg-red-400/5 px-1.5 py-0.5 text-[8px] text-[var(--danger)]/70 w-fit">
                           👤 {task.humanAssignee}
                         </span>
                       )}
@@ -776,7 +776,7 @@ function FilterSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`appearance-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-secondary)] tracking-wider outline-none transition-all focus:border-neo/30 cursor-pointer ${
+      className={`appearance-none rounded-lg border border-[var(--border-medium)] bg-[var(--bg-secondary)] tracking-wider outline-none transition-all focus:border-[var(--accent-medium)] cursor-pointer ${
         compact
           ? "px-2 py-1.5 pr-5 text-[10px] text-[var(--text-secondary)] shrink-0"
           : "px-2.5 py-1.5 pr-6 text-[10px] text-[var(--text-secondary)]"
@@ -791,7 +791,7 @@ function FilterSelect({
         <option
           key={o.value}
           value={o.value}
-          style={{ backgroundColor: "#12121a", color: "rgba(255,255,255,0.6)" }}
+          style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-secondary)" }}
         >
           {o.label}
         </option>

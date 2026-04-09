@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Manrope, JetBrains_Mono } from "next/font/google";
 import { Sidebar } from "@/components/sidebar";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-const inter = Inter({
+const manrope = Manrope({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-manrope",
   display: "swap",
 });
 
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${manrope.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         <Script
           id="theme-init"
@@ -51,7 +51,7 @@ export default function RootLayout({
         <Providers>
           <div className="grid-bg scanlines min-h-screen">
             <Sidebar />
-            <main className="pt-14 lg:pl-[220px] lg:pt-0">
+            <main className="pt-16 lg:pl-[272px] lg:pt-0">
               {children}
             </main>
           </div>

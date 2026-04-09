@@ -160,8 +160,7 @@ function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
 
   return (
     <div
-      className={`${size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} rounded-full bg-neo`}
-      style={{ boxShadow: "0 0 10px rgba(0, 240, 255, 0.5)" }}
+      className={`${size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} rounded-full bg-[var(--accent)] ring-4 ring-[var(--accent-soft)]`}
     />
   );
 }
@@ -172,8 +171,8 @@ function BrandName() {
   const displayName = name.length > 12 ? name.slice(0, 12) : name;
 
   return (
-    <span className="glow-text-neo font-mono text-sm font-bold tracking-[0.15em] text-neo">
-      {displayName.toUpperCase()}
+    <span className="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+      {displayName}
     </span>
   );
 }
@@ -203,17 +202,16 @@ export function Sidebar() {
         <Link
           href={item.href}
           onClick={onClick}
-          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs tracking-wide transition-all duration-200 ${
+          className={`group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] font-medium transition-all duration-200 ${
             active
-              ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-              : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+              ? "border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
+              : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           }`}
-          style={active ? { boxShadow: "inset 0 0 20px rgba(0, 240, 255, 0.05)" } : undefined}
+          
         >
           {active && (
             <div
-              className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r bg-neo"
-              style={{ boxShadow: "0 0 8px rgba(0, 240, 255, 0.6)" }}
+              className="absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]"
             />
           )}
           <span className={`transition-colors ${active ? "text-[var(--accent)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
@@ -222,8 +220,7 @@ export function Sidebar() {
           <span>{item.label.toUpperCase()}</span>
           {active && (
             <div
-              className="ml-auto h-1.5 w-1.5 rounded-full bg-neo"
-              style={{ boxShadow: "0 0 6px rgba(0, 240, 255, 0.6)" }}
+              className="ml-auto h-2 w-2 rounded-full bg-[var(--accent)]"
             />
           )}
         </Link>
@@ -300,7 +297,7 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 backdrop-blur-xl lg:hidden">
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-2.5">
           <BrandLogo size="sm" />
           <BrandName />
@@ -331,7 +328,7 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <div
-        className={`fixed top-0 left-0 z-40 flex h-[100dvh] w-64 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl transition-transform duration-300 lg:hidden ${
+        className={`fixed top-0 left-0 z-40 flex h-[100dvh] w-72 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)] backdrop-blur-xl transition-transform duration-300 lg:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -365,26 +362,26 @@ export function Sidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[220px] flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-primary)] backdrop-blur-xl lg:flex">
-        <div className="flex items-center gap-3 px-5 py-5">
+      <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[272px] flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 backdrop-blur-xl lg:flex">
+        <div className="flex items-center gap-3 rounded-2xl px-4 py-4">
           <BrandLogo size="md" />
           <div className="flex flex-col">
             <BrandName />
-            <span className="font-mono text-[10px] tracking-[0.3em] text-[var(--text-tertiary)]">
-              YOUR CREW. YOUR COMMAND.
+            <span className="text-[11px] tracking-normal text-[var(--text-tertiary)]">
+              Operations command
             </span>
           </div>
         </div>
 
-        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
+        <div className="mx-3 h-px bg-[var(--border-subtle)]" />
 
         <CompanySwitcher />
 
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 px-2 py-4">
           <NavList />
         </nav>
 
-        <div className="border-t border-[var(--border-subtle)] px-3 py-3">
+        <div className="mx-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-3">
           <UserInfo />
           <SignOutButton />
           <ThemeToggle />

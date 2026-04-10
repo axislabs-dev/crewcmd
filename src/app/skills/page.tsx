@@ -767,14 +767,6 @@ export default function SkillsPage() {
                     CHECK FOR UPDATES
                   </button>
                 )}
-                {!selectedSkill.id.startsWith("built-in:") && (
-                  <button
-                    onClick={() => handleDeleteSkill(selectedSkill.id)}
-                    className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                  >
-                    REMOVE
-                  </button>
-                )}
               </div>
             </div>
 
@@ -782,6 +774,18 @@ export default function SkillsPage() {
               <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">
                 Source: {selectedSkill.sourceUrl}
               </p>
+            )}
+
+            {/* Skill actions */}
+            {!selectedSkill.id.startsWith("built-in:") && (
+              <div className="mt-4 flex items-center gap-2 border-t border-[var(--border-subtle)] pt-4">
+                <button
+                  onClick={() => handleDeleteSkill(selectedSkill.id)}
+                  className="rounded-lg border border-red-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                >
+                  REMOVE FROM WORKSPACE
+                </button>
+              </div>
             )}
 
             {/* Edit mode */}

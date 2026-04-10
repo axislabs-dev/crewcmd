@@ -80,6 +80,14 @@ async function applySchema() {
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS canvas_position JSONB`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_id UUID`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_ref TEXT`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'user'`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private'`,
+    `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'company'`,
+    `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
+    `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
+    `UPDATE company_runtimes SET owner_company_id = company_id WHERE owner_company_id IS NULL`,
   ];
   for (const stmt of incrementalAlters) {
     try {
@@ -224,6 +232,9 @@ async function applySchema() {
       CREATE TABLE IF NOT EXISTS company_runtimes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        owner_type TEXT NOT NULL DEFAULT 'company',
+        owner_user_id UUID,
+        owner_company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
         runtime_type TEXT NOT NULL DEFAULT 'openclaw',
         name TEXT NOT NULL,
         gateway_url TEXT NOT NULL,

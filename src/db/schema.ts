@@ -30,6 +30,10 @@ export const companyRoleEnum = pgEnum("company_role", [
   "viewer",
 ]);
 
+export const ownershipTypeEnum = pgEnum("ownership_type", ["user", "company"]);
+
+export const agentVisibilityEnum = pgEnum("agent_visibility", ["private", "team", "org"]);
+
 export const goalStatusEnum = pgEnum("goal_status", [
   "active",
   "completed",
@@ -202,7 +206,10 @@ export const agents = pgTable("agents", {
   model: text("model"),
   workspacePath: text("workspace_path"),
   runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().default({}),
-  visibility: text("visibility").notNull().default("team"), // private | assigned | team
+  ownerType: ownershipTypeEnum("owner_type").notNull().default("user"),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  ownerCompanyId: uuid("owner_company_id").references(() => companies.id, { onDelete: "set null" }),
+  visibility: agentVisibilityEnum("visibility").notNull().default("private"),
   canvasPosition: jsonb("canvas_position").$type<{ x: number; y: number } | null>(),
   runtimeId: uuid("runtime_id").references(() => companyRuntimes.id, { onDelete: "set null" }),
   runtimeRef: text("runtime_ref"), // agent ID on the runtime side (e.g. "cipher")
@@ -584,6 +591,9 @@ export const companyRuntimes = pgTable("company_runtimes", {
   companyId: uuid("company_id")
     .references(() => companies.id, { onDelete: "cascade" })
     .notNull(),
+  ownerType: ownershipTypeEnum("owner_type").notNull().default("company"),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  ownerCompanyId: uuid("owner_company_id").references(() => companies.id, { onDelete: "cascade" }),
   runtimeType: text("runtime_type").notNull().default("openclaw"), // openclaw | nanoclaw | custom
   name: text("name").notNull(),
   gatewayUrl: text("gateway_url").notNull(), // ws://localhost:18789

@@ -7,7 +7,7 @@ import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ skillId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const authError = await requireAuth(request);
   if (authError) return authError;
@@ -16,7 +16,7 @@ export async function POST(
     return NextResponse.json({ error: "Database not available" }, { status: 500 });
   }
 
-  const { skillId } = await params;
+  const { id: skillId } = await params;
 
   const [skill] = await withRetry(() =>
     db!

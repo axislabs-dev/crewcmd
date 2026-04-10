@@ -1,25 +1,17 @@
 import { NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { companyRuntimes } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { cookies } from "next/headers";
+import { and, eq } from "drizzle-orm";
+import { getAgentAccessContext, runtimeOwnershipValues, buildRuntimeReadWhere, canManageCompanyOwnedAgent } from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/runtimes — List all runtimes for the active company
- */
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const companyId = cookieStore.get("active_company")?.value;
-    if (!companyId) {
-      return NextResponse.json({ error: "No active company" }, { status: 400 });
-    }
-
-    if (!db) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
+    const access = await getAgentAccessContext();
+    if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    const where = buildRuntimeReadWhere(access);
+    if (!where) return NextResponse.json([]);
 
     const runtimes = await withRetry(() => db!
       .select({
@@ -33,9 +25,12 @@ export async function GET() {
         lastPing: companyRuntimes.lastPing,
         metadata: companyRuntimes.metadata,
         createdAt: companyRuntimes.createdAt,
+        ownerType: companyRuntimes.ownerType,
+        ownerUserId: companyRuntimes.ownerUserId,
+        ownerCompanyId: companyRuntimes.ownerCompanyId,
       })
       .from(companyRuntimes)
-      .where(eq(companyRuntimes.companyId, companyId)));
+      .where(where));
 
     return NextResponse.json(runtimes);
   } catch (err) {
@@ -44,43 +39,34 @@ export async function GET() {
   }
 }
 
-/**
- * POST /api/runtimes — Create a new runtime connection
- */
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const companyId = cookieStore.get("active_company")?.value;
-    if (!companyId) {
-      return NextResponse.json({ error: "No active company" }, { status: 400 });
-    }
-
+    const access = await getAgentAccessContext();
+    if (!access.userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const body = await request.json();
-    const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata } = body;
+    const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata, ownerType } = body;
 
     if (!name || !gatewayUrl || !httpUrl) {
-      return NextResponse.json(
-        { error: "name, gatewayUrl, and httpUrl are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "name, gatewayUrl, and httpUrl are required" }, { status: 400 });
+    }
+    if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+
+    if (!access.activeCompanyId) return NextResponse.json({ error: "Select an active company first" }, { status: 400 });
+    const ownership = runtimeOwnershipValues({ ownerType, userId: access.userId, activeCompanyId: access.activeCompanyId });
+    if (ownership.ownerType === "company" && !canManageCompanyOwnedAgent(access, ownership.ownerCompanyId)) {
+      return NextResponse.json({ error: "Only company admins can create org-owned runtimes" }, { status: 403 });
     }
 
-    if (!db) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
-
-    // Check if this is the first runtime (make it primary)
     const existing = await withRetry(() => db!
       .select({ id: companyRuntimes.id })
       .from(companyRuntimes)
-      .where(eq(companyRuntimes.companyId, companyId)));
+      .where(and(eq(companyRuntimes.companyId, access.activeCompanyId!), eq(companyRuntimes.ownerType, ownership.ownerType))));
 
     const isPrimary = existing.length === 0;
 
     const [runtime] = await withRetry(() => db!
       .insert(companyRuntimes)
       .values({
-        companyId,
         runtimeType: runtimeType || "openclaw",
         name,
         gatewayUrl,
@@ -90,6 +76,7 @@ export async function POST(request: Request) {
         status: "connected",
         lastPing: new Date(),
         metadata: metadata || null,
+        ...ownership,
       })
       .returning());
 

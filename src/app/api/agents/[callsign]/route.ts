@@ -2,42 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { canReadAgent, canUpdateAgent, getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
+interface RouteParams { params: Promise<{ callsign: string }>; }
 
-interface RouteParams {
-  params: Promise<{ callsign: string }>;
-}
-
-export async function GET(
-  _request: NextRequest,
-  { params }: RouteParams
-) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { callsign } = await params;
-
-  if (!db) {
-    return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-  }
-
+  if (!db) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   try {
-    // Find agent in DB by callsign (case-insensitive via uppercase match)
+    const access = await getAgentAccessContext();
     const dbAgents = await withRetry(() => db!.select().from(schema.agents));
-    const agent = dbAgents.find(
-      (a) => a.callsign.toLowerCase() === callsign.toLowerCase()
-    );
-
-    if (!agent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
-
-    // Try to merge heartbeat data if available
-    const heartbeats = await withRetry(() =>
-      db!.select().from(schema.agentHeartbeats)
-    ).catch(() => []);
-    const hb = heartbeats.find(
-      (h) => (h.callsign ?? "").toLowerCase() === callsign.toLowerCase()
-    );
-
+    const agent = dbAgents.find((a) => a.callsign.toLowerCase() === callsign.toLowerCase());
+    if (!agent || !canReadAgent(agent, access)) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    const heartbeats = await withRetry(() => db!.select().from(schema.agentHeartbeats)).catch(() => []);
+    const hb = heartbeats.find((h) => (h.callsign ?? "").toLowerCase() === callsign.toLowerCase());
     return NextResponse.json({
       id: agent.id,
       callsign: agent.callsign,
@@ -54,6 +33,11 @@ export async function GET(
       adapterConfig: agent.adapterConfig ?? {},
       runtimeConfig: agent.runtimeConfig ?? {},
       companyId: agent.companyId,
+      runtimeId: agent.runtimeId,
+      ownerType: agent.ownerType,
+      ownerUserId: agent.ownerUserId,
+      ownerCompanyId: agent.ownerCompanyId,
+      visibility: agent.visibility,
       role: agent.role ?? "engineer",
       model: agent.model ?? null,
       workspacePath: agent.workspacePath ?? null,
@@ -66,52 +50,30 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { callsign } = await params;
-
-  if (!db) {
-    return NextResponse.json({ error: "Database not available" }, { status: 503 });
-  }
-
+  if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
   try {
+    const access = await getAgentAccessContext();
     const body = await request.json();
-
-    // Find the agent first
     const dbAgents = await withRetry(() => db!.select().from(schema.agents));
-    const agent = dbAgents.find(
-      (a) => a.callsign.toLowerCase() === callsign.toLowerCase()
-    );
+    const agent = dbAgents.find((a) => a.callsign.toLowerCase() === callsign.toLowerCase());
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    if (!canUpdateAgent(agent, access)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    if (!agent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
-
-    // Build update object from allowed fields
     const allowedFields = [
-      "name", "callsign", "title", "emoji", "color",
-      "adapterType", "adapterConfig", "runtimeConfig", "role", "model",
-      "workspacePath", "reportsTo", "companyId", "soulContent", "status",
-      "canvasPosition", "avatarUrl",
+      "name", "callsign", "title", "emoji", "color", "adapterType", "adapterConfig", "runtimeConfig", "role", "model",
+      "workspacePath", "reportsTo", "companyId", "soulContent", "status", "canvasPosition", "avatarUrl", "runtimeId",
     ] as const;
-
     const updates: Record<string, unknown> = {};
-    for (const field of allowedFields) {
-      if (field in body) {
-        updates[field] = body[field];
-      }
+    for (const field of allowedFields) if (field in body) updates[field] = body[field];
+
+    if ("visibility" in body) {
+      updates.visibility = normalizeVisibilityForCreation({ ownerType: agent.ownerType, requestedVisibility: body.visibility });
     }
 
-    // Handle extended fields that merge into adapterConfig
-    const extendedAdapterFields = [
-      "command", "thinkingEffort", "promptTemplate", "instructionsFile",
-      "extraArgs", "envVars", "timeoutSec", "gracePeriodSec",
-      "gatewayUrl", "gatewayToken", "httpUrl", "httpAuthHeader",
-    ];
-    const hasExtendedAdapter = extendedAdapterFields.some((f) => f in body);
-    if (hasExtendedAdapter) {
+    const extendedAdapterFields = ["command","thinkingEffort","promptTemplate","instructionsFile","extraArgs","envVars","timeoutSec","gracePeriodSec","gatewayUrl","gatewayToken","httpUrl","httpAuthHeader"];
+    if (extendedAdapterFields.some((f) => f in body)) {
       const existing = (agent.adapterConfig ?? {}) as Record<string, unknown>;
       const merged = { ...existing, ...(updates.adapterConfig as Record<string, unknown> || {}) };
       if ("command" in body) merged.command = body.command || undefined;
@@ -123,22 +85,14 @@ export async function PATCH(
       if ("timeoutSec" in body) merged.timeoutSec = body.timeoutSec;
       if ("gracePeriodSec" in body) merged.gracePeriodSec = body.gracePeriodSec;
       if ("gatewayUrl" in body) merged.url = body.gatewayUrl;
-      if ("gatewayToken" in body) {
-        merged.headers = { ...(merged.headers as Record<string, string> || {}), "x-openclaw-token": body.gatewayToken };
-      }
+      if ("gatewayToken" in body) merged.headers = { ...(merged.headers as Record<string, string> || {}), "x-openclaw-token": body.gatewayToken };
       if ("httpUrl" in body) merged.url = body.httpUrl;
-      if ("httpAuthHeader" in body) {
-        merged.headers = { ...(merged.headers as Record<string, string> || {}), Authorization: body.httpAuthHeader };
-      }
+      if ("httpAuthHeader" in body) merged.headers = { ...(merged.headers as Record<string, string> || {}), Authorization: body.httpAuthHeader };
       updates.adapterConfig = merged;
     }
 
-    // Handle extended heartbeat / run policy fields that merge into runtimeConfig
-    const extendedRuntimeFields = [
-      "heartbeatEnabled", "heartbeatIntervalSec", "wakeOnDemand", "cooldownSec", "maxConcurrentRuns",
-    ];
-    const hasExtendedRuntime = extendedRuntimeFields.some((f) => f in body);
-    if (hasExtendedRuntime) {
+    const extendedRuntimeFields = ["heartbeatEnabled","heartbeatIntervalSec","wakeOnDemand","cooldownSec","maxConcurrentRuns"];
+    if (extendedRuntimeFields.some((f) => f in body)) {
       const existing = (agent.runtimeConfig ?? {}) as Record<string, unknown>;
       const existingHb = (existing.heartbeat ?? {}) as Record<string, unknown>;
       const merged = { ...existing, ...(updates.runtimeConfig as Record<string, unknown> || {}) };
@@ -152,19 +106,8 @@ export async function PATCH(
       updates.runtimeConfig = merged;
     }
 
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
-    }
-
-    // Use raw SQL set for dynamic updates via Drizzle
-    const [updated] = await withRetry(() =>
-      db!
-        .update(schema.agents)
-        .set(updates)
-        .where(eq(schema.agents.id, agent.id))
-        .returning()
-    );
-
+    if (Object.keys(updates).length === 0) return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    const [updated] = await withRetry(() => db!.update(schema.agents).set(updates).where(eq(schema.agents.id, agent.id)).returning());
     return NextResponse.json(updated);
   } catch (err) {
     console.error("[api/agents/callsign] PATCH Error:", err);
@@ -172,30 +115,16 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: RouteParams
-) {
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { callsign } = await params;
-
-  if (!db) {
-    return NextResponse.json({ error: "Database not available" }, { status: 503 });
-  }
-
+  if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
   try {
+    const access = await getAgentAccessContext();
     const dbAgents = await withRetry(() => db!.select().from(schema.agents));
-    const agent = dbAgents.find(
-      (a) => a.callsign.toLowerCase() === callsign.toLowerCase()
-    );
-
-    if (!agent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
-
-    await withRetry(() =>
-      db!.delete(schema.agents).where(eq(schema.agents.id, agent.id))
-    );
-
+    const agent = dbAgents.find((a) => a.callsign.toLowerCase() === callsign.toLowerCase());
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    if (!canUpdateAgent(agent, access)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    await withRetry(() => db!.delete(schema.agents).where(eq(schema.agents.id, agent.id)));
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[api/agents/callsign] DELETE Error:", err);

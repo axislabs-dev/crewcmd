@@ -1,59 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
-import { requireAuth } from "@/lib/require-auth";
-import { sql } from "drizzle-orm";
-import type { AgentVisibility } from "@/db/schema-access";
+import { agents } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { canUpdateAgent, getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
+interface RouteParams { params: Promise<{ callsign: string }>; }
 
-interface RouteParams {
-  params: Promise<{ callsign: string }>;
-}
-
-const VALID_TIERS: AgentVisibility[] = ["private", "assigned", "team"];
-
-/**
- * PATCH /api/agents/[callsign]/visibility — Change agent visibility tier.
- * Body: { visibility: 'private' | 'assigned' | 'team' }
- */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { callsign } = await params;
-
-  if (!db) {
-    return NextResponse.json({ error: "Database not available" }, { status: 503 });
-  }
-
-  const authErr = await requireAuth(request);
-  if (authErr) return authErr;
+  if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
   try {
-    const body = await request.json();
-    const { visibility } = body;
+    const access = await getAgentAccessContext();
+    const { visibility } = await request.json();
+    const existing = await withRetry(() => db!.select().from(agents));
+    const agent = existing.find((item) => item.callsign.toLowerCase() === callsign.toLowerCase());
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    if (!canUpdateAgent(agent, access)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    if (!visibility || !VALID_TIERS.includes(visibility)) {
-      return NextResponse.json(
-        { error: `visibility must be one of: ${VALID_TIERS.join(", ")}` },
-        { status: 400 }
-      );
-    }
-
-    const result = await withRetry(() =>
-      db!.execute(sql.raw(`
-        UPDATE agents
-        SET visibility = '${visibility}'
-        WHERE LOWER(callsign) = LOWER('${callsign}')
-        RETURNING id, callsign, visibility
-      `))
+    const nextVisibility = normalizeVisibilityForCreation({ ownerType: agent.ownerType, requestedVisibility: visibility });
+    const [updated] = await withRetry(() =>
+      db!.update(agents).set({ visibility: nextVisibility }).where(eq(agents.id, agent.id)).returning()
     );
 
-    const rows = result.rows ?? result;
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(rows[0]);
-  } catch (err) {
-    console.error("[api/agents/visibility] PATCH Error:", err);
+    return NextResponse.json({ success: true, agent: updated, sharingNote: agent.ownerType === "user" ? "Personal agents stay private in v1." : null });
+  } catch (error) {
+    console.error("[api/agents/:callsign/visibility] PATCH error", error);
     return NextResponse.json({ error: "Failed to update visibility" }, { status: 500 });
   }
 }

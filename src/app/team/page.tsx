@@ -123,6 +123,15 @@ const adapterLabels: Record<string, string> = {
 
 // ─── View modes ─────────────────────────────────────────────────────────
 
+function ownershipLabel(agent: Agent) {
+  return agent.ownerType === "company" ? "ORG" : "PERSONAL";
+}
+
+function visibilityLabel(agent: Agent) {
+  return (agent.visibility ?? "private").toUpperCase();
+}
+
+
 type ViewMode = "canvas" | "tree" | "grid";
 
 // ─── Tree Node Card ─────────────────────────────────────────────────────
@@ -219,6 +228,12 @@ function NodeCard({
                   {agent.model}
                 </span>
               )}
+              <span className="rounded bg-[var(--bg-surface-hover)] px-1 py-0.5 text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                {ownershipLabel(agent)}
+              </span>
+              <span className="rounded bg-[var(--accent-soft)] px-1 py-0.5 text-[9px] tracking-wider text-[var(--accent)]">
+                {visibilityLabel(agent)}
+              </span>
             </div>
             {/* Skills */}
             {agentSkills.length > 0 && (
@@ -368,6 +383,12 @@ function GridCard({
               {agent.role.toUpperCase()}
             </span>
           )}
+          <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[10px] tracking-wider text-[var(--text-tertiary)]">
+            {ownershipLabel(agent)}
+          </span>
+          <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] tracking-wider text-[var(--accent)]">
+            {visibilityLabel(agent)}
+          </span>
         </div>
 
         {skills.length > 0 && (

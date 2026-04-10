@@ -24,6 +24,11 @@ export interface Agent {
   role: string;
   model: string | null;
   workspacePath: string | null;
+  runtimeId?: string | null;
+  ownerType?: "user" | "company";
+  ownerUserId?: string | null;
+  ownerCompanyId?: string | null;
+  visibility?: "private" | "team" | "org";
   canvasPosition?: { x: number; y: number } | null;
   avatarUrl?: string | null;
   tokenUsage?: {

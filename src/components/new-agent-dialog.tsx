@@ -28,6 +28,8 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
   });
   const [callsignManual, setCallsignManual] = useState(false);
   const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
+  const [ownerType, setOwnerType] = useState<"user" | "company">("user");
+  const [visibility, setVisibility] = useState<"private" | "team" | "org">("private");
 
   // Fetch existing agents for reports-to picker
   useEffect(() => {
@@ -102,6 +104,8 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
           workspacePath: values.workspacePath.trim() || null,
           reportsTo: values.reportsTo || null,
           companyId,
+          ownerType,
+          visibility,
           // Extended fields
           command: values.command.trim() || null,
           thinkingEffort: values.thinkingEffort || null,
@@ -155,6 +159,29 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
               {error}
             </div>
           )}
+
+
+          <div className="mb-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">Ownership & visibility</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-[var(--text-secondary)]">
+                <span className="mb-1 block">Owned by</span>
+                <select value={ownerType} onChange={(e) => { const next=e.target.value as "user"|"company"; setOwnerType(next); if (next === "user") setVisibility("private"); else if (visibility === "private") setVisibility("team"); }} className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)]">
+                  <option value="user">Me (personal runtime/agent)</option>
+                  <option value="company" disabled={!companyId}>Current org runtime/agent</option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--text-secondary)]">
+                <span className="mb-1 block">Visibility</span>
+                <select value={visibility} onChange={(e) => setVisibility(e.target.value as "private"|"team"|"org")} disabled={ownerType === "user"} className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60">
+                  <option value="private">Private</option>
+                  <option value="team">Team</option>
+                  <option value="org">Org</option>
+                </select>
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-tertiary)]">Personal agents are private by default and stay private in v1. Use an org-owned runtime/agent when you need team or org access.</p>
+          </div>
 
           <AgentConfigFields
             values={values}

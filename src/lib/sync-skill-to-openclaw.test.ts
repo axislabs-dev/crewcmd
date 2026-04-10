@@ -1,23 +1,37 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+// ─── Hoisted mock state (vi.mock is hoisted, so vars must be too) ───
+
+const { agentsDbMock } = vi.hoisted(() => ({
+  agentsDbMock: {
+    __table: Symbol.for("agents"),
+    id: Symbol.for("agents.id"),
+    companyId: Symbol.for("agents.companyId"),
+    runtimeId: Symbol.for("agents.runtimeId"),
+    runtimeRef: Symbol.for("agents.runtimeRef"),
+  },
+}));
+
 // ─── Mock in-memory filesystem ──────────────────────────────────────
 
-const memFs: Record<string, string> = {};
+const membrane: { store: Record<string, string> } = vi.hoisted(() => ({
+  store: {},
+}));
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(async (p: string) => {
-    if (memFs[p] === undefined) throw new Error(`ENOENT: ${p}`);
-    return memFs[p];
+    if (membrane.store[p] === undefined) throw new Error(`ENOENT: ${p}`);
+    return membrane.store[p];
   }),
-  writeFile: vi.fn(async (p: string, c: string) => { memFs[p] = c; }),
+  writeFile: vi.fn(async (p: string, c: string) => { membrane.store[p] = c; }),
   rename: vi.fn(async (f: string, t: string) => {
-    if (memFs[f] === undefined) throw new Error(`ENOENT: ${f}`);
-    memFs[t] = memFs[f];
-    delete memFs[f];
+    if (membrane.store[f] === undefined) throw new Error(`ENOENT: ${f}`);
+    membrane.store[t] = membrane.store[f];
+    delete membrane.store[f];
   }),
   mkdir: vi.fn(async () => {}),
   stat: vi.fn(async (p: string) => {
-    if (memFs[p] === undefined) throw new Error(`ENOENT: ${p}`);
+    if (membrane.store[p] === undefined) throw new Error(`ENOENT: ${p}`);
     return { mtimeMs: Date.now() };
   }),
   access: vi.fn(async () => {}),
@@ -30,18 +44,10 @@ vi.mock("node:os", () => ({
 
 // ─── DB mocks ───────────────────────────────────────────────────────
 
-const agentsDbMock = {
-  __table: Symbol.for("agents"),
-  id: Symbol.for("agents.id"),
-  companyId: Symbol.for("agents.companyId"),
-  runtimeId: Symbol.for("agents.runtimeId"),
-  runtimeRef: Symbol.for("agents.runtimeRef"),
-};
-
 vi.mock("@/db", async () => {
   const { vi } = await import("vitest");
   return {
-    db: undefined, // will be set by each test via re-mock if needed
+    db: undefined,
     withRetry: (fn: () => Promise<unknown>) => fn(),
   };
 });
@@ -131,7 +137,7 @@ import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 
 describe("syncSkillToOpenClaw", () => {
   beforeEach(() => {
-    Object.keys(memFs).forEach((k) => delete memFs[k]);
+    Object.keys(membrane.store).forEach((k) => delete membrane.store[k]);
   });
 
   const opts = {

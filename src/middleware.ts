@@ -42,6 +42,8 @@ export default auth((req) => {
       }
     }
 
+    // /settings is available to all authenticated users
+
     // viewer role: block write-oriented pages (tasks, projects creation etc are handled by API)
     // viewers can see all dashboard pages in read-only mode
   }

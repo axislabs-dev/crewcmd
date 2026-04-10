@@ -85,7 +85,25 @@ chore: update dependencies
 
 ## Testing
 
-Currently there's no test suite. If you add tests, use Vitest. Contributions that add test coverage are very welcome.
+We use [Vitest](https://vitest.dev/) with PGlite for zero-config test runs — no external database needed.
+
+```bash
+pnpm test          # run all tests
+pnpm test:watch    # watch mode
+```
+
+Test coverage is still early. See the **Engineering Foundations > Testing** section in [docs/ROADMAP.md](./docs/ROADMAP.md) for priority test targets and good first issues. Adding tests to critical paths is one of the most valuable contributions you can make.
+
+## Where to Contribute
+
+Not sure where to start? The [Roadmap](./docs/ROADMAP.md) has a full breakdown. High-impact areas:
+
+- **Tests** — Adding test coverage to critical paths (skill invoke, agent CRUD, auth). See the testing priority table in the roadmap.
+- **API validation** — Adding Zod schemas to API route handlers. Mechanical, high-value work.
+- **ADRs** — Documenting architecture decisions. Read the code, write the "why." See `docs/architecture/decisions/`.
+- **Schema split** — Breaking `src/db/schema.ts` into domain-specific files. Mechanical refactor with clear instructions in the roadmap.
+
+Check [GitHub Issues](https://github.com/axislabs-dev/crewcmd/issues) for items labeled `good first issue`.
 
 ## Reporting Issues
 

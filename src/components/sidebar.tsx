@@ -7,11 +7,11 @@ import { signOut, useSession } from "next-auth/react";
 import { CompanySwitcher } from "@/components/company-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useCompany } from "@/components/company-context";
+import { Avatar } from "@/components/avatar";
 
-// Grouped nav structure: section → items
 const navSections = [
   {
-    label: null, // Top-level, no section header
+    label: null,
     items: [
       {
         href: "/inbox",
@@ -129,11 +129,10 @@ const navSections = [
       },
     ],
   },
-
 ];
 
 const settingsItem = {
-  href: "/dashboard/settings",
+  href: "/settings",
   label: "Settings",
   icon: (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -150,19 +149,11 @@ function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
   if (company?.logoUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={company.logoUrl}
-        alt={company.name}
-        className={`${logoSize} rounded-md object-contain`}
-      />
+      <img src={company.logoUrl} alt={company.name} className={`${logoSize} rounded-md object-contain`} />
     );
   }
 
-  return (
-    <div
-      className={`${size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} rounded-full bg-[var(--accent)] ring-4 ring-[var(--accent-soft)]`}
-    />
-  );
+  return <div className={`${size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} rounded-full bg-[var(--accent)] ring-4 ring-[var(--accent-soft)]`} />;
 }
 
 function BrandName() {
@@ -170,11 +161,7 @@ function BrandName() {
   const name = company?.name || "CREWCMD";
   const displayName = name.length > 12 ? name.slice(0, 12) : name;
 
-  return (
-    <span className="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
-      {displayName}
-    </span>
-  );
+  return <span className="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{displayName}</span>;
 }
 
 export function Sidebar() {
@@ -182,9 +169,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: session } = useSession();
 
-  // Hide sidebar on login page and access-denied
   if (pathname === "/" || pathname === "/access-denied") return null;
-  // Hide sidebar on invite pages
   if (pathname.startsWith("/invite/")) return null;
 
   const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
@@ -207,22 +192,13 @@ export function Sidebar() {
               ? "border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
               : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           }`}
-          
         >
-          {active && (
-            <div
-              className="absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]"
-            />
-          )}
+          {active && <div className="absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
           <span className={`transition-colors ${active ? "text-[var(--accent)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
             {item.icon}
           </span>
           <span>{item.label.toUpperCase()}</span>
-          {active && (
-            <div
-              className="ml-auto h-2 w-2 rounded-full bg-[var(--accent)]"
-            />
-          )}
+          {active && <div className="ml-auto h-2 w-2 rounded-full bg-[var(--accent)]" />}
         </Link>
       </li>
     );
@@ -232,11 +208,7 @@ export function Sidebar() {
     <div className="space-y-4">
       {navSections.map((section, idx) => (
         <div key={idx}>
-          {section.label && (
-            <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">
-              {section.label}
-            </div>
-          )}
+          {section.label && <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">{section.label}</div>}
           <ul className="space-y-0.5">
             {section.items.map((item) => (
               <NavLink key={item.href} item={item} onClick={onClick} />
@@ -244,11 +216,17 @@ export function Sidebar() {
           </ul>
         </div>
       ))}
+      <div>
+        <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
+        <ul className="space-y-0.5">
+          <NavLink item={settingsItem} onClick={onClick} />
+        </ul>
+      </div>
       {isSuperAdmin && (
         <div>
-          <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
+          <div className="mx-3 mb-1.5 mt-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">Admin</div>
           <ul className="space-y-0.5">
-            <NavLink item={settingsItem} onClick={onClick} />
+            <NavLink item={{ ...settingsItem, href: "/dashboard/settings", label: "Admin settings" }} onClick={onClick} />
           </ul>
         </div>
       )}
@@ -259,34 +237,18 @@ export function Sidebar() {
     if (!session?.user) return null;
     const username = (session.user as Record<string, unknown>).username as string | undefined;
     return (
-      <div className="flex items-center gap-2 px-3 py-2">
-        {session.user.image && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={session.user.image}
-            alt=""
-            className="h-6 w-6 rounded-full border border-[var(--border-medium)]"
-          />
-        )}
+      <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-[var(--bg-surface-hover)]">
+        <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] text-[var(--text-secondary)]">
-            {session.user.name || username || "User"}
-          </p>
-          {role && (
-            <p className="text-[9px] text-[var(--text-tertiary)]">
-              {role.toUpperCase().replace("_", " ")}
-            </p>
-          )}
+          <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
+          {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
         </div>
-      </div>
+      </Link>
     );
   };
 
   const SignOutButton = () => (
-    <button
-      onClick={() => signOut({ callbackUrl: "/" })}
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] tracking-wide text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
-    >
+    <button onClick={() => signOut({ callbackUrl: "/" })} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] tracking-wide text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]">
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
       </svg>
@@ -296,17 +258,12 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar */}
       <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-2.5">
           <BrandLogo size="sm" />
           <BrandName />
         </div>
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-          aria-label="Toggle navigation"
-        >
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Toggle navigation">
           {mobileOpen ? (
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -319,29 +276,15 @@ export function Sidebar() {
         </button>
       </div>
 
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      {mobileOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      {/* Mobile drawer */}
-      <div
-        className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] transition-transform duration-300 lg:hidden ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
+      <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
           <div className="flex items-center gap-2.5">
             <BrandLogo size="sm" />
             <BrandName />
           </div>
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-            aria-label="Close navigation"
-          >
+          <button onClick={() => setMobileOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Close navigation">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -355,39 +298,28 @@ export function Sidebar() {
           <UserInfo />
           <SignOutButton />
           <ThemeToggle />
-          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}
-          </span>
+          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}</span>
         </div>
       </div>
 
-      {/* Desktop sidebar */}
       <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[272px] flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 backdrop-blur-xl lg:flex">
         <div className="flex items-center gap-3 rounded-2xl px-4 py-4">
           <BrandLogo size="md" />
           <div className="flex flex-col">
             <BrandName />
-            <span className="text-[11px] tracking-normal text-[var(--text-tertiary)]">
-              Operations command
-            </span>
+            <span className="text-[11px] tracking-normal text-[var(--text-tertiary)]">Operations command</span>
           </div>
         </div>
-
         <div className="mx-3 h-px bg-[var(--border-subtle)]" />
-
         <CompanySwitcher />
-
         <nav className="flex-1 px-2 py-4">
           <NavList />
         </nav>
-
         <div className="mx-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-3">
           <UserInfo />
           <SignOutButton />
           <ThemeToggle />
-          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION}
-          </span>
+          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}</span>
         </div>
       </aside>
     </>

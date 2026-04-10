@@ -16,6 +16,7 @@ import { eq, and } from "drizzle-orm";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { generateCrewCmdSkill } from "./crewcmd-skill-template";
 import { detectCallbackUrl } from "./detect-callback-url";
+import { CREWCMD_MANAGEMENT_SKILL_METADATA } from "./skills/crewcmd-management";
 import fs from "node:fs/promises";
 import path from "node:path";
 

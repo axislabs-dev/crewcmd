@@ -27,6 +27,8 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<AgentConfigValues>(defaultAgentConfigValues());
   const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
+  const [ownerType, setOwnerType] = useState<"user" | "company">("user");
+  const [visibility, setVisibility] = useState<"private" | "team" | "org">("private");
 
   // Load agent data + existing agents
   useEffect(() => {
@@ -42,6 +44,8 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
         }
 
         const adapterConfig = (agent.adapterConfig ?? {}) as Record<string, unknown>;
+        setOwnerType((agent.ownerType as "user" | "company") ?? "user");
+        setVisibility((agent.visibility as "private" | "team" | "org") ?? "private");
         const runtimeConfig = (agent.runtimeConfig ?? {}) as Record<string, unknown>;
         const heartbeat = (runtimeConfig.heartbeat ?? {}) as Record<string, unknown>;
 
@@ -164,6 +168,7 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
           wakeOnDemand: values.wakeOnDemand,
           cooldownSec: values.cooldownSec,
           maxConcurrentRuns: values.maxConcurrentRuns,
+          visibility,
         }),
       });
 
@@ -238,6 +243,25 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
                   {error}
                 </div>
               )}
+              <div className="mb-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">Ownership & visibility</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs text-[var(--text-secondary)]">
+                    <span className="mb-1 block">Owned by</span>
+                    <input value={ownerType === "company" ? "Current org" : "Personal"} disabled className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] opacity-80" />
+                  </label>
+                  <label className="text-xs text-[var(--text-secondary)]">
+                    <span className="mb-1 block">Visibility</span>
+                    <select value={visibility} onChange={(e) => setVisibility(e.target.value as "private"|"team"|"org")} disabled={ownerType === "user"} className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60">
+                      <option value="private">Private</option>
+                      <option value="team">Team</option>
+                      <option value="org">Org</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">Personal agents remain private in v1. Org-owned agents can be shared to team or org based on company policy.</p>
+              </div>
+
               <AgentConfigFields
                 values={values}
                 onChange={handleChange}

@@ -19,7 +19,7 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react";
 import dagre from "@dagrejs/dagre";
-import "@xyflow/react/dist/style.css";
+// CSS imported in globals.css to avoid Turbopack chunk loading issues
 import type { Agent } from "@/lib/data";
 import { AgentNode, type AgentNodeData } from "./agent-node";
 

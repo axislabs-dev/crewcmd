@@ -149,3 +149,7 @@ GET /api/audit-log       (full compliance trail)
 - Always include `createdBy` when creating tasks programmatically
 
 For full API reference including chat, runtimes, skills, blueprints, budgets, approvals, and more: read `references/api-full.md`.
+
+## Built-in OpenClaw tracing
+
+CrewCmd now ships `@axislabs/crewcmd-hooks`, an OpenClaw hook pack that mirrors `sessions_spawn` / `sessions_send` dispatches into CrewCmd chat via `/api/chat/messages`. Install it from `packages/crewcmd-hooks/scripts/setup-hook.sh` on any runtime that should automatically record subagent work in the CrewCmd UI.

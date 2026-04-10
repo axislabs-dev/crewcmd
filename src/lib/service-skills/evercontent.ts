@@ -1,7 +1,8 @@
 import type { ServiceSkillHandler } from "@/lib/service-skills";
 
+const EVERCONTENT_BASE_URL = "https://app.evercontent.io";
+
 interface EverContentConfig {
-  baseUrl?: string;
   defaultCustomerId?: string;
   defaultProjectId?: string;
   allowedCustomerIds?: string[];
@@ -12,7 +13,6 @@ interface EverContentConfig {
 
 function asConfig(config: Record<string, unknown>): EverContentConfig {
   return {
-    baseUrl: typeof config.baseUrl === "string" ? config.baseUrl : undefined,
     defaultCustomerId: typeof config.defaultCustomerId === "string" ? config.defaultCustomerId : undefined,
     defaultProjectId: typeof config.defaultProjectId === "string" ? config.defaultProjectId : undefined,
     allowedCustomerIds: Array.isArray(config.allowedCustomerIds)
@@ -64,10 +64,9 @@ async function request(
   path: string,
   init?: RequestInit
 ): Promise<unknown> {
-  if (!config.baseUrl) throw new Error("EverContent config.baseUrl is required");
   if (!config.__resolvedSecret) throw new Error("EverContent config.secretRef could not be resolved");
 
-  const response = await fetch(new URL(path, config.baseUrl).toString(), {
+  const response = await fetch(new URL(path, EVERCONTENT_BASE_URL).toString(), {
     ...init,
     headers: {
       "content-type": "application/json",

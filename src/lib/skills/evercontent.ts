@@ -33,7 +33,6 @@ This skill expects per-agent config in \`agent_skills.config\`.
 Example:
 \`\`\`json
 {
-  "baseUrl": "https://app.evercontent.com",
   "secretRef": { "name": "evercontent-api-key" },
   "allowedProjectIds": ["project_456"],
   "canPublish": false
@@ -41,7 +40,6 @@ Example:
 \`\`\`
 
 Common fields:
-- \`baseUrl\`: EverContent base URL
 - \`secretRef\`: company secret reference for the EverContent API key
 - \`defaultCustomerId\`: optional default customer scope
 - \`defaultProjectId\`: optional default project scope
@@ -93,11 +91,6 @@ Supported actions:
       type: "object",
       additionalProperties: false,
       properties: {
-        baseUrl: {
-          type: "string",
-          title: "EverContent base URL",
-          description: "Workspace URL, e.g. https://app.evercontent.com",
-        },
         secretRef: {
           type: "object",
           title: "EverContent API key",
@@ -134,10 +127,9 @@ Supported actions:
           description: "Leave false for review-safe draft workflows",
         },
       },
-      required: ["baseUrl", "secretRef"],
+      required: ["secretRef"],
     },
     configExample: {
-      baseUrl: "https://app.evercontent.com",
       secretRef: { name: "evercontent-api-key" },
       defaultScope: "project",
       allowedProjectIds: ["project_456"],

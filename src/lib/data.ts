@@ -25,6 +25,7 @@ export interface Agent {
   model: string | null;
   workspacePath: string | null;
   canvasPosition?: { x: number; y: number } | null;
+  avatarUrl?: string | null;
   tokenUsage?: {
     totalTokens: number;
     sessionCount: number;

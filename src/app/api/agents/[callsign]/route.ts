@@ -94,7 +94,7 @@ export async function PATCH(
       "name", "callsign", "title", "emoji", "color",
       "adapterType", "adapterConfig", "runtimeConfig", "role", "model",
       "workspacePath", "reportsTo", "companyId", "soulContent", "status",
-      "canvasPosition",
+      "canvasPosition", "avatarUrl",
     ] as const;
 
     const updates: Record<string, unknown> = {};

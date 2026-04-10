@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Agent } from "@/lib/data";
+import { AgentAvatar } from "@/components/avatar";
 
 export interface AgentNodeData {
   agent: Agent;

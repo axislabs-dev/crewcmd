@@ -47,7 +47,7 @@ Common fields:
 - \`defaultProjectId\`: optional default project scope
 - \`allowedCustomerIds\`: optional allow-list of customer IDs
 - \`allowedProjectIds\`: optional allow-list of project IDs
-- \`defaultScope\`: one of \`v1\`, \`customer\`, or \`project\`
+- \`defaultScope\`: one of \`customer\` or \`project\`
 - \`canPublish\`: defaults to \`false\`; only publish when explicitly enabled
 
 ## Capability contract
@@ -95,13 +95,13 @@ Supported actions:
       properties: {
         baseUrl: {
           type: "string",
-          title: "Base URL",
-          description: "EverContent base URL, e.g. https://app.evercontent.com",
+          title: "EverContent base URL",
+          description: "Workspace URL, e.g. https://app.evercontent.com",
         },
         secretRef: {
           type: "object",
-          title: "Secret reference",
-          description: "Reference to a CrewCmd service secret containing the EverContent API key",
+          title: "EverContent API key",
+          description: "Vault-backed company secret containing the EverContent API key",
           additionalProperties: false,
           properties: {
             name: { type: "string", title: "Secret name" },
@@ -123,7 +123,9 @@ Supported actions:
         defaultScope: {
           type: "string",
           title: "Default scope",
-          enum: ["v1", "customer", "project"],
+          description: "Choose the default lookup scope for this agent",
+          enum: ["customer", "project"],
+          default: "project",
         },
         canPublish: {
           type: "boolean",
@@ -137,6 +139,7 @@ Supported actions:
     configExample: {
       baseUrl: "https://app.evercontent.com",
       secretRef: { name: "evercontent-api-key" },
+      defaultScope: "project",
       allowedProjectIds: ["project_456"],
       canPublish: false,
     },

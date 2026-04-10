@@ -24,7 +24,8 @@ const schema = {
     defaultScope: {
       type: "string",
       title: "Default scope",
-      enum: ["v1", "customer", "project"],
+      enum: ["customer", "project"],
+      default: "project",
     },
     allowedProjectIds: {
       type: "array",

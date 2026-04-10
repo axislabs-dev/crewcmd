@@ -1,0 +1,24 @@
+{
+  "name": "@axislabs/crewcmd-hooks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw hook pack for tracing subagent conversations into CrewCmd chat.",
+  "type": "module",
+  "main": "dist/subagent-trace/handler.js",
+  "exports": {
+    ".": "./dist/subagent-trace/handler.js",
+    "./subagent-trace": "./dist/subagent-trace/handler.js",
+    "./install": "./dist/install.js"
+  },
+  "files": [
+    "dist",
+    "HOOK.md",
+    "src",
+    "scripts",
+    "vitest.config.ts"
+  ],
+  "scripts": {
+    "build": "../../node_modules/.bin/tsc -p tsconfig.json",
+    "test": "../../node_modules/.bin/vitest run tests/subagent-trace.test.ts"
+  }
+}

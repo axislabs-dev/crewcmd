@@ -342,6 +342,8 @@ export default function SkillsPage() {
           description: ms.description,
           version: ms.version,
           sourceUrl: ms.sourceUrl,
+          content: ms.content,
+          metadata: ms.metadata,
           companyId,
         }),
       });

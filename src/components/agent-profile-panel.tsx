@@ -4,6 +4,16 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { Agent, Task, Activity } from "@/lib/data";
 import { ROLES } from "@/components/agent-config-fields";
+import {
+  getInitialSkillConfig,
+  getSecretRefName,
+  getSkillConfigFields,
+  getSkillConfigSchema,
+  parseStringList,
+  setSecretRefName,
+  stringifyStringList,
+  validateSkillConfig,
+} from "@/lib/skill-config-form";
 import { timeAgo } from "@/lib/utils";
 import { AgentControlPanel } from "@/components/agent-control-panel";
 import { AgentOutputViewer } from "@/components/agent-output-viewer";
@@ -20,7 +30,14 @@ interface AgentSkillRow {
     name: string;
     slug: string;
     description?: string;
-    metadata?: { icon?: string; category?: string; runtime?: string; command?: string | null };
+    metadata?: {
+      icon?: string;
+      category?: string;
+      runtime?: string;
+      command?: string | null;
+      configSchema?: Record<string, unknown>;
+      configExample?: Record<string, unknown>;
+    };
   };
 }
 
@@ -30,7 +47,14 @@ interface AvailableSkill {
   name: string;
   description?: string | null;
   source?: string | null;
-  metadata?: { icon?: string; category?: string; runtime?: string; command?: string | null };
+  metadata?: {
+    icon?: string;
+    category?: string;
+    runtime?: string;
+    command?: string | null;
+    configSchema?: Record<string, unknown>;
+    configExample?: Record<string, unknown>;
+  };
 }
 
 interface AgentDetail extends Agent {
@@ -566,6 +590,201 @@ function SummaryTab({
 
 // ─── Skills Tab ─────────────────────────────────────────────────────────
 
+interface ServiceSecretOption {
+  id: string;
+  name: string;
+  description: string | null;
+  maskedValue: string;
+}
+
+function SkillConfigFields({
+  row,
+  config,
+  secrets,
+  saving,
+  onChange,
+  onCreateSecret,
+}: {
+  row: AgentSkillRow;
+  config: Record<string, unknown>;
+  secrets: ServiceSecretOption[];
+  saving: boolean;
+  onChange: (next: Record<string, unknown>) => void;
+  onCreateSecret: (args: { row: AgentSkillRow; fieldKey: string; name: string; value: string; description: string }) => Promise<void>;
+}) {
+  const schema = getSkillConfigSchema(row.skill.metadata);
+  const fields = getSkillConfigFields(schema).filter((field) => field.kind !== "unsupported");
+  const [secretDrafts, setSecretDrafts] = useState<Record<string, { open: boolean; name: string; value: string; description: string; saving: boolean }>>({});
+
+  if (!schema || fields.length === 0) return null;
+
+  return (
+    <div className="space-y-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)]/30 p-3">
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Guided config</p>
+        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Use the typed form first. Raw JSON is still available below for advanced cases.</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {fields.map((field) => {
+          const value = config[field.key];
+          const secretName = field.kind === "secret-ref" ? getSecretRefName(value) : "";
+          const secretDraft = secretDrafts[field.key] ?? { open: false, name: "", value: "", description: "", saving: false };
+
+          return (
+            <div key={field.key} className={field.kind === "string-array" ? "md:col-span-2" : ""}>
+              <label className="mb-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
+                {field.title}
+                {field.required ? <span className="ml-1 text-red-300">*</span> : null}
+              </label>
+
+              {field.kind === "string" && (
+                <input
+                  type="text"
+                  value={typeof value === "string" ? value : ""}
+                  disabled={saving}
+                  onChange={(e) => onChange({ ...config, [field.key]: e.target.value })}
+                  className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+                />
+              )}
+
+              {field.kind === "enum" && (
+                <select
+                  value={typeof value === "string" ? value : ""}
+                  disabled={saving}
+                  onChange={(e) => onChange({ ...config, [field.key]: e.target.value || undefined })}
+                  className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+                >
+                  <option value="">Select…</option>
+                  {(field.options ?? []).map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              )}
+
+              {field.kind === "boolean" && (
+                <label className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(value)}
+                    disabled={saving}
+                    onChange={(e) => onChange({ ...config, [field.key]: e.target.checked })}
+                  />
+                  <span>{field.description ?? "Toggle setting"}</span>
+                </label>
+              )}
+
+              {field.kind === "string-array" && (
+                <textarea
+                  value={stringifyStringList(value)}
+                  disabled={saving}
+                  onChange={(e) => onChange({ ...config, [field.key]: parseStringList(e.target.value) })}
+                  rows={4}
+                  className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
+                  placeholder="One value per line"
+                />
+              )}
+
+              {field.kind === "secret-ref" && (
+                <div className="space-y-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] p-3">
+                  <select
+                    value={secretName}
+                    disabled={saving}
+                    onChange={(e) => onChange(setSecretRefName(config, field.key, e.target.value))}
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+                  >
+                    <option value="">Select a company secret…</option>
+                    {secrets.map((secret) => (
+                      <option key={secret.id} value={secret.name}>{secret.name}</option>
+                    ))}
+                  </select>
+
+                  {secretName ? (
+                    <p className="text-[10px] text-[var(--text-tertiary)]">Selected secret: <span className="font-mono text-[var(--text-primary)]">{secretName}</span></p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    disabled={saving || secretDraft.saving}
+                    onClick={() => setSecretDrafts((current) => ({
+                      ...current,
+                      [field.key]: { ...secretDraft, open: !secretDraft.open, name: secretDraft.name || `${row.skill.slug}-api-key` },
+                    }))}
+                    className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[10px] font-semibold tracking-wider text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)]"
+                  >
+                    {secretDraft.open ? "CANCEL NEW SECRET" : "CREATE SECRET"}
+                  </button>
+
+                  {secretDraft.open && (
+                    <div className="space-y-2 rounded-lg border border-dashed border-[var(--border-medium)] p-3">
+                      <input
+                        type="text"
+                        value={secretDraft.name}
+                        placeholder="Secret name"
+                        onChange={(e) => setSecretDrafts((current) => ({ ...current, [field.key]: { ...secretDraft, name: e.target.value } }))}
+                        className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+                      />
+                      <input
+                        type="password"
+                        value={secretDraft.value}
+                        placeholder="API key / token"
+                        onChange={(e) => setSecretDrafts((current) => ({ ...current, [field.key]: { ...secretDraft, value: e.target.value } }))}
+                        className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={secretDraft.description}
+                        placeholder="Description (optional)"
+                        onChange={(e) => setSecretDrafts((current) => ({ ...current, [field.key]: { ...secretDraft, description: e.target.value } }))}
+                        className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={saving || secretDraft.saving}
+                        onClick={async () => {
+                          setSecretDrafts((current) => ({ ...current, [field.key]: { ...secretDraft, saving: true } }));
+                          try {
+                            await onCreateSecret({
+                              row,
+                              fieldKey: field.key,
+                              name: secretDraft.name,
+                              value: secretDraft.value,
+                              description: secretDraft.description,
+                            });
+                            setSecretDrafts((current) => ({
+                              ...current,
+                              [field.key]: { open: false, name: "", value: "", description: "", saving: false },
+                            }));
+                          } catch {
+                            // parent surface shows the error; keep the draft open for correction
+                          } finally {
+                            setSecretDrafts((current) => ({
+                              ...current,
+                              [field.key]: { ...(current[field.key] ?? secretDraft), saving: false },
+                            }));
+                          }
+                        }}
+                        className="rounded-lg px-3 py-2 text-[10px] font-semibold tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{ backgroundColor: "rgba(0, 240, 255, 0.12)", color: "var(--accent)" }}
+                      >
+                        {secretDraft.saving ? "SAVING SECRET…" : "SAVE SECRET"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {field.description && field.kind !== "boolean" ? (
+                <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">{field.description}</p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SkillsTab({
   agent,
   skills,
@@ -583,16 +802,41 @@ function SkillsTab({
 }) {
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [configDrafts, setConfigDrafts] = useState<Record<string, string>>({});
+  const [formConfigs, setFormConfigs] = useState<Record<string, Record<string, unknown>>>({});
+  const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretOption[]>([]);
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
+
+  const loadServiceSecrets = useCallback(async () => {
+    if (!agent?.companyId) {
+      setServiceSecrets([]);
+      return;
+    }
+
+    const res = await fetch(`/api/service-secrets?companyId=${agent.companyId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Failed to load service secrets");
+    setServiceSecrets(Array.isArray(data.secrets) ? data.secrets : []);
+  }, [agent?.companyId]);
+
+  useEffect(() => {
+    loadServiceSecrets().catch(() => setServiceSecrets([]));
+  }, [loadServiceSecrets]);
 
   useEffect(() => {
     setConfigDrafts((current) => {
       const next = { ...current };
       for (const row of skills) {
-        if (!(row.skillId in next)) {
-          next[row.skillId] = JSON.stringify(row.config ?? {}, null, 2);
-        }
+        next[row.skillId] = JSON.stringify(row.config ?? {}, null, 2);
+      }
+      return next;
+    });
+
+    setFormConfigs((current) => {
+      const next = { ...current };
+      for (const row of skills) {
+        const schema = getSkillConfigSchema(row.skill.metadata);
+        next[row.skillId] = getInitialSkillConfig(schema, (row.config ?? {}) as Record<string, unknown>);
       }
       return next;
     });
@@ -600,6 +844,11 @@ function SkillsTab({
 
   const assignedSkillIds = new Set(skills.map((row) => row.skillId));
   const unassignedSkills = availableSkills.filter((skill) => !assignedSkillIds.has(skill.id));
+
+  function updateRowConfig(row: AgentSkillRow, nextConfig: Record<string, unknown>) {
+    setFormConfigs((current) => ({ ...current, [row.skillId]: nextConfig }));
+    setConfigDrafts((current) => ({ ...current, [row.skillId]: JSON.stringify(nextConfig, null, 2) }));
+  }
 
   async function attachSkill() {
     if (!agent || !selectedSkillId) return;
@@ -641,31 +890,79 @@ function SkillsTab({
     }
   }
 
-  async function saveConfig(row: AgentSkillRow) {
+  async function saveConfig(row: AgentSkillRow, config: Record<string, unknown>) {
     if (!agent) return;
+    const schema = getSkillConfigSchema(row.skill.metadata);
+    const validation = validateSkillConfig(schema, config);
+    if (!validation.ok) {
+      setAttachError(validation.error);
+      return;
+    }
+
     setSavingSkillId(row.skillId);
     setAttachError(null);
     try {
-      const raw = configDrafts[row.skillId] ?? "{}";
-      const parsed = raw.trim() ? JSON.parse(raw) : {};
       const res = await fetch(`/api/agents/${agent.callsign.toLowerCase()}/skills/${row.skillId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: parsed, enabled: row.enabled ?? true }),
+        body: JSON.stringify({ config, enabled: row.enabled ?? true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save skill config");
 
       onSkillsChange(skills.map((skillRow) => (
         skillRow.skillId === row.skillId
-          ? { ...skillRow, config: parsed, enabled: data.enabled ?? skillRow.enabled }
+          ? { ...skillRow, config, enabled: data.enabled ?? skillRow.enabled }
           : skillRow
       )));
-      setConfigDrafts((current) => ({ ...current, [row.skillId]: JSON.stringify(parsed, null, 2) }));
+      updateRowConfig(row, config);
     } catch (err) {
       setAttachError(err instanceof Error ? err.message : "Failed to save skill config");
     } finally {
       setSavingSkillId(null);
+    }
+  }
+
+  async function saveJsonConfig(row: AgentSkillRow) {
+    try {
+      const raw = configDrafts[row.skillId] ?? "{}";
+      const parsed = raw.trim() ? JSON.parse(raw) : {};
+      await saveConfig(row, parsed as Record<string, unknown>);
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Failed to save skill config");
+    }
+  }
+
+  async function createSecret(args: { row: AgentSkillRow; fieldKey: string; name: string; value: string; description: string }) {
+    try {
+      if (!agent?.companyId) throw new Error("Select a company before creating secrets.");
+
+      const name = args.name.trim();
+      if (!name || !args.value.trim()) {
+        throw new Error("Secret name and value are required.");
+      }
+
+      const res = await fetch("/api/service-secrets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: agent.companyId,
+          name,
+          value: args.value,
+          description: args.description.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save secret");
+
+      await loadServiceSecrets();
+      const currentConfig = formConfigs[args.row.skillId] ?? (args.row.config ?? {});
+      updateRowConfig(args.row, setSecretRefName(currentConfig, args.fieldKey, name));
+      setAttachError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save secret";
+      setAttachError(message);
+      throw err;
     }
   }
 
@@ -677,7 +974,7 @@ function SkillsTab({
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-medium text-[var(--text-primary)]">Assign skill</p>
-            <p className="text-[10px] text-[var(--text-tertiary)]">Attach a skill here, then configure it below. Use <code className="rounded bg-[var(--bg-surface-hover)] px-1 py-0.5">secretRef</code> for shared secrets.</p>
+            <p className="text-[10px] text-[var(--text-tertiary)]">Attach a skill here, then configure it below. Guided forms now default to secret references instead of raw API keys.</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -715,47 +1012,76 @@ function SkillsTab({
         </div>
       ) : (
         <div className="space-y-3">
-          {skills.map((s) => (
-            <div key={s.skillId} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
-              <div className="mb-3 flex items-start gap-2.5">
-                <span className="text-lg leading-none">{s.skill.metadata?.icon ?? "⚡"}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-xs font-medium text-[var(--text-primary)]">{s.skill.name}</p>
-                    <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--text-tertiary)]">{s.skill.metadata?.category ?? "skill"}</span>
+          {skills.map((s) => {
+            const config = formConfigs[s.skillId] ?? ((s.config ?? {}) as Record<string, unknown>);
+            const example = s.skill.metadata?.configExample ? JSON.stringify(s.skill.metadata.configExample) : null;
+
+            return (
+              <div key={s.skillId} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
+                <div className="mb-3 flex items-start gap-2.5">
+                  <span className="text-lg leading-none">{s.skill.metadata?.icon ?? "⚡"}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-xs font-medium text-[var(--text-primary)]">{s.skill.name}</p>
+                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--text-tertiary)]">{s.skill.metadata?.category ?? "skill"}</span>
+                    </div>
+                    {s.skill.description && <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{s.skill.description}</p>}
                   </div>
-                  {s.skill.description && <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{s.skill.description}</p>}
+                </div>
+
+                <SkillConfigFields
+                  row={s}
+                  config={config}
+                  secrets={serviceSecrets}
+                  saving={savingSkillId === s.skillId}
+                  onChange={(next) => updateRowConfig(s, next)}
+                  onCreateSecret={createSecret}
+                />
+
+                <div className="mt-3">
+                  <label className="mb-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
+                    Advanced config JSON
+                  </label>
+                  <textarea
+                    value={configDrafts[s.skillId] ?? "{}"}
+                    onChange={(e) => setConfigDrafts((current) => ({ ...current, [s.skillId]: e.target.value }))}
+                    rows={8}
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
+                    spellCheck={false}
+                  />
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-[10px] text-[var(--text-tertiary)]">
+                    {example ? `Example: ${example}` : "Use secretRef values for credentials. Raw JSON is for advanced cases only."}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveConfig(s, config)}
+                      disabled={savingSkillId === s.skillId}
+                      className="rounded-lg px-3 py-2 text-[11px] tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ backgroundColor: agentColor + "18", color: agentColor }}
+                    >
+                      {savingSkillId === s.skillId ? "SAVING…" : "SAVE FORM"}
+                    </button>
+                    <button
+                      onClick={() => saveJsonConfig(s)}
+                      disabled={savingSkillId === s.skillId}
+                      className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[11px] tracking-wider text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      SAVE JSON
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <label className="mb-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
-                Config JSON
-              </label>
-              <textarea
-                value={configDrafts[s.skillId] ?? "{}"}
-                onChange={(e) => setConfigDrafts((current) => ({ ...current, [s.skillId]: e.target.value }))}
-                rows={8}
-                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
-                spellCheck={false}
-              />
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <p className="text-[10px] text-[var(--text-tertiary)]">Example: {`{"baseUrl":"https://app.evercontent.com","secretRef":{"name":"evercontent-api-key"},"allowedProjectIds":["project_456"],"canPublish":false}`}</p>
-                <button
-                  onClick={() => saveConfig(s)}
-                  disabled={savingSkillId === s.skillId}
-                  className="rounded-lg px-3 py-2 text-[11px] tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ backgroundColor: agentColor + "18", color: agentColor }}
-                >
-                  {savingSkillId === s.skillId ? "SAVING…" : "SAVE CONFIG"}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
+
 
 // ─── Config Tab ─────────────────────────────────────────────────────────
 

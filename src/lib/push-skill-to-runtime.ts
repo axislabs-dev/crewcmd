@@ -157,6 +157,14 @@ async function upsertSystemSkill(
 ): Promise<{ id: string }> {
   if (!db) throw new Error("Database not available");
 
+  const metadata = {
+    ...CREWCMD_MANAGEMENT_SKILL_METADATA,
+    configExample: {
+      ...CREWCMD_MANAGEMENT_SKILL_METADATA.configExample,
+      companyId,
+    },
+  };
+
   // Check if system skill already exists for this company
   const [existing] = await withRetry(() =>
     db!
@@ -176,7 +184,7 @@ async function upsertSystemSkill(
     await withRetry(() =>
       db!
         .update(skills)
-        .set({ content, updatedAt: new Date() })
+        .set({ content, metadata, updatedAt: new Date() })
         .where(eq(skills.id, existing.id))
     );
     return { id: existing.id };
@@ -194,6 +202,7 @@ async function upsertSystemSkill(
           "Full workspace management — tasks, projects, agents, inbox, blueprints, budgets, docs, org chart, and activity.",
         source: "system",
         content,
+        metadata,
         installed: true,
       })
       .returning({ id: skills.id })

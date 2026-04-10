@@ -10,11 +10,12 @@
 
 import { and, eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
+import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -138,13 +139,20 @@ export async function syncSkillToOpenClaw(
     return makeFailure("Write error – metadata", checksum, skillMdPath, openclawJsonPath, errors, now);
   }
 
-  // ── Merge openclaw.json ──────────────────────────────────────
+  // ── Resolve secrets for openclaw.json env vars ───────────────
   const assignmentConfig =
     typeof skillData.assignment.config === "object" && skillData.assignment.config !== null
       ? skillData.assignment.config
       : {};
 
-  const skillEntry = buildSkillEntry(slug, skillData.skill, skillData.assignment.enabled, assignmentConfig);
+  const resolvedEnv = await resolveSkillEnvVars(
+    opts.companyId,
+    slug,
+    skillData.skill.metadata,
+    assignmentConfig as Record<string, unknown>
+  );
+
+  const skillEntry = buildSkillEntry(slug, skillData.skill, skillData.assignment.enabled, assignmentConfig, resolvedEnv);
 
   try {
     await mergeOpenclawJson(openclawJsonPath, slug, skillEntry);
@@ -333,24 +341,64 @@ interface OpenClawSkillEntry {
 
 function buildSkillEntry(
   slug: string,
-  skill: typeof skills.$inferSelect,
+  _skill: typeof skills.$inferSelect,
   enabled: boolean,
-  assignmentConfig: Record<string, unknown>
+  assignmentConfig: Record<string, unknown>,
+  resolvedEnv: Record<string, string>
 ): OpenClawSkillEntry {
   const primaryEnv = derivePrimaryEnvVar(slug);
 
-  // Build env map: any secretRef in the assignment config is resolved to an env var.
-  // For Phase 1 we only set the primary key as a placeholder — actual secret values
-  // are injected by the caller (resolve-secrets.ts) which can populate the env map.
-  const env: Record<string, string> = {
-    [primaryEnv]: "$(resolve-from-vault)",
-  };
+  // Use resolved secret values if available, otherwise leave a placeholder
+  const env: Record<string, string> = Object.keys(resolvedEnv).length > 0
+    ? resolvedEnv
+    : { [primaryEnv]: "$(resolve-from-vault)" };
 
   return {
     enabled,
     env,
     config: assignmentConfig,
   };
+}
+
+/**
+ * Resolve secretRef values from the vault and map them to env var names
+ * for writing into openclaw.json.
+ */
+async function resolveSkillEnvVars(
+  companyId: string,
+  slug: string,
+  metadata: Record<string, unknown> | null | undefined,
+  config: Record<string, unknown>
+): Promise<Record<string, string>> {
+  const env: Record<string, string> = {};
+  const secretNames = collectSecretRefNames(config);
+  if (secretNames.size === 0) return env;
+
+  const meta = metadata ?? {};
+  const primaryEnvVar = getPrimaryEnvVarFromMetadata(meta, slug);
+
+  for (const name of secretNames) {
+    const value = await resolveSecretRef(companyId, { secretRef: { name } });
+    if (value) {
+      env[primaryEnvVar] = value;
+    }
+  }
+
+  return env;
+}
+
+function getPrimaryEnvVarFromMetadata(metadata: Record<string, unknown>, slug: string): string {
+  const openclaw = metadata.openclaw as Record<string, unknown> | undefined;
+  if (openclaw && typeof openclaw.primaryEnv === "string") {
+    return openclaw.primaryEnv;
+  }
+  if (openclaw) {
+    const requires = openclaw.requires as Record<string, unknown> | undefined;
+    if (requires && Array.isArray(requires.env) && typeof requires.env[0] === "string") {
+      return requires.env[0];
+    }
+  }
+  return derivePrimaryEnvVar(slug);
 }
 
 // ─── Filesystem Operations ──────────────────────────────────────────

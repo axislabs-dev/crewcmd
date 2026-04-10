@@ -44,6 +44,7 @@ export async function GET() {
         model: agent.model ?? null,
         workspacePath: agent.workspacePath ?? null,
         canvasPosition: agent.canvasPosition ?? null,
+        avatarUrl: agent.avatarUrl ?? null,
         tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
       };
     });

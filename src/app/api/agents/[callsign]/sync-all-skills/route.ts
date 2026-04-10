@@ -7,7 +7,7 @@ import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> }
+  { params }: { params: Promise<{ callsign: string }> }
 ) {
   const authError = await requireAuth(request);
   if (authError) return authError;
@@ -16,13 +16,13 @@ export async function POST(
     return NextResponse.json({ error: "Database not available" }, { status: 500 });
   }
 
-  const { agentId } = await params;
+  const { callsign: callsignParam } = await params;
 
   const [agent] = await withRetry(() =>
     db!
       .select({ id: agents.id, companyId: agents.companyId })
       .from(agents)
-      .where(eq(agents.id, agentId))
+      .where(eq(agents.callsign, callsignParam))
       .limit(1)
   );
 
@@ -31,6 +31,7 @@ export async function POST(
   }
 
   const companyId = agent.companyId;
+  const agentId = agent.id;
 
   const assignments = await withRetry(() =>
     db!

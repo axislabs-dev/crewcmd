@@ -86,6 +86,7 @@ export interface DiscoveredAgent {
   model?: string;
   workspace?: string;
   reportsTo?: string;
+  avatarUrl?: string;
   identityRaw?: string;
   soulRaw?: string;
 }
@@ -717,5 +718,15 @@ function parseAgentIdentity(
     }
   }
 
-  return { id: agent.id, name, emoji, title, description, reportsTo, identityRaw, soulRaw };
+  return {
+    id: agent.id,
+    name,
+    emoji,
+    title,
+    description,
+    reportsTo,
+    avatarUrl: agent.identity?.avatarUrl || agent.identity?.avatar || undefined,
+    identityRaw,
+    soulRaw,
+  };
 }

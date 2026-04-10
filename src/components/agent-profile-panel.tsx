@@ -7,6 +7,7 @@ import { ROLES } from "@/components/agent-config-fields";
 import { timeAgo } from "@/lib/utils";
 import { AgentControlPanel } from "@/components/agent-control-panel";
 import { AgentOutputViewer } from "@/components/agent-output-viewer";
+import { AgentAvatar } from "@/components/avatar";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -338,13 +339,8 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
             </div>
           ) : agent ? (
             <div className="flex items-start gap-3">
-              {/* Emoji avatar */}
-              <div
-                className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-2xl"
-                style={{ backgroundColor: agentColor + "18" }}
-              >
-                {agent.emoji}
-              </div>
+              {/* Avatar */}
+              <AgentAvatar agent={agent} size="md" />
 
               {/* Identity */}
               <div className="min-w-0 flex-1">

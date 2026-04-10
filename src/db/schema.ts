@@ -137,6 +137,7 @@ export const users = pgTable("users", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  avatarUrl: text("avatar_url"),
 });
 
 export const agentStatusEnum = pgEnum("agent_status", [
@@ -205,6 +206,7 @@ export const agents = pgTable("agents", {
   canvasPosition: jsonb("canvas_position").$type<{ x: number; y: number } | null>(),
   runtimeId: uuid("runtime_id").references(() => companyRuntimes.id, { onDelete: "set null" }),
   runtimeRef: text("runtime_ref"), // agent ID on the runtime side (e.g. "cipher")
+  avatarUrl: text("avatar_url"), // imported from OpenClaw identity.avatarUrl or user-uploaded
 });
 
 export const projects = pgTable("projects", {

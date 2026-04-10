@@ -7,6 +7,7 @@ import { EditAgentDialog } from "@/components/edit-agent-dialog";
 import { AgentProfilePanel } from "@/components/agent-profile-panel";
 import { TaskDialog } from "@/components/task-dialog";
 import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
+import { AgentAvatar } from "@/components/avatar";
 import type { Agent } from "@/lib/data";
 
 const TeamCanvas = lazy(() =>
@@ -189,12 +190,7 @@ function NodeCard({
           )}
 
           {/* Avatar */}
-          <div
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-lg"
-            style={{ backgroundColor: agent.color + "18" }}
-          >
-            {agent.emoji}
-          </div>
+          <AgentAvatar agent={agent} size="md" />
 
           {/* Info */}
           <div className="min-w-0 flex-1">
@@ -344,7 +340,7 @@ function GridCard({
       <div className="relative">
         <div className="mb-3 flex items-start justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{agent.emoji}</span>
+            <AgentAvatar agent={agent} size="lg" />
             <div>
               <span
                 className="font-mono text-sm font-bold tracking-wider cursor-pointer transition-colors hover:underline"

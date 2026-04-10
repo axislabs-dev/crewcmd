@@ -176,6 +176,103 @@
 
 ---
 
+## Engineering Foundations
+
+> These items make the codebase contributor-friendly, testable, and maintainable as the project scales. Many are excellent first contributions.
+
+### Testing
+
+CrewCmd currently has minimal test coverage. The goal is to build a safety net that lets contributors ship with confidence.
+
+**Priority test targets (ordered by risk):**
+
+| Area | What to test | Why it matters |
+|------|-------------|----------------|
+| Skill invoke pipeline | `service-skills.ts` → handler → secret resolution | Core value prop; breaks silently |
+| Agent CRUD API | `POST/GET/PATCH /api/agents` | Most-used endpoints |
+| Skills CRUD + assignment | `POST /api/skills`, agent skill attach/detach | Skill engine is the moat |
+| Auth flow | Signup, login, session, company membership | Security boundary |
+| Governance | Approval gate checks, audit log writes | Trust layer |
+| Heartbeat engine | Cron parsing, schedule calculation, execution lifecycle | Agents depend on this to wake up |
+| Skill config form | Schema parsing, validation, secret ref detection | UI correctness |
+
+**Testing conventions:**
+- Framework: Vitest (already configured)
+- DB: Use PGlite in tests — no external database needed
+- Location: Co-locate tests with source (`foo.test.ts` next to `foo.ts`)
+- Coverage goal: Critical paths first, not percentage targets
+- Run: `pnpm test` (must pass in CI before merge)
+
+**Good first issues for testing:**
+- Add happy-path test for `POST /api/skills` (create a skill, verify it's returned by GET)
+- Add test for `resolveAdapterFromSkills` with mock agent skills
+- Add test for `calculateNextExecution` cron parser edge cases
+- Add test for `checkApprovalRequired` governance check
+- Add integration test for skill invoke end-to-end (evercontent handler with mocked HTTP)
+
+### Schema Organization
+
+The schema (`src/db/schema.ts`, 815 lines, 30+ tables) should be split by domain for readability:
+
+| File | Tables |
+|------|--------|
+| `schema/agents.ts` | agents, agentHeartbeats, agentSkills, agentBudgets |
+| `schema/tasks.ts` | tasks, taskComments, timeEntries, projects |
+| `schema/skills.ts` | skills, agentSkills, serviceSecrets |
+| `schema/governance.ts` | approvalGates, approvalRequests, auditLog, configVersions, escalationPaths |
+| `schema/heartbeats.ts` | heartbeatSchedules, heartbeatExecutions |
+| `schema/company.ts` | companies, companyMembers, companyProviderKeys, companyRuntimes |
+| `schema/users.ts` | users |
+| `schema/content.ts` | docs, workspaceFiles, inboxMessages |
+| `schema/index.ts` | Re-exports everything (no breaking changes) |
+
+### Architecture Decision Records (ADRs)
+
+Key decisions that need to be documented so contributors understand *why*, not just *what*:
+
+| ADR | Decision | Status |
+|-----|----------|--------|
+| ADR-001 | Multi-tenant by company — companyId on everything, personal workspaces are single-member companies | Needs writing |
+| ADR-002 | Adapter pattern for agent execution — agents are runtime-agnostic, skills map to adapters | Needs writing |
+| ADR-003 | Skill system — three sources (built-in, system, marketplace), service-skill vs CLI-skill, config resolution | Needs writing |
+| ADR-004 | Heartbeat model — agents wake/check/exit vs persistent processes | Needs writing |
+| ADR-005 | OpenClaw gateway as default runtime — WebSocket RPC with Ed25519 device auth | Needs writing |
+| ADR-006 | Two-tier skill config — company-level defaults + per-agent overrides | Needs design |
+| ADR-007 | Governance as middleware — approval checks before actions, not just audit after | Needs design |
+
+Location: `docs/architecture/decisions/` — one file per ADR, short (context → decision → consequences).
+
+### API Validation
+
+API routes currently do minimal input validation. Adding schema validation at the boundary prevents bad data and gives contributors clear contracts.
+
+**Approach:** Zod schemas co-located with route handlers. Validate request body at the top of each POST/PATCH handler.
+
+**Good first issues:**
+- Add Zod validation to `POST /api/skills` (name, slug required; metadata shape)
+- Add Zod validation to `POST /api/agents` (callsign, name, title required)
+- Add Zod validation to `POST /api/tasks` (title required; status/priority must be valid enum)
+- Add Zod validation to `POST /api/service-secrets` (name, value required)
+
+### Lib Organization
+
+`src/lib/` has 40+ files at the top level. Group by domain incrementally:
+
+```
+src/lib/
+├── agents/        # resolve-agent, agent-access, agent-runtime, delegation
+├── skills/        # built-in, evercontent, service-skills, skill-config-form
+├── governance/    # governance, escalation, budget
+├── gateway/       # gateway-client, openclaw, openclaw-config-parser
+├── chat/          # chat-store, chat-tools, chat-pubsub, chat-system-prompt
+├── auth/          # auth, require-auth, heartbeat-auth
+└── utils.ts       # General utilities
+```
+
+This is a mechanical refactor — update imports, no logic changes. Can be done one domain at a time.
+
+---
+
 ## Technical Debt
 
 - Pre-existing type errors in `chat/page.tsx` (unrelated to design overhaul)
@@ -185,4 +282,4 @@
 
 ---
 
-*Last updated: 2026-04-10 by Neo*
+*Last updated: 2026-04-10*

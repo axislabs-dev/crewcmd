@@ -30,13 +30,17 @@ const mockFromHeartbeats = vi.fn();
 vi.mock("@/db", () => ({
   db: {
     select: () => ({
-      from: (table: symbol) => {
-        // Route to different mocks based on call order
-        if (table === Symbol.for("agents")) return mockFromAgents();
-        if (table === Symbol.for("heartbeats")) return mockFromHeartbeats();
-        // Fallback: first call is agents, subsequent are heartbeats
-        return mockFromAgents();
-      },
+      from: (table: symbol) => ({
+        where: () => {
+          if (table === Symbol.for("agents")) return mockFromAgents();
+          return mockFromHeartbeats();
+        },
+        catch: (...args: Parameters<Promise<unknown>["catch"]>) => mockFromHeartbeats().catch(...args),
+        then: (...args: Parameters<Promise<unknown>["then"]>) => {
+          if (table === Symbol.for("agents")) return mockFromAgents().then(...args);
+          return mockFromHeartbeats().then(...args);
+        },
+      }),
     }),
   },
   withRetry: (fn: () => unknown) => fn(),
@@ -45,6 +49,18 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   agents: Symbol.for("agents"),
   agentHeartbeats: Symbol.for("heartbeats"),
+}));
+
+vi.mock("@/lib/agent-access", () => ({
+  getAgentAccessContext: vi.fn(async () => ({
+    userId: "user-1",
+    activeCompanyId: null,
+    memberships: [],
+  })),
+  buildAgentReadWhere: vi.fn(() => ({ mocked: true })),
+  canManageCompanyOwnedAgent: vi.fn(() => true),
+  normalizeVisibilityForCreation: vi.fn(() => "private"),
+  resolveRuntimeOwnership: vi.fn(async () => null),
 }));
 
 import { GET } from "./route";

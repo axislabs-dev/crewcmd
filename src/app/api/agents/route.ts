@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
+import {
+  buildAgentReadWhere,
+  canManageCompanyOwnedAgent,
+  getAgentAccessContext,
+  normalizeVisibilityForCreation,
+  resolveRuntimeOwnership,
+} from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
 
@@ -10,20 +17,19 @@ export async function GET() {
   }
 
   try {
-    // Fetch DB agents and heartbeats in parallel
+    const access = await getAgentAccessContext();
+    const where = buildAgentReadWhere(access);
+    if (!where) return NextResponse.json({ agents: [], source: "db" });
+
     const [dbAgents, heartbeats] = await Promise.all([
-      withRetry(() => db!.select().from(schema.agents)),
+      withRetry(() => db!.select().from(schema.agents).where(where)),
       withRetry(() => db!.select().from(schema.agentHeartbeats)).catch(() => []),
     ]);
 
-    // Index heartbeats by callsign for quick lookup
-    const heartbeatMap = new Map(
-      heartbeats.map((hb) => [hb.callsign?.toLowerCase(), hb])
-    );
+    const heartbeatMap = new Map(heartbeats.map((hb) => [hb.callsign?.toLowerCase(), hb]));
 
     const agents = dbAgents.map((agent) => {
       const hb = heartbeatMap.get(agent.callsign.toLowerCase());
-
       return {
         id: agent.id,
         callsign: agent.callsign,
@@ -45,14 +51,16 @@ export async function GET() {
         workspacePath: agent.workspacePath ?? null,
         canvasPosition: agent.canvasPosition ?? null,
         avatarUrl: agent.avatarUrl ?? null,
+        runtimeId: agent.runtimeId ?? null,
+        ownerType: agent.ownerType,
+        ownerUserId: agent.ownerUserId ?? null,
+        ownerCompanyId: agent.ownerCompanyId ?? null,
+        visibility: agent.visibility,
         tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
       };
     });
 
-    return NextResponse.json({
-      agents,
-      source: agents.length > 0 ? "db" : "none",
-    });
+    return NextResponse.json({ agents, source: agents.length > 0 ? "db" : "none" });
   } catch (err) {
     console.error("[api/agents] Error:", err);
     return NextResponse.json({ agents: [], source: "none" });
@@ -65,6 +73,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const access = await getAgentAccessContext();
+    if (!access.userId) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const body = await request.json();
     const {
       name,
@@ -81,7 +94,9 @@ export async function POST(request: NextRequest) {
       workspacePath,
       reportsTo,
       companyId,
-      // New extended fields (merged into adapterConfig / runtimeConfig)
+      runtimeId,
+      ownerType,
+      visibility,
       command,
       thinkingEffort,
       promptTemplate,
@@ -107,7 +122,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "name and callsign are required" }, { status: 400 });
     }
 
-    // Build adapter config: start with any raw adapterConfig passed, then merge extended fields
+    const runtimeOwnership = await resolveRuntimeOwnership(runtimeId || null);
+    const effectiveOwnerType = runtimeOwnership?.ownerType ?? (ownerType === "company" ? "company" : "user");
+    const effectiveOwnerCompanyId = runtimeOwnership?.ownerCompanyId ?? (effectiveOwnerType === "company" ? access.activeCompanyId : null);
+    const effectiveOwnerUserId = runtimeOwnership?.ownerUserId ?? (effectiveOwnerType === "user" ? access.userId : null);
+
+    if (effectiveOwnerType === "company" && !canManageCompanyOwnedAgent(access, effectiveOwnerCompanyId)) {
+      return NextResponse.json({ error: "Only company admins can create org-owned agents" }, { status: 403 });
+    }
+
     const finalAdapterConfig: Record<string, unknown> = { ...(adapterConfig || {}) };
     if (command) finalAdapterConfig.command = command;
     if (thinkingEffort) finalAdapterConfig.thinkingEffort = thinkingEffort;
@@ -117,18 +140,14 @@ export async function POST(request: NextRequest) {
     if (envVars && Object.keys(envVars).length > 0) finalAdapterConfig.envVars = envVars;
     if (timeoutSec !== undefined) finalAdapterConfig.timeoutSec = timeoutSec;
     if (gracePeriodSec !== undefined) finalAdapterConfig.gracePeriodSec = gracePeriodSec;
-    // Gateway-specific
     if (gatewayUrl) finalAdapterConfig.url = gatewayUrl;
     if (gatewayToken) finalAdapterConfig.headers = { ...(finalAdapterConfig.headers as Record<string, string> || {}), "x-openclaw-token": gatewayToken };
-    // HTTP-specific
     if (httpUrl) finalAdapterConfig.url = httpUrl;
     if (httpAuthHeader) finalAdapterConfig.headers = { ...(finalAdapterConfig.headers as Record<string, string> || {}), Authorization: httpAuthHeader };
-    // OpenRouter-specific
     if (openrouterApiKey) finalAdapterConfig.apiKey = openrouterApiKey;
     if (openrouterBaseUrl) finalAdapterConfig.baseUrl = openrouterBaseUrl;
     else if (adapterType === "openrouter") finalAdapterConfig.baseUrl = "https://openrouter.ai/api/v1";
 
-    // Build runtime config
     const finalRuntimeConfig: Record<string, unknown> = { ...(runtimeConfig || {}) };
     if (heartbeatEnabled !== undefined || heartbeatIntervalSec !== undefined || wakeOnDemand !== undefined || cooldownSec !== undefined || maxConcurrentRuns !== undefined) {
       finalRuntimeConfig.heartbeat = {
@@ -145,7 +164,7 @@ export async function POST(request: NextRequest) {
         name,
         callsign: callsign.toUpperCase(),
         title: title || "Agent",
-        emoji: emoji || "\u{1F916}",
+        emoji: emoji || "🤖",
         color: color || "#888888",
         adapterType: adapterType || "openclaw_gateway",
         adapterConfig: finalAdapterConfig,
@@ -155,7 +174,12 @@ export async function POST(request: NextRequest) {
         model: model || null,
         workspacePath: workspacePath || null,
         reportsTo: reportsTo || null,
-        companyId: companyId || null,
+        companyId: companyId || access.activeCompanyId || null,
+        runtimeId: runtimeId || null,
+        ownerType: effectiveOwnerType,
+        ownerUserId: effectiveOwnerUserId,
+        ownerCompanyId: effectiveOwnerCompanyId,
+        visibility: normalizeVisibilityForCreation({ ownerType: effectiveOwnerType, requestedVisibility: visibility }),
       }).returning()
     );
 

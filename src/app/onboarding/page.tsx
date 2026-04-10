@@ -39,7 +39,7 @@ export default function OnboardingPage() {
   const [agentRole, setAgentRole] = useState("engineer");
 
   // Step 2c: Connect runtime
-  const [connectMode, setConnectMode] = useState<"choose" | "gateway" | "local">("choose");
+  const [connectMode, setConnectMode] = useState<"choose" | "gateway" | "local">("gateway");
   const [gatewayUrl, setGatewayUrl] = useState("localhost:18789");
   const [authToken, setAuthToken] = useState("");
   const [probeResult, setProbeResult] = useState<{
@@ -55,6 +55,8 @@ export default function OnboardingPage() {
   const [probing, setProbing] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [importOwnerType, setImportOwnerType] = useState<"user" | "company">("company");
+  const [importVisibility, setImportVisibility] = useState<"private" | "team" | "org">("team");
   // Persist device key across retries (probeResult gets cleared on each attempt)
   const [deviceKeyPem, setDeviceKeyPem] = useState<string | undefined>();
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export default function OnboardingPage() {
     if (mode === "connect") {
       setStep(2);
       setTeamMode("connect");
-      setConnectMode("choose");
+      setConnectMode("gateway");
     }
   }, []);
 
@@ -117,6 +119,7 @@ export default function OnboardingPage() {
         body: JSON.stringify({
           blueprintId: `builtin-${selectedBlueprint.slug}`,
           companyId,
+          ownerType: importOwnerType,
         }),
       });
       if (res.ok) {
@@ -147,6 +150,7 @@ export default function OnboardingPage() {
           adapterConfig: {},
           role: agentRole,
           companyId,
+          ownerType: importOwnerType,
         }),
       });
     } catch {
@@ -250,6 +254,7 @@ export default function OnboardingPage() {
           httpUrl: gatewayUrl.trim().startsWith("http") ? gatewayUrl.trim() : `http://${gatewayUrl.trim()}`,
           authToken: authToken.trim() || null,
           companyId,
+          ownerType: importOwnerType,
         }),
       });
 
@@ -273,6 +278,8 @@ export default function OnboardingPage() {
             models: probeResult.models,
             defaultAgentId: probeResult.defaultAgentId,
             devicePrivateKeyPem: probeResult.devicePrivateKeyPem,
+            ownerType: importOwnerType,
+            visibility: importVisibility,
           }),
         });
       } else {
@@ -298,6 +305,8 @@ export default function OnboardingPage() {
               role: "agent",
               companyId,
               reportsTo: agent.reportsTo || null,
+              ownerType: importOwnerType,
+              visibility: importVisibility,
             }),
           });
         }
@@ -445,7 +454,7 @@ export default function OnboardingPage() {
                   BUILD YOUR TEAM
                 </h2>
                 <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                  Choose a pre-built team blueprint or create your first agent from scratch.
+                  Start with a blueprint, import an existing OpenClaw crew, or create your first agent from scratch.
                 </p>
               </div>
 
@@ -466,7 +475,7 @@ export default function OnboardingPage() {
 
                 {/* Connect runtime option */}
                 <button
-                  onClick={() => setTeamMode("connect")}
+                  onClick={() => { setTeamMode("connect"); setConnectMode("gateway"); setProbeResult(null); }}
                   className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
                 >
                   <div className="text-2xl">🔌</div>
@@ -474,7 +483,7 @@ export default function OnboardingPage() {
                     CONNECT RUNTIME
                   </h3>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Import your existing agent team from an OpenClaw gateway. Local or remote.
+                    Import your existing OpenClaw agents. Gateway is the recommended path; local auto-detect is fallback for same-machine setups.
                   </p>
                 </button>
 
@@ -650,7 +659,7 @@ export default function OnboardingPage() {
                     CONNECT TO OPENCLAW
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Connect to your OpenClaw gateway to import your agent team.
+                    Gateway-first import is the recommended path. Use local auto-detect only when CrewCmd and OpenClaw are running on the same machine.
                   </p>
                 </div>
                 <button
@@ -668,10 +677,10 @@ export default function OnboardingPage() {
                 >
                   <div className="text-2xl">🔌</div>
                   <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
-                    CONNECT TO GATEWAY
+                    RECOMMENDED: GATEWAY
                   </h3>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Enter your gateway URL and auth token. Works for local and remote gateways.
+                    Best for remote hosts and shared setups. Paste the gateway URL and token to discover agents.
                   </p>
                 </button>
 
@@ -684,12 +693,27 @@ export default function OnboardingPage() {
                 >
                   <div className="text-2xl">🔍</div>
                   <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
-                    AUTO-DETECT LOCAL
+                    FALLBACK: AUTO-DETECT LOCAL
                   </h3>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    OpenClaw running on this machine? Auto-detect from config files.
+                    Same-machine only. Reads local config files when CrewCmd and OpenClaw live on this device.
                   </p>
                 </button>
+              </div>
+
+              <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold tracking-wider text-[var(--text-primary)]">FALLBACK: SAME-MACHINE AUTO-DETECT</p>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Only use this if CrewCmd and OpenClaw are running on the same computer and you want us to read local config files.</p>
+                  </div>
+                  <button
+                    onClick={() => { setConnectMode("local"); handleProbeLocal(); }}
+                    className="shrink-0 rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
+                  >
+                    TRY LOCAL
+                  </button>
+                </div>
               </div>
 
               {probeResult && !probeResult.ok && (
@@ -779,7 +803,7 @@ export default function OnboardingPage() {
                     CONNECT TO GATEWAY
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Enter your OpenClaw gateway URL and auth token. Device pairing is handled automatically.
+                    Recommended for almost all imports. Connect through the gateway, then choose where imported agents should live.
                   </p>
                 </div>
                 <button
@@ -870,7 +894,7 @@ export default function OnboardingPage() {
                     FOUND {probeResult.agents.length} AGENTS
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Detected from OpenClaw config. Select which agents to import.
+                    Review the discovered agents, choose where they should live, then import them into CrewCmd.
                   </p>
                 </div>
                 <button
@@ -933,6 +957,53 @@ export default function OnboardingPage() {
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-4">
+                <div className="mb-2 text-[10px] font-bold tracking-wider text-[var(--text-primary)]">OWNERSHIP</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => { setImportOwnerType("user"); setImportVisibility("private"); }}
+                    className={`rounded-lg border px-3 py-3 text-left transition-all ${importOwnerType === "user" ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20" : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"}`}
+                  >
+                    <div className="text-[11px] font-bold tracking-wider text-[var(--text-primary)]">PERSONAL WORKSPACE</div>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Owned by you. Imported agents stay private in v1.</p>
+                    <p className="mt-2 text-[9px] font-mono text-[var(--text-tertiary)]">ownerType=user · visibility=private</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setImportOwnerType("company"); if (importVisibility === "private") setImportVisibility("team"); }}
+                    className={`rounded-lg border px-3 py-3 text-left transition-all ${importOwnerType === "company" ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20" : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"}`}
+                  >
+                    <div className="text-[11px] font-bold tracking-wider text-[var(--text-primary)]">TEAM WORKSPACE</div>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Owned by the current team. Default visibility is team.</p>
+                    <p className="mt-2 text-[9px] font-mono text-[var(--text-tertiary)]">ownerType=company · visibility=team</p>
+                  </button>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className={labelClass}>OWNED BY
+                    <input
+                      value={importOwnerType === "company" ? "Team workspace" : "Personal workspace"}
+                      disabled
+                      className={`${inputClass} mt-1 opacity-80`}
+                    />
+                  </label>
+                  <label className={labelClass}>VISIBILITY
+                    <select
+                      value={importVisibility}
+                      onChange={(e) => setImportVisibility(e.target.value as "private" | "team" | "org")}
+                      disabled={importOwnerType === "user"}
+                      className={`${inputClass} mt-1 appearance-none disabled:opacity-60`}
+                    >
+                      <option value="private">Private</option>
+                      <option value="team">Team</option>
+                      <option value="org">Org</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">No fine-grained per-user sharing yet. Personal imports stay private; team imports use team visibility by default.</p>
               </div>
 
               {/* Models info */}

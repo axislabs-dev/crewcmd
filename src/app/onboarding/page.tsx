@@ -968,8 +968,7 @@ export default function OnboardingPage() {
                     className={`rounded-lg border px-3 py-3 text-left transition-all ${importOwnerType === "user" ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20" : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"}`}
                   >
                     <div className="text-[11px] font-bold tracking-wider text-[var(--text-primary)]">PERSONAL WORKSPACE</div>
-                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Owned by you. Imported agents stay private in v1.</p>
-                    <p className="mt-2 text-[9px] font-mono text-[var(--text-tertiary)]">ownerType=user · visibility=private</p>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Only you can access these imported agents.</p>
                   </button>
                   <button
                     type="button"
@@ -977,8 +976,7 @@ export default function OnboardingPage() {
                     className={`rounded-lg border px-3 py-3 text-left transition-all ${importOwnerType === "company" ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20" : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"}`}
                   >
                     <div className="text-[11px] font-bold tracking-wider text-[var(--text-primary)]">TEAM WORKSPACE</div>
-                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Owned by the current team. Default visibility is team.</p>
-                    <p className="mt-2 text-[9px] font-mono text-[var(--text-tertiary)]">ownerType=company · visibility=team</p>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Available to your team by default.</p>
                   </button>
                 </div>
 
@@ -1243,6 +1241,10 @@ const SIMPLE_ROLES = [
   { value: "assistant", label: "Assistant" },
   { value: "manager", label: "Manager" },
   { value: "researcher", label: "Researcher" },
+  { value: "support", label: "Support" },
+  { value: "custom", label: "Custom" },
+];
+, label: "Researcher" },
   { value: "support", label: "Support" },
   { value: "custom", label: "Custom" },
 ];

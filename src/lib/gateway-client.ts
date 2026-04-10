@@ -392,6 +392,21 @@ export class GatewayClient {
     return this.rpc<GatewayModelsListResult>("models.list", {});
   }
 
+  async skillsUpdate(params: {
+    agentId?: string;
+    slug: string;
+    enabled?: boolean;
+    env?: Record<string, string>;
+  }): Promise<{ ok: boolean }> {
+    return this.rpc<{ ok: boolean }>("skills.update", params);
+  }
+
+  async skillsStatus(params: {
+    agentId?: string;
+  } = {}): Promise<{ skills: Array<{ slug: string; enabled: boolean; env?: Record<string, string> }> }> {
+    return this.rpc("skills.status", params);
+  }
+
   async listAgentFiles(agentId: string): Promise<GatewayFilesListResult> {
     return this.rpc<GatewayFilesListResult>("agents.files.list", { agentId });
   }

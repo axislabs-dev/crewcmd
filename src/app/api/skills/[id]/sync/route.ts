@@ -4,6 +4,7 @@ import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 
 export async function POST(
   request: NextRequest,
@@ -44,9 +45,12 @@ export async function POST(
   );
 
   const failed: Array<{ agentId: string; error: string }> = [];
+  const secretErrors: Array<{ agentId: string; error: string }> = [];
   let synced = 0;
+  let secretsPushed = 0;
 
   for (const assignment of assignments) {
+    // Step 1: Sync SKILL.md to local workspace (same-machine only)
     try {
       const result = await syncSkillToOpenClaw({
         skillId,
@@ -68,7 +72,30 @@ export async function POST(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
+    // Step 2: Push secrets to gateway as env vars (works local + remote)
+    try {
+      const secretResult = await pushSecretsToGateway({
+        skillId,
+        agentId: assignment.agentId,
+        companyId: skill.companyId,
+      });
+
+      if (secretResult.ok) {
+        secretsPushed += secretResult.envVarsPushed.length;
+      } else {
+        secretErrors.push({
+          agentId: assignment.agentId,
+          error: secretResult.errors.join("; "),
+        });
+      }
+    } catch (error) {
+      secretErrors.push({
+        agentId: assignment.agentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  return NextResponse.json({ synced, failed });
+  return NextResponse.json({ synced, secretsPushed, failed, secretErrors });
 }

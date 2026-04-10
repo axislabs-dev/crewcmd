@@ -157,13 +157,25 @@ function TeamCanvasInner({
     [agents, agentSkills, callbacks]
   );
 
-  // Apply dagre layout only if no agents have saved positions
+  // Always run dagre, then restore saved positions for agents that have them
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
-    if (hasManualPositions) {
-      return { nodes: rawNodes, edges: rawEdges };
+    const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(rawNodes, rawEdges, direction);
+
+    if (!hasManualPositions) {
+      return { nodes: layouted, edges: layoutedEdges };
     }
-    return getLayoutedElements(rawNodes, rawEdges, direction);
-  }, [rawNodes, rawEdges, hasManualPositions, direction]);
+
+    const savedPositions = new Map(
+      agents.filter((a) => a.canvasPosition).map((a) => [a.callsign.toLowerCase(), a.canvasPosition!])
+    );
+
+    const nodes = layouted.map((node) => {
+      const saved = savedPositions.get(node.id);
+      return saved ? { ...node, position: saved } : node;
+    });
+
+    return { nodes, edges: layoutedEdges };
+  }, [rawNodes, rawEdges, agents, hasManualPositions, direction]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);

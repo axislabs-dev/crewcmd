@@ -891,6 +891,26 @@ function SkillsTab({
     }
   }
 
+  async function detachSkill(row: AgentSkillRow) {
+    if (!agent) return;
+    setSavingSkillId(row.skillId);
+    setAttachError(null);
+    try {
+      const res = await fetch(`/api/agents/${agent.callsign.toLowerCase()}/skills/${row.skillId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to remove skill");
+      }
+      onSkillsChange(skills.filter((s) => s.skillId !== row.skillId));
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Failed to remove skill");
+    } finally {
+      setSavingSkillId(null);
+    }
+  }
+
   async function saveConfig(row: AgentSkillRow, config: Record<string, unknown>) {
     if (!agent) return;
     const schema = getSkillConfigSchema(row.skill.metadata);
@@ -1071,9 +1091,13 @@ function SkillsTab({
                 </div>
 
                 <div className="mt-2 flex items-center justify-between gap-3">
-                  <p className="text-[10px] text-[var(--text-tertiary)]">
-                    {example ? `Example: ${example}` : "Use secretRef values for credentials. Raw JSON is for advanced cases only."}
-                  </p>
+                  <button
+                    onClick={() => detachSkill(s)}
+                    disabled={savingSkillId === s.skillId}
+                    className="rounded-lg border border-red-500/20 px-2.5 py-1.5 text-[10px] tracking-wider text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    REMOVE
+                  </button>
                   <div className="flex gap-2">
                     <button
                       onClick={() => saveConfig(s, config)}

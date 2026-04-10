@@ -622,7 +622,7 @@ function SkillConfigFields({
     <div className="space-y-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)]/30 p-3">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Guided config</p>
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Use the typed form first. Raw JSON is still available below for advanced cases.</p>
+        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Use the form for normal setup. Open Advanced only if you need to edit the raw config.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -806,6 +806,7 @@ function SkillsTab({
   const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretOption[]>([]);
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [advancedOpenBySkillId, setAdvancedOpenBySkillId] = useState<Record<string, boolean>>({});
 
   const loadServiceSecrets = useCallback(async () => {
     if (!agent?.companyId) {
@@ -1038,17 +1039,35 @@ function SkillsTab({
                   onCreateSecret={createSecret}
                 />
 
-                <div className="mt-3">
-                  <label className="mb-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
-                    Advanced config JSON
-                  </label>
-                  <textarea
-                    value={configDrafts[s.skillId] ?? "{}"}
-                    onChange={(e) => setConfigDrafts((current) => ({ ...current, [s.skillId]: e.target.value }))}
-                    rows={8}
-                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
-                    spellCheck={false}
-                  />
+                <div className="mt-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)]/30 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpenBySkillId((current) => ({ ...current, [s.skillId]: !current[s.skillId] }))}
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Advanced</p>
+                      <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Show raw JSON for edge cases and manual edits.</p>
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--accent)]">
+                      {advancedOpenBySkillId[s.skillId] ? "Hide" : "Show"}
+                    </span>
+                  </button>
+
+                  {advancedOpenBySkillId[s.skillId] ? (
+                    <div className="mt-3">
+                      <label className="mb-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
+                        Assignment JSON
+                      </label>
+                      <textarea
+                        value={configDrafts[s.skillId] ?? "{}"}
+                        onChange={(e) => setConfigDrafts((current) => ({ ...current, [s.skillId]: e.target.value }))}
+                        rows={8}
+                        className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
+                        spellCheck={false}
+                      />
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-2 flex items-center justify-between gap-3">
@@ -1064,13 +1083,15 @@ function SkillsTab({
                     >
                       {savingSkillId === s.skillId ? "SAVING…" : "SAVE FORM"}
                     </button>
-                    <button
-                      onClick={() => saveJsonConfig(s)}
-                      disabled={savingSkillId === s.skillId}
-                      className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[11px] tracking-wider text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      SAVE JSON
-                    </button>
+                    {advancedOpenBySkillId[s.skillId] ? (
+                      <button
+                        onClick={() => saveJsonConfig(s)}
+                        disabled={savingSkillId === s.skillId}
+                        className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[11px] tracking-wider text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        SAVE JSON
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>

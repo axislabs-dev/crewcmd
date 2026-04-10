@@ -3,6 +3,7 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
+import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         .where(eq(schema.agentSkills.id, row.id))
         .returning()
     );
+
+    // Re-push secrets to gateway when config changes (non-blocking)
+    if (config !== undefined && agent.companyId && agent.runtimeId) {
+      pushSecretsToGateway({
+        skillId,
+        agentId: agent.id,
+        companyId: agent.companyId,
+      }).catch((err) => {
+        console.warn(`[api/agents/skills] Secret push failed for ${agent.callsign}:`, err);
+      });
+    }
 
     return NextResponse.json(updated);
   } catch (err) {

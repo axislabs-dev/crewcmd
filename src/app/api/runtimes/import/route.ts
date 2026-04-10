@@ -5,6 +5,12 @@ import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import type { DiscoveredAgent, GatewayModel } from "@/lib/gateway-client";
 import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
+import {
+  canManageCompanyOwnedAgent,
+  getAgentAccessContext,
+  normalizeVisibilityForCreation,
+  resolveRuntimeOwnership,
+} from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +20,8 @@ interface ImportBody {
   models?: GatewayModel[];
   defaultAgentId?: string;
   devicePrivateKeyPem?: string;
+  ownerType?: "user" | "company";
+  visibility?: "private" | "team" | "org";
 }
 
 // Color palette for imported agents
@@ -39,8 +47,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No active company" }, { status: 400 });
     }
 
+    const access = await getAgentAccessContext();
+    if (!access.userId) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const body: ImportBody = await request.json();
-    const { runtimeId, agents: importAgents, devicePrivateKeyPem } = body;
+    const { runtimeId, agents: importAgents, devicePrivateKeyPem, ownerType, visibility } = body;
 
     if (!runtimeId || !importAgents?.length) {
       return NextResponse.json(
@@ -62,6 +75,24 @@ export async function POST(request: Request) {
     if (!runtime || runtime.companyId !== companyId) {
       return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
     }
+
+    const runtimeOwnership = await resolveRuntimeOwnership(runtimeId);
+    const effectiveOwnerType = runtimeOwnership?.ownerType ?? (ownerType === "company" ? "company" : "user");
+    const effectiveOwnerUserId = runtimeOwnership?.ownerUserId ?? (effectiveOwnerType === "user" ? access.userId : null);
+    const effectiveOwnerCompanyId = runtimeOwnership?.ownerCompanyId ?? (effectiveOwnerType === "company" ? companyId : null);
+
+    if (ownerType && runtimeOwnership && ownerType !== runtimeOwnership.ownerType) {
+      return NextResponse.json({ error: "Import ownership must match the selected runtime" }, { status: 400 });
+    }
+
+    if (effectiveOwnerType === "company" && !canManageCompanyOwnedAgent(access, effectiveOwnerCompanyId)) {
+      return NextResponse.json({ error: "Only company admins can import team-owned agents" }, { status: 403 });
+    }
+
+    const effectiveVisibility = normalizeVisibilityForCreation({
+      ownerType: effectiveOwnerType,
+      requestedVisibility: visibility,
+    });
 
     // Store device private key in the runtime metadata for persistent device auth
     if (devicePrivateKeyPem) {
@@ -140,6 +171,10 @@ export async function POST(request: Request) {
             runtimeRef: agent.id,
             reportsTo: agent.reportsTo || null,
             avatarUrl: agent.avatarUrl || null,
+            ownerType: effectiveOwnerType,
+            ownerUserId: effectiveOwnerUserId,
+            ownerCompanyId: effectiveOwnerCompanyId,
+            visibility: effectiveVisibility,
           })
           .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
 

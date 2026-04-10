@@ -58,49 +58,33 @@ const VOICE_SYSTEM_PROMPT = [
   "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
 
-/** Load message history from DB into the Zustand store for an agent */
-async function loadFromDBIntoStore(agentId: string, companyId: string) {
+/** Load message history from the gateway session into the Zustand store for an agent */
+async function loadThreadHistoryIntoStore(agentId: string) {
   try {
-    const sessRes = await fetch(
-      `/api/chat/sessions?agentId=${encodeURIComponent(agentId)}&companyId=${encodeURIComponent(companyId)}`
+    const res = await fetch(
+      `/api/chat/history?sessionKey=${encodeURIComponent(agentId)}&limit=200`
     );
-    if (!sessRes.ok) return;
+    if (!res.ok) return;
 
-    const { sessions } = await sessRes.json() as {
-      sessions: { id: string; agentId: string; title: string | null }[];
+    const { messages } = await res.json() as {
+      messages: { id: string; role: "user" | "assistant"; content: string }[];
     };
-    if (!sessions?.length) return;
+    if (!messages?.length) return;
 
-    const allMessages: { id: string; sessionId: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[] = [];
-    for (const session of sessions) {
-      const msgRes = await fetch(
-        `/api/chat/messages?sessionId=${encodeURIComponent(session.id)}&limit=100`
-      );
-      if (!msgRes.ok) continue;
-      const { messages } = await msgRes.json() as {
-        messages: { id: string; role: "user" | "assistant"; content: string; createdAt?: string; metadata?: Message["metadata"] }[];
-      };
-      if (messages?.length) {
-        allMessages.push(...messages.map((m) => ({ ...m, sessionId: session.id })));
-      }
-    }
-
-    if (!allMessages.length) return;
-
+    const baseTime = Date.now();
     useChatStore.getState().loadSession(
       agentId,
-      allMessages.map((m) => ({
-        id: m.id,
-        sessionId: m.sessionId,
+      messages.map((m, index) => ({
+        id: `${agentId.toLowerCase()}-history-${index}-${m.id}`,
         agentId: agentId.toLowerCase(),
         role: m.role,
         content: m.content,
-        metadata: m.metadata,
-        createdAt: m.createdAt || new Date().toISOString(),
+        createdAt: new Date(baseTime + index).toISOString(),
+        metadata: null,
       }))
     );
   } catch {
-    // DB unavailable
+    // Gateway unavailable
   }
 }
 
@@ -202,12 +186,11 @@ export default function ChatPage() {
       });
   }, []);
 
-  // Load messages from Zustand store; on first load for an agent, hydrate from DB
+  // Load messages from Zustand store; on first load for an agent, hydrate from gateway history
   const loadedAgentsRef = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
     const agentId = selectedAgent?.callsign || activeSessionKey;
-    const companyId = company?.id;
 
     // Read whatever the store already has (from SSE)
     const storeMessages = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
@@ -223,10 +206,10 @@ export default function ChatPage() {
       setMessages([]);
     }
 
-    // If we haven't loaded from DB for this agent yet, do so
-    if (companyId && !loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
+    // If we haven't loaded gateway history for this agent yet, do so
+    if (!loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
       loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
-      loadFromDBIntoStore(agentId, companyId).then(() => {
+      loadThreadHistoryIntoStore(agentId).then(() => {
         if (cancelled) return;
         const updated = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
         setMessages(updated.map((m) => ({
@@ -243,7 +226,7 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, company?.id, storeMarkRead]);
+  }, [activeSessionKey, selectedAgent?.callsign, storeMarkRead]);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {

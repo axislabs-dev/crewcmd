@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { publishChatEvent } from "@/lib/chat-pubsub";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,10 @@ async function resolveSessionId(agentId: string, companyId: string): Promise<str
 
   const existing = await withRetry(() =>
     db!.select().from(chatSessions)
-      .where(eq(chatSessions.agentId, agentLower))
+      .where(and(
+        eq(chatSessions.agentId, agentLower),
+        eq(chatSessions.companyId, companyId)
+      ))
       .orderBy(desc(chatSessions.updatedAt))
       .limit(1)
   );

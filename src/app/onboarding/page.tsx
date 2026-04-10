@@ -1244,7 +1244,3 @@ const SIMPLE_ROLES = [
   { value: "support", label: "Support" },
   { value: "custom", label: "Custom" },
 ];
-, label: "Researcher" },
-  { value: "support", label: "Support" },
-  { value: "custom", label: "Custom" },
-];

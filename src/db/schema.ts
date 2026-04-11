@@ -741,6 +741,24 @@ export const agentAccessGrants = pgTable("agent_access_grants", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Gateway Sessions ──────────────────────────────────────────────
+
+export const gatewaySessions = pgTable("gateway_sessions", {
+  key: text("key").primaryKey(),
+  agentId: text("agent_id").notNull(),
+  spawnedByKey: text("spawned_by_key"),
+  kind: text("kind").notNull(),
+  label: text("label"),
+  title: text("title"),
+  lastMessagePreview: text("last_message_preview"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+  tokenUsage: jsonb("token_usage").$type<{ input?: number; output?: number; total?: number }>(),
+  model: text("model"),
+  modelProvider: text("model_provider"),
+  sessionId: text("session_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Chat Sessions & Messages ──────────────────────────────────────
 
 export const chatSessions = pgTable("chat_sessions", {
@@ -750,6 +768,7 @@ export const chatSessions = pgTable("chat_sessions", {
     .notNull(),
   agentId: text("agent_id").notNull(), // callsign e.g. "neo", "sentinel"
   title: text("title"), // auto-generated or user-set
+  gatewaySessionKey: text("gateway_session_key"), // optional link to OpenClaw gateway session
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

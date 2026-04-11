@@ -82,6 +82,7 @@ async function applySchema() {
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_ref TEXT`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'user'`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
+    `ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS gateway_session_key TEXT`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
     `ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private'`,
     `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'company'`,

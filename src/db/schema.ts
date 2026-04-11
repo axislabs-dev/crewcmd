@@ -768,6 +768,7 @@ export const chatSessions = pgTable("chat_sessions", {
     .notNull(),
   agentId: text("agent_id").notNull(), // callsign e.g. "neo", "sentinel"
   title: text("title"), // auto-generated or user-set
+  gatewaySessionKey: text("gateway_session_key"), // optional link to OpenClaw gateway session
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -12,7 +12,11 @@ export const dynamic = "force-dynamic";
  * Find-or-create a chat session for an agent+company pair.
  * Returns the session ID.
  */
-async function resolveSessionId(agentId: string, companyId: string): Promise<string> {
+async function resolveSessionId(
+  agentId: string,
+  companyId: string,
+  gatewaySessionKey?: string | null,
+): Promise<string> {
   const agentLower = agentId.toLowerCase();
 
   const existing = await withRetry(() =>
@@ -25,12 +29,24 @@ async function resolveSessionId(agentId: string, companyId: string): Promise<str
       .limit(1)
   );
 
-  if (existing.length > 0) return existing[0].id;
+  if (existing.length > 0) {
+    const session = existing[0];
+    // Link gateway session key if not already set
+    if (gatewaySessionKey && !session.gatewaySessionKey) {
+      await withRetry(() =>
+        db!.update(chatSessions)
+          .set({ gatewaySessionKey })
+          .where(eq(chatSessions.id, session.id))
+      );
+    }
+    return session.id;
+  }
 
   const [newSession] = await withRetry(() =>
     db!.insert(chatSessions).values({
       companyId,
       agentId: agentLower,
+      gatewaySessionKey: gatewaySessionKey || null,
     }).returning()
   );
   return newSession.id;
@@ -86,7 +102,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages, agent, companyId: bodyCompanyId } = body;
+    const { messages, agent, companyId: bodyCompanyId, sessionKey: bodySessionKey } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return Response.json(
@@ -105,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     const agentId = agent || "main";
-    const sessionKey = agentId === "main" ? "main" : agentId;
+    const sessionKey = (bodySessionKey as string) || (agentId === "main" ? "main" : agentId);
 
     // Resolve company ID from body or cookie
     const companyId = bodyCompanyId ||
@@ -118,7 +134,7 @@ export async function POST(request: NextRequest) {
 
     if (db && companyId) {
       try {
-        sessionId = await resolveSessionId(agentId, companyId);
+        sessionId = await resolveSessionId(agentId, companyId, sessionKey);
         const userMsg = await persistAndPublish(
           sessionId,
           agentId,

@@ -11,6 +11,7 @@ import {
   findDefaultAgent,
   findParentAgent,
 } from "@/components/chat/agent-tree-selector";
+import { useSessionBrowserStore } from "@/lib/session-browser-store";
 import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
 import { useChatStore } from "@/lib/chat-store";
@@ -88,6 +89,48 @@ async function loadThreadHistoryIntoStore(agentId: string) {
   }
 }
 
+/** Load message preview from the gateway session API (for session browser) */
+async function loadSessionPreviewIntoStore(sessionKey: string) {
+  try {
+    const res = await fetch(
+      `/api/openclaw/sessions/${encodeURIComponent(sessionKey)}/preview`
+    );
+    if (!res.ok) return;
+
+    const { items, status } = await res.json() as {
+      status: "ok" | "empty" | "missing" | "error";
+      items: Array<{ role: string; text: string }>;
+    };
+    if (status !== "ok" || !items?.length) return;
+
+    const baseTime = Date.now();
+    useChatStore.getState().loadSession(
+      sessionKey,
+      items.map((m, index) => ({
+        id: `${sessionKey}-history-${index}`,
+        agentId: sessionKey,
+        role: m.role as "user" | "assistant",
+        content: m.text,
+        createdAt: new Date(baseTime + index).toISOString(),
+        metadata: null,
+      }))
+    );
+  } catch {
+    // Gateway unavailable
+  }
+}
+        agentId: agentId.toLowerCase(),
+        role: m.role,
+        content: m.content,
+        createdAt: new Date(baseTime + index).toISOString(),
+        metadata: null,
+      }))
+    );
+  } catch {
+    // Gateway unavailable
+  }
+}
+
 export default function ChatPage() {
   const { company } = useCompany();
   const storeMarkRead = useChatStore((s) => s.markRead);
@@ -134,10 +177,11 @@ export default function ChatPage() {
   const isSpeakingQueueRef = useRef(false);
   const spokenSentencesRef = useRef<number>(0);
 
-  // Derive session key from selected agent
+  // Derive session key: if a gateway session is selected, use it;
+  // otherwise fall back to agent callsign
   const activeSessionKey = useMemo(
-    () => selectedAgent?.callsign.toLowerCase() || "main",
-    [selectedAgent]
+    () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
+    [selectedSessionKey, selectedAgent]
   );
 
   // No unmount persistence needed — server-side /api/chat route persists
@@ -206,8 +250,26 @@ export default function ChatPage() {
       setMessages([]);
     }
 
-    // If we haven't loaded gateway history for this agent yet, do so
-    if (!loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
+    // If a gateway session is selected, load its preview
+    if (selectedSessionKey) {
+      if (!loadedAgentsRef.current.has(selectedSessionKey)) {
+        loadedAgentsRef.current.add(selectedSessionKey);
+        loadSessionPreviewIntoStore(selectedSessionKey).then(() => {
+          if (cancelled) return;
+          const updated = useChatStore.getState().messagesByAgent[selectedSessionKey] || [];
+          if (updated.length > 0) {
+            setMessages(updated.map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              createdAt: m.createdAt,
+              metadata: m.metadata,
+            })));
+          }
+        });
+      }
+    } else if (!loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
+      // Otherwise load standard thread history
       loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
       loadThreadHistoryIntoStore(agentId).then(() => {
         if (cancelled) return;
@@ -226,7 +288,7 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, storeMarkRead]);
+  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead]);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
@@ -368,8 +430,8 @@ export default function ChatPage() {
   );
 
   const handleAgentSelect = useCallback(
-    (agent: Agent) => {
-      if (agent.id === selectedAgent?.id) return;
+    (agent: Agent, sessionKey?: string | null) => {
+      if (agent.id === selectedAgent?.id && sessionKey === selectedSessionKey) return;
       // Abort any in-flight streaming to prevent cross-agent bleed
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -379,9 +441,11 @@ export default function ChatPage() {
       setStreamingContent("");
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
+      // Update session selection (or clear it for regular agent mode)
+      selectSession(sessionKey ?? null);
       setSelectedAgent(agent);
     },
-    [selectedAgent]
+    [selectedAgent, selectedSessionKey, selectSession]
   );
 
   const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
@@ -921,6 +985,7 @@ export default function ChatPage() {
             agent: selectedAgent?.callsign,
             companyId: company?.id,
             metadata,
+            sessionKey: selectedSessionKey ?? undefined,
           }),
           signal: controller.signal,
         });
@@ -1052,7 +1117,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey]
   );
 
   const interruptAudio = useCallback(() => {

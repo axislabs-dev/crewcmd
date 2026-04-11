@@ -119,22 +119,16 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     // Gateway unavailable
   }
 }
-        agentId: agentId.toLowerCase(),
-        role: m.role,
-        content: m.content,
-        createdAt: new Date(baseTime + index).toISOString(),
-        metadata: null,
-      }))
-    );
-  } catch {
-    // Gateway unavailable
-  }
-}
 
 export default function ChatPage() {
   const { company } = useCompany();
   const storeMarkRead = useChatStore((s) => s.markRead);
   const storeClearAgent = useChatStore((s) => s.clearAgent);
+  const {
+    selectedSessionKey,
+    selectSession,
+    clearSelection,
+  } = useSessionBrowserStore();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");

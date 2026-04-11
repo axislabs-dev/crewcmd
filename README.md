@@ -75,6 +75,30 @@ pnpm dev
 - Docker (optional, for containerized deployment)
 - GitHub OAuth app (optional, for team auth)
 
+## OpenClaw Hook Pack (zero-config)
+
+CrewCmd ships an OpenClaw hook pack that traces subagent dispatch prompts and completions into CrewCmd chat.
+
+```bash
+cd packages/crewcmd-hooks
+pnpm install
+./scripts/setup-hook.sh
+```
+
+What the setup script does:
+- builds the hook pack so `handler.js` exists at the hook root
+- copies the full pack into `~/.openclaw/hooks/crewcmd-hooks/`
+- enables the `subagent-trace` hook in OpenClaw
+- restarts the OpenClaw gateway
+
+URL discovery is zero-config by default. The hook resolves CrewCmd in this order:
+1. `CREWCMD_URL`
+2. `~/.openclaw/workspace/CREWCMD_URL`
+3. `.env.local` values such as `NEXT_PUBLIC_APP_URL` or `CREWCMD_URL`
+4. common local defaults like `http://localhost:3000`
+
+If none of those resolve, tracing is skipped gracefully and the original OpenClaw flow continues.
+
 ## Features
 
 | Feature | Description |

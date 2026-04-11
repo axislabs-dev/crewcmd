@@ -4,10 +4,10 @@
   "private": true,
   "description": "OpenClaw hook pack for tracing subagent conversations into CrewCmd chat.",
   "type": "module",
-  "main": "dist/subagent-trace/handler.js",
+  "main": "dist/handler.js",
   "exports": {
-    ".": "./dist/subagent-trace/handler.js",
-    "./subagent-trace": "./dist/subagent-trace/handler.js",
+    ".": "./dist/handler.js",
+    "./subagent-trace": "./dist/handler.js",
     "./install": "./dist/install.js"
   },
   "files": [
@@ -18,7 +18,7 @@
     "vitest.config.ts"
   ],
   "scripts": {
-    "build": "../../node_modules/.bin/tsc -p tsconfig.json",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && ../../node_modules/.bin/tsc -p tsconfig.json",
     "test": "../../node_modules/.bin/vitest run tests/subagent-trace.test.ts"
   }
 }

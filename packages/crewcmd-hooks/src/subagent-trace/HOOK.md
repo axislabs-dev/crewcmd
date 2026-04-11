@@ -1,7 +1,7 @@
 ---
 name: subagent-trace
 type: tool_result_persist
-entry: ./dist/subagent-trace/handler.js
+entry: ./handler.js
 description: Trace subagent dispatch prompts and completions into CrewCmd chat.
 ---
 

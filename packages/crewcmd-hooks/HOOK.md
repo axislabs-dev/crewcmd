@@ -1,6 +1,8 @@
 ---
-name: crewcmd-hooks
-description: Hook pack that traces OpenClaw subagent dispatches into CrewCmd chat.
+name: subagent-trace
+type: tool_result_persist
+entry: ./handler.js
+description: Trace subagent dispatch prompts and completions into CrewCmd chat.
 ---
 
 # CrewCmd Hooks

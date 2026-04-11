@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import subagentTraceHook, { clearQueue, extractTraceEnvelope, readQueuedTraceFiles } from "../src/subagent-trace/handler";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import subagentTraceHook, { clearQueue, extractTraceEnvelope, readQueuedTraceFiles, resolveCrewcmdUrl } from "../src/handler";
 
 describe("subagent-trace hook", () => {
+  const originalCrewcmdUrl = process.env.CREWCMD_URL;
+
+  beforeEach(() => {
+    process.env.CREWCMD_URL = "http://localhost:3000";
+  });
+
   afterEach(() => {
     clearQueue();
     vi.restoreAllMocks();
+    if (originalCrewcmdUrl === undefined) delete process.env.CREWCMD_URL;
+    else process.env.CREWCMD_URL = originalCrewcmdUrl;
   });
 
   it("extracts spawn payloads into CrewCmd trace envelopes", () => {
@@ -37,6 +45,11 @@ describe("subagent-trace hook", () => {
 
   it("ignores unrelated tools", () => {
     expect(extractTraceEnvelope({ toolName: "read", input: {}, result: {} })).toBeNull();
+  });
+
+  it("prefers CREWCMD_URL from the environment", () => {
+    process.env.CREWCMD_URL = "https://crewcmd.example.com/";
+    expect(resolveCrewcmdUrl()).toBe("https://crewcmd.example.com");
   });
 
   it("queues payloads and returns undefined", () => {

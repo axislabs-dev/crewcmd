@@ -1,14 +1,26 @@
-import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync, readFileSync, existsSync, appendFileSync } from "node:fs";
+import { spawn, execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { spawn } from "node:child_process";
 
 type JsonRecord = Record<string, unknown>;
 
-const DEFAULT_CREWCMD_URL = process.env.CREWCMD_URL || "https://localhost:3000";
 const DEFAULT_AXISLABS_COMPANY_ID = process.env.AXISLABS_COMPANY_ID || process.env.CREWCMD_COMPANY_ID || "00000000-0000-0000-0000-000000000001";
 const QUEUE_DIR = resolve(homedir(), ".openclaw", "workspace", ".crewcmd-trace-queue");
 const LOG_PATH = resolve(QUEUE_DIR, "worker.log");
+const CREWCMD_URL_FILE = resolve(homedir(), ".openclaw", "workspace", "CREWCMD_URL");
+const CREWCMD_ENV_FILE_CANDIDATES = [
+  resolve(homedir(), "Developer", "axislabs", "crewcmd-live", ".env.local"),
+  resolve(process.cwd(), ".env.local"),
+];
+const CREWCMD_URL_CANDIDATES = [
+  "http://localhost:3000",
+  "https://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://127.0.0.1:3000",
+  "http://100.0.0.0:3000",
+  "https://100.0.0.0:3000",
+];
 
 export interface TraceEnvelope {
   toolName: string;
@@ -47,6 +59,58 @@ function stringifyContent(value: unknown): string | undefined {
   } catch {
     return String(value);
   }
+}
+
+function normalizeUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function readEnvLikeValue(filePath: string, keys: string[]): string | undefined {
+  if (!existsSync(filePath)) return undefined;
+  const content = readFileSync(filePath, "utf8");
+  for (const key of keys) {
+    const match = content.match(new RegExp(`^${key}=(.+)$`, "m"));
+    if (!match) continue;
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+    return normalizeUrl(raw.replace(/^['\"]|['\"]$/g, ""));
+  }
+  return undefined;
+}
+
+function canReachCrewcmd(url: string): boolean {
+  try {
+    const output = execFileSync("curl", ["-sk", "--max-time", "2", `${url}/api/health`], { encoding: "utf8" });
+    return output.includes('"status"');
+  } catch {
+    return false;
+  }
+}
+
+function logWarning(message: string) {
+  try {
+    ensureQueueDir();
+    appendFileSync(LOG_PATH, `[${new Date().toISOString()}] WARN ${message}\n`);
+  } catch {}
+}
+
+export function resolveCrewcmdUrl(): string | undefined {
+  const envUrl = asString(process.env.CREWCMD_URL);
+  if (envUrl) return normalizeUrl(envUrl);
+
+  const workspaceUrl = readEnvLikeValue(CREWCMD_URL_FILE, ["CREWCMD_URL", "NEXT_PUBLIC_APP_URL"]);
+  if (workspaceUrl) return workspaceUrl;
+
+  for (const envPath of CREWCMD_ENV_FILE_CANDIDATES) {
+    const configUrl = readEnvLikeValue(envPath, ["CREWCMD_URL", "NEXT_PUBLIC_APP_URL"]);
+    if (configUrl) return configUrl;
+  }
+
+  for (const candidate of CREWCMD_URL_CANDIDATES) {
+    if (canReachCrewcmd(candidate)) return candidate;
+  }
+
+  return undefined;
 }
 
 export function extractTraceEnvelope(payload: unknown, now = new Date()): TraceEnvelope | null {
@@ -102,13 +166,13 @@ export function enqueueTrace(envelope: TraceEnvelope): string {
   return finalPath;
 }
 
-export function spawnTraceWorker(queuePath: string) {
+export function spawnTraceWorker(queuePath: string, crewcmdUrl: string) {
   ensureQueueDir();
   const workerCode = `
     import { appendFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
     const queueDir = ${JSON.stringify(QUEUE_DIR)};
     const logPath = ${JSON.stringify(LOG_PATH)};
-    const baseUrl = ${JSON.stringify(DEFAULT_CREWCMD_URL)};
+    const baseUrl = ${JSON.stringify(crewcmdUrl)};
     const token = process.env.HEARTBEAT_SECRET;
     const headers = { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) };
     const files = process.argv.slice(1).flatMap((entry) => entry === '--drain' ? readdirSync(queueDir).filter((name) => name.endsWith('.json')).map((name) => queueDir + '/' + name) : [entry]);
@@ -143,8 +207,13 @@ export default function subagentTraceHook(payload: unknown) {
   try {
     const envelope = extractTraceEnvelope(payload);
     if (!envelope) return undefined;
+    const crewcmdUrl = resolveCrewcmdUrl();
+    if (!crewcmdUrl) {
+      logWarning("CrewCmd URL could not be resolved; skipping subagent trace delivery.");
+      return undefined;
+    }
     const queuePath = enqueueTrace(envelope);
-    spawnTraceWorker(queuePath);
+    spawnTraceWorker(queuePath, crewcmdUrl);
   } catch (error) {
     try {
       ensureQueueDir();

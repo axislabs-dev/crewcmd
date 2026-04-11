@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient } from "@/lib/gateway-chat-pool";
+import { ensureEventBridge } from "@/lib/init-event-bridge";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export async function GET(
   }
 
   try {
+    await ensureEventBridge();
     const client = await getGatewayClient();
 
     const result = await client.rpc<Record<string, unknown>>(

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { Agent } from "@/lib/data";
+import { SessionListDropdown } from "./session-list-dropdown";
 
 interface AgentTreeNode {
   agent: Agent;
@@ -12,7 +13,7 @@ interface AgentTreeNode {
 interface AgentTreeSelectorProps {
   agents: Agent[];
   selectedAgent: Agent | null;
-  onSelect: (agent: Agent) => void;
+  onSelect: (agent: Agent, sessionKey?: string | null) => void;
   unreadCounts: Record<string, number>;
 }
 
@@ -76,6 +77,7 @@ export function AgentTreeSelector({
   unreadCounts,
 }: AgentTreeSelectorProps) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"agents" | "sessions">("agents");
   const ref = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -117,57 +119,89 @@ export function AgentTreeSelector({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 min-w-[260px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-xl border border-[var(--border-medium)] py-1 shadow-2xl" style={{ backgroundColor: "var(--bg-primary)" }}>
-          {flatNodes.length === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-[var(--text-tertiary)]">
-              No agents available
-            </div>
-          ) : (
-            flatNodes.map(({ agent, depth }) => {
-              const isSelected = selectedAgent?.id === agent.id;
-              const unread = unreadCounts[agent.callsign.toLowerCase()] || 0;
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[280px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-xl border border-[var(--border-medium)] py-1 shadow-2xl" style={{ backgroundColor: "var(--bg-primary)" }}>
+          {/* Tab toggle */}
+          <div className="flex gap-0 px-2 py-1.5 border-b border-[var(--border-subtle)]">
+            {(["agents", "sessions"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 rounded-md px-3 py-1 text-[11px] font-mono tracking-wider uppercase transition-colors ${
+                  tab === t
+                    ? "bg-[var(--bg-surface-hover)] text-[var(--accent)] font-bold"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
 
-              return (
-                <button
-                  key={agent.id}
-                  onClick={() => {
-                    onSelect(agent);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] ${
-                    isSelected
-                      ? "bg-[var(--bg-surface-hover)] border-l-2 border-l-[var(--accent)]"
-                      : ""
-                  }`}
-                  style={{ paddingLeft: `${12 + depth * 16}px` }}
-                >
-                  <span className="text-base shrink-0">{agent.emoji}</span>
+          {/* Tab content */}
+          {tab === "agents" ? (
+            flatNodes.length === 0 ? (
+              <div className="px-3 py-2 text-[11px] text-[var(--text-tertiary)]">
+                No agents available
+              </div>
+            ) : (
+              flatNodes.map(({ agent, depth }) => {
+                const isSelected = selectedAgent?.id === agent.id;
+                const unread = unreadCounts[agent.callsign.toLowerCase()] || 0;
 
-                  <div className="flex flex-1 items-center gap-2 overflow-hidden">
-                    <span
-                      className={`font-mono tracking-wider ${isSelected ? "font-bold" : "font-medium"}`}
-                      style={{ color: agent.color }}
-                    >
-                      {agent.callsign}
-                    </span>
-                    <span className="truncate text-[var(--text-tertiary)]">
-                      {agent.title || agent.name}
-                    </span>
-                  </div>
+                return (
+                  <button
+                    key={agent.id}
+                    onClick={() => {
+                      onSelect(agent);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                      isSelected
+                        ? "bg-[var(--bg-surface-hover)] border-l-2 border-l-[var(--accent)]"
+                        : ""
+                    }`}
+                    style={{ paddingLeft: `${12 + depth * 16}px` }}
+                  >
+                    <span className="text-base shrink-0">{agent.emoji}</span>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {unread > 0 && (
-                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-bold text-white">
-                        {unread > 99 ? "99+" : unread}
+                    <div className="flex flex-1 items-center gap-2 overflow-hidden">
+                      <span
+                        className={`font-mono tracking-wider ${isSelected ? "font-bold" : "font-medium"}`}
+                        style={{ color: agent.color }}
+                      >
+                        {agent.callsign}
                       </span>
-                    )}
-                    <div
-                      className={`h-1.5 w-1.5 rounded-full ${statusColor(agent.status)}`}
-                    />
-                  </div>
-                </button>
-              );
-            })
+                      <span className="truncate text-[var(--text-tertiary)]">
+                        {agent.title || agent.name}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {unread > 0 && (
+                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-bold text-white">
+                          {unread > 99 ? "99+" : unread}
+                        </span>
+                      )}
+                      <div
+                        className={`h-1.5 w-1.5 rounded-full ${statusColor(agent.status)}`}
+                      />
+                    </div>
+                  </button>
+                );
+              })
+            )
+          ) : (
+            <SessionListDropdown
+              onSelectSession={(sessionKey) => {
+                // Also select the current agent so it looks right in the header
+                // The session key is passed separately for routing
+                if (selectedAgent) {
+                  onSelect(selectedAgent, sessionKey);
+                }
+                setOpen(false);
+              }}
+              selectedAgentCallsign={selectedAgent?.callsign ?? null}
+            />
           )}
         </div>
       )}

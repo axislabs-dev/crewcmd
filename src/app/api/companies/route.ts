@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   if (authError) return authError;
   if (!db) return NextResponse.json([]);
 
-  const user = await resolveCurrentUser();
+  const user = await resolveCurrentUser(request);
   if (!user) return NextResponse.json([]);
 
   // Get all companies this user is a member of
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   if (authError) return authError;
   if (!db) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
 
-  const user = await resolveCurrentUser();
+  const user = await resolveCurrentUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const displayName = user.name || user.email;
@@ -58,13 +58,15 @@ export async function POST(request: NextRequest) {
     createdBy: displayName,
   }).returning();
 
-  // Add creator as owner
-  await db.insert(companyMembers).values({
-    companyId: company.id,
-    userId: user.id,
-    role: "owner",
-    invitedBy: displayName,
-  });
+  // Add creator as owner (skip for system user)
+  if (user.id !== "00000000-0000-0000-0000-000000000001") {
+    await db.insert(companyMembers).values({
+      companyId: company.id,
+      userId: user.id,
+      role: "owner",
+      invitedBy: displayName,
+    });
+  }
 
   return NextResponse.json(company, { status: 201 });
 }

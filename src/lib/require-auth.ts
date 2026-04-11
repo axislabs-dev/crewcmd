@@ -11,8 +11,11 @@ export async function requireAuth(req: NextRequest): Promise<NextResponse | null
   const expectedToken = process.env.HEARTBEAT_SECRET;
   if (expectedToken) {
     const authHeader = req.headers.get("authorization");
-    if (authHeader === `Bearer ${expectedToken}`) {
-      return null; // authorized
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const providedToken = authHeader.slice(7);
+      if (providedToken === expectedToken.trim()) {
+        return null; // authorized
+      }
     }
   }
 
@@ -22,5 +25,8 @@ export async function requireAuth(req: NextRequest): Promise<NextResponse | null
     return null; // authorized
   }
 
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return NextResponse.json(
+    { error: "Unauthorized", debug: { hasBearerToken: !!expectedToken } },
+    { status: 401 }
+  );
 }

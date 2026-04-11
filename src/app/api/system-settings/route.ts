@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 async function isOwnerOrAdmin(req: NextRequest): Promise<boolean> {
   if (!db) return false;
 
-  const user = await resolveCurrentUser();
+  const user = await resolveCurrentUser(req);
   if (!user) return false;
 
   const companyId = req.headers.get("x-company-id") ?? req.nextUrl.searchParams.get("companyId");

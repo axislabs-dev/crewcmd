@@ -8,12 +8,12 @@ import { uploadImage } from "@/lib/image-storage";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  const user = await resolveCurrentUser();
+  const user = await resolveCurrentUser(request);
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -33,7 +33,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  const user = await resolveCurrentUser();
+  const user = await resolveCurrentUser(request);
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

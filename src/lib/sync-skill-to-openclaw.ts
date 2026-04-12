@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
+import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "./openclaw-workspace-resolver";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -77,7 +78,15 @@ export async function syncSkillToOpenClaw(
   const slug = skillData.skill.slug;
   const runtimeRef =
     skillData.agent.runtimeRef ?? skillData.agent.id;
-  const skillsDir = openclawSkillsDir(runtimeRef, slug);
+  const resolvedWorkspacePath = await resolveOpenClawWorkspacePath({
+    runtimeRef,
+    workspacePath: skillData.agent.workspacePath ?? null,
+  });
+  const skillsDir = openclawSkillsDir({
+    runtimeRef,
+    workspacePath: resolvedWorkspacePath,
+    slug,
+  });
   const skillMdPath = join(skillsDir, "SKILL.md");
   const metaPath = join(skillsDir, ".crewcmd-meta.json");
   const openclawJsonPath = join(homedir(), ".openclaw", "openclaw.json");
@@ -403,8 +412,16 @@ function getPrimaryEnvVarFromMetadata(metadata: Record<string, unknown>, slug: s
 
 // ─── Filesystem Operations ──────────────────────────────────────────
 
-function openclawSkillsDir(runtimeRef: string, slug: string): string {
-  return join(homedir(), ".openclaw", `workspace-${runtimeRef}`, "skills", slug);
+function openclawSkillsDir(params: {
+  runtimeRef: string;
+  workspacePath?: string | null;
+  slug: string;
+}): string {
+  if (params.workspacePath) {
+    return join(params.workspacePath, "skills", params.slug);
+  }
+
+  return join(legacyOpenClawWorkspacePath(params.runtimeRef), "skills", params.slug);
 }
 
 /**

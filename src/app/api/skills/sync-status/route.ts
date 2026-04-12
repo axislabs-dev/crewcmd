@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
+import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "@/lib/openclaw-workspace-resolver";
 
 interface SyncMeta {
   source?: string;
@@ -17,8 +17,8 @@ interface SyncMeta {
   checksum?: string;
 }
 
-function metaPathFor(runtimeRef: string, slug: string) {
-  return join(homedir(), ".openclaw", `workspace-${runtimeRef}`, "skills", slug, ".crewcmd-meta.json");
+function metaPathFor(workspacePath: string, slug: string) {
+  return join(workspacePath, "skills", slug, ".crewcmd-meta.json");
 }
 
 export async function GET() {
@@ -32,6 +32,7 @@ export async function GET() {
         agentId: agents.id,
         agentCallsign: agents.callsign,
         runtimeRef: agents.runtimeRef,
+        workspacePath: agents.workspacePath,
         skillId: skills.id,
         skillSlug: skills.slug,
         skillName: skills.name,
@@ -45,39 +46,51 @@ export async function GET() {
   const items = await Promise.all(
     assignments.map(async (assignment) => {
       const runtimeRef = assignment.runtimeRef ?? assignment.agentId;
-      const metaPath = metaPathFor(runtimeRef, assignment.skillSlug);
+      const resolvedWorkspacePath = await resolveOpenClawWorkspacePath({
+        runtimeRef,
+        workspacePath: assignment.workspacePath ?? null,
+      });
+      const candidateMetaPaths = [
+        resolvedWorkspacePath ? metaPathFor(resolvedWorkspacePath, assignment.skillSlug) : null,
+        metaPathFor(legacyOpenClawWorkspacePath(runtimeRef), assignment.skillSlug),
+      ].filter((value, index, arr): value is string => Boolean(value) && arr.indexOf(value) === index);
 
-      try {
-        const raw = await readFile(metaPath, "utf-8");
-        const meta = JSON.parse(raw) as SyncMeta;
-        return {
-          companyId: assignment.companyId,
-          agentId: assignment.agentId,
-          agentCallsign: assignment.agentCallsign,
-          skillId: assignment.skillId,
-          skillName: assignment.skillName,
-          skillSlug: assignment.skillSlug,
-          status: "synced" as const,
-          syncedAt: meta.syncedAt ?? null,
-          checksum: meta.checksum ?? null,
-          previousChecksum: meta.previousChecksum ?? null,
-          error: null,
-        };
-      } catch (error) {
-        return {
-          companyId: assignment.companyId,
-          agentId: assignment.agentId,
-          agentCallsign: assignment.agentCallsign,
-          skillId: assignment.skillId,
-          skillName: assignment.skillName,
-          skillSlug: assignment.skillSlug,
-          status: "missing" as const,
-          syncedAt: null,
-          checksum: null,
-          previousChecksum: null,
-          error: error instanceof Error ? error.message : String(error),
-        };
+      let lastError: unknown = null;
+      for (const candidateMetaPath of candidateMetaPaths) {
+        try {
+          const raw = await readFile(candidateMetaPath, "utf-8");
+          const meta = JSON.parse(raw) as SyncMeta;
+          return {
+            companyId: assignment.companyId,
+            agentId: assignment.agentId,
+            agentCallsign: assignment.agentCallsign,
+            skillId: assignment.skillId,
+            skillName: assignment.skillName,
+            skillSlug: assignment.skillSlug,
+            status: "synced" as const,
+            syncedAt: meta.syncedAt ?? null,
+            checksum: meta.checksum ?? null,
+            previousChecksum: meta.previousChecksum ?? null,
+            error: null,
+          };
+        } catch (error) {
+          lastError = error;
+        }
       }
+
+      return {
+        companyId: assignment.companyId,
+        agentId: assignment.agentId,
+        agentCallsign: assignment.agentCallsign,
+        skillId: assignment.skillId,
+        skillName: assignment.skillName,
+        skillSlug: assignment.skillSlug,
+        status: "missing" as const,
+        syncedAt: null,
+        checksum: null,
+        previousChecksum: null,
+        error: lastError instanceof Error ? lastError.message : String(lastError),
+      };
     })
   );
 

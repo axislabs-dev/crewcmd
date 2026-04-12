@@ -611,6 +611,14 @@ async function discoverFromClient(
       let identityRaw: string | undefined;
       let soulRaw: string | undefined;
       let agentsMdRaw: string | undefined;
+      let workspace: string | undefined;
+
+      try {
+        const filesResult = await client.listAgentFiles(agent.id);
+        if (filesResult.workspace) {
+          workspace = filesResult.workspace;
+        }
+      } catch { /* workspace discovery unsupported */ }
 
       try {
         const identityResult = await client.getAgentFile(agent.id, "IDENTITY.md");
@@ -633,7 +641,7 @@ async function discoverFromClient(
         }
       } catch { /* file doesn't exist */ }
 
-      discoveredAgents.push(parseAgentIdentity(agent, identityRaw, soulRaw, agentsMdRaw));
+      discoveredAgents.push(parseAgentIdentity(agent, identityRaw, soulRaw, agentsMdRaw, workspace));
     });
 
     await Promise.all(fileReads);
@@ -662,7 +670,8 @@ function parseAgentIdentity(
   agent: GatewayAgent,
   identityRaw?: string,
   soulRaw?: string,
-  agentsMdRaw?: string
+  agentsMdRaw?: string,
+  workspace?: string
 ): DiscoveredAgent {
   let name = agent.identity?.name || agent.name || agent.id;
   let emoji = agent.identity?.emoji || "🤖";
@@ -740,6 +749,7 @@ function parseAgentIdentity(
     title,
     description,
     reportsTo,
+    workspace,
     avatarUrl: agent.identity?.avatarUrl || agent.identity?.avatar || undefined,
     identityRaw,
     soulRaw,

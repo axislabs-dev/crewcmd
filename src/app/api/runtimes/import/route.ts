@@ -167,6 +167,7 @@ export async function POST(request: Request) {
             },
             role: "engineer",
             model: agent.model || null,
+            workspacePath: agent.workspace || null,
             runtimeId,
             runtimeRef: agent.id,
             reportsTo: agent.reportsTo || null,

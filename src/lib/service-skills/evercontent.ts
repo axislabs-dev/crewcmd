@@ -3,9 +3,7 @@ import type { ServiceSkillHandler } from "@/lib/service-skills";
 const EVERCONTENT_BASE_URL = "https://app.evercontent.io";
 
 interface EverContentConfig {
-  defaultCustomerId?: string;
   defaultProjectId?: string;
-  allowedCustomerIds?: string[];
   allowedProjectIds?: string[];
   canPublish?: boolean;
   __resolvedSecret?: string;
@@ -13,11 +11,7 @@ interface EverContentConfig {
 
 function asConfig(config: Record<string, unknown>): EverContentConfig {
   return {
-    defaultCustomerId: typeof config.defaultCustomerId === "string" ? config.defaultCustomerId : undefined,
     defaultProjectId: typeof config.defaultProjectId === "string" ? config.defaultProjectId : undefined,
-    allowedCustomerIds: Array.isArray(config.allowedCustomerIds)
-      ? config.allowedCustomerIds.filter((value): value is string => typeof value === "string")
-      : undefined,
     allowedProjectIds: Array.isArray(config.allowedProjectIds)
       ? config.allowedProjectIds.filter((value): value is string => typeof value === "string")
       : undefined,
@@ -46,19 +40,6 @@ function resolveProjectId(input: Record<string, unknown> | undefined, config: Ev
   return projectId;
 }
 
-function resolveCustomerId(input: Record<string, unknown> | undefined, config: EverContentConfig): string {
-  const customerId = typeof input?.customerId === "string" ? input.customerId : config.defaultCustomerId;
-  if (!customerId) {
-    throw new Error("customerId is required");
-  }
-
-  if (config.allowedCustomerIds?.length && !config.allowedCustomerIds.includes(customerId)) {
-    throw new Error(`customerId ${customerId} is outside the allowed customer scope`);
-  }
-
-  return customerId;
-}
-
 async function request(
   config: EverContentConfig,
   path: string,
@@ -70,7 +51,7 @@ async function request(
     ...init,
     headers: {
       "content-type": "application/json",
-      "x-api-key": config.__resolvedSecret,
+      Authorization: `Bearer ${config.__resolvedSecret}`,
       ...(init?.headers || {}),
     },
   });
@@ -94,39 +75,49 @@ export const evercontentServiceSkillHandler: ServiceSkillHandler = {
 
     switch (action) {
       case "projects.list": {
-        const customerId = typeof input?.customerId === "string" || config.defaultCustomerId
-          ? resolveCustomerId(input, config)
-          : null;
-
-        if (customerId) {
-          return request(config, `/api/customer/projects?customerId=${encodeURIComponent(customerId)}`);
-        }
-
-        return request(config, "/api/projects");
+        return request(config, "/api/v1/projects");
       }
 
       case "posts.list": {
         const projectId = resolveProjectId(input, config);
-        return request(config, `/api/projects/${encodeURIComponent(projectId)}/posts`);
+        return request(config, `/api/v1/posts?projectId=${encodeURIComponent(projectId)}`);
       }
 
       case "posts.get": {
-        const projectId = resolveProjectId(input, config);
         const postId = requireString(input?.postId, "postId");
-        return request(config, `/api/projects/${encodeURIComponent(projectId)}/posts/${encodeURIComponent(postId)}`);
+        return request(config, `/api/v1/posts/${encodeURIComponent(postId)}`);
       }
 
       case "posts.create": {
         const projectId = resolveProjectId(input, config);
         const title = requireString(input?.title, "title");
+        const content = typeof input?.content === "string"
+          ? input.content
+          : typeof input?.contentMarkdown === "string"
+            ? input.contentMarkdown
+            : "";
+
+        if (!content.trim()) {
+          throw new Error("content is required");
+        }
+
         const payload = {
+          projectId,
           title,
-          brief: typeof input?.brief === "string" ? input.brief : "",
-          contentMarkdown: typeof input?.contentMarkdown === "string" ? input.contentMarkdown : "",
-          keywords: Array.isArray(input?.keywords) ? input.keywords.filter((value): value is string => typeof value === "string") : [],
+          content,
+          excerpt: typeof input?.excerpt === "string"
+            ? input.excerpt
+            : typeof input?.brief === "string"
+              ? input.brief
+              : "",
+          slug: typeof input?.slug === "string" ? input.slug : undefined,
+          featuredImageUrl: typeof input?.featuredImageUrl === "string" ? input.featuredImageUrl : undefined,
+          seoMeta: typeof input?.seoMeta === "object" && input?.seoMeta !== null ? input.seoMeta : undefined,
+          status: "draft",
+          topicId: typeof input?.topicId === "string" ? input.topicId : undefined,
         };
 
-        return request(config, `/api/projects/${encodeURIComponent(projectId)}/posts`, {
+        return request(config, "/api/v1/posts", {
           method: "POST",
           body: JSON.stringify(payload),
         });

@@ -15,32 +15,43 @@ export const EVERCONTENT_SKILL_TEMPLATE: InstallableSkillTemplate = {
   description:
     "Create, review, and manage EverContent drafts with scoped project access and publish disabled by default.",
   source: "system",
-  version: "0.1.0",
+  version: "0.2.0",
   sourceUrl: "https://evercontent.co",
   content: `# EverContent Skill
 
-Use EverContent to discover customers/projects and create or update draft blog content.
+Use EverContent directly from OpenClaw to discover projects, inspect posts, create drafts, update content, and publish only when explicitly enabled.
 
-## Intended use
-- Default to review-safe behavior.
-- Draft and save content unless publish permission is explicitly enabled.
-- Respect the assignment config scope. Do not operate outside allowed customers/projects.
-- Never request or store raw API keys in messages or markdown. Use the configured \`secretRef\`.
+## Runtime contract
+This is a native OpenClaw skill.
 
-## Assignment config
-This skill expects per-agent config in \`agent_skills.config\`.
+Read auth and policy from the active OpenClaw config:
 
-Example:
 \`\`\`json
 {
-  "secretRef": { "name": "evercontent-api-key" },
-  "allowedProjectIds": ["project_456"],
-  "canPublish": false
+  "skills": {
+    "entries": {
+      "evercontent": {
+        "enabled": true,
+        "apiKey": "ec_...",
+        "config": {
+          "defaultCustomerId": "customer_123",
+          "defaultProjectId": "project_456",
+          "allowedCustomerIds": ["customer_123"],
+          "allowedProjectIds": ["project_456"],
+          "defaultScope": "project",
+          "canPublish": false
+        }
+      }
+    }
+  }
 }
 \`\`\`
 
-Common fields:
-- \`secretRef\`: company secret reference for the EverContent API key
+Use these values:
+- \`skills.entries.evercontent.apiKey\` for auth
+- \`skills.entries.evercontent.config\` for scope and publish policy
+
+## Config fields
 - \`defaultCustomerId\`: optional default customer scope
 - \`defaultProjectId\`: optional default project scope
 - \`allowedCustomerIds\`: optional allow-list of customer IDs
@@ -48,26 +59,105 @@ Common fields:
 - \`defaultScope\`: one of \`customer\` or \`project\`
 - \`canPublish\`: defaults to \`false\`; only publish when explicitly enabled
 
-## Capability contract
-Supported actions:
-- \`customers.list\`
+## Auth setup
+Resolve config before making requests:
+
+\`\`\`bash
+CONFIG_PATH="\${OPENCLAW_CONFIG_PATH:-\${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/openclaw.json}"
+EVERCONTENT_API_KEY=$(cat "$CONFIG_PATH" 2>/dev/null | jq -r '.skills.entries["evercontent"].apiKey // empty')
+\`\`\`
+
+If \`EVERCONTENT_API_KEY\` is empty, stop and say EverContent is not configured.
+
+Base URL:
+
+\`\`\`
+https://app.evercontent.io
+\`\`\`
+
+Auth header for all requests:
+
+\`\`\`bash
+curl -s -H "x-api-key: $EVERCONTENT_API_KEY" -H "content-type: application/json" ...
+\`\`\`
+
+## Supported operations
 - \`projects.list\`
 - \`posts.list\`
 - \`posts.get\`
 - \`posts.create\`
-- \`posts.update\`
-- \`posts.save\`
 - \`posts.publish\` (only when \`canPublish\` is \`true\`)
 
-## Guardrails
-- Treat publish as a privileged action.
-- If \`canPublish\` is not true, stop at draft/save and explain that publish is disabled.
+## API patterns
+List projects:
+
+\`\`\`bash
+curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/projects"
+\`\`\`
+
+List projects for a customer:
+
+\`\`\`bash
+curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/customer/projects?customerId=CUSTOMER_ID"
+\`\`\`
+
+List posts for a project:
+
+\`\`\`bash
+curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/projects/PROJECT_ID/posts"
+\`\`\`
+
+Get a post:
+
+\`\`\`bash
+curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/projects/PROJECT_ID/posts/POST_ID"
+\`\`\`
+
+Create a draft post:
+
+\`\`\`bash
+curl -s -X POST \\
+  -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "title": "Draft title",
+    "brief": "Short brief",
+    "contentMarkdown": "# Draft content",
+    "keywords": ["keyword-1", "keyword-2"]
+  }' \\
+  "https://app.evercontent.io/api/projects/PROJECT_ID/posts"
+\`\`\`
+
+Publish a post:
+
+\`\`\`bash
+curl -s -X POST \\
+  -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{}' \\
+  "https://app.evercontent.io/api/v1/posts/POST_ID/publish"
+\`\`\`
+
+## Scope rules
+- If \`allowedProjectIds\` exists, never use a project outside that list.
+- If \`allowedCustomerIds\` exists, never use a customer outside that list.
+- If no allow-lists are configured, discovery is unrestricted.
+- If a project action is requested without a \`projectId\`, use \`defaultProjectId\` if present.
+- If a customer-scoped listing is requested without a \`customerId\`, use \`defaultCustomerId\` if present.
 - Prefer project-scoped operations when a project ID is available.
-- Keep output concise and operational: identify project, draft status, and next step for review.
+
+## Safety
+- Default to draft creation and review-safe behavior.
+- Treat publish as privileged.
+- If \`canPublish\` is not \`true\`, refuse publish and explain that publishing is disabled.
+- Never print the API key in output.
+- Keep output operational and concise: project, post, status, and next step.
 `,
   metadata: {
-    kind: "service-skill",
-    service: "evercontent",
     version: 1,
     category: "content",
     icon: "📝",
@@ -77,16 +167,13 @@ Supported actions:
       header: "x-api-key",
       secretRefField: "secretRef",
     },
-    capabilities: [
-      "customers:list",
-      "projects:list",
-      "posts:list",
-      "posts:get",
-      "posts:create",
-      "posts:update",
-      "posts:save",
-      "posts:publish",
-    ],
+    openclaw: {
+      requires: {
+        bins: ["curl", "jq"],
+        env: ["EVERCONTENT_API_KEY"],
+      },
+      primaryEnv: "EVERCONTENT_API_KEY",
+    },
     configSchema: {
       type: "object",
       additionalProperties: false,
@@ -94,7 +181,7 @@ Supported actions:
         secretRef: {
           type: "object",
           title: "EverContent API key",
-          description: "Vault-backed company secret containing the EverContent API key",
+          description: "CrewCmd secret reference used to sync apiKey into the OpenClaw runtime config",
           additionalProperties: false,
           properties: {
             name: { type: "string", title: "Secret name" },

@@ -571,6 +571,9 @@ async function mergeOpenclawJson(
   if (existingEntry) {
     // Merge nested objects, overwrite scalars
     existingEntry.enabled = entry.enabled;
+    if (entry.apiKey) {
+      existingEntry.apiKey = entry.apiKey;
+    }
 
     // Merge env: add new keys, keep existing
     const existingEnv = existingEntry.env as Record<string, unknown> | undefined;

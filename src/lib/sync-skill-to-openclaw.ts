@@ -17,7 +17,10 @@ import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
-import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "./openclaw-workspace-resolver";
+import {
+  defaultOpenClawWorkspaceRoot,
+  resolveOpenClawWorkspaceRoot,
+} from "./openclaw-workspace-resolver";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -51,13 +54,8 @@ const META_VERSION = "0.1.0";
 // ─── Public API ─────────────────────────────────────────────────────
 
 /**
- * Sync a single CrewCMD skill to a specific agent's OpenClaw workspace.
- *
- * 1. Reads skill / agent / assignment from DB
- * 2. Generates SKILL.md with AgentSkills frontmatter
- * 3. Tries gateway-native sync first (`agents.files.set` + `skills.update`)
- * 4. Falls back to local filesystem sync for same-machine runtimes
- * 5. Verifies the write via SHA-256
+ * Sync a single CrewCMD skill into OpenClaw's shared workspace skill root
+ * and update the target agent's explicit skill allowlist when present.
  */
 export async function syncSkillToOpenClaw(
   opts: SyncSkillOptions
@@ -105,11 +103,12 @@ export async function syncSkillToOpenClaw(
     skillData.skill.metadata,
     assignmentConfig as Record<string, unknown>
   );
-  const resolvedWorkspacePath = await resolveOpenClawWorkspacePath({
+  const sharedWorkspaceRoot =
+    await resolveOpenClawWorkspaceRoot({
     runtimeRef,
     workspacePath: skillData.agent.workspacePath ?? null,
-  });
-  const skillsDir = openclawSkillsDir({ runtimeRef, workspacePath: resolvedWorkspacePath, slug });
+    }) ?? defaultOpenClawWorkspaceRoot();
+  const skillsDir = openclawSkillsDir({ workspaceRoot: sharedWorkspaceRoot, slug });
   const skillMdPath = join(skillsDir, "SKILL.md");
   const openclawJsonPath = join(homedir(), ".openclaw", "openclaw.json");
 
@@ -125,37 +124,9 @@ export async function syncSkillToOpenClaw(
     };
   }
 
-  if (skillData.runtime?.gatewayUrl && skillData.agent.runtimeRef) {
-    try {
-      await syncSkillViaGateway({
-        runtime: skillData.runtime,
-        runtimeRef: skillData.agent.runtimeRef,
-        slug,
-        skillMdContent,
-        metaContent,
-        resolvedEnv,
-        enabled: skillData.assignment.enabled,
-        checksum,
-      });
-
-      return {
-        success: true,
-        skillPath: `agent:${skillData.agent.runtimeRef}:skills/${slug}/SKILL.md`,
-        configPath: `skills.entries.${slug}`,
-        checksum,
-        errors: [],
-        syncedAt: now,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[sync-skill] Gateway sync failed for ${slug}, falling back to local filesystem: ${message}`);
-      errors.push(`Gateway sync failed: ${message}`);
-    }
-  }
-
   return syncSkillViaFilesystem({
     runtimeRef,
-    workspacePath: resolvedWorkspacePath,
+    workspaceRoot: sharedWorkspaceRoot,
     slug,
     skill: skillData.skill,
     assignmentConfig: assignmentConfig as Record<string, unknown>,
@@ -166,6 +137,7 @@ export async function syncSkillToOpenClaw(
     checksum,
     syncedAt: now,
     priorErrors: errors,
+    runtime: skillData.runtime,
   });
 }
 
@@ -375,15 +347,11 @@ function getPrimaryEnvVarFromMetadata(metadata: Record<string, unknown>, slug: s
   return derivePrimaryEnvVar(slug);
 }
 
-async function syncSkillViaGateway(params: {
+async function refreshSkillViaGateway(params: {
   runtime: typeof companyRuntimes.$inferSelect;
-  runtimeRef: string;
   slug: string;
-  skillMdContent: string;
-  metaContent: string;
   resolvedEnv: Record<string, string>;
   enabled: boolean;
-  checksum: string;
 }): Promise<void> {
   const meta = params.runtime.metadata as Record<string, unknown> | null;
   const deviceKeyPem = meta?.devicePrivateKeyPem as string | undefined;
@@ -396,31 +364,11 @@ async function syncSkillViaGateway(params: {
 
   try {
     await client.connect();
-    await client.setAgentFile(
-      params.runtimeRef,
-      `skills/${params.slug}/SKILL.md`,
-      params.skillMdContent
-    );
-    await client.setAgentFile(
-      params.runtimeRef,
-      `skills/${params.slug}/.crewcmd-meta.json`,
-      params.metaContent
-    );
-
     await client.skillsUpdate({
       skillKey: params.slug,
       enabled: params.enabled,
       ...(Object.keys(params.resolvedEnv).length > 0 ? { env: params.resolvedEnv } : {}),
     });
-
-    const written = await client.getAgentFile(
-      params.runtimeRef,
-      `skills/${params.slug}/SKILL.md`
-    );
-    const actualChecksum = "sha256:" + sha256(written.file.content ?? "");
-    if (actualChecksum !== params.checksum) {
-      throw new Error(`Checksum mismatch after gateway write: expected ${params.checksum}, got ${actualChecksum}`);
-    }
   } finally {
     client.close();
   }
@@ -428,7 +376,7 @@ async function syncSkillViaGateway(params: {
 
 async function syncSkillViaFilesystem(params: {
   runtimeRef: string;
-  workspacePath: string | null;
+  workspaceRoot: string;
   slug: string;
   skill: typeof skills.$inferSelect;
   assignmentConfig: Record<string, unknown>;
@@ -439,10 +387,10 @@ async function syncSkillViaFilesystem(params: {
   checksum: string;
   syncedAt: string;
   priorErrors: string[];
+  runtime: typeof companyRuntimes.$inferSelect | null;
 }): Promise<SyncResult> {
   const skillsDir = openclawSkillsDir({
-    runtimeRef: params.runtimeRef,
-    workspacePath: params.workspacePath,
+    workspaceRoot: params.workspaceRoot,
     slug: params.slug,
   });
   const skillMdPath = join(skillsDir, "SKILL.md");
@@ -473,10 +421,27 @@ async function syncSkillViaFilesystem(params: {
   );
 
   try {
-    await mergeOpenclawJson(openclawJsonPath, params.slug, skillEntry);
+    await mergeOpenclawJson(openclawJsonPath, params.runtimeRef, params.slug, skillEntry);
   } catch (err) {
     errors.push(`Failed to merge openclaw.json: ${err instanceof Error ? err.message : String(err)}`);
     return makeFailure("Write error – openclaw.json", params.checksum, skillMdPath, openclawJsonPath, errors, params.syncedAt);
+  }
+
+  if (params.runtime?.gatewayUrl) {
+    try {
+      await refreshSkillViaGateway({
+        runtime: params.runtime,
+        slug: params.slug,
+        resolvedEnv: params.resolvedEnv,
+        enabled: params.enabled,
+      });
+    } catch (err) {
+      console.warn(
+        `[sync-skill] Gateway refresh failed for ${params.slug}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
   }
 
   try {
@@ -513,15 +478,10 @@ async function syncSkillViaFilesystem(params: {
 // ─── Filesystem Operations ──────────────────────────────────────────
 
 function openclawSkillsDir(params: {
-  runtimeRef: string;
-  workspacePath?: string | null;
+  workspaceRoot: string;
   slug: string;
 }): string {
-  if (params.workspacePath) {
-    return join(params.workspacePath, "skills", params.slug);
-  }
-
-  return join(legacyOpenClawWorkspacePath(params.runtimeRef), "skills", params.slug);
+  return join(params.workspaceRoot, "skills", params.slug);
 }
 
 /**
@@ -541,6 +501,7 @@ async function atomicWrite(filePath: string, content: string): Promise<void> {
 
 async function mergeOpenclawJson(
   configPath: string,
+  runtimeRef: string,
   slug: string,
   entry: OpenClawSkillEntry
 ): Promise<void> {
@@ -593,7 +554,40 @@ async function mergeOpenclawJson(
     (skillsObj.entries as Record<string, unknown>)[slug] = entry;
   }
 
+  ensureAgentSkillAllowlist(config, runtimeRef, slug);
   await atomicWrite(configPath, JSON.stringify(config, null, 2));
+}
+
+function ensureAgentSkillAllowlist(
+  config: Record<string, unknown>,
+  runtimeRef: string,
+  slug: string
+): void {
+  const agentsConfig = config.agents as Record<string, unknown> | undefined;
+  const agentList = agentsConfig?.list;
+  if (!Array.isArray(agentList)) {
+    return;
+  }
+
+  const agentEntry = agentList.find((value) => {
+    if (!isPlainObject(value)) return false;
+    return value.id === runtimeRef;
+  });
+  if (!isPlainObject(agentEntry) || !Array.isArray(agentEntry.skills)) {
+    return;
+  }
+
+  const currentSkills = agentEntry.skills.filter(
+    (value: unknown): value is string => typeof value === "string"
+  );
+  const hasSkill = currentSkills.some((value) => normalizeSkillName(value) === slug);
+  if (!hasSkill) {
+    agentEntry.skills = [...currentSkills, slug];
+  }
+}
+
+function normalizeSkillName(value: string): string {
+  return value.replace(/^\/+/, "");
 }
 
 /**

@@ -17,6 +17,7 @@ import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
+import { addSkillToGatewayAgentAllowlist } from "./openclaw-gateway-skill-assignment";
 import {
   defaultOpenClawWorkspaceRoot,
   resolveOpenClawWorkspaceRoot,
@@ -460,6 +461,20 @@ async function syncSkillViaFilesystem(params: {
     } catch (err) {
       console.warn(
         `[sync-skill] Gateway refresh failed for ${params.slug}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+
+    try {
+      await addSkillToGatewayAgentAllowlist({
+        runtime: params.runtime,
+        agentId: params.runtimeRef,
+        slug: params.slug,
+      });
+    } catch (err) {
+      console.warn(
+        `[sync-skill] Gateway allowlist patch failed for ${params.slug}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );

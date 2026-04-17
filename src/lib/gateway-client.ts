@@ -15,7 +15,7 @@ import WebSocket from "ws";
 // ─── Constants ──────────────────────────────────────────────────────
 
 const PROTOCOL_VERSION = 3;
-const DEFAULT_SCOPES = ["operator.read", "operator.write"];
+const DEFAULT_SCOPES = ["operator.read", "operator.write", "operator.admin"];
 const CLIENT_ID = "gateway-client";
 const CLIENT_VERSION = "crewcmd/1.0.0";
 const CLIENT_MODE = "backend";
@@ -86,6 +86,19 @@ export interface GatewaySkillStatusEntry {
 
 export interface GatewaySkillsStatusResult {
   skills: GatewaySkillStatusEntry[];
+}
+
+export interface GatewayConfigSnapshot {
+  hash?: string;
+  raw?: string;
+  config: Record<string, unknown>;
+}
+
+export interface GatewayConfigPatchResult {
+  ok: boolean;
+  noop?: boolean;
+  path?: string;
+  config?: Record<string, unknown>;
 }
 
 export interface DiscoveredAgent {
@@ -416,6 +429,37 @@ export class GatewayClient {
     agentId?: string;
   } = {}): Promise<GatewaySkillsStatusResult> {
     return this.rpc<GatewaySkillsStatusResult>("skills.status", params);
+  }
+
+  async configGet(): Promise<GatewayConfigSnapshot> {
+    return this.rpc<GatewayConfigSnapshot>("config.get", {});
+  }
+
+  async configPatch(params: {
+    patch: Record<string, unknown>;
+    baseHash?: string;
+    note?: string;
+    sessionKey?: string;
+    restartDelayMs?: number;
+  }): Promise<GatewayConfigPatchResult> {
+    const baseHash =
+      typeof params.baseHash === "string" && params.baseHash.trim()
+        ? params.baseHash
+        : undefined;
+    const resolvedBaseHash = baseHash ?? (await this.configGet()).hash;
+    if (typeof resolvedBaseHash !== "string" || !resolvedBaseHash.trim()) {
+      throw new Error("Gateway config.get did not return a usable base hash");
+    }
+
+    return this.rpc<GatewayConfigPatchResult>("config.patch", {
+      raw: JSON.stringify(params.patch),
+      baseHash: resolvedBaseHash,
+      ...(params.note ? { note: params.note } : {}),
+      ...(params.sessionKey ? { sessionKey: params.sessionKey } : {}),
+      ...(typeof params.restartDelayMs === "number"
+        ? { restartDelayMs: params.restartDelayMs }
+        : {}),
+    });
   }
 
   async listAgentFiles(agentId: string): Promise<GatewayFilesListResult> {

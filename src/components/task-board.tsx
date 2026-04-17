@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Task, Agent, TaskStatus, TimeEntry } from "@/lib/data";
+import { buildAgentLookup, getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
 
 interface ProjectDoc {
   name: string;
@@ -29,6 +30,8 @@ interface TaskBoardProps {
   initialTasks: Task[];
   agents: Agent[];
   projects?: Project[];
+  agentsLoading?: boolean;
+  agentsError?: string | null;
 }
 
 const columns: { key: TaskStatus; label: string }[] = [
@@ -56,7 +59,7 @@ const priorityStyles: Record<string, string> = {
   critical: "text-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]",
 };
 
-export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
   const [boardTasks, setBoardTasks] = useState<Task[]>(initialTasks);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -331,8 +334,16 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
     isDragging: boolean;
   } | null>(null);
 
-  const agentMap = new Map(agents.map((a) => [a.id, a]));
+  const agentMap = buildAgentLookup(agents);
   const projectMap = new Map(projects.map((p) => [p.id, p]));
+
+  const agentSelectStatus = agentsLoading
+    ? "Loading agents..."
+    : agentsError
+    ? "Couldn't load agents"
+    : agents.length === 0
+    ? "No agents available in this company"
+    : null;
 
   async function loadComments(taskId: string) {
     setLoadingComments(true);
@@ -978,18 +989,25 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   </div>
                   <div>
                     <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">ASSIGN TO AGENT</label>
+                    {(() => {
+                      const unknownAgent = getUnknownAgentOption(editForm.assignedAgentId, agents);
+                      return (
                     <select
-                      value={editForm.assignedAgentId}
+                      value={resolveAssignedAgentValue(agents, editForm.assignedAgentId)}
                       onChange={(e) => setEditForm({ ...editForm, assignedAgentId: e.target.value })}
                       className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
                     >
                       <option value="">Unassigned</option>
+                      {agentSelectStatus && <option value="" disabled>{agentSelectStatus}</option>}
                       {agents.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.emoji} {a.callsign}
                         </option>
                       ))}
+                      {unknownAgent && <option value={unknownAgent.value}>{unknownAgent.label}</option>}
                     </select>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">ASSIGN TO HUMAN</label>
@@ -1231,8 +1249,11 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                   </div>
                   <div>
                     <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">ASSIGNED TO</span>
+                    {(() => {
+                      const unknownAgent = getUnknownAgentOption(selectedTask.assignedAgentId, agents);
+                      return (
                     <select
-                      value={selectedTask.assignedAgentId || ""}
+                      value={resolveAssignedAgentValue(agents, selectedTask.assignedAgentId)}
                       onChange={async (e) => {
                         const val = e.target.value || null;
                         const updated = { ...selectedTask, assignedAgentId: val };
@@ -1243,10 +1264,14 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                       className="mt-1 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)] outline-none focus:border-[var(--accent-medium)]"
                     >
                       <option value="">Unassigned</option>
+                      {agentSelectStatus && <option value="" disabled>{agentSelectStatus}</option>}
                       {agents.map((a) => (
                         <option key={a.id} value={a.id}>{a.emoji} {a.callsign}</option>
                       ))}
+                      {unknownAgent && <option value={unknownAgent.value}>{unknownAgent.label}</option>}
                     </select>
+                      );
+                    })()}
                   </div>
                   <div>
                     <span className="text-[9px] tracking-wider text-[var(--danger)]/50">HUMAN ASSIGNEE</span>
@@ -1874,8 +1899,11 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                             </button>
                           );
                         })()}
+                        {(() => {
+                          const unknownAgent = getUnknownAgentOption(task.assignedAgentId, agents);
+                          return (
                         <select
-                          value={task.assignedAgentId || ""}
+                          value={resolveAssignedAgentValue(agents, task.assignedAgentId)}
                           onChange={async (e) => {
                             const newAgentId = e.target.value || null;
                             const newStatus = task.status; // assigning an agent does NOT auto-queue — use Queue button
@@ -1909,12 +1937,24 @@ export function TaskBoard({ initialTasks, agents, projects = [] }: TaskBoardProp
                           }}
                         >
                           <option value="" style={{ color: "var(--text-tertiary)", backgroundColor: "var(--bg-surface-strong)" }}>⊘ Unassigned</option>
+                          {agentSelectStatus && (
+                            <option value="" disabled style={{ color: "var(--text-tertiary)", backgroundColor: "var(--bg-surface-strong)" }}>
+                              {agentSelectStatus}
+                            </option>
+                          )}
                           {agents.map((a) => (
                             <option key={a.id} value={a.id} style={{ color: a.color, backgroundColor: "var(--bg-surface-strong)" }}>
                               {a.emoji} {a.callsign} — {a.title}
                             </option>
                           ))}
+                          {unknownAgent && (
+                            <option value={unknownAgent.value} style={{ color: "var(--text-tertiary)", backgroundColor: "var(--bg-surface-strong)" }}>
+                              {unknownAgent.label}
+                            </option>
+                          )}
                         </select>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

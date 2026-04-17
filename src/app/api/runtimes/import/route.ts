@@ -109,18 +109,32 @@ export async function POST(request: Request) {
 
     // Get existing agents to avoid duplicates
     const existingAgents = await withRetry(() => db!
-      .select({ callsign: agents.callsign, runtimeRef: agents.runtimeRef })
+      .select({
+        id: agents.id,
+        callsign: agents.callsign,
+        runtimeId: agents.runtimeId,
+        runtimeRef: agents.runtimeRef,
+        name: agents.name,
+      })
       .from(agents)
       .where(eq(agents.companyId, companyId)));
 
     const existingCallsigns = new Set(
       existingAgents.map((a) => a.callsign.toLowerCase())
     );
-    const existingRefs = new Set(
-      existingAgents.filter((a) => a.runtimeRef).map((a) => a.runtimeRef!)
+    const existingByRuntimeRef = new Map(
+      existingAgents
+        .filter((agent) => agent.runtimeRef)
+        .map((agent) => [agent.runtimeRef!, agent] as const)
+    );
+    const detachedByCallsign = new Map(
+      existingAgents
+        .filter((agent) => !agent.runtimeId)
+        .map((agent) => [agent.callsign.toLowerCase(), agent] as const)
     );
 
     const created: { callsign: string; name: string; id: string }[] = [];
+    const reattached: { callsign: string; name: string; id: string }[] = [];
     const skipped: { id: string; reason: string }[] = [];
 
     for (let i = 0; i < importAgents.length; i++) {
@@ -128,10 +142,45 @@ export async function POST(request: Request) {
       const callsign =
         agent.name?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) ||
         agent.id.toUpperCase();
+      const existingByRef = existingByRuntimeRef.get(agent.id);
+      const existingDetached = detachedByCallsign.get(callsign.toLowerCase());
 
-      // Skip if already imported
-      if (existingRefs.has(agent.id)) {
-        skipped.push({ id: agent.id, reason: "Already imported (runtime_ref match)" });
+      // Reattach if this agent identity is already known
+      const agentToReattach = existingByRef ?? existingDetached;
+      if (agentToReattach) {
+        const [updatedAgent] = await withRetry(() => db!
+          .update(agents)
+          .set({
+            callsign,
+            name: agent.name || agent.id,
+            title: agent.title || "Agent",
+            emoji: agent.emoji || "🤖",
+            color: COLORS[i % COLORS.length],
+            status: "online",
+            soulContent: agent.description || null,
+            adapterType: "openclaw_gateway",
+            adapterConfig: {
+              url: runtime.httpUrl,
+              headers: runtime.authToken
+                ? { Authorization: `Bearer ${runtime.authToken}` }
+                : undefined,
+            },
+            role: "engineer",
+            model: agent.model || null,
+            workspacePath: agent.workspace || null,
+            runtimeId,
+            runtimeRef: agent.id,
+            reportsTo: agent.reportsTo || null,
+            avatarUrl: agent.avatarUrl || null,
+            ownerType: effectiveOwnerType,
+            ownerUserId: effectiveOwnerUserId,
+            ownerCompanyId: effectiveOwnerCompanyId,
+            visibility: effectiveVisibility,
+          })
+          .where(eq(agents.id, agentToReattach.id))
+          .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
+
+        reattached.push(updatedAgent);
         continue;
       }
 
@@ -187,7 +236,7 @@ export async function POST(request: Request) {
     }
 
     // Auto-push CrewCmd skill to the runtime (non-blocking — failure is logged, not thrown)
-    if (created.length > 0) {
+    if (created.length > 0 || reattached.length > 0) {
       try {
         await pushSkillToRuntime(runtimeId);
       } catch (skillErr) {
@@ -200,8 +249,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       imported: created.length,
+      reattached: reattached.length,
       skipped: skipped.length,
-      agents: created,
+      agents: [...reattached, ...created],
       skippedDetails: skipped,
     });
   } catch (err) {

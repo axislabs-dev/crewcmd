@@ -28,6 +28,22 @@ interface ProviderKey {
   updatedAt: string;
 }
 
+interface RuntimeRecord {
+  id: string;
+  runtimeType: string;
+  name: string;
+  gatewayUrl: string;
+  httpUrl: string;
+  isPrimary: boolean;
+  status: string;
+  lastPing: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  ownerType: "user" | "company";
+  ownerUserId: string | null;
+  ownerCompanyId: string | null;
+}
+
 const PROVIDER_INFO: Record<string, { label: string; placeholder: string }> = {
   anthropic: { label: "Anthropic", placeholder: "sk-ant-..." },
   openai: { label: "OpenAI", placeholder: "sk-..." },
@@ -59,6 +75,8 @@ export default function CompanySettingsPage() {
   const [newKeyProvider, setNewKeyProvider] = useState("anthropic");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [savingKey, setSavingKey] = useState(false);
+  const [runtimes, setRuntimes] = useState<RuntimeRecord[]>([]);
+  const [deletingRuntimeId, setDeletingRuntimeId] = useState<string | null>(null);
 
   // API Access state
   const [apiToken, setApiToken] = useState<string | null>(null);
@@ -97,6 +115,7 @@ export default function CompanySettingsPage() {
         fetch(`/api/companies/${companyId}/members`),
         fetch(`/api/provider-keys?companyId=${companyId}`),
       ]);
+      const runtimesPromise = fetch("/api/runtimes");
 
       if (companyRes.ok) {
         const data = await companyRes.json();
@@ -127,6 +146,12 @@ export default function CompanySettingsPage() {
       if (keysRes.ok) {
         const data = await keysRes.json();
         setProviderKeys(data.keys ?? []);
+      }
+
+      const runtimesRes = await runtimesPromise;
+      if (runtimesRes.ok) {
+        const data = await runtimesRes.json();
+        setRuntimes(Array.isArray(data) ? data : []);
       }
     } catch {
       // ignore
@@ -401,6 +426,40 @@ export default function CompanySettingsPage() {
       fetchData();
     } catch {
       // ignore
+    }
+  }
+
+  async function handleDeleteRuntime(runtime: RuntimeRecord) {
+    const label = runtime.name || runtime.gatewayUrl;
+    const confirmed = window.confirm(
+      `Delete runtime "${label}"?\n\nLinked agents will be detached from this runtime.`
+    );
+    if (!confirmed) return;
+
+    setDeletingRuntimeId(runtime.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/runtimes/${runtime.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete runtime");
+      }
+
+      setMessage({
+        type: "success",
+        text: data.detachedAgents > 0
+          ? `Runtime deleted. ${data.detachedAgents} linked agent${data.detachedAgents === 1 ? "" : "s"} detached.`
+          : "Runtime deleted.",
+      });
+      await fetchData();
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to delete runtime",
+      });
+    } finally {
+      setDeletingRuntimeId(null);
     }
   }
 
@@ -715,6 +774,79 @@ export default function CompanySettingsPage() {
           >
             {savingKey ? "..." : "ADD KEY"}
           </button>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">RUNTIMES</h2>
+            <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+              Manage connected OpenClaw runtimes available to this workspace.
+            </p>
+          </div>
+          <a
+            href="/onboarding?mode=connect"
+            className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+          >
+            CONNECT RUNTIME
+          </a>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {runtimes.map((runtime) => (
+            <div
+              key={runtime.id}
+              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
+                    {runtime.isPrimary && (
+                      <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
+                        PRIMARY
+                      </span>
+                    )}
+                    <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                      {runtime.ownerType === "company" ? "TEAM" : "PERSONAL"}
+                    </span>
+                    <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                      {runtime.runtimeType.toUpperCase()}
+                    </span>
+                    <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] tracking-wider ${
+                      runtime.status === "connected"
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : runtime.status === "error"
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-amber-500/20 text-amber-400"
+                    }`}>
+                      {runtime.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="mt-2 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                    {runtime.gatewayUrl}
+                  </p>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    {runtime.lastPing
+                      ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
+                      : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => void handleDeleteRuntime(runtime)}
+                  disabled={deletingRuntimeId === runtime.id}
+                  className="shrink-0 rounded-lg border border-red-500/30 px-3 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {deletingRuntimeId === runtime.id ? "DELETING..." : "DELETE"}
+                </button>
+              </div>
+            </div>
+          ))}
+          {runtimes.length === 0 && (
+            <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">No runtimes connected</p>
+          )}
         </div>
       </div>
 

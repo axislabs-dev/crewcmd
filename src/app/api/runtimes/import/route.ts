@@ -11,6 +11,10 @@ import {
   normalizeVisibilityForCreation,
   resolveRuntimeOwnership,
 } from "@/lib/agent-access";
+import {
+  getRequestOrigin,
+  type RuntimeMetadata,
+} from "@/lib/runtime-callback-url";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +56,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    const callbackBaseUrl = getRequestOrigin(request);
     const body: ImportBody = await request.json();
     const { runtimeId, agents: importAgents, devicePrivateKeyPem, ownerType, visibility } = body;
 
@@ -95,14 +100,19 @@ export async function POST(request: Request) {
     });
 
     // Store device private key in the runtime metadata for persistent device auth
-    if (devicePrivateKeyPem) {
+    if (devicePrivateKeyPem || callbackBaseUrl) {
+      const nextMetadata: RuntimeMetadata = {
+        ...((runtime.metadata || {}) as RuntimeMetadata),
+        callbackBaseUrl,
+      };
+      if (devicePrivateKeyPem) {
+        nextMetadata.devicePrivateKeyPem = devicePrivateKeyPem;
+      }
+
       await withRetry(() => db!
         .update(companyRuntimes)
         .set({
-          metadata: {
-            ...((runtime.metadata || {}) as Record<string, unknown>),
-            devicePrivateKeyPem,
-          },
+          metadata: nextMetadata,
         })
         .where(eq(companyRuntimes.id, runtimeId)));
     }

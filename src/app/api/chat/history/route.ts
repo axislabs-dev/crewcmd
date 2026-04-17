@@ -32,7 +32,9 @@ export async function GET(request: NextRequest) {
     })) as HistoryResponse;
 
     // Normalize messages to { role, content } format
-    const messages = (result?.messages || []).map((msg: HistoryMessage) => {
+    const messages = (result?.messages || [])
+      .filter((msg: HistoryMessage) => msg.role === "user" || msg.role === "assistant")
+      .map((msg: HistoryMessage) => {
       let content = "";
       if (typeof msg.content === "string") {
         content = msg.content;
@@ -49,12 +51,12 @@ export async function GET(request: NextRequest) {
         content = (msg.content as Record<string, string>).text;
       }
 
-      return {
-        id: crypto.randomUUID(),
-        role: msg.role === "assistant" ? "assistant" : "user",
-        content,
-      };
-    });
+        return {
+          id: crypto.randomUUID(),
+          role: msg.role as "user" | "assistant",
+          content,
+        };
+      });
 
     return Response.json({ messages });
   } catch (error) {

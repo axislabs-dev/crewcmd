@@ -18,6 +18,7 @@ import type {
   InboxStats,
 } from "@/db/schema-inbox";
 import { timeAgo } from "@/lib/utils";
+import { useCompany } from "@/components/company-context";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function AgentTag({ callsign }: { callsign: string }) {
 
 /** Agent Inbox — centralized communication hub for agent-human interactions */
 export default function InboxPage() {
+  const { company } = useCompany();
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [stats, setStats] = useState<InboxStats | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -114,6 +116,7 @@ export default function InboxPage() {
   const fetchMessages = useCallback(async () => {
     try {
       const params = new URLSearchParams();
+      if (company?.id) params.set("company_id", company.id);
       if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`/api/inbox?${params.toString()}`);
       if (res.ok) {
@@ -123,18 +126,20 @@ export default function InboxPage() {
     } catch {
       /* network error — keep existing messages */
     }
-  }, [statusFilter]);
+  }, [company?.id, statusFilter]);
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/inbox/stats");
+      const params = new URLSearchParams();
+      if (company?.id) params.set("company_id", company.id);
+      const res = await fetch(`/api/inbox/stats?${params.toString()}`);
       if (res.ok) {
         setStats(await res.json());
       }
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [company?.id]);
 
   useEffect(() => {
     setLoading(true);

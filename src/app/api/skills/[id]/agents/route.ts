@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
+import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
+import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +67,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "config must be an object when provided" }, { status: 400 });
     }
 
+    const [agent] = await withRetry(() =>
+      db!
+        .select()
+        .from(schema.agents)
+        .where(eq(schema.agents.id, agentId))
+        .limit(1)
+    );
+
+    if (!agent) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    }
+
+    const [skill] = await withRetry(() =>
+      db!
+        .select()
+        .from(schema.skills)
+        .where(eq(schema.skills.id, id))
+        .limit(1)
+    );
+
+    if (!skill) {
+      return NextResponse.json({ error: "Skill not found" }, { status: 404 });
+    }
+
+    if (agent.companyId !== skill.companyId) {
+      return NextResponse.json({ error: "Agent and skill belong to different companies" }, { status: 400 });
+    }
+
+    if (config !== undefined) {
+      const validation = await validateSkillConfigSecretRefs(agent.companyId, config);
+      if (!validation.ok) {
+        return NextResponse.json({ error: validation.error }, { status: 400 });
+      }
+    }
+
     // Check if already assigned
     const existing = await withRetry(() =>
       db!
@@ -77,11 +116,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
 
     if (existing.length > 0) {
+      let uninstall:
+        | { ok: boolean; error?: string; warnings?: string[]; removedPaths?: string[]; removedConfigEntry?: boolean }
+        | undefined;
+      try {
+        const result = await uninstallSkillFromOpenClaw({
+          skillId: id,
+          agentId,
+          companyId: agent.companyId,
+        });
+        uninstall = result.success
+          ? {
+              ok: true,
+              warnings: result.warnings,
+              removedPaths: result.removedPaths,
+              removedConfigEntry: result.removedConfigEntry,
+            }
+          : {
+              ok: false,
+              error: result.errors.join("; ") || "Workspace cleanup failed",
+              warnings: result.warnings,
+              removedPaths: result.removedPaths,
+              removedConfigEntry: result.removedConfigEntry,
+            };
+      } catch (err) {
+        uninstall = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+
       // Unassign
       await withRetry(() =>
         db!.delete(schema.agentSkills).where(eq(schema.agentSkills.id, existing[0].id))
       );
-      return NextResponse.json({ action: "removed", agentSkillId: existing[0].id });
+      return NextResponse.json({ action: "removed", agentSkillId: existing[0].id, uninstall });
     }
 
     // Assign
@@ -97,7 +166,44 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .returning()
     );
 
-    return NextResponse.json({ action: "added", ...created }, { status: 201 });
+    let sync: { ok: boolean; error?: string } | undefined;
+    let secrets: { ok: boolean; error?: string } | undefined;
+
+    try {
+      const result = await syncSkillToOpenClaw({
+        skillId: id,
+        agentId,
+        companyId: agent.companyId,
+      });
+      sync = result.success
+        ? { ok: true }
+        : { ok: false, error: result.errors.join("; ") || "Sync failed" };
+    } catch (err) {
+      sync = {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    if (agent.runtimeId) {
+      try {
+        const result = await pushSecretsToGateway({
+          skillId: id,
+          agentId,
+          companyId: agent.companyId,
+        });
+        secrets = result.ok
+          ? { ok: true }
+          : { ok: false, error: result.errors.join("; ") || "Secret push failed" };
+      } catch (err) {
+        secrets = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    return NextResponse.json({ action: "added", ...created, sync, secrets }, { status: 201 });
   } catch (err) {
     console.error("[api/skills/[id]/agents] POST Error:", err);
     return NextResponse.json({ error: "Failed to toggle assignment" }, { status: 500 });

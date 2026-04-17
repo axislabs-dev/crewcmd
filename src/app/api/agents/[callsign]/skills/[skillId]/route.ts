@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +139,38 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
+    let uninstall:
+      | { ok: boolean; error?: string; warnings?: string[]; removedPaths?: string[]; removedConfigEntry?: boolean }
+      | undefined;
+    if (agent.companyId) {
+      try {
+        const result = await uninstallSkillFromOpenClaw({
+          skillId,
+          agentId: agent.id,
+          companyId: agent.companyId,
+        });
+        uninstall = result.success
+          ? {
+              ok: true,
+              warnings: result.warnings,
+              removedPaths: result.removedPaths,
+              removedConfigEntry: result.removedConfigEntry,
+            }
+          : {
+              ok: false,
+              error: result.errors.join("; ") || "Workspace cleanup failed",
+              warnings: result.warnings,
+              removedPaths: result.removedPaths,
+              removedConfigEntry: result.removedConfigEntry,
+            };
+      } catch (err) {
+        uninstall = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
     await withRetry(() =>
       db!.delete(schema.agentSkills).where(
         and(
@@ -147,7 +180,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       )
     );
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, uninstall });
   } catch (err) {
     console.error("[api/agents/[callsign]/skills/[skillId]] DELETE Error:", err);
     return NextResponse.json({ error: "Failed to detach skill" }, { status: 500 });

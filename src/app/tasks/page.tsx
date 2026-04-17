@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Agent, Task, TaskStatus, TaskPriority } from "@/lib/data";
 import { TaskBoard } from "@/components/task-board";
 import { TaskTable } from "@/components/task-table";
+import { getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
 
 interface Project {
   id: string;
@@ -20,6 +21,8 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [showCreate, setShowCreate] = useState(false);
   const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", status: "inbox", projectId: "" });
@@ -41,10 +44,13 @@ export default function TasksPage() {
   }
 
   const refresh = useCallback(async () => {
+    setAgentsLoading(true);
+    setAgentsError(null);
     try {
-      const [tasksRes, agentsRes] = await Promise.all([
+      const [tasksRes, agentsRes, projRes] = await Promise.all([
         fetch("/api/tasks").catch(() => null),
-        fetch("/api/openclaw/agents").catch(() => null),
+        fetch("/api/agents").catch(() => null),
+        fetch("/api/projects").catch(() => null),
       ]);
 
       if (tasksRes?.ok) {
@@ -54,16 +60,19 @@ export default function TasksPage() {
 
       if (agentsRes?.ok) {
         const data = await agentsRes.json();
-        setAgents(data.agents || []);
+        setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      } else {
+        setAgentsError("Couldn't load assignable agents.");
       }
 
-      const projRes = await fetch("/api/projects").catch(() => null);
       if (projRes?.ok) {
         const data = await projRes.json();
         setProjects(Array.isArray(data) ? data : []);
       }
     } catch {
-      /* empty */
+      setAgentsError("Couldn't load assignable agents.");
+    } finally {
+      setAgentsLoading(false);
     }
   }, []);
 
@@ -99,6 +108,14 @@ export default function TasksPage() {
       : projectFilter === "none"
       ? tasks.filter((t) => !t.projectId)
       : tasks.filter((t) => t.projectId === projectFilter);
+
+  const agentStatusMessage = agentsLoading
+    ? "Loading assignable agents…"
+    : agentsError
+    ? agentsError
+    : agents.length === 0
+    ? "No assignable agents are available in the current company scope."
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -311,17 +328,26 @@ export default function TasksPage() {
         )}
 
         <main className="flex-1 p-2 sm:p-6">
+          {agentStatusMessage && (
+            <div className="mb-4 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-[11px] text-[var(--text-tertiary)]">
+              {agentStatusMessage}
+            </div>
+          )}
           {viewMode === "board" ? (
             <TaskBoard
               initialTasks={boardTasks}
               agents={agents}
               projects={projects}
+              agentsLoading={agentsLoading}
+              agentsError={agentsError}
             />
           ) : (
             <TaskTable
               tasks={tasks}
               agents={agents}
               projects={projects}
+              agentsLoading={agentsLoading}
+              agentsError={agentsError}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDelete}
               onTaskClick={setSelectedTask}
@@ -336,6 +362,8 @@ export default function TasksPage() {
           task={selectedTask}
           agents={agents}
           projects={projects}
+          agentsLoading={agentsLoading}
+          agentsError={agentsError}
           onClose={() => setSelectedTask(null)}
           onUpdate={(updates) => {
             handleTaskUpdate(selectedTask.id, updates);
@@ -415,6 +443,8 @@ function TableTaskModal({
   task,
   agents,
   projects,
+  agentsLoading,
+  agentsError,
   onClose,
   onUpdate,
   onDelete,
@@ -422,6 +452,8 @@ function TableTaskModal({
   task: Task;
   agents: Agent[];
   projects: Project[];
+  agentsLoading: boolean;
+  agentsError: string | null;
   onClose: () => void;
   onUpdate: (updates: Partial<Task>) => void;
   onDelete: () => void;
@@ -432,12 +464,20 @@ function TableTaskModal({
     description: task.description || "",
     priority: task.priority,
     status: task.status,
-    assignedAgentId: task.assignedAgentId || "",
+    assignedAgentId: resolveAssignedAgentValue(agents, task.assignedAgentId),
     humanAssignee: task.humanAssignee || "",
     projectId: task.projectId || "",
   });
 
   const projectMap = new Map(projects.map((p) => [p.id, p]));
+  const unknownAgent = getUnknownAgentOption(form.assignedAgentId, agents);
+  const agentSelectStatus = agentsLoading
+    ? "Loading agents..."
+    : agentsError
+    ? "Couldn't load agents"
+    : agents.length === 0
+    ? "No agents available in this company"
+    : null;
 
   async function save() {
     setSaving(true);
@@ -548,14 +588,16 @@ function TableTaskModal({
             <div>
               <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">AGENT</label>
               <select
-                value={form.assignedAgentId}
+                value={resolveAssignedAgentValue(agents, form.assignedAgentId)}
                 onChange={(e) => setForm({ ...form, assignedAgentId: e.target.value })}
                 className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-medium)]"
               >
                 <option value="">Unassigned</option>
+                {agentSelectStatus && <option value="" disabled>{agentSelectStatus}</option>}
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>{a.emoji} {a.callsign}</option>
                 ))}
+                {unknownAgent && <option value={unknownAgent.value}>{unknownAgent.label}</option>}
               </select>
             </div>
             <div>

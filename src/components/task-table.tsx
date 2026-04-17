@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import type { Task, Agent, TaskStatus, TaskPriority, TaskSource } from "@/lib/data";
+import { buildAgentLookup, getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
 
 interface Project {
   id: string;
@@ -14,6 +15,8 @@ interface TaskTableProps {
   tasks: Task[];
   agents: Agent[];
   projects?: Project[];
+  agentsLoading?: boolean;
+  agentsError?: string | null;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskDelete: (taskId: string) => void;
   onTaskClick: (task: Task) => void;
@@ -61,7 +64,7 @@ const sourceStyles: Record<TaskSource, { label: string; cls: string }> = {
 const PRIORITY_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 const PAGE_SIZE = 50;
 
-export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDelete, onTaskClick }: TaskTableProps) {
+export function TaskTable({ tasks, agents, projects = [], agentsLoading = false, agentsError = null, onTaskUpdate, onTaskDelete, onTaskClick }: TaskTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -78,8 +81,15 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
   const [bulkPriority, setBulkPriority] = useState<TaskPriority>("medium");
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  const agentMap = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
+  const agentMap = useMemo(() => buildAgentLookup(agents), [agents]);
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const agentSelectStatus = agentsLoading
+    ? "Loading agents..."
+    : agentsError
+    ? "Couldn't load agents"
+    : agents.length === 0
+    ? "No agents available in this company"
+    : null;
 
   // Unique assignees from tasks
   const assigneeOptions = useMemo(() => {
@@ -628,7 +638,7 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-col gap-1">
                       <select
-                        value={task.assignedAgentId || ""}
+                        value={resolveAssignedAgentValue(agents, task.assignedAgentId)}
                         onChange={(e) =>
                           inlineUpdate(task.id, "assignedAgentId", e.target.value || null)
                         }
@@ -640,6 +650,11 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                         <option value="" style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-tertiary)" }}>
                           ⊘ Unassigned
                         </option>
+                        {agentSelectStatus && (
+                          <option value="" disabled style={{ backgroundColor: "var(--bg-surface-strong)", color: "var(--text-tertiary)" }}>
+                            {agentSelectStatus}
+                          </option>
+                        )}
                         {agents.map((a) => (
                           <option
                             key={a.id}
@@ -649,6 +664,17 @@ export function TaskTable({ tasks, agents, projects = [], onTaskUpdate, onTaskDe
                             {a.emoji} {a.callsign}
                           </option>
                         ))}
+                        {(() => {
+                          const unknownAgent = getUnknownAgentOption(task.assignedAgentId, agents);
+                          return unknownAgent ? (
+                            <option
+                              value={unknownAgent.value}
+                              style={{ color: "var(--text-tertiary)", backgroundColor: "var(--bg-surface-strong)" }}
+                            >
+                              {unknownAgent.label}
+                            </option>
+                          ) : null;
+                        })()}
                       </select>
                       {task.humanAssignee && (
                         <span className="flex items-center gap-1 rounded border border-red-400/20 bg-red-400/5 px-1.5 py-0.5 text-[8px] text-[var(--danger)]/70 w-fit">

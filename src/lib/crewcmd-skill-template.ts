@@ -16,13 +16,21 @@ export function generateCrewCmdSkill(config: CrewCmdSkillConfig): string {
   return `---
 name: crewcmd
 description: Full workspace management — tasks, projects, agents, inbox, blueprints, budgets, docs, org chart, and more.
-version: "2.0"
+version: "2.1"
 ---
 
 # CrewCmd Management
 
 You are connected to a CrewCmd workspace (company: ${companyId}).
 Use these API endpoints to manage your workspace — tasks, projects, agents, inbox, blueprints, budgets, documents, org chart, and activity.
+
+## Operating rules
+
+- Use task comments as the audit trail for work: starting, progress, blockers, handoffs, review context, and completion notes.
+- If you change task status or make a meaningful decision, add a task comment so humans and agents can reconstruct what happened.
+- If you need something from a human, create an inbox message instead of silently blocking.
+- Prefer updating an existing task and commenting on it over creating duplicate tasks for the same thread of work.
+- Keep comments and inbox messages concise, operational, and explicit about the next action needed.
 
 ## Authentication
 
@@ -113,6 +121,14 @@ Content-Type: application/json
   "agentId": "your-agent-uuid"
 }
 \`\`\`
+
+### List Task Comments
+
+\`\`\`
+GET ${baseUrl}/api/tasks/{id}/comments
+\`\`\`
+
+Use this before major updates so you can preserve context and avoid repeating work already captured on the task.
 
 ### Task Time Entries
 
@@ -240,10 +256,17 @@ GET ${baseUrl}/api/inbox?company_id={companyId}&status={status}&priority={priori
 
 Query parameters (all optional except \`company_id\`):
 - \`status\` — Message status filter
-- \`priority\` — Priority filter
+- \`priority\` — \`critical\`, \`high\`, \`normal\`, \`low\`
 - \`type\` — Message type filter
 - \`limit\` — Max results (default 50)
 - \`offset\` — Pagination offset (default 0)
+
+Use inbox when you need:
+- approval
+- clarification
+- credentials or access
+- priority decisions
+- escalation on blockers
 
 ### Send Message
 
@@ -255,8 +278,8 @@ Content-Type: application/json
   "companyId": "${companyId}",
   "fromAgentId": "your-agent-uuid",
   "toAgentId": "target-agent-uuid",
-  "type": "request",
-  "priority": "medium",
+  "type": "question",
+  "priority": "normal",
   "title": "Message title",
   "body": "Message content",
   "context": {},
@@ -266,18 +289,23 @@ Content-Type: application/json
 
 Fields:
 - \`toAgentId\` or \`toUserId\` — Recipient (agent or human)
-- \`type\` — Message type (e.g. \`request\`, \`notification\`, \`escalation\`)
-- \`priority\` — \`low\`, \`medium\`, \`high\`, \`urgent\`
+- \`type\` — One of \`decision\`, \`blocker\`, \`completed\`, \`question\`, \`escalation\`, \`update\`, \`approval\`
+- \`priority\` — \`critical\`, \`high\`, \`normal\`, \`low\`
 
-### Get / Update Message
+### Update Message
 
 \`\`\`
-GET   ${baseUrl}/api/inbox/{id}
 PATCH ${baseUrl}/api/inbox/{id}
 Content-Type: application/json
 
-{ "status": "read" }
+{ "status": "actioned", "actionResult": "Approved deploy", "actionedBy": "user" }
 \`\`\`
+
+Updatable fields:
+- \`status\`
+- \`actionResult\`
+- \`snoozeUntil\`
+- \`actionedBy\`
 
 ### Bulk Operations
 
@@ -668,6 +696,7 @@ Content-Type: application/json
 7. **Documentation**: Create docs for runbooks, decisions, and knowledge sharing.
 8. **Budget awareness**: Check your budget before starting expensive operations.
 9. **Always log**: Every significant action should appear in the task board, activity log, or inbox.
+10. **Human asks go to inbox**: approvals, questions, blockers, and requests for credentials belong in inbox messages.
 
 ## Example: Full Task Lifecycle
 
@@ -688,10 +717,10 @@ curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
   -d '{"content": "Found root cause in auth middleware.", "agentId": "YOUR_AGENT_ID"}' \\
   "${baseUrl}/api/tasks/TASK_ID/comments"
 
-# 4. Send a message to another agent
+# 4. Ask for human or agent input via inbox
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
   -H "Content-Type: application/json" \\
-  -d '{"companyId": "${companyId}", "fromAgentId": "YOUR_AGENT_ID", "toAgentId": "OTHER_AGENT_ID", "type": "request", "title": "Need review", "body": "Please review PR #42"}' \\
+  -d '{"companyId": "${companyId}", "fromAgentId": "YOUR_AGENT_ID", "toAgentId": "OTHER_AGENT_ID", "type": "question", "priority": "normal", "title": "Need review", "body": "Please review PR #42"}' \\
   "${baseUrl}/api/inbox"
 
 # 5. Mark as ready for review with PR link
@@ -700,7 +729,13 @@ curl -X PATCH -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
   -d '{"status": "review", "prUrl": "https://github.com/org/repo/pull/42", "prStatus": "open"}' \\
   "${baseUrl}/api/tasks/TASK_ID"
 
-# 6. Log activity
+# 6. Add final audit-trail comment
+curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "Content-Type: application/json" \\
+  -d '{"content": "Implemented fix, opened PR #42, ready for review.", "agentId": "YOUR_AGENT_ID"}' \\
+  "${baseUrl}/api/tasks/TASK_ID/comments"
+
+# 7. Log activity
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
   -H "Content-Type: application/json" \\
   -d '{"agentId": "YOUR_AGENT_ID", "actionType": "task_completed", "description": "Completed TSK-1234"}' \\

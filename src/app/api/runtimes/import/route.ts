@@ -279,16 +279,16 @@ export async function POST(request: Request) {
       }
     }
 
-    // Auto-push CrewCmd skill to the runtime (non-blocking — failure is logged, not thrown)
-    if (created.length > 0 || reattached.length > 0) {
-      try {
-        await pushSkillToRuntime(runtimeId);
-      } catch (skillErr) {
-        console.warn(
-          "[api/runtimes/import] Skill push failed (non-fatal):",
-          skillErr instanceof Error ? skillErr.message : String(skillErr)
-        );
-      }
+    // Always refresh the CrewCmd management skill on runtime import/reconnect.
+    // This keeps existing linked agents updated even when this import pass
+    // did not create or reattach any new database rows.
+    try {
+      await pushSkillToRuntime(runtimeId);
+    } catch (skillErr) {
+      console.warn(
+        "[api/runtimes/import] Skill push failed (non-fatal):",
+        skillErr instanceof Error ? skillErr.message : String(skillErr)
+      );
     }
 
     return NextResponse.json({

@@ -101,6 +101,32 @@ export interface GatewayConfigPatchResult {
   config?: Record<string, unknown>;
 }
 
+export interface GatewayCronJob {
+  id: string;
+  agentId?: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  schedule: Record<string, unknown>;
+  sessionTarget?: string;
+  wakeMode?: string;
+  payload: Record<string, unknown>;
+  delivery?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+  sessionKey?: string;
+}
+
+export interface GatewayCronListResult {
+  jobs: GatewayCronJob[];
+  total?: number;
+  offset?: number;
+  limit?: number;
+  hasMore?: boolean;
+  nextOffset?: number | null;
+}
+
 export interface DiscoveredAgent {
   id: string;
   name: string;
@@ -460,6 +486,36 @@ export class GatewayClient {
         ? { restartDelayMs: params.restartDelayMs }
         : {}),
     });
+  }
+
+  async cronList(): Promise<GatewayCronListResult> {
+    return this.rpc<GatewayCronListResult>("cron.list", {});
+  }
+
+  async cronAdd(params: {
+    agentId?: string;
+    name: string;
+    description?: string;
+    enabled?: boolean;
+    schedule: Record<string, unknown>;
+    sessionTarget?: string;
+    wakeMode?: string;
+    payload: Record<string, unknown>;
+    delivery?: Record<string, unknown>;
+    sessionKey?: string;
+  }): Promise<GatewayCronJob> {
+    return this.rpc<GatewayCronJob>("cron.add", params);
+  }
+
+  async cronUpdate(params: {
+    id: string;
+    patch: Record<string, unknown>;
+  }): Promise<GatewayCronJob> {
+    return this.rpc<GatewayCronJob>("cron.update", params);
+  }
+
+  async cronRemove(id: string): Promise<{ ok: boolean; removed?: boolean }> {
+    return this.rpc<{ ok: boolean; removed?: boolean }>("cron.remove", { id });
   }
 
   async listAgentFiles(agentId: string): Promise<GatewayFilesListResult> {

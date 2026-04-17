@@ -99,6 +99,13 @@
       "when": 1775783135982,
       "tag": "0013_cute_justice",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776470100000,
+      "tag": "0017_runtime_managed_resources",
+      "breakpoints": true
     }
   ]
 }

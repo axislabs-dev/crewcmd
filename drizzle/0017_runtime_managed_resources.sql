@@ -1,0 +1,20 @@
+CREATE TABLE "runtime_managed_resources" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "runtime_id" uuid NOT NULL,
+  "company_id" uuid NOT NULL,
+  "resource_type" text NOT NULL,
+  "resource_key" text NOT NULL,
+  "target_agent_id" uuid,
+  "target_agent_ref" text,
+  "external_id" text,
+  "path" text,
+  "payload" jsonb,
+  "previous_state" jsonb,
+  "managed_by" text DEFAULT 'crewcmd' NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT "runtime_managed_resources_runtime_id_company_runtimes_id_fk" FOREIGN KEY ("runtime_id") REFERENCES "public"."company_runtimes"("id") ON DELETE cascade ON UPDATE no action,
+  CONSTRAINT "runtime_managed_resources_company_id_companies_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE cascade ON UPDATE no action,
+  CONSTRAINT "runtime_managed_resources_target_agent_id_agents_id_fk" FOREIGN KEY ("target_agent_id") REFERENCES "public"."agents"("id") ON DELETE set null ON UPDATE no action,
+  CONSTRAINT "runtime_managed_resources_runtime_id_resource_type_resource_key_unique" UNIQUE("runtime_id","resource_type","resource_key")
+);

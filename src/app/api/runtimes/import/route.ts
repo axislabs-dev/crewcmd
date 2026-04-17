@@ -15,6 +15,7 @@ import {
   getRequestOrigin,
   type RuntimeMetadata,
 } from "@/lib/runtime-callback-url";
+import { ensureCrewCmdRuntimeOperatingLayer } from "@/lib/runtime-operating-layer";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,14 @@ export async function POST(request: Request) {
 
     const callbackBaseUrl = getRequestOrigin(request);
     const body: ImportBody = await request.json();
-    const { runtimeId, agents: importAgents, devicePrivateKeyPem, ownerType, visibility } = body;
+    const {
+      runtimeId,
+      agents: importAgents,
+      defaultAgentId,
+      devicePrivateKeyPem,
+      ownerType,
+      visibility,
+    } = body;
 
     if (!runtimeId || !importAgents?.length) {
       return NextResponse.json(
@@ -105,6 +113,9 @@ export async function POST(request: Request) {
         ...((runtime.metadata || {}) as RuntimeMetadata),
         callbackBaseUrl,
       };
+      if (defaultAgentId) {
+        nextMetadata.defaultAgentId = defaultAgentId;
+      }
       if (devicePrivateKeyPem) {
         nextMetadata.devicePrivateKeyPem = devicePrivateKeyPem;
       }
@@ -294,6 +305,7 @@ export async function POST(request: Request) {
     // did not create or reattach any new database rows.
     try {
       await pushSkillToRuntime(runtimeId);
+      await ensureCrewCmdRuntimeOperatingLayer(runtimeId);
     } catch (skillErr) {
       console.warn(
         "[api/runtimes/import] Skill push failed (non-fatal):",

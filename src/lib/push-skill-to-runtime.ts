@@ -17,6 +17,7 @@ import { generateCrewCmdSkill } from "./crewcmd-skill-template";
 import { CREWCMD_MANAGEMENT_SKILL_METADATA } from "./skills/crewcmd-management";
 import { syncSkillToOpenClaw } from "./sync-skill-to-openclaw";
 import { resolveRuntimeCallbackUrl } from "./runtime-callback-url";
+import { upsertRuntimeManagedResource } from "./runtime-managed-resources";
 
 const SYSTEM_SKILL_SLUG = "crewcmd-management";
 const SYSTEM_SKILL_NAME = "CrewCmd Management";
@@ -49,6 +50,19 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     skillContent
   );
 
+  await upsertRuntimeManagedResource({
+    runtimeId,
+    companyId: runtime.companyId,
+    resourceType: "skill-entry",
+    resourceKey: SYSTEM_SKILL_SLUG,
+    externalId: skillRecord.id,
+    payload: {
+      skillId: skillRecord.id,
+      slug: SYSTEM_SKILL_SLUG,
+      baseUrl,
+    },
+  });
+
   // Link skill to all agents on this runtime
   await linkSkillToAgents({
     skillId: skillRecord.id,
@@ -59,10 +73,25 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
 
   for (const agent of runtimeAgents) {
     try {
-      await syncSkillToOpenClaw({
+    await syncSkillToOpenClaw({
         skillId: skillRecord.id,
         agentId: agent.id,
         companyId: runtime.companyId,
+      });
+      await upsertRuntimeManagedResource({
+        runtimeId,
+        companyId: runtime.companyId,
+        resourceType: "agent-skill",
+        resourceKey: `${agent.id}:${skillRecord.id}`,
+        targetAgentId: agent.id,
+        targetAgentRef: agent.runtimeRef ?? agent.id,
+        externalId: skillRecord.id,
+        payload: {
+          skillId: skillRecord.id,
+          slug: SYSTEM_SKILL_SLUG,
+          agentId: agent.id,
+          runtimeRef: agent.runtimeRef ?? agent.id,
+        },
       });
     } catch (err) {
       console.warn(

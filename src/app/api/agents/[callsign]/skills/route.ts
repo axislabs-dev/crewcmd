@@ -4,6 +4,7 @@ import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
+import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 
 export const dynamic = "force-dynamic";
 
@@ -97,18 +98,48 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }).returning()
     );
 
-    // Push secrets to gateway (non-blocking — don't fail the assignment if gateway is unreachable)
-    if (agent.companyId && agent.runtimeId) {
-      pushSecretsToGateway({
-        skillId,
-        agentId: agent.id,
-        companyId: agent.companyId,
-      }).catch((err) => {
-        console.warn(`[api/agents/skills] Secret push failed for ${agent.callsign}:`, err);
-      });
+    let sync: { ok: boolean; error?: string } | undefined;
+    let secrets: { ok: boolean; error?: string } | undefined;
+
+    if (agent.companyId) {
+      try {
+        const result = await syncSkillToOpenClaw({
+          skillId,
+          agentId: agent.id,
+          companyId: agent.companyId,
+        });
+        sync = result.success
+          ? { ok: true }
+          : { ok: false, error: result.errors.join("; ") || "Sync failed" };
+      } catch (err) {
+        sync = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     }
 
-    return NextResponse.json(created, { status: 201 });
+    // Push secrets to gateway after the runtime files/config are in place.
+    if (agent.companyId && agent.runtimeId) {
+      try {
+        const result = await pushSecretsToGateway({
+          skillId,
+          agentId: agent.id,
+          companyId: agent.companyId,
+        });
+        secrets = result.ok
+          ? { ok: true }
+          : { ok: false, error: result.errors.join("; ") || "Secret push failed" };
+      } catch (err) {
+        console.warn(`[api/agents/skills] Secret push failed for ${agent.callsign}:`, err);
+        secrets = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    return NextResponse.json({ ...created, sync, secrets }, { status: 201 });
   } catch (err) {
     console.error("[api/agents/[callsign]/skills] POST Error:", err);
     return NextResponse.json({ error: "Failed to attach skill" }, { status: 500 });

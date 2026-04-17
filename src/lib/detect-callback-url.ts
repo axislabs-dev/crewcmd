@@ -16,9 +16,15 @@ import os from "node:os";
 export function detectCallbackUrl(gatewayUrl: string): string {
   const parsed = new URL(gatewayUrl);
   const gatewayHost = parsed.hostname;
-  const port = process.env.PORT || "3000";
-  const useHttps =
-    process.env.HTTPS === "true" || process.env.NODE_ENV === "production";
+  const explicitBaseUrl = resolveExplicitBaseUrl();
+  if (explicitBaseUrl && isReachableFromGateway(explicitBaseUrl.hostname, gatewayHost)) {
+    return explicitBaseUrl.toString().replace(/\/$/, "");
+  }
+
+  const port = explicitBaseUrl?.port || "3000";
+  const useHttps = explicitBaseUrl
+    ? explicitBaseUrl.protocol === "https:"
+    : process.env.HTTPS === "true" || process.env.NODE_ENV === "production";
   const scheme = useHttps ? "https" : "http";
 
   // If gateway is on localhost, just use localhost
@@ -51,6 +57,34 @@ export function detectCallbackUrl(gatewayUrl: string): string {
     `[detect-callback-url] No matching network interface for gateway ${gatewayHost}, falling back to localhost`
   );
   return `${scheme}://localhost:${port}`;
+}
+
+function resolveExplicitBaseUrl(): URL | null {
+  const candidates = [
+    process.env.CREWCMD_BASE_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+  ];
+
+  for (const raw of candidates) {
+    if (!raw) continue;
+    try {
+      return new URL(raw);
+    } catch {
+      // ignore invalid env values
+    }
+  }
+
+  return null;
+}
+
+function isReachableFromGateway(appHost: string, gatewayHost: string): boolean {
+  if (appHost === "localhost" || appHost === "127.0.0.1" || appHost === "::1") {
+    return gatewayHost === "localhost" || gatewayHost === "127.0.0.1" || gatewayHost === "::1";
+  }
+
+  const appPrefix = getNetworkPrefix(appHost);
+  const gatewayPrefix = getNetworkPrefix(gatewayHost);
+  return !!appPrefix && !!gatewayPrefix && appPrefix === gatewayPrefix;
 }
 
 /**

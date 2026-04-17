@@ -142,6 +142,20 @@ const settingsItem = {
   ),
 };
 
+const companySettingsItem = {
+  href: "/settings/company",
+  label: "Company settings",
+  icon: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 21h16.5M4.5 3h15a.75.75 0 0 1 .75.75V21H3.75V3.75A.75.75 0 0 1 4.5 3Zm3 4.5h1.5V9h-1.5V7.5Zm0 4.5h1.5v1.5h-1.5V12Zm0 4.5h1.5V18h-1.5v-1.5Zm4.5-9h1.5V9H12V7.5Zm0 4.5h1.5v1.5H12V12Zm0 4.5h1.5V18H12v-1.5Zm4.5-9H18V9h-1.5V7.5Zm0 4.5H18v1.5h-1.5V12Zm0 4.5H18V18h-1.5v-1.5Z"
+      />
+    </svg>
+  ),
+};
+
 function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
   const { company } = useCompany();
   const logoSize = size === "sm" ? "h-6 w-6" : "h-8 w-8";
@@ -177,6 +191,7 @@ export function Sidebar() {
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
+    if (href === "/settings") return pathname === "/settings";
     return pathname.startsWith(href);
   };
 
@@ -220,6 +235,7 @@ export function Sidebar() {
         <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
         <ul className="space-y-0.5">
           <NavLink item={settingsItem} onClick={onClick} />
+          <NavLink item={companySettingsItem} onClick={onClick} />
         </ul>
       </div>
       {isSuperAdmin && (

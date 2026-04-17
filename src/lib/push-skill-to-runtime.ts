@@ -2,7 +2,7 @@
  * Push the CrewCmd Management skill to all agents on a runtime.
  *
  * Strategy (in order):
- * 1. Try agents.files.put RPC (may not exist in all gateway versions)
+ * 1. Try agents.files.set RPC
  * 2. Fall back to chat message asking the agent to write the file
  * 3. Last resort for local runtimes: write directly via fs if workspace is accessible
  *
@@ -87,13 +87,9 @@ async function pushViaGateway(
     for (const agent of runtimeAgents) {
       if (!agent.runtimeRef) continue;
 
-      // Strategy 1: Try agents.files.put RPC
+      // Strategy 1: Try agents.files.set RPC
       try {
-        await client.rpc("agents.files.put", {
-          agentId: agent.runtimeRef,
-          name: "SKILL.md",
-          content: skillContent,
-        });
+        await client.setAgentFile(agent.runtimeRef, "SKILL.md", skillContent);
         console.log(`[push-skill] Wrote SKILL.md via RPC for agent ${agent.callsign}`);
         continue;
       } catch {

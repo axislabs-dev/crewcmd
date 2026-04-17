@@ -124,9 +124,10 @@ export async function pushSecretsToGateway(
 
   try {
     await client.connect();
+    // OpenClaw stores skill entry config by skillKey in gateway config.
+    // This is currently gateway-global rather than per-agent.
     await client.skillsUpdate({
-      agentId: agent.runtimeRef || undefined,
-      slug: skill.slug,
+      skillKey: skill.slug,
       enabled: assignment.enabled,
       env: envMap.env,
     });

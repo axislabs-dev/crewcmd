@@ -77,6 +77,17 @@ export interface GatewayFileGetResult {
   file: GatewayFileEntry;
 }
 
+export interface GatewaySkillStatusEntry {
+  name: string;
+  skillKey: string;
+  enabled?: boolean;
+  env?: Record<string, string>;
+}
+
+export interface GatewaySkillsStatusResult {
+  skills: GatewaySkillStatusEntry[];
+}
+
 export interface DiscoveredAgent {
   id: string;
   name: string;
@@ -393,9 +404,9 @@ export class GatewayClient {
   }
 
   async skillsUpdate(params: {
-    agentId?: string;
-    slug: string;
+    skillKey: string;
     enabled?: boolean;
+    apiKey?: string;
     env?: Record<string, string>;
   }): Promise<{ ok: boolean }> {
     return this.rpc<{ ok: boolean }>("skills.update", params);
@@ -403,8 +414,8 @@ export class GatewayClient {
 
   async skillsStatus(params: {
     agentId?: string;
-  } = {}): Promise<{ skills: Array<{ slug: string; enabled: boolean; env?: Record<string, string> }> }> {
-    return this.rpc("skills.status", params);
+  } = {}): Promise<GatewaySkillsStatusResult> {
+    return this.rpc<GatewaySkillsStatusResult>("skills.status", params);
   }
 
   async listAgentFiles(agentId: string): Promise<GatewayFilesListResult> {
@@ -413,6 +424,18 @@ export class GatewayClient {
 
   async getAgentFile(agentId: string, name: string): Promise<GatewayFileGetResult> {
     return this.rpc<GatewayFileGetResult>("agents.files.get", { agentId, name });
+  }
+
+  async setAgentFile(
+    agentId: string,
+    name: string,
+    content: string
+  ): Promise<GatewayFileGetResult> {
+    return this.rpc<GatewayFileGetResult>("agents.files.set", {
+      agentId,
+      name,
+      content,
+    });
   }
 
   on(event: string, callback: (payload: unknown) => void): void {

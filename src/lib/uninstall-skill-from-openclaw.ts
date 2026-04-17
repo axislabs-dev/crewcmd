@@ -212,7 +212,7 @@ async function disableSkillViaGateway(
   try {
     await client.connect();
     await client.skillsUpdate({
-      skillKey: slug,
+      slug,
       enabled: false,
     });
   } finally {

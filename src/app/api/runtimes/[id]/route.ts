@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { agents, companyRuntimes } from "@/db/schema";
 import { canManageCompanyOwnedAgent, getAgentAccessContext } from "@/lib/agent-access";
+import {
+  cleanupCrewCmdRuntimeOperatingLayer,
+} from "@/lib/runtime-operating-layer";
+import { deleteRuntimeManagedResources } from "@/lib/runtime-managed-resources";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +51,9 @@ export async function DELETE(
         .from(agents)
         .where(eq(agents.runtimeId, id))
     );
+
+    await cleanupCrewCmdRuntimeOperatingLayer(id);
+    await deleteRuntimeManagedResources(id);
 
     if (linkedAgents.length > 0) {
       await withRetry(() =>

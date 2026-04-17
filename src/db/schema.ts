@@ -313,6 +313,43 @@ export const cronJobs = pgTable("cron_jobs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const runtimeManagedResources = pgTable(
+  "runtime_managed_resources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runtimeId: uuid("runtime_id")
+      .references(() => companyRuntimes.id, { onDelete: "cascade" })
+      .notNull(),
+    companyId: uuid("company_id")
+      .references(() => companies.id, { onDelete: "cascade" })
+      .notNull(),
+    resourceType: text("resource_type").notNull(),
+    resourceKey: text("resource_key").notNull(),
+    targetAgentId: uuid("target_agent_id").references(() => agents.id, {
+      onDelete: "set null",
+    }),
+    targetAgentRef: text("target_agent_ref"),
+    externalId: text("external_id"),
+    path: text("path"),
+    payload: jsonb("payload").$type<Record<string, unknown>>(),
+    previousState: jsonb("previous_state").$type<Record<string, unknown>>(),
+    managedBy: text("managed_by").notNull().default("crewcmd"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    runtimeResourceUnique: unique().on(
+      table.runtimeId,
+      table.resourceType,
+      table.resourceKey
+    ),
+  })
+);
+
 export const nodeStatus = pgTable("node_status", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

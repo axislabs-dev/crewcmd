@@ -16,7 +16,13 @@ import os from "node:os";
 export function detectCallbackUrl(gatewayUrl: string): string {
   const parsed = new URL(gatewayUrl);
   const gatewayHost = parsed.hostname;
-  const port = process.env.PORT || "3000";
+  const explicit =
+    process.env.CREWCMD_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+  if (explicit.trim()) {
+    return explicit.trim().replace(/\/+$/, "");
+  }
+
+  const port = "3000";
   const useHttps =
     process.env.HTTPS === "true" || process.env.NODE_ENV === "production";
   const scheme = useHttps ? "https" : "http";

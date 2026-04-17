@@ -14,9 +14,9 @@ import { db, withRetry } from "@/db";
 import { companyRuntimes, skills, agentSkills, agents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateCrewCmdSkill } from "./crewcmd-skill-template";
-import { detectCallbackUrl } from "./detect-callback-url";
 import { CREWCMD_MANAGEMENT_SKILL_METADATA } from "./skills/crewcmd-management";
 import { syncSkillToOpenClaw } from "./sync-skill-to-openclaw";
+import { resolveRuntimeCallbackUrl } from "./runtime-callback-url";
 
 const SYSTEM_SKILL_SLUG = "crewcmd-management";
 const SYSTEM_SKILL_NAME = "CrewCmd Management";
@@ -30,8 +30,7 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   );
   if (!runtime) throw new Error(`Runtime ${runtimeId} not found`);
 
-  // Detect callback URL based on gateway network
-  const baseUrl = detectCallbackUrl(runtime.gatewayUrl);
+  const baseUrl = resolveRuntimeCallbackUrl({ runtime });
 
   // Generate the SKILL.md content
   // Auth token is NOT embedded — agents read $HEARTBEAT_SECRET from their environment at runtime

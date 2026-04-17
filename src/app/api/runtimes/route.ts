@@ -3,6 +3,7 @@ import { db, withRetry } from "@/db";
 import { companyRuntimes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getAgentAccessContext, runtimeOwnershipValues, buildRuntimeReadWhere, canManageCompanyOwnedAgent } from "@/lib/agent-access";
+import { getRequestOrigin } from "@/lib/runtime-callback-url";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     if (!access.userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const body = await request.json();
     const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata, ownerType } = body;
+    const callbackBaseUrl = getRequestOrigin(request);
 
     if (!name || !gatewayUrl || !httpUrl) {
       return NextResponse.json({ error: "name, gatewayUrl, and httpUrl are required" }, { status: 400 });
@@ -75,7 +77,10 @@ export async function POST(request: Request) {
         isPrimary,
         status: "connected",
         lastPing: new Date(),
-        metadata: metadata || null,
+        metadata: {
+          ...((metadata || {}) as Record<string, unknown>),
+          callbackBaseUrl,
+        },
         ...ownership,
       })
       .returning());

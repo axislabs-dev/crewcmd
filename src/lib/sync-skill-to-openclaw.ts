@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
+import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "./openclaw-workspace-resolver";
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -54,10 +55,9 @@ const META_VERSION = "0.1.0";
  *
  * 1. Reads skill / agent / assignment from DB
  * 2. Generates SKILL.md with AgentSkills frontmatter
- * 3. Writes atomically to `~/.openclaw/workspace-<runtimeRef>/skills/<slug>/SKILL.md`
- * 4. Creates `.crewcmd-meta.json` alongside
- * 5. Merges runtime config into `~/.openclaw/openclaw.json`
- * 6. Verifies the write via SHA-256
+ * 3. Tries gateway-native sync first (`agents.files.set` + `skills.update`)
+ * 4. Falls back to local filesystem sync for same-machine runtimes
+ * 5. Verifies the write via SHA-256
  */
 export async function syncSkillToOpenClaw(
   opts: SyncSkillOptions
@@ -78,32 +78,40 @@ export async function syncSkillToOpenClaw(
   const slug = skillData.skill.slug;
   const runtimeRef =
     skillData.agent.runtimeRef ?? skillData.agent.id;
+  const assignmentConfig =
+    typeof skillData.assignment.config === "object" && skillData.assignment.config !== null
+      ? skillData.assignment.config
+      : {};
+
+  const skillMdContent = generateSkillMd(skillData.skill);
+  const checksum = "sha256:" + sha256(skillMdContent);
+  const metaContent = JSON.stringify(
+    {
+      source: "crewcmd",
+      skillId: opts.skillId,
+      version: META_VERSION,
+      syncedAt: now,
+      syncedBy: opts.agentId,
+      sourceType: (skillData.skill.metadata as Record<string, unknown> | null)?.["sourceType"] ?? skillData.skill.source,
+      previousChecksum: null,
+      checksum,
+    },
+    null,
+    2
+  );
+  const resolvedEnv = await resolveSkillEnvVars(
+    opts.companyId,
+    slug,
+    skillData.skill.metadata,
+    assignmentConfig as Record<string, unknown>
+  );
   const resolvedWorkspacePath = await resolveOpenClawWorkspacePath({
     runtimeRef,
     workspacePath: skillData.agent.workspacePath ?? null,
   });
-  const skillsDir = openclawSkillsDir({
-    runtimeRef,
-    workspacePath: resolvedWorkspacePath,
-    slug,
-  });
+  const skillsDir = openclawSkillsDir({ runtimeRef, workspacePath: resolvedWorkspacePath, slug });
   const skillMdPath = join(skillsDir, "SKILL.md");
-  const metaPath = join(skillsDir, ".crewcmd-meta.json");
   const openclawJsonPath = join(homedir(), ".openclaw", "openclaw.json");
-
-  // ── Generate SKILL.md content ────────────────────────────────
-  const skillMdContent = generateSkillMd(skillData.skill);
-  const checksum = "sha256:" + sha256(skillMdContent);
-
-  // ── Retrieve previous checksum for .crewcmd-meta.json ────────
-  let previousChecksum: string | undefined;
-  try {
-    const raw = await readFile(metaPath, "utf-8");
-    const meta = JSON.parse(raw) as Record<string, unknown>;
-    previousChecksum = meta.checksum as string | undefined;
-  } catch {
-    // no previous sync — first time
-  }
 
   // ── Dry-run shortcut ─────────────────────────────────────────
   if (opts.dryRun) {
@@ -117,91 +125,48 @@ export async function syncSkillToOpenClaw(
     };
   }
 
-  // ── Write SKILL.md (atomic) ──────────────────────────────────
-  try {
-    await atomicWrite(skillMdPath, skillMdContent);
-  } catch (err) {
-    errors.push(`Failed to write SKILL.md: ${err instanceof Error ? err.message : String(err)}`);
-    return makeFailure("Write error – SKILL.md", checksum, skillMdPath, openclawJsonPath, errors, now);
-  }
+  if (skillData.runtime?.gatewayUrl && skillData.agent.runtimeRef) {
+    try {
+      await syncSkillViaGateway({
+        runtime: skillData.runtime,
+        runtimeRef: skillData.agent.runtimeRef,
+        slug,
+        skillMdContent,
+        metaContent,
+        resolvedEnv,
+        enabled: skillData.assignment.enabled,
+        checksum,
+      });
 
-  // ── Write .crewcmd-meta.json (atomic) ────────────────────────
-  const metaContent = JSON.stringify(
-    {
-      source: "crewcmd",
-      skillId: opts.skillId,
-      version: META_VERSION,
-      syncedAt: now,
-      syncedBy: opts.agentId,
-      sourceType: (skillData.skill.metadata as Record<string, unknown> | null)?.["sourceType"] ?? skillData.skill.source,
-      previousChecksum: previousChecksum ?? null,
-      checksum,
-    },
-    null,
-    2
-  );
-
-  try {
-    await atomicWrite(metaPath, metaContent);
-  } catch (err) {
-    errors.push(`Failed to write .crewcmd-meta.json: ${err instanceof Error ? err.message : String(err)}`);
-    return makeFailure("Write error – metadata", checksum, skillMdPath, openclawJsonPath, errors, now);
-  }
-
-  // ── Resolve secrets for openclaw.json env vars ───────────────
-  const assignmentConfig =
-    typeof skillData.assignment.config === "object" && skillData.assignment.config !== null
-      ? skillData.assignment.config
-      : {};
-
-  const resolvedEnv = await resolveSkillEnvVars(
-    opts.companyId,
-    slug,
-    skillData.skill.metadata,
-    assignmentConfig as Record<string, unknown>
-  );
-
-  const skillEntry = buildSkillEntry(slug, skillData.skill, skillData.assignment.enabled, assignmentConfig, resolvedEnv);
-
-  try {
-    await mergeOpenclawJson(openclawJsonPath, slug, skillEntry);
-  } catch (err) {
-    errors.push(`Failed to merge openclaw.json: ${err instanceof Error ? err.message : String(err)}`);
-    return makeFailure("Write error – openclaw.json", checksum, skillMdPath, openclawJsonPath, errors, now);
-  }
-
-  // ── Verify write ─────────────────────────────────────────────
-  try {
-    const written = await readFile(skillMdPath, "utf-8");
-    const actualChecksum = "sha256:" + sha256(written);
-    if (actualChecksum !== checksum) {
-      errors.push(
-        `Checksum mismatch after write: expected ${checksum}, got ${actualChecksum}`
-      );
+      return {
+        success: true,
+        skillPath: `agent:${skillData.agent.runtimeRef}:skills/${slug}/SKILL.md`,
+        configPath: `skills.entries.${slug}`,
+        checksum,
+        errors: [],
+        syncedAt: now,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[sync-skill] Gateway sync failed for ${slug}, falling back to local filesystem: ${message}`);
+      errors.push(`Gateway sync failed: ${message}`);
     }
-  } catch (err) {
-    errors.push(`Failed to verify written file: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  if (errors.length > 0) {
-    return {
-      success: false,
-      skillPath: skillMdPath,
-      configPath: openclawJsonPath,
-      checksum,
-      errors,
-      syncedAt: now,
-    };
-  }
-
-  return {
-    success: true,
-    skillPath: skillMdPath,
-    configPath: openclawJsonPath,
+  return syncSkillViaFilesystem({
+    runtimeRef,
+    workspacePath: resolvedWorkspacePath,
+    slug,
+    skill: skillData.skill,
+    assignmentConfig: assignmentConfig as Record<string, unknown>,
+    enabled: skillData.assignment.enabled,
+    resolvedEnv,
+    skillMdContent,
+    metaContent,
     checksum,
-    errors: [],
     syncedAt: now,
-  };
+    priorErrors: errors,
+  });
 }
 
 // ─── DB Loading ─────────────────────────────────────────────────────
@@ -408,6 +373,141 @@ function getPrimaryEnvVarFromMetadata(metadata: Record<string, unknown>, slug: s
     }
   }
   return derivePrimaryEnvVar(slug);
+}
+
+async function syncSkillViaGateway(params: {
+  runtime: typeof companyRuntimes.$inferSelect;
+  runtimeRef: string;
+  slug: string;
+  skillMdContent: string;
+  metaContent: string;
+  resolvedEnv: Record<string, string>;
+  enabled: boolean;
+  checksum: string;
+}): Promise<void> {
+  const meta = params.runtime.metadata as Record<string, unknown> | null;
+  const deviceKeyPem = meta?.devicePrivateKeyPem as string | undefined;
+  const client = new GatewayClient(
+    params.runtime.gatewayUrl,
+    params.runtime.authToken || null,
+    resolveDeviceIdentity(deviceKeyPem),
+    15000
+  );
+
+  try {
+    await client.connect();
+    await client.setAgentFile(
+      params.runtimeRef,
+      `skills/${params.slug}/SKILL.md`,
+      params.skillMdContent
+    );
+    await client.setAgentFile(
+      params.runtimeRef,
+      `skills/${params.slug}/.crewcmd-meta.json`,
+      params.metaContent
+    );
+
+    await client.skillsUpdate({
+      skillKey: params.slug,
+      enabled: params.enabled,
+      ...(Object.keys(params.resolvedEnv).length > 0 ? { env: params.resolvedEnv } : {}),
+    });
+
+    const written = await client.getAgentFile(
+      params.runtimeRef,
+      `skills/${params.slug}/SKILL.md`
+    );
+    const actualChecksum = "sha256:" + sha256(written.file.content ?? "");
+    if (actualChecksum !== params.checksum) {
+      throw new Error(`Checksum mismatch after gateway write: expected ${params.checksum}, got ${actualChecksum}`);
+    }
+  } finally {
+    client.close();
+  }
+}
+
+async function syncSkillViaFilesystem(params: {
+  runtimeRef: string;
+  workspacePath: string | null;
+  slug: string;
+  skill: typeof skills.$inferSelect;
+  assignmentConfig: Record<string, unknown>;
+  enabled: boolean;
+  resolvedEnv: Record<string, string>;
+  skillMdContent: string;
+  metaContent: string;
+  checksum: string;
+  syncedAt: string;
+  priorErrors: string[];
+}): Promise<SyncResult> {
+  const skillsDir = openclawSkillsDir({
+    runtimeRef: params.runtimeRef,
+    workspacePath: params.workspacePath,
+    slug: params.slug,
+  });
+  const skillMdPath = join(skillsDir, "SKILL.md");
+  const metaPath = join(skillsDir, ".crewcmd-meta.json");
+  const openclawJsonPath = join(homedir(), ".openclaw", "openclaw.json");
+  const errors = [...params.priorErrors];
+
+  try {
+    await atomicWrite(skillMdPath, params.skillMdContent);
+  } catch (err) {
+    errors.push(`Failed to write SKILL.md: ${err instanceof Error ? err.message : String(err)}`);
+    return makeFailure("Write error – SKILL.md", params.checksum, skillMdPath, openclawJsonPath, errors, params.syncedAt);
+  }
+
+  try {
+    await atomicWrite(metaPath, params.metaContent);
+  } catch (err) {
+    errors.push(`Failed to write .crewcmd-meta.json: ${err instanceof Error ? err.message : String(err)}`);
+    return makeFailure("Write error – metadata", params.checksum, skillMdPath, openclawJsonPath, errors, params.syncedAt);
+  }
+
+  const skillEntry = buildSkillEntry(
+    params.slug,
+    params.skill,
+    params.enabled,
+    params.assignmentConfig,
+    params.resolvedEnv
+  );
+
+  try {
+    await mergeOpenclawJson(openclawJsonPath, params.slug, skillEntry);
+  } catch (err) {
+    errors.push(`Failed to merge openclaw.json: ${err instanceof Error ? err.message : String(err)}`);
+    return makeFailure("Write error – openclaw.json", params.checksum, skillMdPath, openclawJsonPath, errors, params.syncedAt);
+  }
+
+  try {
+    const written = await readFile(skillMdPath, "utf-8");
+    const actualChecksum = "sha256:" + sha256(written);
+    if (actualChecksum !== params.checksum) {
+      errors.push(`Checksum mismatch after write: expected ${params.checksum}, got ${actualChecksum}`);
+    }
+  } catch (err) {
+    errors.push(`Failed to verify written file: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (errors.length > 0) {
+    return {
+      success: false,
+      skillPath: skillMdPath,
+      configPath: openclawJsonPath,
+      checksum: params.checksum,
+      errors,
+      syncedAt: params.syncedAt,
+    };
+  }
+
+  return {
+    success: true,
+    skillPath: skillMdPath,
+    configPath: openclawJsonPath,
+    checksum: params.checksum,
+    errors: [],
+    syncedAt: params.syncedAt,
+  };
 }
 
 // ─── Filesystem Operations ──────────────────────────────────────────

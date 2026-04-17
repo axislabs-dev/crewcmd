@@ -130,9 +130,9 @@ describe("invokeServiceSkill", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toEqual({ items: [{ id: "post_1" }] });
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://app.evercontent.io/api/projects/project_456/posts",
+      "https://app.evercontent.io/api/v1/posts?projectId=project_456",
       expect.objectContaining({
-        headers: expect.objectContaining({ "x-api-key": "secret_123" }),
+        headers: expect.objectContaining({ Authorization: "Bearer secret_123" }),
       })
     );
   });

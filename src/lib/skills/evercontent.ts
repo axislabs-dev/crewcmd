@@ -15,11 +15,11 @@ export const EVERCONTENT_SKILL_TEMPLATE: InstallableSkillTemplate = {
   description:
     "Create, review, and manage EverContent drafts with scoped project access and publish disabled by default.",
   source: "system",
-  version: "0.2.0",
+  version: "0.3.0",
   sourceUrl: "https://evercontent.co",
   content: `# EverContent Skill
 
-Use EverContent directly from OpenClaw to discover projects, inspect posts, create drafts, update content, and publish only when explicitly enabled.
+Use EverContent directly from OpenClaw via the external API-key surface to discover projects, inspect posts, create drafts, and publish only when explicitly enabled.
 
 ## Runtime contract
 This is a native OpenClaw skill.
@@ -34,11 +34,8 @@ Read auth and policy from the active OpenClaw config:
         "enabled": true,
         "apiKey": "ec_...",
         "config": {
-          "defaultCustomerId": "customer_123",
           "defaultProjectId": "project_456",
-          "allowedCustomerIds": ["customer_123"],
           "allowedProjectIds": ["project_456"],
-          "defaultScope": "project",
           "canPublish": false
         }
       }
@@ -52,11 +49,8 @@ Use these values:
 - \`skills.entries.evercontent.config\` for scope and publish policy
 
 ## Config fields
-- \`defaultCustomerId\`: optional default customer scope
 - \`defaultProjectId\`: optional default project scope
-- \`allowedCustomerIds\`: optional allow-list of customer IDs
 - \`allowedProjectIds\`: optional allow-list of project IDs
-- \`defaultScope\`: one of \`customer\` or \`project\`
 - \`canPublish\`: defaults to \`false\`; only publish when explicitly enabled
 
 ## Auth setup
@@ -75,10 +69,10 @@ Base URL:
 https://app.evercontent.io
 \`\`\`
 
-Auth header for all requests:
+Use the external API v1 contract for all requests:
 
 \`\`\`bash
-curl -s -H "x-api-key: $EVERCONTENT_API_KEY" -H "content-type: application/json" ...
+curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" -H "content-type: application/json" ...
 \`\`\`
 
 ## Supported operations
@@ -92,51 +86,44 @@ curl -s -H "x-api-key: $EVERCONTENT_API_KEY" -H "content-type: application/json"
 List projects:
 
 \`\`\`bash
-curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
-  "https://app.evercontent.io/api/projects"
-\`\`\`
-
-List projects for a customer:
-
-\`\`\`bash
-curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
-  "https://app.evercontent.io/api/customer/projects?customerId=CUSTOMER_ID"
+curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/v1/projects"
 \`\`\`
 
 List posts for a project:
 
 \`\`\`bash
-curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
-  "https://app.evercontent.io/api/projects/PROJECT_ID/posts"
+curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/v1/posts?projectId=PROJECT_ID"
 \`\`\`
 
 Get a post:
 
 \`\`\`bash
-curl -s -H "x-api-key: $EVERCONTENT_API_KEY" \\
-  "https://app.evercontent.io/api/projects/PROJECT_ID/posts/POST_ID"
+curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/v1/posts/POST_ID"
 \`\`\`
 
 Create a draft post:
 
 \`\`\`bash
 curl -s -X POST \\
-  -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
   -H "content-type: application/json" \\
   -d '{
+    "projectId": "PROJECT_ID",
     "title": "Draft title",
-    "brief": "Short brief",
-    "contentMarkdown": "# Draft content",
-    "keywords": ["keyword-1", "keyword-2"]
+    "content": "# Draft content",
+    "status": "draft"
   }' \\
-  "https://app.evercontent.io/api/projects/PROJECT_ID/posts"
+  "https://app.evercontent.io/api/v1/posts"
 \`\`\`
 
 Publish a post:
 
 \`\`\`bash
 curl -s -X POST \\
-  -H "x-api-key: $EVERCONTENT_API_KEY" \\
+  -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
   -H "content-type: application/json" \\
   -d '{}' \\
   "https://app.evercontent.io/api/v1/posts/POST_ID/publish"
@@ -144,10 +131,8 @@ curl -s -X POST \\
 
 ## Scope rules
 - If \`allowedProjectIds\` exists, never use a project outside that list.
-- If \`allowedCustomerIds\` exists, never use a customer outside that list.
-- If no allow-lists are configured, discovery is unrestricted.
+- If no project allow-list is configured, project discovery is unrestricted.
 - If a project action is requested without a \`projectId\`, use \`defaultProjectId\` if present.
-- If a customer-scoped listing is requested without a \`customerId\`, use \`defaultCustomerId\` if present.
 - Prefer project-scoped operations when a project ID is available.
 
 ## Safety
@@ -164,7 +149,7 @@ curl -s -X POST \\
     reviewSafeByDefault: true,
     auth: {
       type: "header-api-key",
-      header: "x-api-key",
+      header: "Authorization",
       secretRefField: "secretRef",
     },
     openclaw: {
@@ -188,24 +173,11 @@ curl -s -X POST \\
           },
           required: ["name"],
         },
-        defaultCustomerId: { type: "string", title: "Default customer ID" },
         defaultProjectId: { type: "string", title: "Default project ID" },
-        allowedCustomerIds: {
-          type: "array",
-          title: "Allowed customer IDs",
-          items: { type: "string" },
-        },
         allowedProjectIds: {
           type: "array",
           title: "Allowed project IDs",
           items: { type: "string" },
-        },
-        defaultScope: {
-          type: "string",
-          title: "Default scope",
-          description: "Choose the default lookup scope for this agent",
-          enum: ["customer", "project"],
-          default: "project",
         },
         canPublish: {
           type: "boolean",
@@ -218,7 +190,6 @@ curl -s -X POST \\
     },
     configExample: {
       secretRef: { name: "evercontent-api-key" },
-      defaultScope: "project",
       allowedProjectIds: ["project_456"],
       canPublish: false,
     },

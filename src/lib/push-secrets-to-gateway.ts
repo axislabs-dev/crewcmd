@@ -2,16 +2,14 @@
  * Push skill secrets from CrewCmd's vault to an OpenClaw gateway.
  *
  * Works for both local and remote gateways — uses the WebSocket RPC
- * `skills.update` method to set env vars on the runtime side. Secrets
- * never touch the filesystem or LLM context; they're injected into the
- * agent's process environment by the gateway.
+ * `skills.update` method to set native skill auth/env on the runtime side.
  *
  * Flow:
  * 1. Load the skill assignment + config from DB
  * 2. Collect all secretRef names from the config
  * 3. Resolve each secret from the company vault
- * 4. Map to env var names (from skill metadata or derived from slug)
- * 5. Connect to the gateway and call skills.update with the env map
+ * 4. Map to env/apiKey fields from skill metadata
+ * 5. Connect to the gateway and call skills.update with the resolved secret values
  */
 
 import { and, eq } from "drizzle-orm";
@@ -129,6 +127,7 @@ export async function pushSecretsToGateway(
     await client.skillsUpdate({
       skillKey: skill.slug,
       enabled: assignment.enabled,
+      ...(envMap.apiKey ? { apiKey: envMap.apiKey } : {}),
       env: envMap.env,
     });
 
@@ -149,6 +148,7 @@ export async function pushSecretsToGateway(
 // ─── Env Var Resolution ─────────────────────────────────────────────
 
 interface EnvMapResult {
+  apiKey?: string;
   env: Record<string, string>;
   errors: string[];
 }
@@ -196,7 +196,11 @@ async function resolveEnvMap(
     env[envVarName] = value;
   }
 
-  return { env, errors };
+  return {
+    apiKey: isApiKeySkill(metadata) ? env[primaryEnvVar] : undefined,
+    env,
+    errors,
+  };
 }
 
 /**
@@ -240,6 +244,11 @@ function getEnvVarForSecret(
 
   // For skills without auth metadata, the first (often only) secret is primary
   return primaryEnvVar;
+}
+
+function isApiKeySkill(metadata: Record<string, unknown>): boolean {
+  const auth = metadata.auth as Record<string, unknown> | undefined;
+  return auth?.type === "header-api-key";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

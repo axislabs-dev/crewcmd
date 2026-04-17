@@ -281,18 +281,21 @@ export function derivePrimaryEnvVar(slug: string): string {
 
 interface OpenClawSkillEntry {
   enabled: boolean;
+  apiKey?: string;
   env: Record<string, string>;
   config: Record<string, unknown>;
 }
 
 function buildSkillEntry(
   slug: string,
-  _skill: typeof skills.$inferSelect,
+  skill: typeof skills.$inferSelect,
   enabled: boolean,
   assignmentConfig: Record<string, unknown>,
   resolvedEnv: Record<string, string>
 ): OpenClawSkillEntry {
   const primaryEnv = derivePrimaryEnvVar(slug);
+  const metadata = isPlainObject(skill.metadata) ? skill.metadata : {};
+  const apiKey = resolveApiKeyForSkill(metadata, slug, resolvedEnv);
 
   // Use resolved secret values if available, otherwise leave a placeholder
   const env: Record<string, string> = Object.keys(resolvedEnv).length > 0
@@ -301,6 +304,7 @@ function buildSkillEntry(
 
   return {
     enabled,
+    ...(apiKey ? { apiKey } : {}),
     env,
     config: assignmentConfig,
   };
@@ -347,11 +351,27 @@ function getPrimaryEnvVarFromMetadata(metadata: Record<string, unknown>, slug: s
   return derivePrimaryEnvVar(slug);
 }
 
+function resolveApiKeyForSkill(
+  metadata: Record<string, unknown>,
+  slug: string,
+  resolvedEnv: Record<string, string>
+): string | undefined {
+  const auth = metadata.auth as Record<string, unknown> | undefined;
+  if (auth?.type !== "header-api-key") {
+    return undefined;
+  }
+
+  const primaryEnvVar = getPrimaryEnvVarFromMetadata(metadata, slug);
+  const apiKey = resolvedEnv[primaryEnvVar];
+  return typeof apiKey === "string" && apiKey.trim() ? apiKey : undefined;
+}
+
 async function refreshSkillViaGateway(params: {
   runtime: typeof companyRuntimes.$inferSelect;
   slug: string;
   resolvedEnv: Record<string, string>;
   enabled: boolean;
+  apiKey?: string;
 }): Promise<void> {
   const meta = params.runtime.metadata as Record<string, unknown> | null;
   const deviceKeyPem = meta?.devicePrivateKeyPem as string | undefined;
@@ -367,6 +387,7 @@ async function refreshSkillViaGateway(params: {
     await client.skillsUpdate({
       skillKey: params.slug,
       enabled: params.enabled,
+      ...(params.apiKey ? { apiKey: params.apiKey } : {}),
       ...(Object.keys(params.resolvedEnv).length > 0 ? { env: params.resolvedEnv } : {}),
     });
   } finally {
@@ -434,6 +455,7 @@ async function syncSkillViaFilesystem(params: {
         slug: params.slug,
         resolvedEnv: params.resolvedEnv,
         enabled: params.enabled,
+        apiKey: skillEntry.apiKey,
       });
     } catch (err) {
       console.warn(

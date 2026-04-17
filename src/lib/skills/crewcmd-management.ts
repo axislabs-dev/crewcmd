@@ -9,6 +9,13 @@ export const CREWCMD_MANAGEMENT_SKILL_METADATA = {
     type: "runtime-bearer",
     env: "HEARTBEAT_SECRET",
   },
+  openclaw: {
+    requires: {
+      bins: ["curl"],
+      env: ["HEARTBEAT_SECRET"],
+    },
+    primaryEnv: "HEARTBEAT_SECRET",
+  },
   capabilities: [
     "tasks:list",
     "tasks:get",

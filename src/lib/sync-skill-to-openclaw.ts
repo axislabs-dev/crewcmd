@@ -297,11 +297,14 @@ function buildSkillEntry(
   const primaryEnv = derivePrimaryEnvVar(slug);
   const metadata = isPlainObject(skill.metadata) ? skill.metadata : {};
   const apiKey = resolveApiKeyForSkill(metadata, slug, resolvedEnv);
+  const authType = resolveAuthType(metadata);
 
-  // Use resolved secret values if available, otherwise leave a placeholder
-  const env: Record<string, string> = Object.keys(resolvedEnv).length > 0
-    ? resolvedEnv
-    : { [primaryEnv]: "$(resolve-from-vault)" };
+  let env: Record<string, string> = {};
+  if (Object.keys(resolvedEnv).length > 0) {
+    env = resolvedEnv;
+  } else if (authType === "header-api-key") {
+    env = { [primaryEnv]: "$(resolve-from-vault)" };
+  }
 
   return {
     enabled,
@@ -365,6 +368,11 @@ function resolveApiKeyForSkill(
   const primaryEnvVar = getPrimaryEnvVarFromMetadata(metadata, slug);
   const apiKey = resolvedEnv[primaryEnvVar];
   return typeof apiKey === "string" && apiKey.trim() ? apiKey : undefined;
+}
+
+function resolveAuthType(metadata: Record<string, unknown>): string | undefined {
+  const auth = metadata.auth as Record<string, unknown> | undefined;
+  return typeof auth?.type === "string" ? auth.type : undefined;
 }
 
 async function refreshSkillViaGateway(params: {

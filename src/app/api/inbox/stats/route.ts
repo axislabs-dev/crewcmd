@@ -14,15 +14,6 @@ function emptyStats(): InboxStats {
   };
 }
 
-/** Seed stats returned when the table doesn't exist or is empty */
-function seedStats(): InboxStats {
-  return {
-    total: 6,
-    byPriority: { critical: 1, high: 3, normal: 2, low: 0 },
-    byType: { decision: 1, blocker: 1, completed: 1, question: 1, escalation: 1, approval: 1, update: 0 },
-  };
-}
-
 /**
  * GET /api/inbox/stats — Unread message counts by priority and type.
  * Query params: company_id
@@ -47,10 +38,7 @@ export async function GET(request: NextRequest) {
 
     const rows = (result.rows ?? []) as unknown as Array<{ priority: string; type: string; count: number }>;
 
-    if (rows.length === 0) {
-      // Return seed stats so the UI shows realistic counts
-      return NextResponse.json(seedStats());
-    }
+    if (rows.length === 0) return NextResponse.json(emptyStats());
 
     const stats = emptyStats();
 
@@ -69,6 +57,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats);
   } catch (error) {
     console.error("[api/inbox/stats] GET error:", error);
-    return NextResponse.json(seedStats());
+    return NextResponse.json(emptyStats());
   }
 }

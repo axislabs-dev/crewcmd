@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
+import { removeSkillFromGatewayAgentAllowlist } from "./openclaw-gateway-skill-assignment";
 import {
   defaultOpenClawWorkspaceRoot,
   resolveOpenClawWorkspaceRoot,
@@ -70,6 +71,18 @@ export async function uninstallSkillFromOpenClaw(
     await removeAgentSkillAllowlistEntry(openclawJsonPath, data.agent.runtimeRef ?? data.agent.id, data.skill.slug);
   } catch (err) {
     errors.push(`Failed to update agent skill allowlist: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (data.runtime?.gatewayUrl) {
+    try {
+      await removeSkillFromGatewayAgentAllowlist({
+        runtime: data.runtime,
+        agentId: data.agent.runtimeRef ?? data.agent.id,
+        slug: data.skill.slug,
+      });
+    } catch (err) {
+      warnings.push(`Gateway allowlist removal failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const shouldRemoveConfigEntry = await shouldRemoveRuntimeConfigEntry({

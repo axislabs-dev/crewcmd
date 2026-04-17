@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
-import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "./openclaw-workspace-resolver";
+import {
+  defaultOpenClawWorkspaceRoot,
+  resolveOpenClawWorkspaceRoot,
+} from "./openclaw-workspace-resolver";
 
 export interface UninstallSkillOptions {
   skillId: string;
@@ -53,21 +56,20 @@ export async function uninstallSkillFromOpenClaw(
     };
   }
 
-  const resolvedWorkspacePath = await resolveOpenClawWorkspacePath({
+  const sharedWorkspaceRoot =
+    await resolveOpenClawWorkspaceRoot({
     runtimeRef: data.agent.runtimeRef ?? data.agent.id,
     workspacePath: data.agent.workspacePath ?? null,
-  });
+    }) ?? defaultOpenClawWorkspaceRoot();
   const skillDir = skillDirectoryFor({
-    runtimeRef: data.agent.runtimeRef ?? data.agent.id,
-    workspacePath: resolvedWorkspacePath,
+    workspaceRoot: sharedWorkspaceRoot,
     slug: data.skill.slug,
   });
 
   try {
-    await rm(skillDir, { recursive: true, force: true });
-    removedPaths.push(skillDir);
+    await removeAgentSkillAllowlistEntry(openclawJsonPath, data.agent.runtimeRef ?? data.agent.id, data.skill.slug);
   } catch (err) {
-    errors.push(`Failed to remove skill directory: ${err instanceof Error ? err.message : String(err)}`);
+    errors.push(`Failed to update agent skill allowlist: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const shouldRemoveConfigEntry = await shouldRemoveRuntimeConfigEntry({
@@ -78,6 +80,13 @@ export async function uninstallSkillFromOpenClaw(
 
   let removedConfigEntry = false;
   if (shouldRemoveConfigEntry) {
+    try {
+      await rm(skillDir, { recursive: true, force: true });
+      removedPaths.push(skillDir);
+    } catch (err) {
+      errors.push(`Failed to remove skill directory: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     try {
       removedConfigEntry = await removeOpenClawSkillEntry(openclawJsonPath, data.skill.slug);
     } catch (err) {
@@ -212,7 +221,7 @@ async function disableSkillViaGateway(
   try {
     await client.connect();
     await client.skillsUpdate({
-      slug,
+      skillKey: slug,
       enabled: false,
     });
   } finally {
@@ -221,13 +230,51 @@ async function disableSkillViaGateway(
 }
 
 function skillDirectoryFor(params: {
-  runtimeRef: string;
-  workspacePath: string | null;
+  workspaceRoot: string;
   slug: string;
 }): string {
-  if (params.workspacePath) {
-    return join(params.workspacePath, "skills", params.slug);
+  return join(params.workspaceRoot, "skills", params.slug);
+}
+
+async function removeAgentSkillAllowlistEntry(
+  configPath: string,
+  runtimeRef: string,
+  slug: string
+): Promise<void> {
+  let config: Record<string, unknown>;
+
+  try {
+    config = JSON.parse(await readFile(configPath, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return;
   }
 
-  return join(legacyOpenClawWorkspacePath(params.runtimeRef), "skills", params.slug);
+  const agentsConfig = config.agents as Record<string, unknown> | undefined;
+  const agentList = agentsConfig?.list;
+  if (!Array.isArray(agentList)) {
+    return;
+  }
+
+  const agentEntry = agentList.find((value) => {
+    if (!isPlainObject(value)) return false;
+    return value.id === runtimeRef;
+  });
+  if (!isPlainObject(agentEntry) || !Array.isArray(agentEntry.skills)) {
+    return;
+  }
+
+  const nextSkills = agentEntry.skills
+    .filter((value: unknown): value is string => typeof value === "string")
+    .filter((value) => normalizeSkillName(value) !== slug);
+  agentEntry.skills = nextSkills;
+
+  await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+}
+
+function normalizeSkillName(value: string): string {
+  return value.replace(/^\/+/, "");
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

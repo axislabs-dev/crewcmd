@@ -115,6 +115,7 @@ export async function POST(request: Request) {
         runtimeId: agents.runtimeId,
         runtimeRef: agents.runtimeRef,
         name: agents.name,
+        workspacePath: agents.workspacePath,
       })
       .from(agents)
       .where(eq(agents.companyId, companyId)));
@@ -148,39 +149,82 @@ export async function POST(request: Request) {
       // Reattach if this agent identity is already known
       const agentToReattach = existingByRef ?? existingDetached;
       if (agentToReattach) {
-        const [updatedAgent] = await withRetry(() => db!
-          .update(agents)
-          .set({
+        try {
+          const conflictingRow = existingAgents.find((row) => {
+            if (row.id === agentToReattach.id) return false;
+            if (row.callsign.toLowerCase() !== callsign.toLowerCase()) return false;
+            return isLegacyDuplicate(row, agent);
+          });
+
+          if (conflictingRow) {
+            await withRetry(() =>
+              db!.delete(agents).where(eq(agents.id, conflictingRow.id))
+            );
+
+            const conflictIndex = existingAgents.findIndex((row) => row.id === conflictingRow.id);
+            if (conflictIndex >= 0) existingAgents.splice(conflictIndex, 1);
+            existingCallsigns.delete(conflictingRow.callsign.toLowerCase());
+            detachedByCallsign.delete(conflictingRow.callsign.toLowerCase());
+          }
+
+          const [updatedAgent] = await withRetry(() => db!
+            .update(agents)
+            .set({
+              callsign,
+              name: agent.name || agent.id,
+              title: agent.title || "Agent",
+              emoji: agent.emoji || "🤖",
+              color: COLORS[i % COLORS.length],
+              status: "online",
+              soulContent: agent.description || null,
+              adapterType: "openclaw_gateway",
+              adapterConfig: {
+                url: runtime.httpUrl,
+                headers: runtime.authToken
+                  ? { Authorization: `Bearer ${runtime.authToken}` }
+                  : undefined,
+              },
+              role: "engineer",
+              model: agent.model || null,
+              workspacePath: agent.workspace || null,
+              runtimeId,
+              runtimeRef: agent.id,
+              reportsTo: agent.reportsTo || null,
+              avatarUrl: agent.avatarUrl || null,
+              ownerType: effectiveOwnerType,
+              ownerUserId: effectiveOwnerUserId,
+              ownerCompanyId: effectiveOwnerCompanyId,
+              visibility: effectiveVisibility,
+            })
+            .where(eq(agents.id, agentToReattach.id))
+            .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
+
+          const existingIndex = existingAgents.findIndex((row) => row.id === agentToReattach.id);
+          if (existingIndex >= 0) {
+            existingAgents[existingIndex] = {
+              ...existingAgents[existingIndex],
+              callsign,
+              runtimeId,
+              runtimeRef: agent.id,
+              name: agent.name || agent.id,
+              workspacePath: agent.workspace || null,
+            };
+          }
+          existingCallsigns.add(callsign.toLowerCase());
+          existingByRuntimeRef.set(agent.id, {
+            ...agentToReattach,
             callsign,
-            name: agent.name || agent.id,
-            title: agent.title || "Agent",
-            emoji: agent.emoji || "🤖",
-            color: COLORS[i % COLORS.length],
-            status: "online",
-            soulContent: agent.description || null,
-            adapterType: "openclaw_gateway",
-            adapterConfig: {
-              url: runtime.httpUrl,
-              headers: runtime.authToken
-                ? { Authorization: `Bearer ${runtime.authToken}` }
-                : undefined,
-            },
-            role: "engineer",
-            model: agent.model || null,
-            workspacePath: agent.workspace || null,
             runtimeId,
             runtimeRef: agent.id,
-            reportsTo: agent.reportsTo || null,
-            avatarUrl: agent.avatarUrl || null,
-            ownerType: effectiveOwnerType,
-            ownerUserId: effectiveOwnerUserId,
-            ownerCompanyId: effectiveOwnerCompanyId,
-            visibility: effectiveVisibility,
-          })
-          .where(eq(agents.id, agentToReattach.id))
-          .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
-
-        reattached.push(updatedAgent);
+            name: agent.name || agent.id,
+            workspacePath: agent.workspace || null,
+          });
+          detachedByCallsign.delete(callsign.toLowerCase());
+          reattached.push(updatedAgent);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          skipped.push({ id: agent.id, reason: msg });
+        }
         continue;
       }
 
@@ -258,4 +302,25 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function isLegacyDuplicate(
+  existing: {
+    runtimeId: string | null;
+    runtimeRef: string | null;
+    name: string;
+    workspacePath: string | null;
+  },
+  agent: DiscoveredAgent
+): boolean {
+  if (existing.runtimeId) return false;
+  if (existing.runtimeRef) return false;
+
+  const existingName = existing.name.trim().toLowerCase();
+  const incomingName = (agent.name || agent.id).trim().toLowerCase();
+  if (existingName === incomingName) return true;
+
+  const existingWorkspace = (existing.workspacePath || "").trim();
+  const incomingWorkspace = (agent.workspace || "").trim();
+  return !!existingWorkspace && !!incomingWorkspace && existingWorkspace === incomingWorkspace;
 }

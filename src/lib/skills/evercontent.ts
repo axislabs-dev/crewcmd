@@ -15,7 +15,7 @@ export const EVERCONTENT_SKILL_TEMPLATE: InstallableSkillTemplate = {
   description:
     "Create, review, and manage EverContent drafts with scoped project access and publish disabled by default.",
   source: "system",
-  version: "0.3.0",
+  version: "0.4.0",
   sourceUrl: "https://evercontent.co",
   content: `# EverContent Skill
 
@@ -80,7 +80,15 @@ curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" -H "content-type: applic
 - \`posts.list\`
 - \`posts.get\`
 - \`posts.create\`
+- \`posts.generate\`
+- \`posts.generateBulk\`
 - \`posts.publish\` (only when \`canPublish\` is \`true\`)
+
+## When to use each operation
+- Use \`posts.create\` when the user already has the article copy and wants to save a draft directly.
+- Use \`posts.generate\` when the user gives a keyword, title idea, brief, transcript, or content direction and wants EverContent to generate the draft internally.
+- Use \`posts.generateBulk\` when the user provides multiple keywords or article briefs and wants multiple generated drafts queued at once.
+- Use \`posts.publish\` only when the user explicitly asks to publish and \`canPublish\` is \`true\`.
 
 ## API patterns
 List projects:
@@ -119,6 +127,47 @@ curl -s -X POST \\
   "https://app.evercontent.io/api/v1/posts"
 \`\`\`
 
+Generate a draft with EverContent's internal tools:
+
+\`\`\`bash
+curl -s -X POST \\
+  -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "projectId": "PROJECT_ID",
+    "primaryKeyword": "best payroll software for startups",
+    "title": "Optional draft title",
+    "targetAudience": "startup founders",
+    "industry": "SaaS",
+    "customInstructions": "Focus on practical buying criteria"
+  }' \\
+  "https://app.evercontent.io/api/v1/posts/generate"
+\`\`\`
+
+Bulk generate multiple drafts:
+
+\`\`\`bash
+curl -s -X POST \\
+  -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "projectId": "PROJECT_ID",
+    "jobs": [
+      {
+        "primaryKeyword": "best payroll software for startups",
+        "targetAudience": "startup founders",
+        "industry": "SaaS"
+      },
+      {
+        "primaryKeyword": "startup payroll compliance checklist",
+        "targetAudience": "operations leaders",
+        "industry": "SaaS"
+      }
+    ]
+  }' \\
+  "https://app.evercontent.io/api/v1/posts/generate-bulk"
+\`\`\`
+
 Publish a post:
 
 \`\`\`bash
@@ -134,9 +183,11 @@ curl -s -X POST \\
 - If no project allow-list is configured, project discovery is unrestricted.
 - If a project action is requested without a \`projectId\`, use \`defaultProjectId\` if present.
 - Prefer project-scoped operations when a project ID is available.
+- Bulk generation supports up to 10 jobs per request.
 
 ## Safety
 - Default to draft creation and review-safe behavior.
+- Prefer \`posts.generate\` or \`posts.generateBulk\` when the user wants EverContent to create the article body internally.
 - Treat publish as privileged.
 - If \`canPublish\` is not \`true\`, refuse publish and explain that publishing is disabled.
 - Never print the API key in output.

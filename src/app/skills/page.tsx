@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 
 interface Skill {
   id: string;
-  companyId: string;
+  companyId: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -112,6 +112,7 @@ export default function SkillsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceSkill | null>(null);
   const [tab, setTab] = useState<"installed" | "browse" | "custom">("installed");
@@ -149,9 +150,11 @@ export default function SkillsPage() {
   const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
   const [importingBuiltIn, setImportingBuiltIn] = useState(false);
 
-  const fetchSkills = useCallback(async (cId: string) => {
+  const fetchSkills = useCallback(async (activeWorkspaceId: string, cId?: string | null) => {
     try {
-      const res = await fetch(`/api/skills?company_id=${cId}`);
+      const params = new URLSearchParams({ workspaceId: activeWorkspaceId });
+      if (cId) params.set("company_id", cId);
+      const res = await fetch(`/api/skills?${params.toString()}`);
       if (res.ok) {
         setSkills(await res.json());
       }
@@ -171,9 +174,9 @@ export default function SkillsPage() {
     }
   }, [addToast]);
 
-  const fetchAgents = useCallback(async () => {
+  const fetchAgents = useCallback(async (activeWorkspaceId: string) => {
     try {
-      const res = await fetch("/api/agents");
+      const res = await fetch(`/api/agents?workspaceId=${encodeURIComponent(activeWorkspaceId)}`);
       if (res.ok) {
         const data = await res.json();
         setAgents(data.agents || []);
@@ -184,15 +187,20 @@ export default function SkillsPage() {
   }, [addToast]);
 
   useEffect(() => {
-    const cookie = document.cookie
+    const companyCookie = document.cookie
       .split("; ")
       .find((c) => c.startsWith("active_company="));
-    const cId = cookie?.split("=")[1] ?? null;
+    const workspaceCookie = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("active_workspace="));
+    const cId = companyCookie?.split("=")[1] ?? null;
+    const wId = workspaceCookie?.split("=")[1] ?? null;
     setCompanyId(cId);
+    setWorkspaceId(wId);
 
     const init = async () => {
-      if (cId) await fetchSkills(cId);
-      await Promise.all([fetchMarketplace(), fetchAgents()]);
+      if (wId) await fetchSkills(wId, cId);
+      await Promise.all([fetchMarketplace(), wId ? fetchAgents(wId) : Promise.resolve()]);
       setLoading(false);
     };
     init();
@@ -214,7 +222,7 @@ export default function SkillsPage() {
 
   // Ensure a built-in skill has a DB record, returns the real DB skill ID
   const ensureBuiltInSkill = useCallback(async (skill: Skill): Promise<string | null> => {
-    if (!companyId) return null;
+    if (!companyId || !workspaceId) return null;
     // Check if a DB record already exists for this slug
     const existing = skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"));
     if (existing) return existing.id;
@@ -231,12 +239,13 @@ export default function SkillsPage() {
           description: skill.description,
           source: "built-in",
           companyId,
+          workspaceId,
           metadata: skill.metadata || {},
         }),
       });
       if (res.ok) {
         const created = await res.json();
-        await fetchSkills(companyId);
+        await fetchSkills(workspaceId, companyId);
         return created.id;
       }
     } catch {
@@ -245,7 +254,7 @@ export default function SkillsPage() {
       setImportingBuiltIn(false);
     }
     return null;
-  }, [companyId, skills, fetchSkills]);
+  }, [companyId, workspaceId, skills, fetchSkills]);
 
   // Toggle agent assignment for the selected skill
   const toggleAgentAssignment = useCallback(async (skill: Skill, agentId: string) => {
@@ -329,7 +338,7 @@ export default function SkillsPage() {
   }
 
   async function handleInstall(ms: MarketplaceSkill) {
-    if (!companyId) return;
+    if (!companyId || !workspaceId) return;
     setInstalling(ms.slug);
     try {
       const res = await fetch("/api/skills/import", {
@@ -345,10 +354,11 @@ export default function SkillsPage() {
           content: ms.content,
           metadata: ms.metadata,
           companyId,
+          workspaceId,
         }),
       });
       if (res.ok) {
-        await fetchSkills(companyId);
+        await fetchSkills(workspaceId, companyId);
         addToast(`Installed ${ms.name}`, "success");
       } else {
         addToast(`Failed to install ${ms.name}`);
@@ -361,7 +371,7 @@ export default function SkillsPage() {
   }
 
   async function handleCreateCustom() {
-    if (!companyId || !customName.trim()) return;
+    if (!companyId || !workspaceId || !customName.trim()) return;
     setSavingCustom(true);
     try {
       const slug = customName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -375,6 +385,7 @@ export default function SkillsPage() {
           content: customContent || null,
           source: "custom",
           companyId,
+          workspaceId,
         }),
       });
       if (res.ok) {
@@ -382,7 +393,7 @@ export default function SkillsPage() {
         setCustomName("");
         setCustomDescription("");
         setCustomContent("");
-        await fetchSkills(companyId);
+        await fetchSkills(workspaceId, companyId);
         addToast("Custom skill created", "success");
       } else {
         addToast("Failed to create custom skill");
@@ -411,7 +422,7 @@ export default function SkillsPage() {
         const updated = await res.json();
         setSelectedSkill(updated);
         setEditing(false);
-        if (companyId) await fetchSkills(companyId);
+        if (workspaceId) await fetchSkills(workspaceId, companyId);
         addToast("Skill updated", "success");
       } else {
         addToast("Failed to save skill edits");
@@ -428,7 +439,7 @@ export default function SkillsPage() {
       const res = await fetch(`/api/skills/${skillId}`, { method: "DELETE" });
       if (res.ok) {
         setSelectedSkill(null);
-        if (companyId) await fetchSkills(companyId);
+        if (workspaceId) await fetchSkills(workspaceId, companyId);
       } else {
         addToast("Failed to delete skill");
       }
@@ -474,12 +485,12 @@ export default function SkillsPage() {
     );
   }
 
-  if (!companyId) {
+  if (!workspaceId) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="text-sm text-[var(--text-tertiary)]">No company selected</p>
-          <p className="mt-1 text-xs text-[var(--text-tertiary)]">Select a company from the sidebar to manage skills.</p>
+          <p className="text-sm text-[var(--text-tertiary)]">No workspace selected</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">Select a workspace from the sidebar to manage skills.</p>
         </div>
       </div>
     );
@@ -624,10 +635,10 @@ export default function SkillsPage() {
                               e.stopPropagation();
                               handleInstall(ms);
                             }}
-                            disabled={installing === ms.slug}
+                            disabled={!companyId || installing === ms.slug}
                             className="rounded-full border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                           >
-                            {installing === ms.slug ? "..." : "INSTALL"}
+                            {!companyId ? "COMPANY ONLY" : installing === ms.slug ? "..." : "INSTALL"}
                           </button>
                         )}
                       </div>
@@ -641,7 +652,7 @@ export default function SkillsPage() {
           )}
 
           {/* CUSTOM TAB */}
-          {tab === "custom" && (
+          {tab === "custom" && companyId && (
             <>
               <button
                 onClick={() => setShowCustomForm(true)}
@@ -676,6 +687,13 @@ export default function SkillsPage() {
                 </div>
               )}
             </>
+          )}
+
+          {tab === "custom" && !companyId && (
+            <div className="py-8 text-center">
+              <p className="font-mono text-[10px] text-[var(--text-tertiary)]">Custom skills are company-scoped.</p>
+              <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">Switch to a company workspace to create or install them.</p>
+            </div>
           )}
         </div>
       </div>
@@ -942,10 +960,14 @@ export default function SkillsPage() {
                 ) : (
                   <button
                     onClick={() => handleInstall(selectedMarketplace)}
-                    disabled={installing === selectedMarketplace.slug}
+                    disabled={!companyId || installing === selectedMarketplace.slug}
                     className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                   >
-                    {installing === selectedMarketplace.slug ? "INSTALLING..." : "INSTALL SKILL"}
+                    {!companyId
+                      ? "COMPANY ONLY"
+                      : installing === selectedMarketplace.slug
+                        ? "INSTALLING..."
+                        : "INSTALL SKILL"}
                   </button>
                 )}
               </div>

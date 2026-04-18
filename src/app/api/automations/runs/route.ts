@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { listCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
+import { GatewayClient, resolveDeviceIdentity } from "@/lib/gateway-client";
 
 export const dynamic = "force-dynamic";
-
-interface RunEntry {
-  ts: string;
-  jobId: string;
-  action: string;
-  status: string;
-  summary?: string;
-  error?: string;
-  delivered?: boolean;
-  deliveryStatus?: string;
-  sessionId?: string;
-}
 
 export async function GET(req: NextRequest) {
   const jobId = req.nextUrl.searchParams.get("job_id");
@@ -25,44 +12,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "job_id is required" }, { status: 400 });
   }
 
-  const runsPath = join(homedir(), ".openclaw", "cron", "runs", `${jobId}.jsonl`);
-
-  if (!existsSync(runsPath)) {
-    return NextResponse.json({ runs: [] });
-  }
-
   try {
-    const content = readFileSync(runsPath, "utf-8");
-    const lines = content.trim().split("\n").filter(Boolean);
-
-    const finished: {
-      ts: string;
-      status: string;
-      summary?: string;
-      error?: string;
-      sessionId?: string;
-    }[] = [];
-
-    for (const line of lines) {
-      try {
-        const entry: RunEntry = JSON.parse(line);
-        if (entry.action === "finished") {
-          finished.push({
-            ts: entry.ts,
-            status: entry.status,
-            summary: entry.summary,
-            error: entry.error,
-            sessionId: entry.sessionId,
-          });
-        }
-      } catch {
-        // skip malformed lines
-      }
+    const { runtime } = await listCronJobsFromRuntime();
+    if (!runtime) {
+      return NextResponse.json({ runs: [] });
     }
 
-    // Sort by timestamp descending, take most recent N
-    finished.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-    const runs = finished.slice(0, limit);
+    const meta = (runtime.metadata || {}) as Record<string, unknown>;
+    const deviceKeyPem =
+      typeof meta.devicePrivateKeyPem === "string" ? meta.devicePrivateKeyPem : undefined;
+    const client = new GatewayClient(
+      runtime.gatewayUrl,
+      runtime.authToken || null,
+      resolveDeviceIdentity(deviceKeyPem),
+      15000
+    );
+
+    let runs: Array<Record<string, unknown>> = [];
+    try {
+      await client.connect();
+      const result = await client.cronRuns({ id: jobId, limit });
+      runs = Array.isArray(result.runs) ? result.runs : [];
+    } finally {
+      client.close();
+    }
 
     return NextResponse.json({ runs });
   } catch (err) {

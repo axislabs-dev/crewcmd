@@ -186,10 +186,21 @@ Content-Type: application/json
 ### List Agents
 
 \`\`\`
-GET ${baseUrl}/api/agents
+GET ${baseUrl}/api/agents?companyId=${companyId}
 \`\`\`
 
-Returns all agents with status, current task, skills, and config.
+Use \`companyId\` when calling under runtime bearer auth so CrewCmd can scope the result correctly.
+
+Returns agents with:
+- \`id\` — CrewCmd agent UUID
+- \`callsign\` — dispatchable agent callsign for \`/api/agents/{callsign}/task\`
+- \`runtimeRef\` — runtime agent reference when available
+- status, current task, workspace/runtime metadata
+
+For queue dispatch:
+1. list agents for the company
+2. match task \`assignedAgentId\` to agent \`id\`
+3. use that agent's \`callsign\` when dispatching work
 
 ### Get / Update Agent
 
@@ -218,8 +229,14 @@ GET  ${baseUrl}/api/agents/{callsign}/output/stream
 POST ${baseUrl}/api/agents/{callsign}/task
 Content-Type: application/json
 
-{ "taskId": "uuid-of-task" }
+{
+  "taskId": "uuid-of-task",
+  "prompt": "Concrete work instructions for the agent"
+}
 \`\`\`
+
+This endpoint requires a real \`prompt\`. It does not infer task content automatically.
+Always include the task title, summary, constraints, and what the agent should update in CrewCmd.
 
 ### Agent Skills
 

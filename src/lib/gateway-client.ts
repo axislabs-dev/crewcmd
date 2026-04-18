@@ -127,6 +127,13 @@ export interface GatewayCronListResult {
   nextOffset?: number | null;
 }
 
+export interface GatewayCronRunsResult {
+  runs: Array<Record<string, unknown>>;
+  total?: number;
+  limit?: number;
+  offset?: number;
+}
+
 export interface DiscoveredAgent {
   id: string;
   name: string;
@@ -516,6 +523,13 @@ export class GatewayClient {
 
   async cronRemove(id: string): Promise<{ ok: boolean; removed?: boolean }> {
     return this.rpc<{ ok: boolean; removed?: boolean }>("cron.remove", { id });
+  }
+
+  async cronRuns(params: {
+    id: string;
+    limit?: number;
+  }): Promise<GatewayCronRunsResult> {
+    return this.rpc<GatewayCronRunsResult>("cron.runs", params);
   }
 
   async listAgentFiles(agentId: string): Promise<GatewayFilesListResult> {

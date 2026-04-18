@@ -1,21 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execSync } from "child_process";
+import { db, withRetry } from "@/db";
+import { cronJobs } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { listCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
 
 export const dynamic = "force-dynamic";
-
-function execOpenClaw(command: string): boolean {
-  try {
-    execSync(`openclaw ${command}`, {
-      timeout: 15000,
-      encoding: "utf-8",
-      env: { ...process.env },
-    });
-    return true;
-  } catch (err) {
-    console.error(`[api/schedules] Failed to exec: openclaw ${command}`, err);
-    return false;
-  }
-}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -35,14 +24,47 @@ export async function PATCH(
       return NextResponse.json({ error: "enabled (boolean) is required" }, { status: 400 });
     }
 
-    const command = enabled ? "cron enable" : "cron disable";
-    const success = execOpenClaw(`${command} ${id}`);
-
-    if (!success) {
-      return NextResponse.json({ error: "Failed to update cron job" }, { status: 500 });
+    const { runtime, jobs } = await listCronJobsFromRuntime();
+    if (!runtime) {
+      return NextResponse.json({ error: "No connected runtime found" }, { status: 404 });
     }
 
-    return NextResponse.json({ id, enabled });
+    const target = jobs.find((job) => job.id === id);
+    if (!target) {
+      return NextResponse.json({ error: "Cron job not found on runtime" }, { status: 404 });
+    }
+
+    const meta = (runtime.metadata || {}) as Record<string, unknown>;
+    const { GatewayClient, resolveDeviceIdentity } = await import("@/lib/gateway-client");
+    const deviceKeyPem =
+      typeof meta.devicePrivateKeyPem === "string" ? meta.devicePrivateKeyPem : undefined;
+    const client = new GatewayClient(
+      runtime.gatewayUrl,
+      runtime.authToken || null,
+      resolveDeviceIdentity(deviceKeyPem),
+      15000
+    );
+
+    try {
+      await client.connect();
+      await client.cronUpdate({
+        id,
+        patch: { enabled },
+      });
+    } finally {
+      client.close();
+    }
+
+    if (db) {
+      await withRetry(() =>
+        db!
+          .update(cronJobs)
+          .set({ enabled, updatedAt: new Date() })
+          .where(eq(cronJobs.id, id))
+      );
+    }
+
+    return NextResponse.json({ id, enabled, runtimeId: runtime.id });
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }

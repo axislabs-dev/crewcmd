@@ -5,19 +5,39 @@ import {
   buildAgentReadWhere,
   canManageCompanyOwnedAgent,
   getAgentAccessContext,
+  type AgentAccessContext,
   normalizeVisibilityForCreation,
   resolveRuntimeOwnership,
 } from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!db) {
     return NextResponse.json({ agents: [], source: "none" });
   }
 
   try {
-    const access = await getAgentAccessContext();
+    const authHeader = request.headers.get("authorization");
+    const expectedToken = process.env.HEARTBEAT_SECRET?.trim();
+    const isHeartbeatBearer =
+      !!expectedToken &&
+      !!authHeader &&
+      authHeader.startsWith("Bearer ") &&
+      authHeader.slice(7) === expectedToken;
+
+    const requestedCompanyId =
+      request.nextUrl.searchParams.get("companyId") ??
+      request.nextUrl.searchParams.get("company_id");
+
+    const access: AgentAccessContext = isHeartbeatBearer && requestedCompanyId
+      ? {
+          userId: null,
+          activeCompanyId: requestedCompanyId,
+          memberships: [{ companyId: requestedCompanyId, role: "owner" }],
+        }
+      : await getAgentAccessContext();
+
     const where = buildAgentReadWhere(access);
     if (!where) return NextResponse.json({ agents: [], source: "db" });
 
@@ -52,6 +72,7 @@ export async function GET() {
         canvasPosition: agent.canvasPosition ?? null,
         avatarUrl: agent.avatarUrl ?? null,
         runtimeId: agent.runtimeId ?? null,
+        runtimeRef: agent.runtimeRef ?? null,
         ownerType: agent.ownerType,
         ownerUserId: agent.ownerUserId ?? null,
         ownerCompanyId: agent.ownerCompanyId ?? null,
@@ -68,6 +89,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const { requireAuth } = await import("@/lib/require-auth");
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { cronJobs } from "@/db/schema";
 import { sql, notInArray } from "drizzle-orm";
+import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ function humanSchedule(sched: Record<string, unknown>): string {
 }
 
 export async function POST(req: NextRequest) {
-  const secret = process.env.HEARTBEAT_SECRET;
+  const secret = await getHeartbeatSecret();
   if (!secret) return NextResponse.json({ error: "Server not configured" }, { status: 500 });
 
   const auth = req.headers.get("authorization");

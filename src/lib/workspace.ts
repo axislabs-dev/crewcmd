@@ -12,6 +12,7 @@ import {
   type companyRoleEnum,
 } from "@/db/schema";
 import { resolveCurrentUser } from "@/lib/resolve-user";
+import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 export type CompanyRole = typeof companyRoleEnum.enumValues[number];
 export type WorkspaceType = "personal" | "company";
@@ -41,7 +42,7 @@ export interface WorkspaceSummary extends WorkspaceRecord {
 
 export async function isHeartbeatBearerRequest(request?: Request | NextRequest) {
   const authHeader = request?.headers?.get("authorization");
-  const expectedToken = process.env.HEARTBEAT_SECRET?.trim();
+  const expectedToken = await getHeartbeatSecret();
   return !!expectedToken && !!authHeader && authHeader === `Bearer ${expectedToken}`;
 }
 

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasHeartbeatSecret, matchesHeartbeatBearerToken } from "@/lib/heartbeat-secret";
 
-export function validateHeartbeatAuth(req: NextRequest): NextResponse | null {
-  const expectedToken = process.env.HEARTBEAT_SECRET;
-
-  // Local dev: no secret configured = allow all heartbeats (zero-config)
-  if (!expectedToken) {
+export async function validateHeartbeatAuth(req: NextRequest): Promise<NextResponse | null> {
+  const expected = await matchesHeartbeatBearerToken(req.headers.get("authorization"));
+  const hasConfiguredSecret = await hasHeartbeatSecret();
+  if (!hasConfiguredSecret) {
     return null;
   }
 
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
+  if (!expected) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

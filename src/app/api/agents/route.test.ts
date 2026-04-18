@@ -24,22 +24,20 @@ const mockAgents = [
   },
 ];
 
-const mockFromAgents = vi.fn();
 const mockFromHeartbeats = vi.fn();
+const mockListWorkspaceAgents = vi.fn();
+const mockGetAgentWorkspaceIds = vi.fn();
+const mockResolveAccessibleWorkspace = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
     select: () => ({
       from: (table: symbol) => ({
-        where: () => {
-          if (table === Symbol.for("agents")) return mockFromAgents();
-          return mockFromHeartbeats();
-        },
         catch: (...args: Parameters<Promise<unknown>["catch"]>) => mockFromHeartbeats().catch(...args),
         then: (...args: Parameters<Promise<unknown>["then"]>) => {
-          if (table === Symbol.for("agents")) return mockFromAgents().then(...args);
           return mockFromHeartbeats().then(...args);
         },
+        where: () => mockFromHeartbeats(),
       }),
     }),
   },
@@ -52,15 +50,23 @@ vi.mock("@/db/schema", () => ({
 }));
 
 vi.mock("@/lib/agent-access", () => ({
+  canManageCompanyOwnedAgent: vi.fn(() => true),
+  normalizeVisibilityForCreation: vi.fn(() => "private"),
+  resolveRuntimeOwnership: vi.fn(async () => null),
   getAgentAccessContext: vi.fn(async () => ({
     userId: "user-1",
     activeCompanyId: null,
     memberships: [],
   })),
-  buildAgentReadWhere: vi.fn(() => ({ mocked: true })),
-  canManageCompanyOwnedAgent: vi.fn(() => true),
-  normalizeVisibilityForCreation: vi.fn(() => "private"),
-  resolveRuntimeOwnership: vi.fn(async () => null),
+}));
+
+vi.mock("@/lib/workspace", () => ({
+  isHeartbeatBearerRequest: vi.fn(async () => false),
+  listWorkspaceAgents: (...args: unknown[]) => mockListWorkspaceAgents(...args),
+  getAgentWorkspaceIds: (...args: unknown[]) => mockGetAgentWorkspaceIds(...args),
+  resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
+  grantAgentDefaultWorkspace: vi.fn(async () => null),
+  grantAgentToWorkspace: vi.fn(async () => null),
 }));
 
 import { GET } from "./route";
@@ -80,7 +86,9 @@ function makeRequest(url = "http://localhost/api/agents") {
 describe("GET /api/agents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFromAgents.mockResolvedValue(mockAgents);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1" });
+    mockListWorkspaceAgents.mockResolvedValue(mockAgents);
+    mockGetAgentWorkspaceIds.mockResolvedValue(["ws-1"]);
     mockFromHeartbeats.mockResolvedValue([]);
   });
 
@@ -96,7 +104,7 @@ describe("GET /api/agents", () => {
   });
 
   it("returns source 'none' when no agents", async () => {
-    mockFromAgents.mockResolvedValue([]);
+    mockListWorkspaceAgents.mockResolvedValue([]);
 
     const res = await GET(makeRequest());
     const body = await res.json();

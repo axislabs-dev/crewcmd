@@ -2,13 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import {
-  buildAgentReadWhere,
   canManageCompanyOwnedAgent,
   getAgentAccessContext,
-  type AgentAccessContext,
   normalizeVisibilityForCreation,
   resolveRuntimeOwnership,
 } from "@/lib/agent-access";
+import {
+  getAgentWorkspaceIds,
+  grantAgentDefaultWorkspace,
+  grantAgentToWorkspace,
+  isHeartbeatBearerRequest,
+  listWorkspaceAgents,
+  resolveAccessibleWorkspace,
+} from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -18,43 +24,42 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const authHeader = request.headers.get("authorization");
-    const expectedToken = process.env.HEARTBEAT_SECRET?.trim();
-    const isHeartbeatBearer =
-      !!expectedToken &&
-      !!authHeader &&
-      authHeader.startsWith("Bearer ") &&
-      authHeader.slice(7) === expectedToken;
-
+    const isHeartbeatBearer = await isHeartbeatBearerRequest(request);
     const requestedCompanyId =
       request.nextUrl.searchParams.get("companyId") ??
       request.nextUrl.searchParams.get("company_id");
+    const requestedWorkspaceId = request.nextUrl.searchParams.get("workspaceId");
+    const runtimeId = request.nextUrl.searchParams.get("runtimeId");
 
-    const access: AgentAccessContext = isHeartbeatBearer && requestedCompanyId
-      ? {
-          userId: null,
-          activeCompanyId: requestedCompanyId,
-          memberships: [{ companyId: requestedCompanyId, role: "owner" }],
-        }
-      : await getAgentAccessContext();
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: requestedWorkspaceId,
+      explicitCompanyId: requestedCompanyId,
+      requireExplicitForBearer: true,
+    });
 
-    const where = buildAgentReadWhere(access);
-    if (!where) return NextResponse.json({ agents: [], source: "db" });
+    if (!workspace) {
+      if (isHeartbeatBearer && !requestedCompanyId && !requestedWorkspaceId) {
+        return NextResponse.json(
+          { error: "workspaceId or companyId is required for bearer-scoped agent listing" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ agents: [], source: "none" });
+    }
+
+    const includeDetached = request.nextUrl.searchParams.get("includeDetached") === "true";
 
     const [dbAgents, heartbeats] = await Promise.all([
-      withRetry(() => db!.select().from(schema.agents).where(where)),
+      listWorkspaceAgents(workspace.id, { runtimeId, includeDetached }),
       withRetry(() => db!.select().from(schema.agentHeartbeats)).catch(() => []),
     ]);
 
-    const includeDetached = request.nextUrl.searchParams.get("includeDetached") === "true";
-    const visibleAgents = includeDetached
-      ? dbAgents
-      : dbAgents.filter((agent) => !(agent.runtimeRef && !agent.runtimeId));
-
     const heartbeatMap = new Map(heartbeats.map((hb) => [hb.callsign?.toLowerCase(), hb]));
 
-    const agents = visibleAgents.map((agent) => {
+    const agents = await Promise.all(dbAgents.map(async (agent) => {
       const hb = heartbeatMap.get(agent.callsign.toLowerCase());
+      const workspaceIds = await getAgentWorkspaceIds(agent.id);
       return {
         id: agent.id,
         callsign: agent.callsign,
@@ -82,9 +87,10 @@ export async function GET(request: NextRequest) {
         ownerUserId: agent.ownerUserId ?? null,
         ownerCompanyId: agent.ownerCompanyId ?? null,
         visibility: agent.visibility,
+        workspaceIds,
         tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
       };
-    });
+    }));
 
     return NextResponse.json({ agents, source: agents.length > 0 ? "db" : "none" });
   } catch (err) {
@@ -124,6 +130,7 @@ export async function POST(request: NextRequest) {
       workspacePath,
       reportsTo,
       companyId,
+      workspaceId,
       runtimeId,
       ownerType,
       visibility,
@@ -150,6 +157,16 @@ export async function POST(request: NextRequest) {
 
     if (!name || !callsign) {
       return NextResponse.json({ error: "name and callsign are required" }, { status: 400 });
+    }
+
+    const targetWorkspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? null,
+      explicitCompanyId: companyId ?? access.activeCompanyId ?? null,
+    });
+
+    if (!targetWorkspace) {
+      return NextResponse.json({ error: "A readable workspace is required" }, { status: 400 });
     }
 
     const runtimeOwnership = await resolveRuntimeOwnership(runtimeId || null);
@@ -204,7 +221,7 @@ export async function POST(request: NextRequest) {
         model: model || null,
         workspacePath: workspacePath || null,
         reportsTo: reportsTo || null,
-        companyId: companyId || access.activeCompanyId || null,
+        companyId: targetWorkspace.companyId ?? companyId ?? access.activeCompanyId ?? null,
         runtimeId: runtimeId || null,
         ownerType: effectiveOwnerType,
         ownerUserId: effectiveOwnerUserId,
@@ -212,6 +229,22 @@ export async function POST(request: NextRequest) {
         visibility: normalizeVisibilityForCreation({ ownerType: effectiveOwnerType, requestedVisibility: visibility }),
       }).returning()
     );
+
+    await grantAgentDefaultWorkspace({
+      agentId: created.id,
+      ownerType: effectiveOwnerType,
+      ownerUserId: effectiveOwnerUserId,
+      ownerCompanyId: effectiveOwnerCompanyId,
+      fallbackCompanyId: targetWorkspace.companyId,
+      grantedBy: access.userId,
+    });
+
+    await grantAgentToWorkspace({
+      agentId: created.id,
+      workspaceId: targetWorkspace.id,
+      accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
+      grantedBy: access.userId,
+    });
 
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

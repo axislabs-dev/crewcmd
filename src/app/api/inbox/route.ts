@@ -3,6 +3,11 @@ import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
+import {
+  getCompanyIdForWorkspace,
+  isHeartbeatBearerRequest,
+  resolveAccessibleWorkspace,
+} from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +21,17 @@ const PRIORITY_ORDER: Record<string, number> = {
 
 /**
  * GET /api/inbox — List inbox messages for a company.
- * Query params: company_id, status, priority, type, limit, offset
+ * Query params: workspaceId/company_id, status, priority, type, limit, offset
  * Returns real data only.
  */
 export async function GET(request: NextRequest) {
   if (!db) return NextResponse.json([]);
 
   const { searchParams } = new URL(request.url);
-  const companyId = searchParams.get("company_id");
+  const requestedCompanyId =
+    searchParams.get("companyId") ??
+    searchParams.get("company_id");
+  const requestedWorkspaceId = searchParams.get("workspaceId");
   const status = searchParams.get("status");
   const priority = searchParams.get("priority");
   const type = searchParams.get("type");
@@ -31,8 +39,26 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(searchParams.get("offset") || "0", 10);
 
   try {
+    const heartbeat = await isHeartbeatBearerRequest(request);
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: requestedWorkspaceId,
+      explicitCompanyId: requestedCompanyId,
+      requireExplicitForBearer: true,
+    });
+
+    if (!workspace) {
+      if (heartbeat && !requestedCompanyId && !requestedWorkspaceId) {
+        return NextResponse.json(
+          { error: "workspaceId or companyId is required for bearer-scoped inbox listing" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json([]);
+    }
+
     const conditions: string[] = [];
-    if (companyId) conditions.push(`company_id = '${companyId}'`);
+    conditions.push(`workspace_id = '${workspace.id}'`);
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -40,6 +66,7 @@ export async function GET(request: NextRequest) {
       db!.execute(sql.raw(
         `SELECT
           id,
+          workspace_id AS "workspaceId",
           company_id AS "companyId",
           from_agent_id AS "fromAgentId",
           to_user_id AS "toUserId",
@@ -97,7 +124,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/inbox — Create a new inbox message.
- * Body: { companyId, fromAgentId, toUserId?, toAgentId?, type, priority, title, body, context?, actions? }
+ * Body: { workspaceId?, companyId?, fromAgentId, toUserId?, toAgentId?, type, priority, title, body, context?, actions? }
  */
 export async function POST(request: NextRequest) {
   const authError = await requireAuth(request);
@@ -110,12 +137,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (!body.companyId || !body.fromAgentId || !body.type || !body.title || !body.body) {
+    if (!body.fromAgentId || !body.type || !body.title || !body.body) {
       return NextResponse.json(
-        { error: "companyId, fromAgentId, type, title, and body are required" },
+        { error: "fromAgentId, type, title, and body are required" },
         { status: 400 }
       );
     }
+
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: body.workspaceId ?? null,
+      explicitCompanyId: body.companyId ?? null,
+    });
+
+    if (!workspace) {
+      return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
+    }
+    const companyId = workspace.companyId ?? await getCompanyIdForWorkspace(workspace.id);
 
     const validTypes = ["decision", "blocker", "completed", "question", "escalation", "update", "approval"];
     if (!validTypes.includes(body.type)) {
@@ -138,9 +176,10 @@ export async function POST(request: NextRequest) {
 
     const result = await withRetry(() =>
       db!.execute(sql.raw(`
-        INSERT INTO inbox_messages (company_id, from_agent_id, to_user_id, to_agent_id, type, priority, title, body, context, actions)
+        INSERT INTO inbox_messages (workspace_id, company_id, from_agent_id, to_user_id, to_agent_id, type, priority, title, body, context, actions)
         VALUES (
-          '${body.companyId}',
+          '${workspace.id}',
+          ${companyId ? `'${companyId}'` : "NULL"},
           '${body.fromAgentId}',
           ${toUserId},
           ${toAgentId},
@@ -153,6 +192,7 @@ export async function POST(request: NextRequest) {
         )
         RETURNING
           id,
+          workspace_id AS "workspaceId",
           company_id AS "companyId",
           from_agent_id AS "fromAgentId",
           to_user_id AS "toUserId",

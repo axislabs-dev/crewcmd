@@ -1,0 +1,31 @@
+meta {
+  name: Create Inbox Message
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/inbox
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "workspaceId": "{{workspace_id}}",
+    "fromAgentId": "{{agent_id}}",
+    "toUserId": null,
+    "toAgentId": null,
+    "type": "question",
+    "priority": "normal",
+    "title": "Inbox test message",
+    "body": "Please confirm the workspace-scoped inbox flow.",
+    "context": {},
+    "actions": []
+  }
+}

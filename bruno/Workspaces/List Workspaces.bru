@@ -1,11 +1,11 @@
 meta {
-  name: Delete Project
+  name: List Workspaces
   type: http
-  seq: 5
+  seq: 1
 }
 
-delete {
-  url: {{base_url}}/api/projects/{{project_id}}
+get {
+  url: {{base_url}}/api/workspaces
   body: none
   auth: none
 }

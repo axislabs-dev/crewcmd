@@ -10,6 +10,7 @@ import {
 import { uninstallSkillFromOpenClaw } from "./uninstall-skill-from-openclaw";
 
 const DISPATCH_JOB_NAME = "crewcmd-queue-dispatch";
+const DAILY_BRIEF_JOB_NAME = "crewcmd-daily-brief";
 
 function buildQueueDispatchPrompt(params: {
   baseUrl: string;
@@ -31,6 +32,120 @@ function buildQueueDispatchPrompt(params: {
     "",
     "If there is nothing to dispatch, stop silently.",
   ].join("\n");
+}
+
+function buildDailyBriefPrompt(params: {
+  baseUrl: string;
+  companyId: string;
+}): string {
+  return [
+    "You are running the CrewCmd daily brief for this workspace.",
+    "Use the crewcmd-management skill for all CrewCmd operations.",
+    `CrewCmd base URL: ${params.baseUrl}`,
+    `Company ID: ${params.companyId}`,
+    "",
+    "Workflow:",
+    "1. Calculate a since timestamp for the last 12 hours.",
+    "2. List tasks updated since then and summarize:",
+    "   - tasks completed in the last 12 hours",
+    "   - tasks currently in_progress",
+    "   - tasks currently blocked or in review if they need attention",
+    "3. List inbox messages for the company and include any critical or high-priority unread items that need human action.",
+    "4. List company members and identify the best human recipient (prefer an owner/admin).",
+    "5. Create a concise inbox update for that human with the daily brief. Keep it operational and short.",
+    "",
+    "Rules:",
+    "- Do not create tasks from the daily brief.",
+    "- Do not send duplicate updates if today's brief has already been sent recently.",
+    "- Keep the brief concise and focused on action items, completions, and blockers.",
+    "- If there is nothing notable, do not send a brief.",
+  ].join("\n");
+}
+
+async function ensureManagedCronJob(params: {
+  client: GatewayClient;
+  runtimeId: string;
+  companyId: string;
+  resourceKey: string;
+  agentId: string;
+  description: string;
+  message: string;
+  schedule: Record<string, unknown>;
+}) {
+  const existing = await params.client.cronList();
+  const job = existing.jobs.find((entry) => entry.name === params.resourceKey);
+
+  if (!job) {
+    const created = await params.client.cronAdd({
+      agentId: params.agentId,
+      name: params.resourceKey,
+      description: params.description,
+      enabled: true,
+      schedule: params.schedule,
+      sessionTarget: "isolated",
+      wakeMode: "now",
+      payload: {
+        kind: "agentTurn",
+        message: params.message,
+      },
+      delivery: {
+        mode: "none",
+        channel: "last",
+      },
+    });
+
+    await upsertRuntimeManagedResource({
+      runtimeId: params.runtimeId,
+      companyId: params.companyId,
+      resourceType: "cron-job",
+      resourceKey: params.resourceKey,
+      externalId: created.id,
+      targetAgentRef: params.agentId,
+      payload: created as unknown as Record<string, unknown>,
+    });
+
+    return;
+  }
+
+  const currentMessage =
+    typeof job.payload?.message === "string" ? job.payload.message : "";
+  const patch: Record<string, unknown> = {};
+
+  if (job.agentId !== params.agentId) {
+    patch.agentId = params.agentId;
+  }
+  if (currentMessage !== params.message) {
+    patch.payload = {
+      kind: "agentTurn",
+      message: params.message,
+    };
+  }
+  if (job.description !== params.description) {
+    patch.description = params.description;
+  }
+  if (job.enabled !== true) {
+    patch.enabled = true;
+  }
+  if (JSON.stringify(job.schedule ?? null) !== JSON.stringify(params.schedule)) {
+    patch.schedule = params.schedule;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await params.client.cronUpdate({
+      id: job.id,
+      patch,
+    });
+  }
+
+  await upsertRuntimeManagedResource({
+    runtimeId: params.runtimeId,
+    companyId: params.companyId,
+    resourceType: "cron-job",
+    resourceKey: params.resourceKey,
+    externalId: job.id,
+    targetAgentRef: job.agentId ?? params.agentId,
+    payload: job as unknown as Record<string, unknown>,
+  });
 }
 
 export async function ensureCrewCmdRuntimeOperatingLayer(
@@ -68,73 +183,42 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
 
   try {
     await client.connect();
-    const existing = await client.cronList();
-    const job = existing.jobs.find((entry) => entry.name === DISPATCH_JOB_NAME);
-    const message = buildQueueDispatchPrompt({
+    const dispatchMessage = buildQueueDispatchPrompt({
       baseUrl,
       companyId: runtime.companyId,
     });
-
-    if (!job) {
-      const created = await client.cronAdd({
-        agentId: defaultAgentId,
-        name: DISPATCH_JOB_NAME,
-        description: "CrewCmd-managed queue dispatcher",
-        enabled: true,
-        schedule: {
-          kind: "every",
-          everyMs: 5 * 60 * 1000,
-          anchorMs: Date.now(),
-        },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        payload: {
-          kind: "agentTurn",
-          message,
-        },
-        delivery: {
-          mode: "none",
-          channel: "last",
-        },
-      });
-
-      await upsertRuntimeManagedResource({
-        runtimeId: runtime.id,
-        companyId: runtime.companyId,
-        resourceType: "cron-job",
-        resourceKey: DISPATCH_JOB_NAME,
-        externalId: created.id,
-        targetAgentRef: defaultAgentId,
-        payload: created as unknown as Record<string, unknown>,
-      });
-
-      return;
-    }
-
-    const nextAgentId = defaultAgentId;
-    const currentMessage =
-      typeof job.payload?.message === "string" ? job.payload.message : "";
-    if (job.agentId !== nextAgentId || currentMessage !== message) {
-      await client.cronUpdate({
-        id: job.id,
-        patch: {
-          agentId: nextAgentId,
-          payload: {
-            kind: "agentTurn",
-            message,
-          },
-        },
-      });
-    }
-
-    await upsertRuntimeManagedResource({
+    await ensureManagedCronJob({
+      client,
       runtimeId: runtime.id,
       companyId: runtime.companyId,
-      resourceType: "cron-job",
       resourceKey: DISPATCH_JOB_NAME,
-      externalId: job.id,
-      targetAgentRef: job.agentId ?? defaultAgentId,
-      payload: job as unknown as Record<string, unknown>,
+      agentId: defaultAgentId,
+      description: "CrewCmd-managed queue dispatcher",
+      message: dispatchMessage,
+      schedule: {
+        kind: "every",
+        everyMs: 5 * 60 * 1000,
+        anchorMs: Date.now(),
+      },
+    });
+
+    const dailyBriefMessage = buildDailyBriefPrompt({
+      baseUrl,
+      companyId: runtime.companyId,
+    });
+    await ensureManagedCronJob({
+      client,
+      runtimeId: runtime.id,
+      companyId: runtime.companyId,
+      resourceKey: DAILY_BRIEF_JOB_NAME,
+      agentId: defaultAgentId,
+      description: "CrewCmd-managed daily brief",
+      message: dailyBriefMessage,
+      schedule: {
+        kind: "cron",
+        expr: "0 5 * * *",
+        tz: "Australia/Brisbane",
+      },
     });
   } finally {
     client.close();

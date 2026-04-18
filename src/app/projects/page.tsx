@@ -13,6 +13,8 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
+  url: string | null;
+  folder: string | null;
   color: string;
   status: "active" | "completed" | "archived";
   ownerAgentId: string | null;
@@ -59,11 +61,11 @@ export default function ProjectsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", description: "", color: "#00f0ff", status: "active" });
+  const [newProject, setNewProject] = useState({ name: "", description: "", url: "", folder: "", color: "#00f0ff", status: "active" });
   const [creating, setCreating] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", description: "", color: "#00f0ff", status: "active" });
+  const [editForm, setEditForm] = useState({ name: "", description: "", url: "", folder: "", color: "#00f0ff", status: "active" });
   const [editDocs, setEditDocs] = useState<ProjectDoc[]>([]);
   const [editContext, setEditContext] = useState("");
   const [saving, setSaving] = useState(false);
@@ -96,6 +98,8 @@ export default function ProjectsPage() {
     setEditForm({
       name: project.name,
       description: project.description || "",
+      url: project.url || "",
+      folder: project.folder || "",
       color: project.color || "#00f0ff",
       status: project.status,
     });
@@ -114,6 +118,8 @@ export default function ProjectsPage() {
         body: JSON.stringify({
           name: editForm.name,
           description: editForm.description || null,
+          url: editForm.url || null,
+          folder: editForm.folder || null,
           color: editForm.color,
           status: editForm.status,
           documents: editDocs.filter((d) => d.name.trim() && d.url.trim()),
@@ -198,6 +204,26 @@ export default function ProjectsPage() {
                   />
                 </div>
                 <div>
+                  <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">URL</label>
+                  <input
+                    type="url"
+                    value={newProject.url}
+                    onChange={(e) => setNewProject({ ...newProject, url: e.target.value })}
+                    placeholder="https://example.com/project"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">FOLDER</label>
+                  <input
+                    type="text"
+                    value={newProject.folder}
+                    onChange={(e) => setNewProject({ ...newProject, folder: e.target.value })}
+                    placeholder="/path/to/project"
+                    className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
+                  />
+                </div>
+                <div>
                   <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">COLOR</label>
                   <div className="flex items-center gap-2">
                     <input
@@ -248,7 +274,7 @@ export default function ProjectsPage() {
                       if (res.ok) {
                         const created = await res.json();
                         setProjects([...projects, created]);
-                        setNewProject({ name: "", description: "", color: "#00f0ff", status: "active" });
+                        setNewProject({ name: "", description: "", url: "", folder: "", color: "#00f0ff", status: "active" });
                         setShowCreate(false);
                       }
                     } finally {
@@ -320,6 +346,26 @@ export default function ProjectsPage() {
                       onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                       rows={3}
                       className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-neo/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">URL</label>
+                    <input
+                      type="url"
+                      value={editForm.url}
+                      onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
+                      placeholder="https://example.com/project"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] tracking-wider text-[var(--text-tertiary)]">FOLDER</label>
+                    <input
+                      type="text"
+                      value={editForm.folder}
+                      onChange={(e) => setEditForm({ ...editForm, folder: e.target.value })}
+                      placeholder="/path/to/project"
+                      className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-neo/30"
                     />
                   </div>
                   <div>
@@ -433,6 +479,32 @@ export default function ProjectsPage() {
                     <p className="text-[11px] leading-relaxed text-[var(--text-tertiary)]">
                       {selectedProject.description}
                     </p>
+                  )}
+
+                  {(selectedProject.url || selectedProject.folder) && (
+                    <div className="grid gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:grid-cols-2">
+                      {selectedProject.url && (
+                        <div>
+                          <div className="mb-1 font-mono text-[9px] tracking-[0.18em] text-[var(--text-tertiary)]">URL</div>
+                          <a
+                            href={selectedProject.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block truncate font-mono text-[11px] text-[var(--accent)] transition-colors hover:text-[var(--accent)]/80"
+                          >
+                            {selectedProject.url}
+                          </a>
+                        </div>
+                      )}
+                      {selectedProject.folder && (
+                        <div>
+                          <div className="mb-1 font-mono text-[9px] tracking-[0.18em] text-[var(--text-tertiary)]">FOLDER</div>
+                          <div className="truncate font-mono text-[11px] text-[var(--text-secondary)]">
+                            {selectedProject.folder}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {selectedProject.context && (
@@ -617,6 +689,21 @@ export default function ProjectsPage() {
                     <p className="text-[11px] leading-relaxed text-[var(--text-tertiary)]">
                       {project.description}
                     </p>
+                  )}
+
+                  {(project.url || project.folder) && (
+                    <div className="space-y-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2">
+                      {project.url && (
+                        <div className="truncate font-mono text-[10px] text-[var(--accent)]/80">
+                          URL: {project.url}
+                        </div>
+                      )}
+                      {project.folder && (
+                        <div className="truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                          FOLDER: {project.folder}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   <div className="space-y-2">

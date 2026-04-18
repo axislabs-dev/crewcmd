@@ -11,7 +11,7 @@ post {
 }
 
 headers {
-  Authorization: Bearer {{auth_token}}
+  Authorization: Bearer {{heartbeat_secret}}
   Content-Type: application/json
 }
 
@@ -19,6 +19,7 @@ body:json {
   {
     "name": "New Project",
     "description": "Project description",
+    "workspaceId": "{{workspace_id}}",
     "color": "#00f0ff",
     "status": "active",
     "ownerAgentId": null

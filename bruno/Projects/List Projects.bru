@@ -10,7 +10,13 @@ get {
   auth: none
 }
 
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+}
+
 params:query {
+  workspaceId: {{workspace_id}}
+  ~companyId: {{company_id}}
   ~status: 
   ~ownerId: 
 }

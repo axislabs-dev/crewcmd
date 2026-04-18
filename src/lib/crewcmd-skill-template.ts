@@ -304,7 +304,6 @@ Content-Type: application/json
 
 {
   "workspaceId": "${workspaceId}",
-  "companyId": "${companyId ?? ""}",
   "fromAgentId": "your-agent-uuid",
   "toAgentId": "target-agent-uuid",
   "type": "question",
@@ -358,7 +357,7 @@ GET ${baseUrl}/api/inbox/stats?workspaceId=${workspaceId}
 ### List Documents
 
 \`\`\`
-GET ${baseUrl}/api/docs?category={cat}&docType={type}&visibility={vis}&search={query}&projectId={id}&taskId={id}&tags={comma,separated}&pinned=true
+GET ${baseUrl}/api/docs?workspaceId=${workspaceId}&category={cat}&docType={type}&visibility={vis}&search={query}&projectId={id}&taskId={id}&tags={comma,separated}&pinned=true
 \`\`\`
 
 All query parameters are optional.
@@ -372,6 +371,7 @@ Content-Type: application/json
 {
   "title": "Document title (required)",
   "content": "Document body (required)",
+  "workspaceId": "${workspaceId}",
   "category": "engineering",
   "docType": "runbook",
   "visibility": "team",

@@ -1,11 +1,11 @@
 meta {
-  name: List Tasks
+  name: List Inbox
   type: http
   seq: 1
 }
 
 get {
-  url: {{base_url}}/api/tasks
+  url: {{base_url}}/api/inbox
   body: none
   auth: none
 }
@@ -18,9 +18,8 @@ params:query {
   workspaceId: {{workspace_id}}
   ~companyId: {{company_id}}
   ~status: 
-  ~agentId: 
   ~priority: 
-  ~unassigned: 
-  ~excludeHumanAssignee: 
-  ~since: 
+  ~type: 
+  ~limit: 50
+  ~offset: 0
 }

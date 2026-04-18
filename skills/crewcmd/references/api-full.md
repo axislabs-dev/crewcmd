@@ -20,11 +20,11 @@ Returns service health status. **No auth required.**
 
 ### `GET /api/agents`
 
-List all agents for the current company.
+List agents visible in the current workspace.
 
-**Query params:** `companyId` (optional, falls back to cookie)
+**Query params:** `workspaceId` (preferred), `companyId` (company-workspace shorthand), `runtimeId`, `includeDetached`
 
-**Response:** Array of agent objects with callsign, role, status, model, skills, etc.
+**Response:** Array of agent objects with `id`, `callsign`, `runtimeRef`, role, status, model, skills, and workspace metadata.
 
 ### `GET /api/agents/:callsign`
 
@@ -62,7 +62,7 @@ SSE stream of live agent output.
 
 Assign a task to an agent.
 
-**Body:** `{ "taskId": "..." }` or `{ "message": "..." }`
+**Body:** `{ "taskId": "...", "prompt": "Concrete work instructions" }`
 
 ### `PATCH /api/agents/:callsign/visibility`
 
@@ -157,15 +157,15 @@ Upload a file attachment for chat.
 
 ### `GET /api/tasks`
 
-List tasks with optional filters.
+List workspace-scoped tasks with optional filters.
 
-**Query params:** `status`, `agentId`, `humanAssignee`, `projectId`, `priority`, `unassigned`, `excludeHumanAssignee`, `limit`, `offset`
+**Query params:** `workspaceId` (preferred), `companyId` (company-workspace shorthand), `status`, `agentId`, `projectId`, `priority`, `unassigned`, `excludeHumanAssignee`, `since`
 
 ### `POST /api/tasks`
 
 Create a task.
 
-**Body:** `{ "title": "...", "description": "...", "status": "inbox", "priority": "medium", "assignedAgentId": "...", "projectId": "..." }`
+**Body:** `{ "title": "...", "workspaceId": "...", "description": "...", "status": "inbox", "priority": "medium", "assignedAgentId": "...", "projectId": "..." }`
 
 ### `GET /api/tasks/:id`
 
@@ -209,13 +209,15 @@ Get a task image by index.
 
 ### `GET /api/projects`
 
-List all projects.
+List workspace-scoped projects.
+
+**Query params:** `workspaceId` (preferred), `companyId` (company-workspace shorthand), `status`, `ownerId`
 
 ### `POST /api/projects`
 
 Create a project.
 
-**Body:** `{ "name": "...", "description": "...", "status": "active" }`
+**Body:** `{ "name": "...", "workspaceId": "...", "description": "...", "status": "active" }`
 
 ### `GET /api/projects/:id`
 
@@ -235,13 +237,15 @@ Delete a project.
 
 ### `GET /api/inbox`
 
-List inbox items (agent decisions, blockers, completions).
+List inbox items for one workspace.
 
-**Query params:** `priority`, `agentId`, `status`, `limit`
+**Query params:** `workspaceId` (preferred), `companyId` (company-workspace shorthand), `priority`, `status`, `type`, `limit`, `offset`
 
 ### `POST /api/inbox`
 
 Create an inbox item.
+
+**Body:** `{ "workspaceId": "...", "fromAgentId": "...", "type": "question", "title": "...", "body": "..." }`
 
 ### `PATCH /api/inbox/:id`
 
@@ -253,7 +257,17 @@ Bulk update inbox items.
 
 ### `GET /api/inbox/stats`
 
-Get unread counts by priority tier.
+Get unread counts by priority tier for one workspace.
+
+**Query params:** `workspaceId` (preferred), `companyId` (company-workspace shorthand)
+
+---
+
+## Workspaces
+
+### `GET /api/workspaces`
+
+List workspaces accessible to the current user. This is the canonical way to discover personal vs company scope.
 
 ---
 
@@ -573,15 +587,17 @@ Trigger an agent heartbeat manually.
 
 ---
 
-## Docs (Knowledge Base)
+## Docs (Workspace Knowledge)
 
 ### `GET /api/docs`
 
-List documents. Filterable by `category`, `docType`, `visibility`, `projectId`, `taskId`, `search`, `pinned`, `tags`.
+List workspace-scoped documents. Filterable by `workspaceId`, `companyId`, `category`, `docType`, `visibility`, `projectId`, `taskId`, `search`, `pinned`, `tags`.
 
 ### `POST /api/docs`
 
 Create a document.
+
+**Body:** `{ "title": "...", "content": "...", "workspaceId": "...", ... }`
 
 ### `GET /api/docs/:id`
 

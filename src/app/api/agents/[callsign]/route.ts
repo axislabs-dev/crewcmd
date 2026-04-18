@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { canReadAgent, canUpdateAgent, getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/agent-access";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 interface RouteParams { params: Promise<{ callsign: string }>; }
@@ -12,9 +13,29 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   if (!db) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   try {
     const access = await getAgentAccessContext();
+    const workspace = await resolveAccessibleWorkspace({ request: _request });
     const dbAgents = await withRetry(() => db!.select().from(schema.agents));
     const agent = dbAgents.find((a) => a.callsign.toLowerCase() === callsign.toLowerCase());
-    if (!agent || !canReadAgent(agent, access)) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+
+    let readable = canReadAgent(agent, access);
+    if (!readable && workspace) {
+      const [grant] = await withRetry(() =>
+        db!
+          .select({ id: schema.agentWorkspaceGrants.id })
+          .from(schema.agentWorkspaceGrants)
+          .where(
+            and(
+              eq(schema.agentWorkspaceGrants.agentId, agent.id),
+              eq(schema.agentWorkspaceGrants.workspaceId, workspace.id)
+            )
+          )
+          .limit(1)
+      );
+      readable = !!grant;
+    }
+
+    if (!readable) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     const heartbeats = await withRetry(() => db!.select().from(schema.agentHeartbeats)).catch(() => []);
     const hb = heartbeats.find((h) => (h.callsign ?? "").toLowerCase() === callsign.toLowerCase());
     return NextResponse.json({

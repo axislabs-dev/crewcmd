@@ -46,9 +46,14 @@ export async function GET(request: NextRequest) {
       withRetry(() => db!.select().from(schema.agentHeartbeats)).catch(() => []),
     ]);
 
+    const includeDetached = request.nextUrl.searchParams.get("includeDetached") === "true";
+    const visibleAgents = includeDetached
+      ? dbAgents
+      : dbAgents.filter((agent) => !(agent.runtimeRef && !agent.runtimeId));
+
     const heartbeatMap = new Map(heartbeats.map((hb) => [hb.callsign?.toLowerCase(), hb]));
 
-    const agents = dbAgents.map((agent) => {
+    const agents = visibleAgents.map((agent) => {
       const hb = heartbeatMap.get(agent.callsign.toLowerCase());
       return {
         id: agent.id,

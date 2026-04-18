@@ -65,6 +65,18 @@ vi.mock("@/lib/agent-access", () => ({
 
 import { GET } from "./route";
 
+function makeRequest(url = "http://localhost/api/agents") {
+  const parsed = new URL(url);
+  return {
+    headers: {
+      get: (_name: string) => null,
+    },
+    nextUrl: {
+      searchParams: parsed.searchParams,
+    },
+  } as Parameters<typeof GET>[0];
+}
+
 describe("GET /api/agents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,7 +85,7 @@ describe("GET /api/agents", () => {
   });
 
   it("returns agents with source 'db' when agents exist", async () => {
-    const res = await GET();
+    const res = await GET(makeRequest());
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -86,7 +98,7 @@ describe("GET /api/agents", () => {
   it("returns source 'none' when no agents", async () => {
     mockFromAgents.mockResolvedValue([]);
 
-    const res = await GET();
+    const res = await GET(makeRequest());
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -105,7 +117,7 @@ describe("GET /api/agents", () => {
       },
     ]);
 
-    const res = await GET();
+    const res = await GET(makeRequest());
     const body = await res.json();
 
     expect(body.agents[0].status).toBe("busy");

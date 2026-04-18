@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import type { DocCategory } from "@/lib/data";
+import {
+  getCompanyIdForWorkspace,
+  isHeartbeatBearerRequest,
+  resolveAccessibleWorkspace,
+} from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +24,33 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get("search");
   const pinned = searchParams.get("pinned");
   const tags = searchParams.get("tags"); // comma-separated
+  const requestedCompanyId =
+    searchParams.get("companyId") ??
+    searchParams.get("company_id");
+  const requestedWorkspaceId = searchParams.get("workspaceId");
 
   try {
-    let result = await withRetry(() => db!.select().from(schema.docs));
+    const heartbeat = await isHeartbeatBearerRequest(request);
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: requestedWorkspaceId,
+      explicitCompanyId: requestedCompanyId,
+      requireExplicitForBearer: true,
+    });
+
+    if (!workspace) {
+      if (heartbeat && !requestedCompanyId && !requestedWorkspaceId) {
+        return NextResponse.json(
+          { error: "workspaceId or companyId is required for bearer-scoped document listing" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json([]);
+    }
+
+    let result = await withRetry(() =>
+      db!.select().from(schema.docs).where(eq(schema.docs.workspaceId, workspace.id))
+    );
 
     if (category) {
       result = result.filter((d) => d.category === category);
@@ -93,6 +123,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: body.workspaceId ?? null,
+      explicitCompanyId: body.companyId ?? null,
+    });
+
+    if (!workspace) {
+      return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
+    }
+    const companyId = workspace.companyId ?? await getCompanyIdForWorkspace(workspace.id);
+
     const [doc] = await db
       .insert(schema.docs)
       .values({
@@ -106,6 +147,8 @@ export async function POST(request: NextRequest) {
         projectId: body.projectId || null,
         taskId: body.taskId || null,
         tags: body.tags || [],
+        workspaceId: workspace.id,
+        companyId,
         pinned: body.pinned || false,
       })
       .returning();

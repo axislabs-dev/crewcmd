@@ -57,6 +57,7 @@ export default function OnboardingPage() {
   const [probing, setProbing] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const [importOwnerType, setImportOwnerType] = useState<"user" | "company">("company");
   const [importVisibility, setImportVisibility] = useState<"private" | "team" | "org">("team");
   // Persist device key across retries (probeResult gets cleared on each attempt)
@@ -275,7 +276,15 @@ export default function OnboardingPage() {
   async function handleImportAgents() {
     if (!probeResult || !workspaceId || selectedAgentIds.size === 0) return;
     setImporting(true);
+    setImportError(null);
     try {
+      document.cookie = `active_workspace=${workspaceId};path=/;max-age=${60 * 60 * 24 * 365}`;
+      if (companyId) {
+        document.cookie = `active_company=${companyId};path=/;max-age=${60 * 60 * 24 * 365}`;
+      } else {
+        document.cookie = "active_company=; path=/; max-age=0";
+      }
+
       // First, create or update the runtime
       const runtimeRes = await fetch("/api/runtimes", {
         method: "POST",
@@ -296,6 +305,9 @@ export default function OnboardingPage() {
       if (runtimeRes.ok) {
         const runtime = await runtimeRes.json();
         runtimeId = runtime.id;
+      } else {
+        const data = await runtimeRes.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create runtime");
       }
 
       // Import agents
@@ -303,7 +315,7 @@ export default function OnboardingPage() {
 
       if (runtimeId) {
         // Use the import endpoint which handles deduplication + device key persistence
-        await fetch("/api/runtimes/import", {
+        const importRes = await fetch("/api/runtimes/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -317,11 +329,19 @@ export default function OnboardingPage() {
             visibility: importVisibility,
           }),
         });
+
+        const importData = await importRes.json().catch(() => ({}));
+        if (!importRes.ok) {
+          throw new Error(importData.error || "Failed to import agents");
+        }
+        if ((importData.imported ?? 0) === 0 && (importData.reattached ?? 0) === 0) {
+          throw new Error(importData.error || "No agents were imported");
+        }
       } else {
         // Fallback: create agents directly
         for (const agent of selectedAgents) {
           const callsign = agent.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) || "AGENT";
-          await fetch("/api/agents", {
+          const createRes = await fetch("/api/agents", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -345,12 +365,16 @@ export default function OnboardingPage() {
               visibility: importVisibility,
             }),
           });
+          if (!createRes.ok) {
+            const data = await createRes.json().catch(() => ({}));
+            throw new Error(data.error || `Failed to create agent ${agent.name}`);
+          }
         }
       }
 
       setStep(3);
-    } catch {
-      // ignore
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Import failed");
     } finally {
       setImporting(false);
     }
@@ -1082,6 +1106,12 @@ export default function OnboardingPage() {
                   {selectedAgentIds.size} of {probeResult.agents.length} selected
                 </span>
               </div>
+
+              {importError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[10px] tracking-wider text-red-200">
+                  {importError}
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <button

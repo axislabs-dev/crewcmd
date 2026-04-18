@@ -46,7 +46,8 @@ export interface InboxMessageContext {
 /** Full inbox message record */
 export interface InboxMessage {
   id: string;
-  companyId: string;
+  workspaceId?: string;
+  companyId: string | null;
   fromAgentId: string;
   toUserId: string | null;
   toAgentId: string | null;

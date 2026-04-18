@@ -4,6 +4,7 @@ import { companyRuntimes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getAgentAccessContext, runtimeOwnershipValues, buildRuntimeReadWhere, canManageCompanyOwnedAgent } from "@/lib/agent-access";
 import { getRequestOrigin } from "@/lib/runtime-callback-url";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     const access = await getAgentAccessContext();
     if (!access.userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const body = await request.json();
-    const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata, ownerType } = body;
+    const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata, ownerType, workspaceId, companyId } = body;
     const callbackBaseUrl = getRequestOrigin(request);
 
     if (!name || !gatewayUrl || !httpUrl) {
@@ -53,8 +54,37 @@ export async function POST(request: Request) {
     }
     if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    if (!access.activeCompanyId) return NextResponse.json({ error: "Select an active company first" }, { status: 400 });
-    const ownership = runtimeOwnershipValues({ ownerType, userId: access.userId, activeCompanyId: access.activeCompanyId });
+    const targetWorkspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? null,
+      explicitCompanyId: companyId ?? access.activeCompanyId ?? null,
+    });
+    if (!targetWorkspace) {
+      return NextResponse.json({ error: "Select a readable workspace first" }, { status: 400 });
+    }
+
+    if (ownerType === "company" && targetWorkspace.type !== "company") {
+      return NextResponse.json({ error: "Company-owned runtimes must be created from a company workspace" }, { status: 400 });
+    }
+
+    const anchorCompanyId =
+      targetWorkspace.companyId ??
+      access.activeCompanyId ??
+      access.memberships[0]?.companyId ??
+      null;
+
+    if (!anchorCompanyId && ownerType !== "company") {
+      return NextResponse.json(
+        { error: "Personal runtimes currently require at least one company membership for shared skill storage" },
+        { status: 400 }
+      );
+    }
+
+    const ownership = runtimeOwnershipValues({
+      ownerType,
+      userId: access.userId,
+      activeCompanyId: targetWorkspace.type === "company" ? targetWorkspace.companyId : anchorCompanyId,
+    });
     if (ownership.ownerType === "company" && !canManageCompanyOwnedAgent(access, ownership.ownerCompanyId)) {
       return NextResponse.json({ error: "Only company admins can create org-owned runtimes" }, { status: 403 });
     }
@@ -62,7 +92,13 @@ export async function POST(request: Request) {
     const existing = await withRetry(() => db!
       .select({ id: companyRuntimes.id })
       .from(companyRuntimes)
-      .where(and(eq(companyRuntimes.companyId, access.activeCompanyId!), eq(companyRuntimes.ownerType, ownership.ownerType))));
+      .where(
+        ownership.companyId
+          ? and(eq(companyRuntimes.companyId, ownership.companyId), eq(companyRuntimes.ownerType, ownership.ownerType))
+          : access.userId
+            ? and(eq(companyRuntimes.ownerType, ownership.ownerType), eq(companyRuntimes.ownerUserId, access.userId))
+            : eq(companyRuntimes.ownerType, ownership.ownerType)
+      ));
 
     const isPrimary = existing.length === 0;
 
@@ -80,6 +116,7 @@ export async function POST(request: Request) {
         metadata: {
           ...((metadata || {}) as Record<string, unknown>),
           callbackBaseUrl,
+          workspaceId: targetWorkspace.id,
         },
         ...ownership,
       })

@@ -654,8 +654,7 @@ export const agentSkills = pgTable("agent_skills", {
 export const companyRuntimes = pgTable("company_runtimes", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id")
-    .references(() => companies.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => companies.id, { onDelete: "cascade" }),
   ownerType: ownershipTypeEnum("owner_type").notNull().default("company"),
   ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   ownerCompanyId: uuid("owner_company_id").references(() => companies.id, { onDelete: "cascade" }),

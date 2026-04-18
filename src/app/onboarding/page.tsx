@@ -27,6 +27,8 @@ export default function OnboardingPage() {
   const [companyName, setCompanyName] = useState("");
   const [companyMission, setCompanyMission] = useState("");
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceType, setWorkspaceType] = useState<"personal" | "company" | null>(null);
 
   // Step 2: Team (blueprint, scratch, or connect runtime)
   const [teamMode, setTeamMode] = useState<"choose" | "blueprint" | "scratch" | "connect" | null>(null);
@@ -64,17 +66,47 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const activeWorkspaceId = document.cookie.match(/(?:^|;\s*)active_workspace=([^;]*)/)?.[1] ?? null;
     const existingCompanyId = document.cookie.match(/(?:^|;\s*)active_company=([^;]*)/)?.[1] ?? null;
-    if (!existingCompanyId) return;
+    if (activeWorkspaceId) {
+      setWorkspaceId((current) => current ?? activeWorkspaceId);
+    }
 
-    setCompanyId((current) => current ?? existingCompanyId);
+    if (existingCompanyId) {
+      setCompanyId((current) => current ?? existingCompanyId);
+    }
 
-    const mode = new URLSearchParams(window.location.search).get("mode");
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const requestedOwnerType = params.get("ownerType");
     if (mode === "connect") {
       setStep(2);
       setTeamMode("connect");
       setConnectMode("gateway");
+      if (requestedOwnerType === "user" || requestedOwnerType === "company") {
+        setImportOwnerType(requestedOwnerType);
+        if (requestedOwnerType === "user") setImportVisibility("private");
+      }
     }
+
+    void fetch("/api/workspaces")
+      .then((res) => (res.ok ? res.json() : { workspaces: [] }))
+      .then((data: { workspaces?: Array<{ id: string; type: "personal" | "company"; companyId: string | null }> }) => {
+        const items = Array.isArray(data.workspaces) ? data.workspaces : [];
+        const active = items.find((item) => item.id === activeWorkspaceId) ?? null;
+        if (active) {
+          setWorkspaceType(active.type);
+          setWorkspaceId(active.id);
+          if (active.type === "company" && active.companyId) {
+            setCompanyId((current) => current ?? active.companyId);
+          }
+          if (requestedOwnerType !== "company" && requestedOwnerType !== "user" && active.type === "personal") {
+            setImportOwnerType("user");
+            setImportVisibility("private");
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Step 3: Invite
@@ -133,7 +165,7 @@ export default function OnboardingPage() {
   }
 
   async function handleCreateSingleAgent() {
-    if (!agentName.trim() || !companyId) return;
+    if (!agentName.trim() || !workspaceId) return;
     setLoading(true);
     try {
       const callsign = agentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) || "AGENT";
@@ -150,6 +182,7 @@ export default function OnboardingPage() {
           adapterConfig: {},
           role: agentRole,
           companyId,
+          workspaceId,
           ownerType: importOwnerType,
         }),
       });
@@ -240,7 +273,7 @@ export default function OnboardingPage() {
   }
 
   async function handleImportAgents() {
-    if (!probeResult || !companyId || selectedAgentIds.size === 0) return;
+    if (!probeResult || !workspaceId || selectedAgentIds.size === 0) return;
     setImporting(true);
     try {
       // First, create or update the runtime
@@ -253,6 +286,7 @@ export default function OnboardingPage() {
           gatewayUrl: gatewayUrl.trim().startsWith("ws") ? gatewayUrl.trim() : `ws://${gatewayUrl.trim()}`,
           httpUrl: gatewayUrl.trim().startsWith("http") ? gatewayUrl.trim() : `http://${gatewayUrl.trim()}`,
           authToken: authToken.trim() || null,
+          workspaceId,
           companyId,
           ownerType: importOwnerType,
         }),
@@ -274,6 +308,7 @@ export default function OnboardingPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             runtimeId,
+            workspaceId,
             agents: selectedAgents,
             models: probeResult.models,
             defaultAgentId: probeResult.defaultAgentId,
@@ -303,6 +338,7 @@ export default function OnboardingPage() {
                 devicePrivateKeyPem: probeResult.devicePrivateKeyPem,
               },
               role: "agent",
+              workspaceId,
               companyId,
               reportsTo: agent.reportsTo || null,
               ownerType: importOwnerType,
@@ -973,10 +1009,21 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={() => { setImportOwnerType("company"); if (importVisibility === "private") setImportVisibility("team"); }}
-                    className={`rounded-lg border px-3 py-3 text-left transition-all ${importOwnerType === "company" ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20" : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"}`}
+                    disabled={workspaceType === "personal"}
+                    className={`rounded-lg border px-3 py-3 text-left transition-all ${
+                      workspaceType === "personal"
+                        ? "cursor-not-allowed border-[var(--border-subtle)] opacity-50"
+                        : importOwnerType === "company"
+                          ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]/20"
+                          : "border-[var(--border-subtle)] hover:border-[var(--border-medium)]"
+                    }`}
                   >
                     <div className="text-[11px] font-bold tracking-wider text-[var(--text-primary)]">TEAM WORKSPACE</div>
-                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Available to your team by default.</p>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                      {workspaceType === "personal"
+                        ? "Switch to a company workspace to connect a team runtime."
+                        : "Available to your team by default."}
+                    </p>
                   </button>
                 </div>
 

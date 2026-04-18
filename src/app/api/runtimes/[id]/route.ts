@@ -86,6 +86,7 @@ export async function DELETE(
     }
 
     if (runtime.isPrimary) {
+      const runtimeCompanyId = runtime.companyId ?? null;
       const ownerCompanyId = runtime.ownerCompanyId ?? null;
       const ownerUserId = runtime.ownerUserId ?? null;
       const [replacement] = await withRetry(() =>
@@ -94,7 +95,9 @@ export async function DELETE(
           .from(companyRuntimes)
           .where(
             and(
-              eq(companyRuntimes.companyId, runtime.companyId),
+              runtimeCompanyId
+                ? eq(companyRuntimes.companyId, runtimeCompanyId)
+                : isNull(companyRuntimes.companyId),
               ne(companyRuntimes.id, id),
               eq(companyRuntimes.ownerType, runtime.ownerType),
               ownerCompanyId

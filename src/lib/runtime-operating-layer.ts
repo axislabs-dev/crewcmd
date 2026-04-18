@@ -8,7 +8,7 @@ import {
   upsertRuntimeManagedResource,
 } from "./runtime-managed-resources";
 import { uninstallSkillFromOpenClaw } from "./uninstall-skill-from-openclaw";
-import { ensureCompanyWorkspace } from "./workspace";
+import { resolveRuntimeWorkspace } from "./workspace";
 
 const DISPATCH_JOB_NAME = "crewcmd-queue-dispatch";
 const DAILY_BRIEF_JOB_NAME = "crewcmd-daily-brief";
@@ -16,14 +16,14 @@ const DAILY_BRIEF_JOB_NAME = "crewcmd-daily-brief";
 function buildQueueDispatchPrompt(params: {
   baseUrl: string;
   workspaceId: string;
-  companyId: string;
+  companyId?: string | null;
 }): string {
   return [
     "You are running CrewCmd queue dispatch for this workspace.",
     "Use the crewcmd-management skill for all CrewCmd operations.",
     `CrewCmd base URL: ${params.baseUrl}`,
     `Workspace ID: ${params.workspaceId}`,
-    `Company ID: ${params.companyId}`,
+    ...(params.companyId ? [`Company ID: ${params.companyId}`] : []),
     "",
     "Workflow:",
     "1. List queued tasks for the workspace.",
@@ -37,7 +37,9 @@ function buildQueueDispatchPrompt(params: {
     "9. Do not reassign tasks. Do not create duplicate tasks. Do not notify humans unless the task is blocked or needs a decision.",
     "10. Keep all audit trail on the task as comments.",
     "",
-    "Use workspace-scoped CrewCmd endpoints with workspaceId when available. companyId remains a compatible shorthand for the workspace.",
+    params.companyId
+      ? "Use workspace-scoped CrewCmd endpoints with workspaceId when available. companyId remains a compatible shorthand for the workspace."
+      : "Use workspace-scoped CrewCmd endpoints with workspaceId. There is no company scope for this runtime.",
     "",
     "If there is nothing to dispatch, stop silently.",
   ].join("\n");
@@ -46,14 +48,14 @@ function buildQueueDispatchPrompt(params: {
 function buildDailyBriefPrompt(params: {
   baseUrl: string;
   workspaceId: string;
-  companyId: string;
+  companyId?: string | null;
 }): string {
   return [
     "You are running the CrewCmd daily brief for this workspace.",
     "Use the crewcmd-management skill for all CrewCmd operations.",
     `CrewCmd base URL: ${params.baseUrl}`,
     `Workspace ID: ${params.workspaceId}`,
-    `Company ID: ${params.companyId}`,
+    ...(params.companyId ? [`Company ID: ${params.companyId}`] : []),
     "",
     "Workflow:",
     "1. Calculate a since timestamp for the last 12 hours.",
@@ -62,8 +64,14 @@ function buildDailyBriefPrompt(params: {
     "   - tasks currently in_progress",
     "   - tasks currently blocked or in review if they need attention",
     "3. List inbox messages for the workspace and include any critical or high-priority unread items that need human action.",
-    "4. List company members and identify the best human recipient (prefer an owner/admin).",
-    "5. Create a concise inbox update for that human with the daily brief. Keep it operational and short.",
+    ...(params.companyId
+      ? [
+          "4. List company members and identify the best human recipient (prefer an owner/admin).",
+          "5. Create a concise inbox update for that human with the daily brief. Keep it operational and short.",
+        ]
+      : [
+          "4. Create a concise inbox update for the workspace owner with the daily brief. Keep it operational and short.",
+        ]),
     "",
     "Rules:",
     "- Do not create tasks from the daily brief.",
@@ -180,9 +188,12 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
   }
 
   const baseUrl = resolveRuntimeCallbackUrl({ runtime });
-  const workspace = await ensureCompanyWorkspace(runtime.companyId);
+  const workspace = await resolveRuntimeWorkspace(runtime);
   if (!workspace) {
-    throw new Error(`Workspace for company ${runtime.companyId} not found`);
+    throw new Error(`Workspace for runtime ${runtimeId} not found`);
+  }
+  if (!runtime.companyId) {
+    throw new Error(`Runtime ${runtimeId} is missing company skill storage scope`);
   }
   const deviceKeyPem =
     typeof metadata.devicePrivateKeyPem === "string"
@@ -201,7 +212,7 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
     const dispatchMessage = buildQueueDispatchPrompt({
       baseUrl,
       workspaceId: workspace.id,
-      companyId: runtime.companyId,
+      companyId: runtime.companyId ?? null,
     });
     await ensureManagedCronJob({
       client,
@@ -221,7 +232,7 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
     const dailyBriefMessage = buildDailyBriefPrompt({
       baseUrl,
       workspaceId: workspace.id,
-      companyId: runtime.companyId,
+      companyId: runtime.companyId ?? null,
     });
     await ensureManagedCronJob({
       client,
@@ -249,6 +260,7 @@ export async function cleanupCrewCmdRuntimeOperatingLayer(runtimeId: string): Pr
     db!.select().from(companyRuntimes).where(eq(companyRuntimes.id, runtimeId)).limit(1)
   );
   if (!runtime) return;
+  if (!runtime.companyId) return;
 
   const resources = await listRuntimeManagedResources(runtimeId);
   const metadata = (runtime.metadata || {}) as Record<string, unknown>;

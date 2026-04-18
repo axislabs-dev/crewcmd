@@ -8,12 +8,15 @@ interface CrewCmdSkillConfig {
   baseUrl: string;
   /** Workspace ID for scoping */
   workspaceId: string;
-  /** Company ID for scoping */
-  companyId: string;
+  /** Optional company ID for company-backed workspaces */
+  companyId?: string | null;
 }
 
 export function generateCrewCmdSkill(config: CrewCmdSkillConfig): string {
   const { baseUrl, workspaceId, companyId } = config;
+  const scopeSummary = companyId
+    ? `Compatible company scope: ${companyId}`
+    : "This workspace is personal and has no company scope.";
 
   return `---
 name: crewcmd
@@ -25,7 +28,7 @@ version: "2.1"
 
 You are connected to a CrewCmd workspace.
 Preferred workspace scope: ${workspaceId}
-Compatible company scope: ${companyId}
+${scopeSummary}
 Use these API endpoints to manage your workspace — tasks, projects, agents, inbox, blueprints, budgets, documents, org chart, and activity.
 
 ## Operating rules
@@ -208,6 +211,8 @@ For queue dispatch:
 2. match task \`assignedAgentId\` to agent \`id\`
 3. use that agent's \`callsign\` when dispatching work
 
+If this workspace is personal, avoid company-only endpoints like members, org chart, company budgets, and company approvals unless you are explicitly given a valid company scope.
+
 ### Get / Update Agent
 
 \`\`\`
@@ -299,7 +304,7 @@ Content-Type: application/json
 
 {
   "workspaceId": "${workspaceId}",
-  "companyId": "${companyId}",
+  "companyId": "${companyId ?? ""}",
   "fromAgentId": "your-agent-uuid",
   "toAgentId": "target-agent-uuid",
   "type": "question",

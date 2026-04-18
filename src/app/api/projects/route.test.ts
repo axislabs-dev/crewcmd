@@ -9,10 +9,16 @@ const mockProjects = [
 
 const mockFrom = vi.fn();
 const mockReturning = vi.fn();
+const mockResolveAccessibleWorkspace = vi.fn();
+const mockGetCompanyIdForWorkspace = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
-    select: () => ({ from: mockFrom }),
+    select: () => ({
+      from: () => ({
+        where: mockFrom,
+      }),
+    }),
     insert: () => ({ values: () => ({ returning: mockReturning }) }),
   },
   withRetry: (fn: () => unknown) => fn(),
@@ -28,6 +34,12 @@ vi.mock("@/lib/require-auth", () => ({
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
 }));
 
+vi.mock("@/lib/workspace", () => ({
+  isHeartbeatBearerRequest: vi.fn(async () => false),
+  resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
+  getCompanyIdForWorkspace: (...args: unknown[]) => mockGetCompanyIdForWorkspace(...args),
+}));
+
 import { GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -37,6 +49,8 @@ function makeRequest(url: string, init?: RequestInit) {
 describe("GET /api/projects", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockGetCompanyIdForWorkspace.mockResolvedValue("co-1");
     mockFrom.mockResolvedValue(mockProjects);
   });
 
@@ -70,6 +84,8 @@ describe("POST /api/projects", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockGetCompanyIdForWorkspace.mockResolvedValue("co-1");
   });
 
   it("creates a project and returns 201", async () => {
@@ -79,7 +95,7 @@ describe("POST /api/projects", () => {
     const res = await POST(
       makeRequest("/api/projects", {
         method: "POST",
-        body: JSON.stringify({ name: "Gamma", url: "https://example.com/gamma", folder: "/workspace/gamma" }),
+        body: JSON.stringify({ name: "Gamma", workspaceId: "ws-1", url: "https://example.com/gamma", folder: "/workspace/gamma" }),
       })
     );
     const body = await res.json();
@@ -94,7 +110,7 @@ describe("POST /api/projects", () => {
     const res = await POST(
       makeRequest("/api/projects", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ workspaceId: "ws-1" }),
       })
     );
     const body = await res.json();
@@ -112,7 +128,7 @@ describe("POST /api/projects", () => {
     const res = await POST(
       makeRequest("/api/projects", {
         method: "POST",
-        body: JSON.stringify({ name: "Nope" }),
+        body: JSON.stringify({ name: "Nope", workspaceId: "ws-1" }),
       })
     );
     const body = await res.json();

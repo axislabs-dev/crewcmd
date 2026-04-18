@@ -34,6 +34,14 @@ export const ownershipTypeEnum = pgEnum("ownership_type", ["user", "company"]);
 
 export const agentVisibilityEnum = pgEnum("agent_visibility", ["private", "team", "org"]);
 
+export const workspaceTypeEnum = pgEnum("workspace_type", ["personal", "company"]);
+
+export const workspaceAccessLevelEnum = pgEnum("workspace_access_level", [
+  "viewer",
+  "operator",
+  "manager",
+]);
+
 export const goalStatusEnum = pgEnum("goal_status", [
   "active",
   "completed",
@@ -88,6 +96,19 @@ export const companies = pgTable("companies", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const workspaces = pgTable("workspaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  type: workspaceTypeEnum("type").notNull(),
+  name: text("name").notNull(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "cascade" }),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  personalWorkspaceUnique: unique().on(table.type, table.ownerUserId),
+  companyWorkspaceUnique: unique().on(table.type, table.companyId),
+}));
 
 // ─── Company Members ───────────────────────────────────────────────────
 
@@ -229,6 +250,7 @@ export const projects = pgTable("projects", {
   context: text("context"),
   contextUpdatedAt: timestamp("context_updated_at", { withTimezone: true }),
   contextUpdatedBy: text("context_updated_by"),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -264,6 +286,7 @@ export const tasks = pgTable("tasks", {
   source: taskSourceEnum("source").notNull().default("manual"),
   errorHash: text("error_hash").unique(),
   createdBy: text("created_by"),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -277,6 +300,7 @@ export const activityLog = pgTable("activity_log", {
   actionType: text("action_type").notNull(),
   description: text("description").notNull(),
   metadata: jsonb("metadata"),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -391,6 +415,7 @@ export const docs = pgTable("docs", {
   projectId: uuid("project_id").references(() => projects.id),
   taskId: uuid("task_id").references(() => tasks.id),
   tags: text("tags").array(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   pinned: boolean("pinned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -455,6 +480,7 @@ export const costEvents = pgTable("cost_events", {
 
 export const orgChartNodes = pgTable("org_chart_nodes", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   companyId: uuid("company_id")
     .references(() => companies.id, { onDelete: "cascade" })
     .notNull(),
@@ -742,9 +768,9 @@ export interface InboxMessageContext {
 
 export const inboxMessages = pgTable("inbox_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   companyId: uuid("company_id")
-    .references(() => companies.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => companies.id, { onDelete: "set null" }),
   fromAgentId: text("from_agent_id").notNull(),
   toUserId: uuid("to_user_id"),
   toAgentId: text("to_agent_id"),
@@ -762,6 +788,22 @@ export const inboxMessages = pgTable("inbox_messages", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const agentWorkspaceGrants = pgTable("agent_workspace_grants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" })
+    .notNull(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  accessLevel: workspaceAccessLevelEnum("access_level").notNull().default("operator"),
+  grantedBy: text("granted_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentWorkspaceUnique: unique().on(table.agentId, table.workspaceId),
+}));
 
 // ─── Agent Access Grants ───────────────────────────────────────────
 

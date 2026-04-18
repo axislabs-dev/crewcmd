@@ -6,6 +6,7 @@ export type ProjectStatus = "active" | "completed" | "archived";
 export type DocCategory = "Architecture" | "Strategy" | "Research" | "Guide" | "Report" | "Meeting Notes";
 export type DocType = "sop" | "guide" | "reference" | "runbook" | "general";
 export type DocVisibility = "company" | "project" | "agents_only";
+export type WorkspaceType = "personal" | "company";
 
 export interface Agent {
   id: string;
@@ -25,10 +26,12 @@ export interface Agent {
   model: string | null;
   workspacePath: string | null;
   runtimeId?: string | null;
+  runtimeRef?: string | null;
   ownerType?: "user" | "company";
   ownerUserId?: string | null;
   ownerCompanyId?: string | null;
   visibility?: "private" | "team" | "org";
+  workspaceIds?: string[];
   canvasPosition?: { x: number; y: number } | null;
   avatarUrl?: string | null;
   tokenUsage?: {
@@ -54,6 +57,7 @@ export interface Task {
   source: TaskSource;
   errorHash: string | null;
   createdBy: string | null;
+  workspaceId?: string | null;
   createdAt: string;
   updatedAt: string;
   sortIndex: number;
@@ -69,6 +73,7 @@ export interface Project {
   color: string;
   status: ProjectStatus;
   ownerAgentId: string | null;
+  workspaceId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,6 +91,7 @@ export interface Doc {
   taskId: string | null;
   tags: string[];
   pinned: boolean;
+  workspaceId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

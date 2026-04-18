@@ -1,12 +1,15 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
-import { agents, companyRuntimes } from "@/db/schema";
+import { agents, companyRuntimes, cronJobs } from "@/db/schema";
 import { canManageCompanyOwnedAgent, getAgentAccessContext } from "@/lib/agent-access";
 import {
   cleanupCrewCmdRuntimeOperatingLayer,
 } from "@/lib/runtime-operating-layer";
-import { deleteRuntimeManagedResources } from "@/lib/runtime-managed-resources";
+import {
+  deleteRuntimeManagedResources,
+  listRuntimeManagedResources,
+} from "@/lib/runtime-managed-resources";
 
 export const dynamic = "force-dynamic";
 
@@ -51,9 +54,23 @@ export async function DELETE(
         .from(agents)
         .where(eq(agents.runtimeId, id))
     );
+    const managedResources = await listRuntimeManagedResources(id);
+    const cronResourceIds = managedResources
+      .filter((resource) => resource.resourceType === "cron-job" && resource.externalId)
+      .map((resource) => resource.externalId!) ;
 
     await cleanupCrewCmdRuntimeOperatingLayer(id);
     await deleteRuntimeManagedResources(id);
+
+    if (cronResourceIds.length > 0) {
+      await withRetry(() =>
+        db!.delete(cronJobs).where(
+          cronResourceIds.length === 1
+            ? eq(cronJobs.id, cronResourceIds[0])
+            : inArray(cronJobs.id, cronResourceIds)
+        )
+      );
+    }
 
     if (linkedAgents.length > 0) {
       await withRetry(() =>
@@ -61,6 +78,7 @@ export async function DELETE(
           .update(agents)
           .set({
             runtimeId: null,
+            runtimeRef: null,
             status: "offline",
           })
           .where(eq(agents.runtimeId, id))

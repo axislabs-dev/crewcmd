@@ -86,7 +86,12 @@ export async function syncCronJobsFromRuntime() {
 
   const { runtime, jobs } = await listCronJobsFromRuntime();
   if (!runtime) {
-    return { upserted: 0, deleted: 0, runtimeId: null as string | null };
+    const result = await withRetry(() => db!.delete(cronJobs));
+    return {
+      upserted: 0,
+      deleted: result.rowCount ?? 0,
+      runtimeId: null as string | null,
+    };
   }
 
   const incomingIds = jobs.map((job) => job.id);

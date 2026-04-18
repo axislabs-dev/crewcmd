@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { cronJobs } from "@/db/schema";
+import { syncCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     if (!db) return NextResponse.json({ jobs: [], total: 0 });
+    await syncCronJobsFromRuntime();
     const rows = await db.select().from(cronJobs).orderBy(cronJobs.name);
     // Map DB fields to shape the UI expects
     const jobs = rows.map((j) => ({

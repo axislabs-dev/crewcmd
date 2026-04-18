@@ -8,46 +8,72 @@ interface CompanyData {
   logoUrl: string | null;
 }
 
-interface CompanyContextType {
+export interface WorkspaceData {
+  id: string;
+  type: "personal" | "company";
+  name: string;
+  ownerUserId: string | null;
+  companyId: string | null;
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  memberRole: string | null;
+}
+
+interface WorkspaceContextType {
+  workspace: WorkspaceData | null;
   company: CompanyData | null;
   loading: boolean;
   refresh: () => void;
 }
 
-const CompanyContext = createContext<CompanyContextType>({
+const WorkspaceContext = createContext<WorkspaceContextType>({
+  workspace: null,
   company: null,
   loading: true,
   refresh: () => {},
 });
 
-export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const [company, setCompany] = useState<CompanyData | null>(null);
+function getCookieValue(name: string) {
+  if (typeof document === "undefined") return null;
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+  return cookie?.split("=")[1] ?? null;
+}
+
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const [workspace, setWorkspace] = useState<WorkspaceData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      const cookie = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith("active_company="));
-      const companyId = cookie?.split("=")[1];
-      if (!companyId) {
+      const activeWorkspaceId = getCookieValue("active_workspace");
+      const activeCompanyId = getCookieValue("active_company");
+      const res = await fetch("/api/workspaces");
+      if (!res.ok) {
         setLoading(false);
         return;
       }
 
-      const res = await fetch(`/api/companies/${companyId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCompany({
-          id: data.id,
-          name: data.name,
-          logoUrl: data.logoUrl,
-        });
-      } else if (res.status === 404) {
-        // Company no longer exists (e.g. fresh DB) — clear stale cookie
-        document.cookie = "active_company=; path=/; max-age=0";
-        setCompany(null);
+      const data = await res.json();
+      const items = Array.isArray(data?.workspaces) ? data.workspaces : [];
+      const selected =
+        items.find((item: WorkspaceData) => item.id === activeWorkspaceId) ??
+        items.find((item: WorkspaceData) => item.companyId === activeCompanyId) ??
+        items.find((item: WorkspaceData) => item.type === "personal") ??
+        items[0] ??
+        null;
+
+      if (!activeWorkspaceId && selected?.id) {
+        document.cookie = `active_workspace=${selected.id};path=/;max-age=${60 * 60 * 24 * 365}`;
       }
+      if (selected?.companyId) {
+        document.cookie = `active_company=${selected.companyId};path=/;max-age=${60 * 60 * 24 * 365}`;
+      } else if (selected) {
+        document.cookie = "active_company=; path=/; max-age=0";
+      }
+
+      setWorkspace(selected);
     } catch {
       // ignore
     } finally {
@@ -59,27 +85,37 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
-  // Re-fetch when active_company cookie changes (company switcher)
   useEffect(() => {
     const interval = setInterval(() => {
-      const cookie = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith("active_company="));
-      const id = cookie?.split("=")[1];
-      if (id && id !== company?.id) {
+      const id = getCookieValue("active_workspace");
+      if (id && id !== workspace?.id) {
         refresh();
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [company?.id, refresh]);
+  }, [workspace?.id, refresh]);
+
+  const company = workspace?.type === "company" && workspace.companyId
+    ? {
+        id: workspace.companyId,
+        name: workspace.companyName || workspace.name,
+        logoUrl: workspace.companyLogoUrl || null,
+      }
+    : null;
 
   return (
-    <CompanyContext.Provider value={{ company, loading, refresh }}>
+    <WorkspaceContext.Provider value={{ workspace, company, loading, refresh }}>
       {children}
-    </CompanyContext.Provider>
+    </WorkspaceContext.Provider>
   );
 }
 
+export const CompanyProvider = WorkspaceProvider;
+
+export function useWorkspace() {
+  return useContext(WorkspaceContext);
+}
+
 export function useCompany() {
-  return useContext(CompanyContext);
+  return useContext(WorkspaceContext);
 }

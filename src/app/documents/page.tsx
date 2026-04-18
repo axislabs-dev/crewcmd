@@ -229,7 +229,7 @@ export default function KnowledgeBasePage() {
         <div className="p-4 border-b border-border/40">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="font-bold text-lg tracking-wide">Knowledge Base</h1>
+              <h1 className="font-bold text-lg tracking-wide">Workspace Knowledge</h1>
               <p className="text-[10px] text-muted-foreground tracking-wider mt-0.5">
                 {docs.length} DOCS{pinnedCount > 0 && ` · ${pinnedCount} PINNED`}
               </p>
@@ -514,7 +514,7 @@ export default function KnowledgeBasePage() {
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
               <div className="text-5xl mb-4">📚</div>
-              <h2 className="text-lg font-semibold mb-1">Knowledge Base</h2>
+              <h2 className="text-lg font-semibold mb-1">Workspace Knowledge</h2>
               <p className="text-sm text-muted-foreground mb-1">
                 SOPs, guides, and reference docs for your team and agents.
               </p>

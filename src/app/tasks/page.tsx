@@ -114,7 +114,7 @@ export default function TasksPage() {
     : agentsError
     ? agentsError
     : agents.length === 0
-    ? "No assignable agents are available in the current company scope."
+    ? "No assignable agents are available in the current workspace."
     : null;
 
   return (

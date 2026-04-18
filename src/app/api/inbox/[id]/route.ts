@@ -57,6 +57,7 @@ export async function PATCH(
         WHERE id = '${id}'
         RETURNING
           id,
+          workspace_id AS "workspaceId",
           company_id AS "companyId",
           from_agent_id AS "fromAgentId",
           to_user_id AS "toUserId",

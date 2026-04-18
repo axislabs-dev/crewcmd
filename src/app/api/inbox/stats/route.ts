@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import type { InboxStats, InboxPriority, InboxMessageType } from "@/db/schema-inbox";
+import {
+  isHeartbeatBearerRequest,
+  resolveAccessibleWorkspace,
+} from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -16,22 +20,43 @@ function emptyStats(): InboxStats {
 
 /**
  * GET /api/inbox/stats — Unread message counts by priority and type.
- * Query params: company_id
+ * Query params: workspaceId/company_id
  */
 export async function GET(request: NextRequest) {
   if (!db) return NextResponse.json(emptyStats());
 
   const { searchParams } = new URL(request.url);
-  const companyId = searchParams.get("company_id");
+  const requestedCompanyId =
+    searchParams.get("companyId") ??
+    searchParams.get("company_id");
+  const requestedWorkspaceId = searchParams.get("workspaceId");
 
   try {
-    const companyFilter = companyId ? ` AND company_id = '${companyId}'` : "";
+    const heartbeat = await isHeartbeatBearerRequest(request);
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: requestedWorkspaceId,
+      explicitCompanyId: requestedCompanyId,
+      requireExplicitForBearer: true,
+    });
+
+    if (!workspace) {
+      if (heartbeat && !requestedCompanyId && !requestedWorkspaceId) {
+        return NextResponse.json(
+          { error: "workspaceId or companyId is required for bearer-scoped inbox stats" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json(emptyStats());
+    }
+
+    const workspaceFilter = ` AND workspace_id = '${workspace.id}'`;
 
     const result = await withRetry(() =>
       db!.execute(sql.raw(
         `SELECT priority, type, COUNT(*)::int as count
          FROM inbox_messages
-         WHERE status = 'unread'${companyFilter}
+         WHERE status = 'unread'${workspaceFilter}
          GROUP BY priority, type`
       ))
     );

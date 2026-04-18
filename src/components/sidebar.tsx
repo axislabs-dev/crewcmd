@@ -6,7 +6,7 @@ import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { CompanySwitcher } from "@/components/company-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useCompany } from "@/components/company-context";
+import { useWorkspace } from "@/components/company-context";
 import { Avatar } from "@/components/avatar";
 
 const navSections = [
@@ -111,7 +111,7 @@ const navSections = [
     items: [
       {
         href: "/documents",
-        label: "Knowledge Base",
+        label: "Workspace Knowledge",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
@@ -157,7 +157,7 @@ const companySettingsItem = {
 };
 
 function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
-  const { company } = useCompany();
+  const { workspace, company } = useWorkspace();
   const logoSize = size === "sm" ? "h-6 w-6" : "h-8 w-8";
 
   if (company?.logoUrl) {
@@ -167,12 +167,22 @@ function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
     );
   }
 
+  if (workspace?.type === "personal") {
+    return (
+      <div className={`${logoSize} flex items-center justify-center rounded-md bg-[var(--accent-soft)] font-mono text-[10px] font-bold text-[var(--accent)]`}>
+        P
+      </div>
+    );
+  }
+
   return <div className={`${size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} rounded-full bg-[var(--accent)] ring-4 ring-[var(--accent-soft)]`} />;
 }
 
 function BrandName() {
-  const { company } = useCompany();
-  const name = company?.name || "CREWCMD";
+  const { workspace, company } = useWorkspace();
+  const name = workspace?.type === "personal"
+    ? "Personal"
+    : company?.name || workspace?.name || "CREWCMD";
   const displayName = name.length > 12 ? name.slice(0, 12) : name;
 
   return <span className="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{displayName}</span>;
@@ -182,6 +192,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: session } = useSession();
+  const { workspace } = useWorkspace();
 
   if (pathname === "/" || pathname === "/access-denied") return null;
   if (pathname.startsWith("/invite/")) return null;
@@ -235,7 +246,7 @@ export function Sidebar() {
         <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
         <ul className="space-y-0.5">
           <NavLink item={settingsItem} onClick={onClick} />
-          <NavLink item={companySettingsItem} onClick={onClick} />
+          {workspace?.type === "company" ? <NavLink item={companySettingsItem} onClick={onClick} /> : null}
         </ul>
       </div>
       {isSuperAdmin && (

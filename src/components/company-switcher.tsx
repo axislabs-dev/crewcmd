@@ -2,35 +2,35 @@
 
 import { useState, useEffect, useRef } from "react";
 
-interface Company {
+interface Workspace {
   id: string;
+  type: "personal" | "company";
   name: string;
-  mission: string | null;
-  memberRole: string;
+  companyId: string | null;
+  companyName: string | null;
+  memberRole: string | null;
 }
 
 export function CompanySwitcher() {
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/companies")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: Company[]) => {
-        setCompanies(data);
-        // Read active company from cookie
+    fetch("/api/workspaces")
+      .then((r) => (r.ok ? r.json() : { workspaces: [] }))
+      .then((data: { workspaces?: Workspace[] }) => {
+        const items = Array.isArray(data.workspaces) ? data.workspaces : [];
+        setWorkspaces(items);
         const cookie = document.cookie
           .split("; ")
-          .find((c) => c.startsWith("active_company="));
+          .find((c) => c.startsWith("active_workspace="));
         const cookieId = cookie?.split("=")[1];
-        if (cookieId && data.some((c) => c.id === cookieId)) {
+        if (cookieId && items.some((workspace) => workspace.id === cookieId)) {
           setActiveId(cookieId);
-        } else if (data.length > 0) {
-          // Auto-select first company
-          setActiveId(data[0].id);
-          document.cookie = `active_company=${data[0].id};path=/;max-age=${60 * 60 * 24 * 365}`;
+        } else if (items.length > 0) {
+          switchWorkspace(items.find((workspace) => workspace.type === "personal")?.id || items[0].id, items);
         }
       })
       .catch(() => {});
@@ -46,17 +46,31 @@ export function CompanySwitcher() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  if (companies.length === 0) return null;
+  if (workspaces.length === 0) return null;
 
-  const active = companies.find((c) => c.id === activeId);
+  const active = workspaces.find((workspace) => workspace.id === activeId);
 
-  function switchCompany(id: string) {
+  function switchWorkspace(id: string, items: Workspace[] = workspaces) {
+    const workspace = items.find((entry) => entry.id === id);
+    if (!workspace) return;
+
     setActiveId(id);
-    document.cookie = `active_company=${id};path=/;max-age=${60 * 60 * 24 * 365}`;
+    document.cookie = `active_workspace=${id};path=/;max-age=${60 * 60 * 24 * 365}`;
+    if (workspace.companyId) {
+      document.cookie = `active_company=${workspace.companyId};path=/;max-age=${60 * 60 * 24 * 365}`;
+    } else {
+      document.cookie = "active_company=; path=/; max-age=0";
+    }
     setOpen(false);
-    // Reload to apply company context across the app
     window.location.reload();
   }
+
+  const title = active?.type === "company"
+    ? active.companyName || active.name
+    : "Personal";
+  const subtitle = active?.type === "company"
+    ? active.memberRole?.toUpperCase() || "COMPANY"
+    : "PRIVATE WORKSPACE";
 
   return (
     <div ref={ref} className="relative px-3 pb-3">
@@ -65,17 +79,15 @@ export function CompanySwitcher() {
         className="flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
       >
         <div className="flex h-6 w-6 items-center justify-center rounded bg-[var(--accent-soft)] font-mono text-[10px] font-bold text-[var(--accent)]">
-          {active?.name?.[0]?.toUpperCase() ?? "?"}
+          {active?.type === "personal" ? "P" : active?.name?.[0]?.toUpperCase() ?? "?"}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[10px] tracking-wider text-[var(--text-primary)]">
-            {active?.name ?? "Select company"}
+            {title}
           </p>
-          {active?.mission && (
-            <p className="truncate text-[8px] tracking-wider text-[var(--text-tertiary)]">
-              {active.mission}
-            </p>
-          )}
+          <p className="truncate text-[8px] tracking-wider text-[var(--text-tertiary)]">
+            {subtitle}
+          </p>
         </div>
         <svg
           className={`h-3 w-3 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
@@ -90,30 +102,41 @@ export function CompanySwitcher() {
 
       {open && (
         <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] py-1 shadow-xl backdrop-blur-xl">
-          {companies.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => switchCompany(c.id)}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)] ${
-                c.id === activeId ? "bg-neo/5" : ""
-              }`}
-            >
-              <div className="flex h-5 w-5 items-center justify-center rounded bg-neo/15 font-mono text-[9px] font-bold text-[var(--accent)]">
-                {c.name[0]?.toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[10px] tracking-wider text-[var(--text-primary)]">
-                  {c.name}
-                </p>
-              </div>
-              {c.id === activeId && (
-                <div
-                  className="h-1.5 w-1.5 rounded-full bg-neo"
-                  style={{ boxShadow: "0 0 6px rgba(0, 240, 255, 0.6)" }}
-                />
-              )}
-            </button>
-          ))}
+          {workspaces.map((workspace) => {
+            const label = workspace.type === "company"
+              ? workspace.companyName || workspace.name
+              : "Personal";
+            const meta = workspace.type === "company"
+              ? workspace.memberRole?.toUpperCase() || "COMPANY"
+              : "PRIVATE WORKSPACE";
+            return (
+              <button
+                key={workspace.id}
+                onClick={() => switchWorkspace(workspace.id)}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                  workspace.id === activeId ? "bg-neo/5" : ""
+                }`}
+              >
+                <div className="flex h-5 w-5 items-center justify-center rounded bg-neo/15 font-mono text-[9px] font-bold text-[var(--accent)]">
+                  {workspace.type === "personal" ? "P" : label[0]?.toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[10px] tracking-wider text-[var(--text-primary)]">
+                    {label}
+                  </p>
+                  <p className="truncate text-[8px] tracking-wider text-[var(--text-tertiary)]">
+                    {meta}
+                  </p>
+                </div>
+                {workspace.id === activeId && (
+                  <div
+                    className="h-1.5 w-1.5 rounded-full bg-neo"
+                    style={{ boxShadow: "0 0 6px rgba(0, 240, 255, 0.6)" }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

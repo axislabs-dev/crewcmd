@@ -16,6 +16,7 @@ import {
   type RuntimeMetadata,
 } from "@/lib/runtime-callback-url";
 import { ensureCrewCmdRuntimeOperatingLayer } from "@/lib/runtime-operating-layer";
+import { ensureCompanyWorkspace, grantAgentDefaultWorkspace, grantAgentToWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
       ownerType: effectiveOwnerType,
       requestedVisibility: visibility,
     });
+    const companyWorkspace = await ensureCompanyWorkspace(companyId);
 
     // Store device private key in the runtime metadata for persistent device auth
     if (devicePrivateKeyPem || callbackBaseUrl) {
@@ -241,6 +243,22 @@ export async function POST(request: Request) {
             workspacePath: agent.workspace || null,
           });
           detachedByCallsign.delete(callsign.toLowerCase());
+          if (companyWorkspace) {
+            await grantAgentDefaultWorkspace({
+              agentId: updatedAgent.id,
+              ownerType: effectiveOwnerType,
+              ownerUserId: effectiveOwnerUserId,
+              ownerCompanyId: effectiveOwnerCompanyId,
+              fallbackCompanyId: companyId,
+              grantedBy: access.userId,
+            });
+            await grantAgentToWorkspace({
+              agentId: updatedAgent.id,
+              workspaceId: companyWorkspace.id,
+              accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
+              grantedBy: access.userId,
+            });
+          }
           reattached.push(updatedAgent);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -292,6 +310,23 @@ export async function POST(request: Request) {
             visibility: effectiveVisibility,
           })
           .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
+
+        if (companyWorkspace) {
+          await grantAgentDefaultWorkspace({
+            agentId: created_agent.id,
+            ownerType: effectiveOwnerType,
+            ownerUserId: effectiveOwnerUserId,
+            ownerCompanyId: effectiveOwnerCompanyId,
+            fallbackCompanyId: companyId,
+            grantedBy: access.userId,
+          });
+          await grantAgentToWorkspace({
+            agentId: created_agent.id,
+            workspaceId: companyWorkspace.id,
+            accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
+            grantedBy: access.userId,
+          });
+        }
 
         created.push(created_agent);
       } catch (err) {

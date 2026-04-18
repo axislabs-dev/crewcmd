@@ -3,6 +3,7 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import { Avatar } from "@/components/avatar";
+import { useWorkspace } from "@/components/company-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 interface Profile {
@@ -19,10 +20,23 @@ interface FlashMessage {
   text: string;
 }
 
+interface RuntimeRecord {
+  id: string;
+  runtimeType: string;
+  name: string;
+  gatewayUrl: string;
+  isPrimary: boolean;
+  status: string;
+  lastPing: string | null;
+  createdAt: string;
+  ownerType: "user" | "company";
+}
+
 const inputClassName = "w-full rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)] focus:bg-[var(--accent-soft)]";
 const cardClassName = "glass-card border border-[var(--border-subtle)] p-5 sm:p-6";
 
 export default function SettingsPage() {
+  const { workspace } = useWorkspace();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<FlashMessage | null>(null);
@@ -35,10 +49,17 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [runtimes, setRuntimes] = useState<RuntimeRecord[]>([]);
+  const [loadingRuntimes, setLoadingRuntimes] = useState(true);
+  const [deletingRuntimeId, setDeletingRuntimeId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void loadProfile();
+  }, []);
+
+  useEffect(() => {
+    void loadRuntimes();
   }, []);
 
   const roleLabel = useMemo(() => profile?.role?.replaceAll("_", " ").toUpperCase() ?? "USER", [profile?.role]);
@@ -60,6 +81,41 @@ export default function SettingsPage() {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to load settings" });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadRuntimes() {
+    setLoadingRuntimes(true);
+    try {
+      const res = await fetch("/api/runtimes", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load runtimes");
+      }
+      const all = Array.isArray(data) ? data : [];
+      setRuntimes(all.filter((runtime: RuntimeRecord) => runtime.ownerType === "user"));
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to load runtimes" });
+    } finally {
+      setLoadingRuntimes(false);
+    }
+  }
+
+  async function handleDeleteRuntime(runtimeId: string) {
+    setDeletingRuntimeId(runtimeId);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/runtimes/${runtimeId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete runtime");
+      }
+      setMessage({ type: "success", text: "Personal runtime deleted." });
+      await loadRuntimes();
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to delete runtime" });
+    } finally {
+      setDeletingRuntimeId(null);
     }
   }
 
@@ -299,6 +355,67 @@ export default function SettingsPage() {
               <ThemeToggle />
             </div>
           </div>
+
+          {workspace?.type === "personal" ? (
+            <div className={cardClassName}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">Personal Runtime</h2>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    Connect and manage the OpenClaw runtime that powers your personal agents.
+                  </p>
+                </div>
+                <a
+                  href="/onboarding?mode=connect&ownerType=user"
+                  className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                >
+                  Connect runtime
+                </a>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {loadingRuntimes ? (
+                  <p className="text-sm text-[var(--text-secondary)]">Loading runtimes...</p>
+                ) : runtimes.length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">No personal runtimes connected yet.</p>
+                ) : (
+                  runtimes.map((runtime) => (
+                    <div key={runtime.id} className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
+                            {runtime.isPrimary ? (
+                              <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
+                                PRIMARY
+                              </span>
+                            ) : null}
+                            <span className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                              {runtime.runtimeType.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="mt-2 truncate font-mono text-[11px] text-[var(--text-secondary)]">{runtime.gatewayUrl}</p>
+                          <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                            {runtime.lastPing
+                              ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
+                              : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteRuntime(runtime.id)}
+                          disabled={deletingRuntimeId === runtime.id}
+                          className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
+                        >
+                          {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className={cardClassName}>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Session</h2>

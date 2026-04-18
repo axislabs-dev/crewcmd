@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { agents, companyRuntimes } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { cookies } from "next/headers";
 import type { DiscoveredAgent, GatewayModel } from "@/lib/gateway-client";
 import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 import {
@@ -16,12 +15,19 @@ import {
   type RuntimeMetadata,
 } from "@/lib/runtime-callback-url";
 import { ensureCrewCmdRuntimeOperatingLayer } from "@/lib/runtime-operating-layer";
-import { ensureCompanyWorkspace, grantAgentDefaultWorkspace, grantAgentToWorkspace } from "@/lib/workspace";
+import {
+  grantAgentDefaultWorkspace,
+  grantAgentToWorkspace,
+  listWorkspaceAgents,
+  resolveAccessibleWorkspace,
+  resolveRuntimeWorkspace,
+} from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 interface ImportBody {
   runtimeId: string;
+  workspaceId?: string;
   agents: DiscoveredAgent[];
   models?: GatewayModel[];
   defaultAgentId?: string;
@@ -47,12 +53,6 @@ const COLORS = [
  */
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const companyId = cookieStore.get("active_company")?.value;
-    if (!companyId) {
-      return NextResponse.json({ error: "No active company" }, { status: 400 });
-    }
-
     const access = await getAgentAccessContext();
     if (!access.userId) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -62,6 +62,7 @@ export async function POST(request: Request) {
     const body: ImportBody = await request.json();
     const {
       runtimeId,
+      workspaceId,
       agents: importAgents,
       defaultAgentId,
       devicePrivateKeyPem,
@@ -80,20 +81,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Verify the runtime exists and belongs to this company
     const [runtime] = await withRetry(() => db!
       .select()
       .from(companyRuntimes)
       .where(eq(companyRuntimes.id, runtimeId)));
 
-    if (!runtime || runtime.companyId !== companyId) {
+    if (!runtime) {
       return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
+    }
+
+    const canAccessRuntime = runtime.ownerType === "user"
+      ? runtime.ownerUserId === access.userId
+      : canManageCompanyOwnedAgent(access, runtime.ownerCompanyId ?? runtime.companyId);
+    if (!canAccessRuntime) {
+      return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
+    }
+
+    const runtimeWorkspace = await resolveRuntimeWorkspace(runtime);
+    const targetWorkspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? runtimeWorkspace?.id ?? null,
+      explicitCompanyId: runtime.ownerType === "company" ? (runtime.ownerCompanyId ?? runtime.companyId ?? null) : null,
+    });
+    if (!targetWorkspace) {
+      return NextResponse.json({ error: "Runtime workspace is not accessible" }, { status: 400 });
+    }
+    if (runtimeWorkspace && runtimeWorkspace.id !== targetWorkspace.id) {
+      return NextResponse.json({ error: "Import workspace must match the runtime owner scope" }, { status: 400 });
     }
 
     const runtimeOwnership = await resolveRuntimeOwnership(runtimeId);
     const effectiveOwnerType = runtimeOwnership?.ownerType ?? (ownerType === "company" ? "company" : "user");
     const effectiveOwnerUserId = runtimeOwnership?.ownerUserId ?? (effectiveOwnerType === "user" ? access.userId : null);
-    const effectiveOwnerCompanyId = runtimeOwnership?.ownerCompanyId ?? (effectiveOwnerType === "company" ? companyId : null);
+    const effectiveOwnerCompanyId = runtimeOwnership?.ownerCompanyId ?? (effectiveOwnerType === "company" ? (targetWorkspace.companyId ?? runtime.companyId ?? null) : null);
 
     if (ownerType && runtimeOwnership && ownerType !== runtimeOwnership.ownerType) {
       return NextResponse.json({ error: "Import ownership must match the selected runtime" }, { status: 400 });
@@ -107,13 +127,13 @@ export async function POST(request: Request) {
       ownerType: effectiveOwnerType,
       requestedVisibility: visibility,
     });
-    const companyWorkspace = await ensureCompanyWorkspace(companyId);
 
     // Store device private key in the runtime metadata for persistent device auth
     if (devicePrivateKeyPem || callbackBaseUrl) {
       const nextMetadata: RuntimeMetadata = {
         ...((runtime.metadata || {}) as RuntimeMetadata),
         callbackBaseUrl,
+        workspaceId: targetWorkspace.id,
       };
       if (defaultAgentId) {
         nextMetadata.defaultAgentId = defaultAgentId;
@@ -131,17 +151,7 @@ export async function POST(request: Request) {
     }
 
     // Get existing agents to avoid duplicates
-    const existingAgents = await withRetry(() => db!
-      .select({
-        id: agents.id,
-        callsign: agents.callsign,
-        runtimeId: agents.runtimeId,
-        runtimeRef: agents.runtimeRef,
-        name: agents.name,
-        workspacePath: agents.workspacePath,
-      })
-      .from(agents)
-      .where(eq(agents.companyId, companyId)));
+    const existingAgents = await listWorkspaceAgents(targetWorkspace.id, { includeDetached: true });
 
     const existingCallsigns = new Set(
       existingAgents.map((a) => a.callsign.toLowerCase())
@@ -243,22 +253,20 @@ export async function POST(request: Request) {
             workspacePath: agent.workspace || null,
           });
           detachedByCallsign.delete(callsign.toLowerCase());
-          if (companyWorkspace) {
-            await grantAgentDefaultWorkspace({
-              agentId: updatedAgent.id,
-              ownerType: effectiveOwnerType,
-              ownerUserId: effectiveOwnerUserId,
-              ownerCompanyId: effectiveOwnerCompanyId,
-              fallbackCompanyId: companyId,
-              grantedBy: access.userId,
-            });
-            await grantAgentToWorkspace({
-              agentId: updatedAgent.id,
-              workspaceId: companyWorkspace.id,
-              accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
-              grantedBy: access.userId,
-            });
-          }
+          await grantAgentDefaultWorkspace({
+            agentId: updatedAgent.id,
+            ownerType: effectiveOwnerType,
+            ownerUserId: effectiveOwnerUserId,
+            ownerCompanyId: effectiveOwnerCompanyId,
+            fallbackCompanyId: targetWorkspace.companyId,
+            grantedBy: access.userId,
+          });
+          await grantAgentToWorkspace({
+            agentId: updatedAgent.id,
+            workspaceId: targetWorkspace.id,
+            accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
+            grantedBy: access.userId,
+          });
           reattached.push(updatedAgent);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -289,7 +297,7 @@ export async function POST(request: Request) {
             color,
             status: "online",
             soulContent: agent.description || null,
-            companyId,
+            companyId: targetWorkspace.companyId,
             adapterType: "openclaw_gateway",
             adapterConfig: {
               url: runtime.httpUrl,
@@ -311,22 +319,20 @@ export async function POST(request: Request) {
           })
           .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
 
-        if (companyWorkspace) {
-          await grantAgentDefaultWorkspace({
-            agentId: created_agent.id,
-            ownerType: effectiveOwnerType,
-            ownerUserId: effectiveOwnerUserId,
-            ownerCompanyId: effectiveOwnerCompanyId,
-            fallbackCompanyId: companyId,
-            grantedBy: access.userId,
-          });
-          await grantAgentToWorkspace({
-            agentId: created_agent.id,
-            workspaceId: companyWorkspace.id,
-            accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
-            grantedBy: access.userId,
-          });
-        }
+        await grantAgentDefaultWorkspace({
+          agentId: created_agent.id,
+          ownerType: effectiveOwnerType,
+          ownerUserId: effectiveOwnerUserId,
+          ownerCompanyId: effectiveOwnerCompanyId,
+          fallbackCompanyId: targetWorkspace.companyId,
+          grantedBy: access.userId,
+        });
+        await grantAgentToWorkspace({
+          agentId: created_agent.id,
+          workspaceId: targetWorkspace.id,
+          accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
+          grantedBy: access.userId,
+        });
 
         created.push(created_agent);
       } catch (err) {

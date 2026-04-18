@@ -66,17 +66,30 @@ export async function ensureCompanyWorkspace(companyId: string): Promise<Workspa
   );
   if (!company) return null;
 
-  const [created] = await withRetry(() =>
-    db!
-      .insert(workspaces)
-      .values({
-        type: "company",
-        name: company.name,
-        companyId: company.id,
-      })
-      .returning()
-  );
-  return created ?? null;
+  try {
+    const [created] = await withRetry(() =>
+      db!
+        .insert(workspaces)
+        .values({
+          type: "company",
+          name: company.name,
+          companyId: company.id,
+        })
+        .returning()
+    );
+    return created ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("workspaces_type_company_id_unique")) throw error;
+    const [raced] = await withRetry(() =>
+      db!
+        .select()
+        .from(workspaces)
+        .where(and(eq(workspaces.type, "company"), eq(workspaces.companyId, companyId)))
+        .limit(1)
+    );
+    return raced ?? null;
+  }
 }
 
 export async function ensurePersonalWorkspace(userId: string): Promise<WorkspaceRecord | null> {
@@ -100,17 +113,30 @@ export async function ensurePersonalWorkspace(userId: string): Promise<Workspace
   );
   if (!user) return null;
 
-  const [created] = await withRetry(() =>
-    db!
-      .insert(workspaces)
-      .values({
-        type: "personal",
-        name: user.name || user.email || "Personal Workspace",
-        ownerUserId: user.id,
-      })
-      .returning()
-  );
-  return created ?? null;
+  try {
+    const [created] = await withRetry(() =>
+      db!
+        .insert(workspaces)
+        .values({
+          type: "personal",
+          name: user.name || user.email || "Personal Workspace",
+          ownerUserId: user.id,
+        })
+        .returning()
+    );
+    return created ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("workspaces_type_owner_user_id_unique")) throw error;
+    const [raced] = await withRetry(() =>
+      db!
+        .select()
+        .from(workspaces)
+        .where(and(eq(workspaces.type, "personal"), eq(workspaces.ownerUserId, userId)))
+        .limit(1)
+    );
+    return raced ?? null;
+  }
 }
 
 export async function getWorkspaceAccessContext(request?: Request | NextRequest): Promise<WorkspaceAccessContext> {
@@ -302,6 +328,20 @@ export async function getReadableWorkspaceIdsForCompany(companyId: string) {
 export async function getCompanyIdForWorkspace(workspaceId: string): Promise<string | null> {
   const workspace = await getWorkspaceById(workspaceId);
   return workspace?.companyId ?? null;
+}
+
+export async function resolveRuntimeWorkspace(runtime: {
+  ownerType: "user" | "company";
+  ownerUserId?: string | null;
+  ownerCompanyId?: string | null;
+  companyId?: string | null;
+}): Promise<WorkspaceRecord | null> {
+  if (runtime.ownerType === "user") {
+    return runtime.ownerUserId ? ensurePersonalWorkspace(runtime.ownerUserId) : null;
+  }
+
+  const companyId = runtime.ownerCompanyId ?? runtime.companyId ?? null;
+  return companyId ? ensureCompanyWorkspace(companyId) : null;
 }
 
 export async function grantAgentToWorkspace(params: {

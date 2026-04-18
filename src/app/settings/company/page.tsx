@@ -151,7 +151,8 @@ export default function CompanySettingsPage() {
       const runtimesRes = await runtimesPromise;
       if (runtimesRes.ok) {
         const data = await runtimesRes.json();
-        setRuntimes(Array.isArray(data) ? data : []);
+        const items = Array.isArray(data) ? data : [];
+        setRuntimes(items.filter((runtime: RuntimeRecord) => runtime.ownerType === "company"));
       }
     } catch {
       // ignore
@@ -786,7 +787,7 @@ export default function CompanySettingsPage() {
             </p>
           </div>
           <a
-            href="/onboarding?mode=connect"
+            href="/onboarding?mode=connect&ownerType=company"
             className="rounded-lg border border-[var(--border-medium)] px-3 py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
           >
             CONNECT RUNTIME

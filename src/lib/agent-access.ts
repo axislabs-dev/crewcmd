@@ -150,10 +150,13 @@ export function buildRuntimeReadWhere(ctx: AgentAccessContext): SQL<unknown> | u
 export function runtimeOwnershipValues(params: {
   ownerType?: string | null;
   userId: string | null;
-  activeCompanyId: string;
+  activeCompanyId?: string | null;
 }) {
   const ownerType: OwnershipType = params.ownerType === "company" ? "company" : "user";
   if (ownerType === "company") {
+    if (!params.activeCompanyId) {
+      throw new Error("Company-owned runtimes require a company workspace");
+    }
     return {
       ownerType,
       ownerUserId: null,
@@ -165,6 +168,6 @@ export function runtimeOwnershipValues(params: {
     ownerType,
     ownerUserId: params.userId,
     ownerCompanyId: null,
-    companyId: params.activeCompanyId,
+    companyId: params.activeCompanyId ?? null,
   };
 }

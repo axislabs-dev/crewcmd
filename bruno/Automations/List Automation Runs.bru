@@ -1,0 +1,16 @@
+meta {
+  name: List Automation Runs
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/automations/runs
+  body: none
+  auth: none
+}
+
+params:query {
+  job_id: {{job_id}}
+  ~limit: 20
+}

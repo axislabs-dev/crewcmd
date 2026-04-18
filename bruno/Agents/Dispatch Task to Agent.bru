@@ -1,0 +1,23 @@
+meta {
+  name: Dispatch Task to Agent
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/api/agents/{{callsign}}/task
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "taskId": "{{task_id}}",
+    "prompt": "Work on task {{task_id}}. Review the task details in CrewCmd, add a concise pickup comment, move it to in_progress when you begin, and update the task when complete."
+  }
+}

@@ -4,6 +4,11 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import type { TaskStatus, TaskPriority } from "@/lib/data";
 import { requireAuth } from "@/lib/require-auth";
+import {
+  getCompanyIdForWorkspace,
+  isHeartbeatBearerRequest,
+  resolveAccessibleWorkspace,
+} from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +23,32 @@ export async function GET(request: NextRequest) {
     const unassigned = searchParams.get("unassigned");
     const excludeHumanAssignee = searchParams.get("excludeHumanAssignee") === "true";
     const sinceParam = searchParams.get("since"); // ISO timestamp or Unix ms
+    const requestedCompanyId =
+      searchParams.get("companyId") ??
+      searchParams.get("company_id");
+    const requestedWorkspaceId = searchParams.get("workspaceId");
+    const heartbeat = await isHeartbeatBearerRequest(request);
 
-    let result = await withRetry(() => db!.select().from(schema.tasks));
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: requestedWorkspaceId,
+      explicitCompanyId: requestedCompanyId,
+      requireExplicitForBearer: true,
+    });
+
+    if (!workspace) {
+      if (heartbeat && !requestedCompanyId && !requestedWorkspaceId) {
+        return NextResponse.json(
+          { error: "workspaceId or companyId is required for bearer-scoped task listing" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json([]);
+    }
+
+    let result = await withRetry(() =>
+      db!.select().from(schema.tasks).where(eq(schema.tasks.workspaceId, workspace.id))
+    );
 
     if (status) {
       result = result.filter((t) => t.status === status);
@@ -73,6 +102,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: body.workspaceId ?? null,
+      explicitCompanyId: body.companyId ?? null,
+    });
+
+    if (!workspace) {
+      return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
+    }
+    const companyId = workspace.companyId ?? await getCompanyIdForWorkspace(workspace.id);
+
     // Dedup: if errorHash provided, check for existing non-done task
     if (body.errorHash) {
       const [existing] = await db
@@ -81,7 +121,8 @@ export async function POST(request: NextRequest) {
         .where(
           and(
             eq(schema.tasks.errorHash, body.errorHash),
-            ne(schema.tasks.status, "done")
+            ne(schema.tasks.status, "done"),
+            eq(schema.tasks.workspaceId, workspace.id)
           )
         );
       if (existing) {
@@ -106,6 +147,8 @@ export async function POST(request: NextRequest) {
       source: body.source || "manual",
       errorHash: body.errorHash || null,
       createdBy: body.createdBy || null,
+      workspaceId: workspace.id,
+      companyId,
     }).returning();
 
     // Log task creation activity
@@ -114,6 +157,8 @@ export async function POST(request: NextRequest) {
       agentId: creator,
       actionType: "create",
       description: `Created task: ${task.title}`,
+      workspaceId: workspace.id,
+      companyId,
       metadata: { taskId: task.id, priority: task.priority, status: task.status },
     }).catch(() => {});
 

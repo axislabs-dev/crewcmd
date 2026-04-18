@@ -8,10 +8,16 @@ const mockTasks = [
 
 const mockFrom = vi.fn();
 const mockReturning = vi.fn();
+const mockResolveAccessibleWorkspace = vi.fn();
+const mockGetCompanyIdForWorkspace = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
-    select: () => ({ from: mockFrom }),
+    select: () => ({
+      from: () => ({
+        where: mockFrom,
+      }),
+    }),
     insert: () => ({
       values: () => ({
         returning: mockReturning,
@@ -39,6 +45,12 @@ vi.mock("drizzle-orm", () => ({
   ne: vi.fn(),
 }));
 
+vi.mock("@/lib/workspace", () => ({
+  isHeartbeatBearerRequest: vi.fn(async () => false),
+  resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
+  getCompanyIdForWorkspace: (...args: unknown[]) => mockGetCompanyIdForWorkspace(...args),
+}));
+
 import { GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -48,6 +60,8 @@ function makeRequest(url: string, init?: RequestInit) {
 describe("GET /api/tasks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockGetCompanyIdForWorkspace.mockResolvedValue("co-1");
     mockFrom.mockResolvedValue(mockTasks);
   });
 
@@ -96,6 +110,8 @@ describe("POST /api/tasks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockGetCompanyIdForWorkspace.mockResolvedValue("co-1");
   });
 
   it("creates a task and returns 201", async () => {
@@ -105,7 +121,7 @@ describe("POST /api/tasks", () => {
     const res = await POST(
       makeRequest("/api/tasks", {
         method: "POST",
-        body: JSON.stringify({ title: "New task" }),
+        body: JSON.stringify({ title: "New task", workspaceId: "ws-1" }),
       })
     );
     const body = await res.json();
@@ -118,7 +134,7 @@ describe("POST /api/tasks", () => {
     const res = await POST(
       makeRequest("/api/tasks", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ workspaceId: "ws-1" }),
       })
     );
     const body = await res.json();
@@ -136,7 +152,7 @@ describe("POST /api/tasks", () => {
     const res = await POST(
       makeRequest("/api/tasks", {
         method: "POST",
-        body: JSON.stringify({ title: "Nope" }),
+        body: JSON.stringify({ title: "Nope", workspaceId: "ws-1" }),
       })
     );
     const body = await res.json();

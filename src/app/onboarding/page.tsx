@@ -100,7 +100,7 @@ export default function OnboardingPage() {
           if (active.type === "company" && active.companyId) {
             setCompanyId((current) => current ?? active.companyId);
           }
-          if (requestedOwnerType !== "company" && requestedOwnerType !== "user" && active.type === "personal") {
+          if (requestedOwnerType === "user" || active.type === "personal") {
             setImportOwnerType("user");
             setImportVisibility("private");
           }
@@ -391,6 +391,7 @@ export default function OnboardingPage() {
     "rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50";
   const btnSecondary =
     "rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]";
+  const isPersonalFlow = importOwnerType === "user" || workspaceType === "personal";
 
   const filteredBlueprints =
     categoryFilter === "all"
@@ -1175,8 +1176,48 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* ── Step 3: Invite ── */}
-          {step === 3 && (
+          {/* ── Step 3: Personal completion ── */}
+          {step === 3 && isPersonalFlow && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                  PERSONAL WORKSPACE READY
+                </h2>
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                  Your personal runtime and agents are connected. Team invites are skipped for personal setup.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-4 space-y-2">
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Next steps:
+                </p>
+                <ul className="space-y-1 text-[10px] text-[var(--text-tertiary)]">
+                  <li>• Open Chat to talk to your imported agents.</li>
+                  <li>• Use Team to review imported personal agents.</li>
+                  <li>• When you’re ready to share agents, switch to a company workspace and connect a company runtime there.</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => router.push("/chat")}
+                  className={`flex-1 ${btnPrimary}`}
+                >
+                  GO TO CHAT
+                </button>
+                <button
+                  onClick={() => router.push("/team")}
+                  className={`flex-1 ${btnSecondary}`}
+                >
+                  VIEW TEAM
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Company invite ── */}
+          {step === 3 && !isPersonalFlow && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">

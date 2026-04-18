@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 /**
  * Resolve the current authenticated user from the session.
@@ -16,7 +17,7 @@ export async function resolveCurrentUser(request?: Request | NextRequest) {
   const authHeader = request?.headers?.get("authorization");
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
-    const expectedToken = process.env.HEARTBEAT_SECRET?.trim();
+    const expectedToken = await getHeartbeatSecret();
     if (token === expectedToken) {
       // Return a system user for API auth
       return {

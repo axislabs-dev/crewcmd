@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 /**
  * Require authentication for API mutation endpoints.
@@ -8,7 +9,7 @@ import { auth } from "@/lib/auth";
  */
 export async function requireAuth(req: NextRequest): Promise<NextResponse | null> {
   // 1. Check Bearer token
-  const expectedToken = process.env.HEARTBEAT_SECRET;
+  const expectedToken = await getHeartbeatSecret();
   if (expectedToken) {
     const authHeader = req.headers.get("authorization");
     if (authHeader && authHeader.startsWith("Bearer ")) {

@@ -16,7 +16,7 @@ interface HeartbeatPayload {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = validateHeartbeatAuth(req);
+  const authError = await validateHeartbeatAuth(req);
   if (authError) return authError;
 
   if (!db) {

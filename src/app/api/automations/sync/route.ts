@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
+import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const secret = process.env.HEARTBEAT_SECRET;
+  const secret = await getHeartbeatSecret();
   if (!secret) return NextResponse.json({ error: "Server not configured" }, { status: 500 });
 
   const auth = req.headers.get("authorization");

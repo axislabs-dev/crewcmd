@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaceFiles } from "@/db/schema";
 import { sql } from "drizzle-orm";
+import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const secret = process.env.HEARTBEAT_SECRET;
+  const secret = await getHeartbeatSecret();
   if (!secret) {
     return NextResponse.json({ error: "Server not configured" }, { status: 500 });
   }

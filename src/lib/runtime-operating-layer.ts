@@ -8,30 +8,36 @@ import {
   upsertRuntimeManagedResource,
 } from "./runtime-managed-resources";
 import { uninstallSkillFromOpenClaw } from "./uninstall-skill-from-openclaw";
+import { ensureCompanyWorkspace } from "./workspace";
 
 const DISPATCH_JOB_NAME = "crewcmd-queue-dispatch";
 const DAILY_BRIEF_JOB_NAME = "crewcmd-daily-brief";
 
 function buildQueueDispatchPrompt(params: {
   baseUrl: string;
+  workspaceId: string;
   companyId: string;
 }): string {
   return [
     "You are running CrewCmd queue dispatch for this workspace.",
     "Use the crewcmd-management skill for all CrewCmd operations.",
     `CrewCmd base URL: ${params.baseUrl}`,
+    `Workspace ID: ${params.workspaceId}`,
     `Company ID: ${params.companyId}`,
     "",
     "Workflow:",
-    "1. List queued tasks for the company.",
-    "2. List agents for the company and build a lookup from agent.id to agent.callsign.",
+    "1. List queued tasks for the workspace.",
+    "2. List agents for the workspace and build a lookup from agent.id to agent.callsign.",
     "3. For each queued task with an assigned agent, resolve task.assignedAgentId to an agent callsign using that lookup.",
-    "4. If no matching agent exists, leave the task queued and add a concise task comment explaining dispatch could not resolve the assigned agent.",
-    "5. If the assigned agent exists, inspect whether that agent already has an in_progress task.",
-    "6. If the assigned agent is free, dispatch work with POST /api/agents/{callsign}/task and include a real prompt containing the task title, description, task ID, and instruction to add a concise task comment acknowledging pickup before moving the task to in_progress.",
-    "7. If the assigned agent is already busy, leave the task queued. If there is no queue acknowledgement comment yet, add a concise task comment saying it is queued behind the current task.",
-    "8. Do not reassign tasks. Do not create duplicate tasks. Do not notify humans unless the task is blocked or needs a decision.",
-    "9. Keep all audit trail on the task as comments.",
+    "4. If no matching agent exists, leave the task queued and add a concise task comment explaining dispatch could not resolve the assigned agent in this workspace.",
+    "5. If the assigned agent exists but is detached from a runtime, leave the task queued and add a concise task comment explaining the agent is not currently attached.",
+    "6. If the assigned agent exists, inspect whether that agent already has an in_progress task in this workspace.",
+    "7. If the assigned agent is free, dispatch work with POST /api/agents/{callsign}/task and include a real prompt containing the task title, description, task ID, and instruction to add a concise task comment acknowledging pickup before moving the task to in_progress.",
+    "8. If the assigned agent is already busy, leave the task queued. If there is no queue acknowledgement comment yet, add a concise task comment saying it is queued behind the current task.",
+    "9. Do not reassign tasks. Do not create duplicate tasks. Do not notify humans unless the task is blocked or needs a decision.",
+    "10. Keep all audit trail on the task as comments.",
+    "",
+    "Use workspace-scoped CrewCmd endpoints with workspaceId when available. companyId remains a compatible shorthand for the workspace.",
     "",
     "If there is nothing to dispatch, stop silently.",
   ].join("\n");
@@ -39,12 +45,14 @@ function buildQueueDispatchPrompt(params: {
 
 function buildDailyBriefPrompt(params: {
   baseUrl: string;
+  workspaceId: string;
   companyId: string;
 }): string {
   return [
     "You are running the CrewCmd daily brief for this workspace.",
     "Use the crewcmd-management skill for all CrewCmd operations.",
     `CrewCmd base URL: ${params.baseUrl}`,
+    `Workspace ID: ${params.workspaceId}`,
     `Company ID: ${params.companyId}`,
     "",
     "Workflow:",
@@ -53,7 +61,7 @@ function buildDailyBriefPrompt(params: {
     "   - tasks completed in the last 12 hours",
     "   - tasks currently in_progress",
     "   - tasks currently blocked or in review if they need attention",
-    "3. List inbox messages for the company and include any critical or high-priority unread items that need human action.",
+    "3. List inbox messages for the workspace and include any critical or high-priority unread items that need human action.",
     "4. List company members and identify the best human recipient (prefer an owner/admin).",
     "5. Create a concise inbox update for that human with the daily brief. Keep it operational and short.",
     "",
@@ -172,6 +180,10 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
   }
 
   const baseUrl = resolveRuntimeCallbackUrl({ runtime });
+  const workspace = await ensureCompanyWorkspace(runtime.companyId);
+  if (!workspace) {
+    throw new Error(`Workspace for company ${runtime.companyId} not found`);
+  }
   const deviceKeyPem =
     typeof metadata.devicePrivateKeyPem === "string"
       ? metadata.devicePrivateKeyPem
@@ -188,6 +200,7 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
     await client.connect();
     const dispatchMessage = buildQueueDispatchPrompt({
       baseUrl,
+      workspaceId: workspace.id,
       companyId: runtime.companyId,
     });
     await ensureManagedCronJob({
@@ -207,6 +220,7 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
 
     const dailyBriefMessage = buildDailyBriefPrompt({
       baseUrl,
+      workspaceId: workspace.id,
       companyId: runtime.companyId,
     });
     await ensureManagedCronJob({

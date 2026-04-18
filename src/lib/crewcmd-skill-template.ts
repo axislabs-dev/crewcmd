@@ -6,12 +6,14 @@
 interface CrewCmdSkillConfig {
   /** Base URL of the CrewCmd instance (e.g. http://100.64.1.5:3000) */
   baseUrl: string;
+  /** Workspace ID for scoping */
+  workspaceId: string;
   /** Company ID for scoping */
   companyId: string;
 }
 
 export function generateCrewCmdSkill(config: CrewCmdSkillConfig): string {
-  const { baseUrl, companyId } = config;
+  const { baseUrl, workspaceId, companyId } = config;
 
   return `---
 name: crewcmd
@@ -21,7 +23,9 @@ version: "2.1"
 
 # CrewCmd Management
 
-You are connected to a CrewCmd workspace (company: ${companyId}).
+You are connected to a CrewCmd workspace.
+Preferred workspace scope: ${workspaceId}
+Compatible company scope: ${companyId}
 Use these API endpoints to manage your workspace — tasks, projects, agents, inbox, blueprints, budgets, documents, org chart, and activity.
 
 ## Operating rules
@@ -52,7 +56,7 @@ Base URL: \`${baseUrl}\`
 ### List Tasks
 
 \`\`\`
-GET ${baseUrl}/api/tasks?status={status}&agentId={agentId}
+GET ${baseUrl}/api/tasks?workspaceId=${workspaceId}&status={status}&agentId={agentId}
 \`\`\`
 
 Query parameters (all optional):
@@ -74,7 +78,8 @@ Content-Type: application/json
   "status": "inbox",
   "priority": "medium",
   "assignedAgentId": "uuid-of-agent",
-  "source": "agent_initiative"
+  "source": "agent_initiative",
+  "workspaceId": "${workspaceId}"
 }
 \`\`\`
 
@@ -147,7 +152,7 @@ Content-Type: application/json
 ### List Projects
 
 \`\`\`
-GET ${baseUrl}/api/projects?status={status}&ownerId={ownerId}
+GET ${baseUrl}/api/projects?workspaceId=${workspaceId}&status={status}&ownerId={ownerId}
 \`\`\`
 
 Query parameters (all optional):
@@ -165,7 +170,8 @@ Content-Type: application/json
   "description": "Project description",
   "color": "#3b82f6",
   "status": "active",
-  "ownerAgentId": "uuid"
+  "ownerAgentId": "uuid",
+  "workspaceId": "${workspaceId}"
 }
 \`\`\`
 
@@ -186,10 +192,10 @@ Content-Type: application/json
 ### List Agents
 
 \`\`\`
-GET ${baseUrl}/api/agents?companyId=${companyId}
+GET ${baseUrl}/api/agents?workspaceId=${workspaceId}
 \`\`\`
 
-Use \`companyId\` when calling under runtime bearer auth so CrewCmd can scope the result correctly.
+Use \`workspaceId\` when possible. \`companyId\` remains a compatible shorthand under runtime bearer auth.
 
 Returns agents with:
 - \`id\` — CrewCmd agent UUID
@@ -198,7 +204,7 @@ Returns agents with:
 - status, current task, workspace/runtime metadata
 
 For queue dispatch:
-1. list agents for the company
+1. list agents for the workspace
 2. match task \`assignedAgentId\` to agent \`id\`
 3. use that agent's \`callsign\` when dispatching work
 
@@ -268,10 +274,10 @@ Content-Type: application/json
 ### List Messages
 
 \`\`\`
-GET ${baseUrl}/api/inbox?company_id={companyId}&status={status}&priority={priority}&type={type}&limit=50&offset=0
+GET ${baseUrl}/api/inbox?workspaceId=${workspaceId}&status={status}&priority={priority}&type={type}&limit=50&offset=0
 \`\`\`
 
-Query parameters (all optional except \`company_id\`):
+Query parameters (all optional except workspace scope under bearer auth):
 - \`status\` — Message status filter
 - \`priority\` — \`critical\`, \`high\`, \`normal\`, \`low\`
 - \`type\` — Message type filter
@@ -292,6 +298,7 @@ POST ${baseUrl}/api/inbox
 Content-Type: application/json
 
 {
+  "workspaceId": "${workspaceId}",
   "companyId": "${companyId}",
   "fromAgentId": "your-agent-uuid",
   "toAgentId": "target-agent-uuid",
@@ -336,7 +343,7 @@ Content-Type: application/json
 ### Inbox Stats
 
 \`\`\`
-GET ${baseUrl}/api/inbox/stats?company_id={companyId}
+GET ${baseUrl}/api/inbox/stats?workspaceId=${workspaceId}
 \`\`\`
 
 ---

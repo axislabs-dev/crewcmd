@@ -71,6 +71,11 @@ export const CREWCMD_MANAGEMENT_SKILL_METADATA = {
         title: "Company ID",
         description: "Optional workspace company UUID used when requests need explicit scoping",
       },
+      workspaceId: {
+        type: "string",
+        title: "Workspace ID",
+        description: "Preferred workspace UUID for workspace-scoped CrewCmd operations",
+      },
       defaultAgentId: {
         type: "string",
         title: "Default agent ID",
@@ -99,6 +104,7 @@ export const CREWCMD_MANAGEMENT_SKILL_METADATA = {
   configExample: {
     baseUrl: "https://crewcmd.example.com",
     companyId: "company_123",
+    workspaceId: "workspace_123",
     canManageAgents: true,
   },
 } as const;

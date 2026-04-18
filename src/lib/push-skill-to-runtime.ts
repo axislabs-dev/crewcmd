@@ -18,6 +18,7 @@ import { CREWCMD_MANAGEMENT_SKILL_METADATA } from "./skills/crewcmd-management";
 import { syncSkillToOpenClaw } from "./sync-skill-to-openclaw";
 import { resolveRuntimeCallbackUrl } from "./runtime-callback-url";
 import { upsertRuntimeManagedResource } from "./runtime-managed-resources";
+import { ensureCompanyWorkspace } from "./workspace";
 
 const SYSTEM_SKILL_SLUG = "crewcmd-management";
 const SYSTEM_SKILL_NAME = "CrewCmd Management";
@@ -32,11 +33,14 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   if (!runtime) throw new Error(`Runtime ${runtimeId} not found`);
 
   const baseUrl = resolveRuntimeCallbackUrl({ runtime });
+  const workspace = await ensureCompanyWorkspace(runtime.companyId);
+  if (!workspace) throw new Error(`Workspace for company ${runtime.companyId} not found`);
 
   // Generate the SKILL.md content
   // Auth token is NOT embedded — agents read $HEARTBEAT_SECRET from their environment at runtime
   const skillContent = generateCrewCmdSkill({
     baseUrl,
+    workspaceId: workspace.id,
     companyId: runtime.companyId,
   });
 
@@ -60,6 +64,7 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
       skillId: skillRecord.id,
       slug: SYSTEM_SKILL_SLUG,
       baseUrl,
+      workspaceId: workspace.id,
     },
   });
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, isNull } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import type { TaskStatus, TaskPriority } from "@/lib/data";
@@ -49,6 +49,15 @@ export async function GET(request: NextRequest) {
     let result = await withRetry(() =>
       db!.select().from(schema.tasks).where(eq(schema.tasks.workspaceId, workspace.id))
     );
+
+    if (result.length === 0) {
+      result = await withRetry(() =>
+        db!
+          .select()
+          .from(schema.tasks)
+          .where(and(isNull(schema.tasks.workspaceId), isNull(schema.tasks.companyId)))
+      );
+    }
 
     if (status) {
       result = result.filter((t) => t.status === status);

@@ -3,6 +3,7 @@ import { db, withRetry } from "@/db";
 import { companyRuntimes, cronJobs } from "@/db/schema";
 import { getAgentAccessContext, buildRuntimeReadWhere } from "@/lib/agent-access";
 import { GatewayClient, resolveDeviceIdentity, type GatewayCronJob } from "./gateway-client";
+import { getWorkspaceAccessContext, getWorkspaceById } from "./workspace";
 
 function humanSchedule(sched: Record<string, unknown>): string {
   if (!sched || typeof sched !== "object") return "unknown";
@@ -20,12 +21,56 @@ function humanSchedule(sched: Record<string, unknown>): string {
   return "unknown";
 }
 
-export async function resolvePrimaryReadableRuntimeForActiveCompany() {
-  const access = await getAgentAccessContext();
-  if (!db || !access.activeCompanyId) return null;
+export async function resolvePrimaryReadableRuntimeForActiveWorkspace() {
+  const [access, workspaceAccess] = await Promise.all([
+    getAgentAccessContext(),
+    getWorkspaceAccessContext(),
+  ]);
+  if (!db) return null;
 
   const where = buildRuntimeReadWhere(access);
   if (!where) return null;
+
+  const activeWorkspace = workspaceAccess.activeWorkspaceId
+    ? await getWorkspaceById(workspaceAccess.activeWorkspaceId)
+    : null;
+
+  if (activeWorkspace?.type === "personal" && access.userId) {
+    const primary = await withRetry(() =>
+      db!
+        .select()
+        .from(companyRuntimes)
+        .where(
+          and(
+            eq(companyRuntimes.ownerType, "user"),
+            eq(companyRuntimes.ownerUserId, access.userId!),
+            eq(companyRuntimes.isPrimary, true),
+            where
+          )
+        )
+        .limit(1)
+    );
+    if (primary[0]) return primary[0];
+
+    const fallback = await withRetry(() =>
+      db!
+        .select()
+        .from(companyRuntimes)
+        .where(
+          and(
+            eq(companyRuntimes.ownerType, "user"),
+            eq(companyRuntimes.ownerUserId, access.userId!),
+            where
+          )
+        )
+        .limit(1)
+    );
+
+    return fallback[0] ?? null;
+  }
+
+  const activeCompanyId = activeWorkspace?.companyId ?? access.activeCompanyId;
+  if (!activeCompanyId) return null;
 
   const primary = await withRetry(() =>
     db!
@@ -33,7 +78,7 @@ export async function resolvePrimaryReadableRuntimeForActiveCompany() {
       .from(companyRuntimes)
       .where(
         and(
-          eq(companyRuntimes.companyId, access.activeCompanyId!),
+          eq(companyRuntimes.companyId, activeCompanyId),
           eq(companyRuntimes.isPrimary, true),
           where
         )
@@ -46,7 +91,7 @@ export async function resolvePrimaryReadableRuntimeForActiveCompany() {
     db!
       .select()
       .from(companyRuntimes)
-      .where(and(eq(companyRuntimes.companyId, access.activeCompanyId!), where))
+      .where(and(eq(companyRuntimes.companyId, activeCompanyId), where))
       .limit(1)
   );
 
@@ -54,7 +99,7 @@ export async function resolvePrimaryReadableRuntimeForActiveCompany() {
 }
 
 export async function listCronJobsFromRuntime() {
-  const runtime = await resolvePrimaryReadableRuntimeForActiveCompany();
+  const runtime = await resolvePrimaryReadableRuntimeForActiveWorkspace();
   if (!runtime) {
     return { runtime: null, jobs: [] as GatewayCronJob[] };
   }

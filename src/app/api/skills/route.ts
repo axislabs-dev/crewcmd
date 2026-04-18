@@ -3,14 +3,25 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { BUILT_IN_SKILLS } from "@/lib/skills/built-in";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const companyId = request.nextUrl.searchParams.get("company_id");
-  if (!companyId) {
-    return NextResponse.json({ error: "company_id is required" }, { status: 400 });
+  const requestedCompanyId =
+    request.nextUrl.searchParams.get("companyId") ??
+    request.nextUrl.searchParams.get("company_id");
+  const requestedWorkspaceId = request.nextUrl.searchParams.get("workspaceId");
+
+  const workspace = await resolveAccessibleWorkspace({
+    request,
+    explicitWorkspaceId: requestedWorkspaceId,
+    explicitCompanyId: requestedCompanyId,
+  });
+  if (!workspace) {
+    return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
   }
+  const companyId = workspace.companyId ?? null;
 
   // Built-in skills are always returned, regardless of DB state
   const builtIns = BUILT_IN_SKILLS.map((s) => ({
@@ -36,7 +47,7 @@ export async function GET(request: NextRequest) {
     updatedAt: new Date().toISOString(),
   }));
 
-  if (!db) {
+  if (!db || !companyId) {
     return NextResponse.json(builtIns);
   }
 
@@ -59,10 +70,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, slug, description, source, sourceUrl, sourceRef, version, content, companyId, metadata } = body;
+    const { name, slug, description, source, sourceUrl, sourceRef, version, content, companyId, workspaceId, metadata } = body;
 
-    if (!name || !slug || !companyId) {
-      return NextResponse.json({ error: "name, slug, and companyId are required" }, { status: 400 });
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? null,
+      explicitCompanyId: companyId ?? null,
+    });
+    const resolvedCompanyId = workspace?.companyId ?? companyId ?? null;
+
+    if (!name || !slug || !resolvedCompanyId) {
+      return NextResponse.json({ error: "name, slug, and a company-backed workspace are required" }, { status: 400 });
     }
 
     const [created] = await withRetry(() =>
@@ -75,7 +93,7 @@ export async function POST(request: NextRequest) {
         sourceRef: sourceRef || null,
         version: version || null,
         content: content || null,
-        companyId,
+        companyId: resolvedCompanyId,
         metadata: metadata || {},
         installed: true,
       }).returning()

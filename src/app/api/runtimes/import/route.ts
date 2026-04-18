@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { agents, companyRuntimes } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 import type { DiscoveredAgent, GatewayModel } from "@/lib/gateway-client";
 import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 import {
@@ -150,8 +150,26 @@ export async function POST(request: Request) {
         .where(eq(companyRuntimes.id, runtimeId)));
     }
 
-    // Get existing agents to avoid duplicates
-    const existingAgents = await listWorkspaceAgents(targetWorkspace.id, { includeDetached: true });
+    // Get existing agents in the target workspace plus any globally matching agents.
+    // Callsigns are globally unique, so a personal import of an already imported team
+    // must re-grant existing rows instead of trying to insert duplicates.
+    const candidateCallsigns = importAgents.map((agent) =>
+      (agent.name?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) || agent.id.toUpperCase())
+    );
+    const [existingAgents, globalMatches] = await Promise.all([
+      listWorkspaceAgents(targetWorkspace.id, { includeDetached: true }),
+      withRetry(() =>
+        db!
+          .select()
+          .from(agents)
+          .where(
+            or(
+              inArray(agents.runtimeRef, importAgents.map((agent) => agent.id)),
+              inArray(agents.callsign, candidateCallsigns)
+            )
+          )
+      ),
+    ]);
 
     const existingCallsigns = new Set(
       existingAgents.map((a) => a.callsign.toLowerCase())
@@ -166,6 +184,14 @@ export async function POST(request: Request) {
         .filter((agent) => !agent.runtimeId)
         .map((agent) => [agent.callsign.toLowerCase(), agent] as const)
     );
+    const globalByRuntimeRef = new Map(
+      globalMatches
+        .filter((agent) => agent.runtimeRef)
+        .map((agent) => [agent.runtimeRef!, agent] as const)
+    );
+    const globalByCallsign = new Map(
+      globalMatches.map((agent) => [agent.callsign.toLowerCase(), agent] as const)
+    );
 
     const created: { callsign: string; name: string; id: string }[] = [];
     const reattached: { callsign: string; name: string; id: string }[] = [];
@@ -176,8 +202,10 @@ export async function POST(request: Request) {
       const callsign =
         agent.name?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) ||
         agent.id.toUpperCase();
-      const existingByRef = existingByRuntimeRef.get(agent.id);
-      const existingDetached = detachedByCallsign.get(callsign.toLowerCase());
+      const existingByRef = existingByRuntimeRef.get(agent.id) ?? globalByRuntimeRef.get(agent.id);
+      const existingDetached =
+        detachedByCallsign.get(callsign.toLowerCase()) ??
+        globalByCallsign.get(callsign.toLowerCase());
 
       // Reattach if this agent identity is already known
       const agentToReattach = existingByRef ?? existingDetached;
@@ -207,7 +235,7 @@ export async function POST(request: Request) {
               name: agent.name || agent.id,
               title: agent.title || "Agent",
               emoji: agent.emoji || "🤖",
-              color: COLORS[i % COLORS.length],
+              color: agentToReattach.color || COLORS[i % COLORS.length],
               status: "online",
               soulContent: agent.description || null,
               adapterType: "openclaw_gateway",
@@ -217,17 +245,17 @@ export async function POST(request: Request) {
                   ? { Authorization: `Bearer ${runtime.authToken}` }
                   : undefined,
               },
-              role: "engineer",
+              role: agentToReattach.role || "engineer",
               model: agent.model || null,
               workspacePath: agent.workspace || null,
               runtimeId,
               runtimeRef: agent.id,
               reportsTo: agent.reportsTo || null,
               avatarUrl: agent.avatarUrl || null,
-              ownerType: effectiveOwnerType,
-              ownerUserId: effectiveOwnerUserId,
-              ownerCompanyId: effectiveOwnerCompanyId,
-              visibility: effectiveVisibility,
+              ownerType: agentToReattach.ownerType || effectiveOwnerType,
+              ownerUserId: agentToReattach.ownerUserId ?? effectiveOwnerUserId,
+              ownerCompanyId: agentToReattach.ownerCompanyId ?? effectiveOwnerCompanyId,
+              visibility: agentToReattach.visibility || effectiveVisibility,
             })
             .where(eq(agents.id, agentToReattach.id))
             .returning({ id: agents.id, callsign: agents.callsign, name: agents.name }));
@@ -251,13 +279,14 @@ export async function POST(request: Request) {
             runtimeRef: agent.id,
             name: agent.name || agent.id,
             workspacePath: agent.workspace || null,
+            grantAccessLevel: "manager",
           });
           detachedByCallsign.delete(callsign.toLowerCase());
           await grantAgentDefaultWorkspace({
             agentId: updatedAgent.id,
-            ownerType: effectiveOwnerType,
-            ownerUserId: effectiveOwnerUserId,
-            ownerCompanyId: effectiveOwnerCompanyId,
+            ownerType: agentToReattach.ownerType || effectiveOwnerType,
+            ownerUserId: agentToReattach.ownerUserId ?? effectiveOwnerUserId,
+            ownerCompanyId: agentToReattach.ownerCompanyId ?? effectiveOwnerCompanyId,
             fallbackCompanyId: targetWorkspace.companyId,
             grantedBy: access.userId,
           });
@@ -354,13 +383,25 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({
+    const responseBody = {
       imported: created.length,
       reattached: reattached.length,
       skipped: skipped.length,
       agents: [...reattached, ...created],
       skippedDetails: skipped,
-    });
+    };
+
+    if (created.length === 0 && reattached.length === 0 && skipped.length > 0) {
+      return NextResponse.json(
+        {
+          ...responseBody,
+          error: skipped[0]?.reason || "Failed to import agents",
+        },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(responseBody);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

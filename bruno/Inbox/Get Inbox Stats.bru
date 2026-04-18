@@ -1,11 +1,11 @@
 meta {
-  name: List Tasks
+  name: Get Inbox Stats
   type: http
-  seq: 1
+  seq: 3
 }
 
 get {
-  url: {{base_url}}/api/tasks
+  url: {{base_url}}/api/inbox/stats
   body: none
   auth: none
 }
@@ -17,10 +17,4 @@ headers {
 params:query {
   workspaceId: {{workspace_id}}
   ~companyId: {{company_id}}
-  ~status: 
-  ~agentId: 
-  ~priority: 
-  ~unassigned: 
-  ~excludeHumanAssignee: 
-  ~since: 
 }

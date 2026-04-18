@@ -1,0 +1,15 @@
+meta {
+  name: Sync Automations
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/automations/sync
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+}

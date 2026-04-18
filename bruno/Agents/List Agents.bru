@@ -9,3 +9,12 @@ get {
   body: none
   auth: none
 }
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+}
+
+params:query {
+  ~companyId: {{company_id}}
+  ~includeDetached: 
+}

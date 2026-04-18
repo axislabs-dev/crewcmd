@@ -64,6 +64,8 @@ export interface Project {
   id: string;
   name: string;
   description: string | null;
+  url: string | null;
+  folder: string | null;
   color: string;
   status: ProjectStatus;
   ownerAgentId: string | null;

@@ -51,6 +51,8 @@ export async function POST(request: NextRequest) {
     const [project] = await db.insert(schema.projects).values({
       name: body.name,
       description: body.description || null,
+      url: body.url || null,
+      folder: body.folder || null,
       color: body.color || "#00f0ff",
       status: body.status || "active",
       ownerAgentId: body.ownerAgentId || null,

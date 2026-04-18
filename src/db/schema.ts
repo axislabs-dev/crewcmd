@@ -220,6 +220,8 @@ export const projects = pgTable("projects", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
+  url: text("url"),
+  folder: text("folder"),
   color: text("color").notNull().default("#00f0ff"),
   status: projectStatusEnum("status").notNull().default("active"),
   ownerAgentId: text("owner_agent_id"),

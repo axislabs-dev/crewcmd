@@ -3,8 +3,8 @@ import { NextRequest } from "next/server";
 
 // Mock data
 const mockProjects = [
-  { id: "p1", name: "Alpha", description: null, color: "#00f0ff", status: "active", ownerAgentId: null, documents: null },
-  { id: "p2", name: "Beta", description: "desc", color: "#ff0000", status: "archived", ownerAgentId: "a1", documents: null },
+  { id: "p1", name: "Alpha", description: null, url: null, folder: null, color: "#00f0ff", status: "active", ownerAgentId: null, documents: null },
+  { id: "p2", name: "Beta", description: "desc", url: "https://example.com", folder: "/tmp/beta", color: "#ff0000", status: "archived", ownerAgentId: "a1", documents: null },
 ];
 
 const mockFrom = vi.fn();
@@ -73,19 +73,21 @@ describe("POST /api/projects", () => {
   });
 
   it("creates a project and returns 201", async () => {
-    const created = { id: "p3", name: "Gamma", description: null, color: "#00f0ff", status: "active", ownerAgentId: null, documents: null };
+    const created = { id: "p3", name: "Gamma", description: null, url: "https://example.com/gamma", folder: "/workspace/gamma", color: "#00f0ff", status: "active", ownerAgentId: null, documents: null };
     mockReturning.mockResolvedValue([created]);
 
     const res = await POST(
       makeRequest("/api/projects", {
         method: "POST",
-        body: JSON.stringify({ name: "Gamma" }),
+        body: JSON.stringify({ name: "Gamma", url: "https://example.com/gamma", folder: "/workspace/gamma" }),
       })
     );
     const body = await res.json();
 
     expect(res.status).toBe(201);
     expect(body.name).toBe("Gamma");
+    expect(body.url).toBe("https://example.com/gamma");
+    expect(body.folder).toBe("/workspace/gamma");
   });
 
   it("returns 400 when name is missing", async () => {

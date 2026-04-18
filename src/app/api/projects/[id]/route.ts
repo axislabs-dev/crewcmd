@@ -49,6 +49,8 @@ export async function PATCH(
 
     if (body.name !== undefined) updates.name = body.name;
     if (body.description !== undefined) updates.description = body.description;
+    if (body.url !== undefined) updates.url = body.url;
+    if (body.folder !== undefined) updates.folder = body.folder;
     if (body.color !== undefined) updates.color = body.color;
     if (body.status !== undefined) updates.status = body.status;
     if (body.ownerAgentId !== undefined) updates.ownerAgentId = body.ownerAgentId;

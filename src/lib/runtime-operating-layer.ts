@@ -10,8 +10,8 @@ import {
 import { uninstallSkillFromOpenClaw } from "./uninstall-skill-from-openclaw";
 import { resolveRuntimeWorkspace } from "./workspace";
 
-const DISPATCH_JOB_NAME = "crewcmd-queue-dispatch";
-const DAILY_BRIEF_JOB_NAME = "crewcmd-daily-brief";
+export const DISPATCH_JOB_NAME = "crewcmd-queue-dispatch";
+export const DAILY_BRIEF_JOB_NAME = "crewcmd-daily-brief";
 
 function buildQueueDispatchPrompt(params: {
   baseUrl: string;

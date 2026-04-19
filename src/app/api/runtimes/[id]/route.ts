@@ -13,6 +13,51 @@ import {
 
 export const dynamic = "force-dynamic";
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    if (!db) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
+    const access = await getAgentAccessContext();
+    if (!access.userId) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const [runtime] = await withRetry(() =>
+      db!
+        .select()
+        .from(companyRuntimes)
+        .where(eq(companyRuntimes.id, id))
+        .limit(1)
+    );
+
+    if (!runtime) {
+      return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
+    }
+
+    const canRead = runtime.ownerType === "user"
+      ? runtime.ownerUserId === access.userId
+      : canManageCompanyOwnedAgent(access, runtime.ownerCompanyId ?? runtime.companyId);
+
+    if (!canRead) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    return NextResponse.json({
+      ...runtime,
+      capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -133,4 +178,12 @@ export async function DELETE(
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function readCapabilitySnapshot(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const snapshot = (metadata as Record<string, unknown>).capabilitySnapshot;
+  return snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? (snapshot as Record<string, unknown>)
+    : null;
 }

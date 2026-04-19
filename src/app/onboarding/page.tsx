@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUILT_IN_BLUEPRINTS, type BuiltInBlueprint } from "@/lib/blueprints-data";
+import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 
 // ─── Category pills ──────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export default function OnboardingPage() {
     pairingInstructions?: string;
     agents: { id: string; name: string; emoji: string; title: string; description: string; model?: string; reportsTo?: string }[];
     models: { id: string; name: string; provider: string }[];
+    capabilities?: RuntimeCapabilitySnapshot;
     defaultAgentId?: string;
     devicePrivateKeyPem?: string;
   } | null>(null);
@@ -295,6 +297,7 @@ export default function OnboardingPage() {
           gatewayUrl: gatewayUrl.trim().startsWith("ws") ? gatewayUrl.trim() : `ws://${gatewayUrl.trim()}`,
           httpUrl: gatewayUrl.trim().startsWith("http") ? gatewayUrl.trim() : `http://${gatewayUrl.trim()}`,
           authToken: authToken.trim() || null,
+          capabilitySnapshot: probeResult.capabilities,
           workspaceId,
           companyId,
           ownerType: importOwnerType,
@@ -1085,6 +1088,23 @@ export default function OnboardingPage() {
                   <p className="mt-0.5 text-[9px] text-[var(--text-tertiary)] line-clamp-1">
                     {probeResult.models.join(", ")}
                   </p>
+                </div>
+              )}
+
+              {probeResult.capabilities && (
+                <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] px-3 py-2">
+                  <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
+                    RUNTIME CAPABILITIES
+                  </span>
+                  <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+                    {probeResult.capabilities.providerCount} providers, {probeResult.capabilities.agentCount} agents, default model{" "}
+                    {probeResult.capabilities.defaultModel || "not set"}
+                  </p>
+                  {probeResult.capabilities.configuredProviders.length > 0 && (
+                    <p className="mt-1 text-[9px] text-[var(--text-tertiary)] line-clamp-2">
+                      Providers: {probeResult.capabilities.configuredProviders.map((provider) => provider.id).join(", ")}
+                    </p>
+                  )}
                 </div>
               )}
 

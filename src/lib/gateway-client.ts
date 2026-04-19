@@ -11,6 +11,8 @@
 
 import crypto from "node:crypto";
 import WebSocket from "ws";
+import { deriveRuntimeCapabilitySnapshot } from "./runtime-capabilities";
+import type { RuntimeCapabilitySnapshot } from "./runtime-capabilities";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -163,6 +165,7 @@ export interface ProbeResult {
   version?: string;
   agents: DiscoveredAgent[];
   models: GatewayModel[];
+  capabilities?: RuntimeCapabilitySnapshot;
   defaultAgentId?: string;
   devicePrivateKeyPem?: string;
 }
@@ -743,9 +746,10 @@ async function discoverFromClient(
   devicePrivateKeyPem: string
 ): Promise<ProbeResult> {
   try {
-    const [agentsResult, modelsResult] = await Promise.all([
+    const [agentsResult, modelsResult, configSnapshot] = await Promise.all([
       client.listAgents().catch(() => null),
       client.listModels().catch(() => null),
+      client.configGet().catch(() => null),
     ]);
 
     if (!agentsResult) {
@@ -799,6 +803,12 @@ async function discoverFromClient(
       version,
       agents: discoveredAgents,
       models: modelsResult?.models ?? [],
+      capabilities: configSnapshot?.config
+        ? deriveRuntimeCapabilitySnapshot({
+            config: configSnapshot.config,
+            models: modelsResult?.models ?? [],
+          })
+        : undefined,
       defaultAgentId: agentsResult.defaultId,
       devicePrivateKeyPem,
     };

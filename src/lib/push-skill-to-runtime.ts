@@ -19,6 +19,8 @@ import { syncSkillToOpenClaw } from "./sync-skill-to-openclaw";
 import { resolveRuntimeCallbackUrl } from "./runtime-callback-url";
 import { upsertRuntimeManagedResource } from "./runtime-managed-resources";
 import { resolveRuntimeWorkspace } from "./workspace";
+import { getHeartbeatSecret } from "./heartbeat-secret";
+import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 
 const SYSTEM_SKILL_SLUG = "crewcmd-management";
 const SYSTEM_SKILL_NAME = "CrewCmd Management";
@@ -109,6 +111,8 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
       );
     }
   }
+
+  await syncCrewCmdSkillHeartbeatSecret(runtime, SYSTEM_SKILL_SLUG);
 
   console.log(
     `[push-skill] Pushed CrewCmd skill to runtime ${runtimeId}: ${runtimeAgents.length} agents, baseUrl=${baseUrl}`
@@ -220,5 +224,37 @@ async function linkSkillToAgents(params: {
         })
         .where(eq(agentSkills.id, existing.id))
     );
+  }
+}
+
+async function syncCrewCmdSkillHeartbeatSecret(
+  runtime: typeof companyRuntimes.$inferSelect,
+  skillKey: string
+): Promise<void> {
+  const secret = await getHeartbeatSecret();
+  if (!secret) return;
+
+  const meta = (runtime.metadata || {}) as Record<string, unknown>;
+  const deviceKeyPem = typeof meta.devicePrivateKeyPem === "string"
+    ? meta.devicePrivateKeyPem
+    : undefined;
+
+  const client = new GatewayClient(
+    runtime.gatewayUrl,
+    runtime.authToken || null,
+    resolveDeviceIdentity(deviceKeyPem),
+    15000
+  );
+
+  try {
+    await client.connect();
+    await client.skillsUpdate({
+      skillKey,
+      env: {
+        HEARTBEAT_SECRET: secret,
+      },
+    });
+  } finally {
+    client.close();
   }
 }

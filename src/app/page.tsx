@@ -219,7 +219,7 @@ export default function LoginPage() {
         {/* Bottom branding */}
         <div className="mt-6 text-center">
           <span className="font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
-            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"} · crewcmd.dev
+            CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1"} · crewcmd.dev
           </span>
         </div>
       </div>

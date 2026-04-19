@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import type { InboxStats, InboxPriority, InboxMessageType } from "@/db/schema-inbox";
+import { extractSqlRows } from "@/lib/sql-result";
 import {
   isHeartbeatBearerRequest,
   resolveAccessibleWorkspace,
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       ))
     );
 
-    const rows = (result.rows ?? []) as unknown as Array<{ priority: string; type: string; count: number }>;
+    const rows = extractSqlRows<{ priority: string; type: string; count: number }>(result);
 
     if (rows.length === 0) return NextResponse.json(emptyStats());
 

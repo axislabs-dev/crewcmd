@@ -5,6 +5,7 @@ import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
 import { normalizeInboxMessage, normalizeInboxMessages } from "@/lib/inbox-response";
+import { extractSqlRows } from "@/lib/sql-result";
 import {
   getCompanyIdForWorkspace,
   isHeartbeatBearerRequest,
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
       ))
     );
 
-    const rows = (result.rows ?? []) as unknown as InboxMessage[];
+    const rows = extractSqlRows<InboxMessage>(result);
     let messages: InboxMessage[] = normalizeInboxMessages(rows);
 
     // Apply filters
@@ -218,7 +219,7 @@ export async function POST(request: NextRequest) {
       `))
     );
 
-    const rows = (result.rows ?? []) as unknown as InboxMessage[];
+    const rows = extractSqlRows<InboxMessage>(result);
     const message = normalizeInboxMessage(rows[0]);
     if (!message) {
       return NextResponse.json({ error: "Inbox message insert did not return a row" }, { status: 500 });

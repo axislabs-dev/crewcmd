@@ -7,6 +7,7 @@ import {
   agents,
   companies,
   companyMembers,
+  companyRuntimes,
   workspaces,
   users,
   type companyRoleEnum,
@@ -38,6 +39,12 @@ export interface WorkspaceSummary extends WorkspaceRecord {
   companyName: string | null;
   companyLogoUrl: string | null;
   memberRole: CompanyRole | null;
+}
+
+interface BearerRuntimeAccess {
+  runtime: typeof companyRuntimes.$inferSelect;
+  allowedWorkspaceIds: Set<string>;
+  defaultWorkspaceId: string | null;
 }
 
 export async function isHeartbeatBearerRequest(request?: Request | NextRequest) {
@@ -229,6 +236,9 @@ export async function resolveAccessibleWorkspace(params: {
   if (!db) return null;
 
   const ctx = await getWorkspaceAccessContext(params.request);
+  const bearerRuntimeAccess = ctx.isHeartbeatBearer
+    ? await resolveBearerRuntimeAccess(params.request)
+    : null;
 
   if (params.explicitWorkspaceId) {
     const [workspace] = await withRetry(() =>
@@ -240,7 +250,9 @@ export async function resolveAccessibleWorkspace(params: {
     );
 
     if (!workspace) return null;
-    if (ctx.isHeartbeatBearer) return workspace;
+    if (ctx.isHeartbeatBearer) {
+      return bearerRuntimeAccess?.allowedWorkspaceIds.has(workspace.id) ? workspace : null;
+    }
     if (!ctx.userId) return null;
 
     const allowedCompanyIds = new Set(ctx.memberships.map((membership) => membership.companyId));
@@ -251,6 +263,13 @@ export async function resolveAccessibleWorkspace(params: {
   }
 
   if (params.explicitCompanyId) {
+    if (ctx.isHeartbeatBearer) {
+      const companyWorkspace = await ensureCompanyWorkspace(params.explicitCompanyId);
+      if (!companyWorkspace) return null;
+      return bearerRuntimeAccess?.allowedWorkspaceIds.has(companyWorkspace.id)
+        ? companyWorkspace
+        : null;
+    }
     if (!ctx.isHeartbeatBearer) {
       const allowedCompanyIds = new Set(ctx.memberships.map((membership) => membership.companyId));
       if (!allowedCompanyIds.has(params.explicitCompanyId)) return null;
@@ -260,6 +279,12 @@ export async function resolveAccessibleWorkspace(params: {
 
   if (ctx.isHeartbeatBearer && params.requireExplicitForBearer) {
     return null;
+  }
+
+  if (ctx.isHeartbeatBearer) {
+    return bearerRuntimeAccess?.defaultWorkspaceId
+      ? getWorkspaceById(bearerRuntimeAccess.defaultWorkspaceId)
+      : null;
   }
 
   if (ctx.activeWorkspaceId) {
@@ -329,6 +354,38 @@ export async function getReadableWorkspaceIdsForCompany(companyId: string) {
 export async function getCompanyIdForWorkspace(workspaceId: string): Promise<string | null> {
   const workspace = await getWorkspaceById(workspaceId);
   return workspace?.companyId ?? null;
+}
+
+async function resolveBearerRuntimeAccess(
+  request?: Request | NextRequest
+): Promise<BearerRuntimeAccess | null> {
+  if (!db || !(await isHeartbeatBearerRequest(request))) {
+    return null;
+  }
+
+  const runtimeId = request?.headers?.get("x-crewcmd-runtime-id")?.trim() ?? null;
+  if (!runtimeId) return null;
+
+  const [runtime] = await withRetry(() =>
+    db!
+      .select()
+      .from(companyRuntimes)
+      .where(eq(companyRuntimes.id, runtimeId))
+      .limit(1)
+  );
+  if (!runtime) return null;
+
+  const defaultWorkspace = await resolveRuntimeWorkspace(runtime);
+  const allowedWorkspaceIds = new Set<string>();
+  if (defaultWorkspace?.id) {
+    allowedWorkspaceIds.add(defaultWorkspace.id);
+  }
+
+  return {
+    runtime,
+    allowedWorkspaceIds,
+    defaultWorkspaceId: defaultWorkspace?.id ?? null,
+  };
 }
 
 export async function resolveRuntimeWorkspace(runtime: {

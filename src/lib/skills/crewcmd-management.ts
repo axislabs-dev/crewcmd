@@ -12,7 +12,7 @@ export const CREWCMD_MANAGEMENT_SKILL_METADATA = {
   openclaw: {
     requires: {
       bins: ["curl"],
-      env: ["HEARTBEAT_SECRET"],
+      env: ["HEARTBEAT_SECRET", "CREWCMD_RUNTIME_ID"],
     },
     primaryEnv: "HEARTBEAT_SECRET",
   },
@@ -76,6 +76,11 @@ export const CREWCMD_MANAGEMENT_SKILL_METADATA = {
         title: "Workspace ID",
         description: "Preferred workspace UUID for workspace-scoped CrewCmd operations",
       },
+      runtimeId: {
+        type: "string",
+        title: "Runtime ID",
+        description: "CrewCmd runtime UUID used to enforce runtime-scoped bearer access",
+      },
       defaultAgentId: {
         type: "string",
         title: "Default agent ID",
@@ -105,6 +110,7 @@ export const CREWCMD_MANAGEMENT_SKILL_METADATA = {
     baseUrl: "https://crewcmd.example.com",
     companyId: "company_123",
     workspaceId: "workspace_123",
+    runtimeId: "runtime_123",
     canManageAgents: true,
   },
 } as const;

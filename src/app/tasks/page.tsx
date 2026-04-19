@@ -126,9 +126,8 @@ export default function TasksPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Horizontal scroll container syncs action bar with kanban scroll */}
-      <div className={viewMode === "board" ? "overflow-x-auto" : ""}>
-        <nav className={`border-b border-[var(--border-subtle)] px-3 py-2 sm:px-6 sm:py-3 ${viewMode === "board" ? "min-w-max" : ""}`}>
+      <div>
+        <nav className="border-b border-[var(--border-subtle)] px-3 py-2 sm:px-6 sm:py-3">
           {/* Mobile: compact single-row layout */}
           <div className="flex items-center justify-between gap-2 sm:hidden">
             <div className="flex items-center gap-2">

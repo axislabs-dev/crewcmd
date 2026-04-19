@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
+import { getHeartbeatSecret } from "./heartbeat-secret";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { addSkillToGatewayAgentAllowlist } from "./openclaw-gateway-skill-assignment";
 import {
@@ -325,11 +326,19 @@ async function resolveSkillEnvVars(
   config: Record<string, unknown>
 ): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
+  const meta = metadata ?? {};
+  const authType = resolveAuthType(meta);
+  const primaryEnvVar = getPrimaryEnvVarFromMetadata(meta, slug);
+
+  if (authType === "runtime-bearer") {
+    const heartbeatSecret = await getHeartbeatSecret();
+    if (heartbeatSecret) {
+      env[primaryEnvVar] = heartbeatSecret;
+    }
+  }
+
   const secretNames = collectSecretRefNames(config);
   if (secretNames.size === 0) return env;
-
-  const meta = metadata ?? {};
-  const primaryEnvVar = getPrimaryEnvVarFromMetadata(meta, slug);
 
   for (const name of secretNames) {
     const value = await resolveSecretRef(companyId, { secretRef: { name } });

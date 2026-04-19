@@ -101,6 +101,12 @@ export interface GatewayConfigPatchResult {
   config?: Record<string, unknown>;
 }
 
+export interface GatewaySecretsReloadResult {
+  ok?: boolean;
+  reloaded?: boolean;
+  degraded?: boolean;
+}
+
 export interface GatewayCronJob {
   id: string;
   agentId?: string;
@@ -493,6 +499,10 @@ export class GatewayClient {
         ? { restartDelayMs: params.restartDelayMs }
         : {}),
     });
+  }
+
+  async secretsReload(): Promise<GatewaySecretsReloadResult> {
+    return this.rpc<GatewaySecretsReloadResult>("secrets.reload", {});
   }
 
   async cronList(): Promise<GatewayCronListResult> {

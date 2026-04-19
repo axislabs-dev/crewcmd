@@ -6,6 +6,8 @@ import { systemSettings, companyMembers } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { resolveCurrentUser } from "@/lib/resolve-user";
 import { writeHeartbeatSecretFile } from "@/lib/system-settings";
+import { getAgentAccessContext } from "@/lib/agent-access";
+import { syncHeartbeatSecretToAccessibleRuntimes } from "@/lib/sync-heartbeat-secret-to-runtimes";
 
 export const dynamic = "force-dynamic";
 
@@ -112,5 +114,21 @@ export async function POST(request: NextRequest) {
   process.env.HEARTBEAT_SECRET = newToken;
   writeHeartbeatSecretFile(newToken);
 
-  return NextResponse.json({ token: newToken });
+  const access = await getAgentAccessContext();
+  const runtimeSync = await syncHeartbeatSecretToAccessibleRuntimes({
+    access,
+    secret: newToken,
+  });
+
+  return NextResponse.json({
+    token: newToken,
+    runtimeSync: {
+      total: runtimeSync.length,
+      synced: runtimeSync.filter((entry) => entry.ok).length,
+      failed: runtimeSync.filter((entry) => !entry.ok).map((entry) => ({
+        runtimeId: entry.runtimeId,
+        error: entry.error,
+      })),
+    },
+  });
 }

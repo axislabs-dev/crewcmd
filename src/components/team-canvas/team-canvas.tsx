@@ -19,7 +19,6 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react";
 import dagre from "@dagrejs/dagre";
-import "@xyflow/react/dist/style.css";
 import type { Agent } from "@/lib/data";
 import { AgentNode, type AgentNodeData } from "./agent-node";
 

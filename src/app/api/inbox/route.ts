@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
@@ -174,11 +175,13 @@ export async function POST(request: NextRequest) {
     const toAgentId = body.toAgentId ? `'${body.toAgentId}'` : "NULL";
     const contextVal = body.context ? `'${JSON.stringify(body.context).replace(/'/g, "''")}'::jsonb` : "NULL";
     const actionsVal = body.actions ? `'${JSON.stringify(body.actions).replace(/'/g, "''")}'::jsonb` : "NULL";
+    const messageId = randomUUID();
 
-    const result = await withRetry(() =>
+    await withRetry(() =>
       db!.execute(sql.raw(`
-        INSERT INTO inbox_messages (workspace_id, company_id, from_agent_id, to_user_id, to_agent_id, type, priority, title, body, context, actions)
+        INSERT INTO inbox_messages (id, workspace_id, company_id, from_agent_id, to_user_id, to_agent_id, type, priority, title, body, context, actions)
         VALUES (
+          '${messageId}',
           '${workspace.id}',
           ${companyId ? `'${companyId}'` : "NULL"},
           '${body.fromAgentId}',
@@ -191,7 +194,12 @@ export async function POST(request: NextRequest) {
           ${contextVal},
           ${actionsVal}
         )
-        RETURNING
+      `))
+    );
+
+    const result = await withRetry(() =>
+      db!.execute(sql.raw(`
+        SELECT
           id,
           workspace_id AS "workspaceId",
           company_id AS "companyId",
@@ -205,11 +213,18 @@ export async function POST(request: NextRequest) {
           snooze_until AS "snoozeUntil",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
+        FROM inbox_messages
+        WHERE id = '${messageId}'
       `))
     );
 
     const rows = (result.rows ?? []) as unknown as InboxMessage[];
-    return NextResponse.json(normalizeInboxMessage(rows[0]), { status: 201 });
+    const message = normalizeInboxMessage(rows[0]);
+    if (!message) {
+      return NextResponse.json({ error: "Inbox message insert did not return a row" }, { status: 500 });
+    }
+
+    return NextResponse.json(message, { status: 201 });
   } catch (error) {
     console.error("[api/inbox] POST error:", error);
     return NextResponse.json({ error: "Failed to create inbox message" }, { status: 500 });

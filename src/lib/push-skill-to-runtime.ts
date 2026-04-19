@@ -56,7 +56,8 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   // Create or update the system skill record in DB
   const skillRecord = await upsertSystemSkill(
     runtime.companyId,
-    skillContent
+    skillContent,
+    workspace.id,
   );
 
   await upsertRuntimeManagedResource({
@@ -79,6 +80,7 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     runtimeAgents,
     baseUrl,
     companyId: runtime.companyId,
+    workspaceId: workspace.id,
   });
 
   for (const agent of runtimeAgents) {
@@ -121,7 +123,8 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
 
 async function upsertSystemSkill(
   companyId: string,
-  content: string
+  content: string,
+  workspaceId?: string
 ): Promise<{ id: string }> {
   if (!db) throw new Error("Database not available");
 
@@ -130,6 +133,7 @@ async function upsertSystemSkill(
     configExample: {
       ...CREWCMD_MANAGEMENT_SKILL_METADATA.configExample,
       companyId,
+      ...(workspaceId ? { workspaceId } : {}),
     },
   };
 
@@ -184,12 +188,14 @@ async function linkSkillToAgents(params: {
   runtimeAgents: (typeof agents.$inferSelect)[];
   baseUrl: string;
   companyId: string;
+  workspaceId: string;
 }): Promise<void> {
   if (!db || params.runtimeAgents.length === 0) return;
 
   const assignmentConfig = {
     baseUrl: params.baseUrl,
     companyId: params.companyId,
+    workspaceId: params.workspaceId,
   };
 
   for (const agent of params.runtimeAgents) {

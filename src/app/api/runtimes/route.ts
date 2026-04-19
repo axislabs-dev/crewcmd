@@ -34,7 +34,12 @@ export async function GET() {
       .from(companyRuntimes)
       .where(where));
 
-    return NextResponse.json(runtimes);
+    return NextResponse.json(
+      runtimes.map((runtime) => ({
+        ...runtime,
+        capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
+      }))
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -46,7 +51,7 @@ export async function POST(request: Request) {
     const access = await getAgentAccessContext();
     if (!access.userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const body = await request.json();
-    const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata, ownerType, workspaceId, companyId } = body;
+    const { name, gatewayUrl, httpUrl, authToken, runtimeType, metadata, ownerType, workspaceId, companyId, capabilitySnapshot } = body;
     const callbackBaseUrl = getRequestOrigin(request);
 
     if (!name || !gatewayUrl || !httpUrl) {
@@ -117,14 +122,26 @@ export async function POST(request: Request) {
           ...((metadata || {}) as Record<string, unknown>),
           callbackBaseUrl,
           workspaceId: targetWorkspace.id,
+          ...(capabilitySnapshot ? { capabilitySnapshot } : {}),
         },
         ...ownership,
       })
       .returning());
 
-    return NextResponse.json(runtime);
+    return NextResponse.json({
+      ...runtime,
+      capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function readCapabilitySnapshot(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const snapshot = (metadata as Record<string, unknown>).capabilitySnapshot;
+  return snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? (snapshot as Record<string, unknown>)
+    : null;
 }

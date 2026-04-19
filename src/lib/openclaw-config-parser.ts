@@ -11,6 +11,7 @@
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
+import { deriveRuntimeCapabilitySnapshot, type RuntimeCapabilitySnapshot } from "./runtime-capabilities";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ export interface ParseResult {
   error?: string;
   agents: ParsedAgent[];
   models: string[];
+  capabilities?: RuntimeCapabilitySnapshot;
   gatewayUrl?: string;
   gatewayPort?: number;
   defaultModel?: string;
@@ -275,6 +277,7 @@ export async function parseOpenClawConfig(
     ok: true,
     agents,
     models: Array.from(modelSet),
+    capabilities: deriveRuntimeCapabilitySnapshot({ config: config as unknown as Record<string, unknown> }),
     gatewayUrl,
     gatewayPort,
     defaultModel,

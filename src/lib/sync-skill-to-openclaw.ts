@@ -372,6 +372,9 @@ async function resolveSkillEnvVars(
     if (heartbeatSecret) {
       env[primaryEnvVar] = heartbeatSecret;
     }
+    if (typeof config.runtimeId === "string" && config.runtimeId.trim()) {
+      env.CREWCMD_RUNTIME_ID = config.runtimeId.trim();
+    }
   }
 
   const secretNames = collectSecretRefNames(config);

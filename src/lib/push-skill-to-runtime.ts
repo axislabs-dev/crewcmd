@@ -66,12 +66,13 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     resourceType: "skill-entry",
     resourceKey: SYSTEM_SKILL_SLUG,
     externalId: skillRecord.id,
-    payload: {
-      skillId: skillRecord.id,
-      slug: SYSTEM_SKILL_SLUG,
-      baseUrl,
-      workspaceId: workspace.id,
-    },
+      payload: {
+        skillId: skillRecord.id,
+        slug: SYSTEM_SKILL_SLUG,
+        baseUrl,
+        workspaceId: workspace.id,
+        runtimeId: runtime.id,
+      },
   });
 
   // Link skill to all agents on this runtime
@@ -81,6 +82,7 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     baseUrl,
     companyId: runtime.companyId,
     workspaceId: workspace.id,
+    runtimeId: runtime.id,
   });
 
   for (const agent of runtimeAgents) {
@@ -134,6 +136,7 @@ async function upsertSystemSkill(
       ...CREWCMD_MANAGEMENT_SKILL_METADATA.configExample,
       companyId,
       ...(workspaceId ? { workspaceId } : {}),
+      runtimeId: "$(runtime-id)",
     },
   };
 
@@ -189,6 +192,7 @@ async function linkSkillToAgents(params: {
   baseUrl: string;
   companyId: string;
   workspaceId: string;
+  runtimeId: string;
 }): Promise<void> {
   if (!db || params.runtimeAgents.length === 0) return;
 
@@ -196,6 +200,7 @@ async function linkSkillToAgents(params: {
     baseUrl: params.baseUrl,
     companyId: params.companyId,
     workspaceId: params.workspaceId,
+    runtimeId: params.runtimeId,
   };
 
   for (const agent of params.runtimeAgents) {
@@ -258,6 +263,7 @@ async function syncCrewCmdSkillHeartbeatSecret(
       skillKey,
       env: {
         HEARTBEAT_SECRET: secret,
+        CREWCMD_RUNTIME_ID: runtime.id,
       },
     });
   } finally {

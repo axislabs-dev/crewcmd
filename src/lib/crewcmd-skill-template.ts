@@ -42,13 +42,15 @@ Use these API endpoints to manage your workspace — tasks, projects, agents, in
 ## Authentication
 
 All mutating requests (POST, PATCH, DELETE) require a Bearer token.
-Use the \`HEARTBEAT_SECRET\` environment variable from your runtime:
+Runtime-scoped requests must also identify which CrewCmd runtime is calling.
+Use the \`HEARTBEAT_SECRET\` and \`CREWCMD_RUNTIME_ID\` environment variables from your runtime:
 
 \`\`\`
 Authorization: Bearer $HEARTBEAT_SECRET
+X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID
 \`\`\`
 
-Read the token from your environment at runtime. Never hardcode it.
+Read both values from your environment at runtime. Never hardcode them.
 
 Base URL: \`${baseUrl}\`
 
@@ -732,40 +734,47 @@ Content-Type: application/json
 \`\`\`bash
 # 1. Check your assigned tasks
 curl -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   "${baseUrl}/api/tasks?status=queued&agentId=YOUR_AGENT_ID"
 
 # 2. Start working on a task
 curl -X PATCH -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
   -d '{"status": "in_progress"}' \\
   "${baseUrl}/api/tasks/TASK_ID"
 
 # 3. Add a progress comment
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
   -d '{"content": "Found root cause in auth middleware.", "agentId": "YOUR_AGENT_ID"}' \\
   "${baseUrl}/api/tasks/TASK_ID/comments"
 
 # 4. Ask for human or agent input via inbox
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
   -d '{"companyId": "${companyId}", "fromAgentId": "YOUR_AGENT_ID", "toAgentId": "OTHER_AGENT_ID", "type": "question", "priority": "normal", "title": "Need review", "body": "Please review PR #42"}' \\
   "${baseUrl}/api/inbox"
 
 # 5. Mark as ready for review with PR link
 curl -X PATCH -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
   -d '{"status": "review", "prUrl": "https://github.com/org/repo/pull/42", "prStatus": "open"}' \\
   "${baseUrl}/api/tasks/TASK_ID"
 
 # 6. Add final audit-trail comment
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
   -d '{"content": "Implemented fix, opened PR #42, ready for review.", "agentId": "YOUR_AGENT_ID"}' \\
   "${baseUrl}/api/tasks/TASK_ID/comments"
 
 # 7. Log activity
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
   -d '{"agentId": "YOUR_AGENT_ID", "actionType": "task_completed", "description": "Completed TSK-1234"}' \\
   "${baseUrl}/api/activity"

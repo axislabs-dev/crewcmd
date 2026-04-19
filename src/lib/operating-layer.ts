@@ -21,6 +21,8 @@ export interface CrewCmdOperatingLayerConfig {
   version: "0.1.1";
   mode: CrewCmdOperatingMode;
   rolePack: CrewCmdRolePack;
+  modelProfile?: string;
+  fallbackProfiles?: string[];
   overlayContent: string;
   mirroredFiles?: {
     identityRaw?: string;
@@ -144,6 +146,8 @@ export function buildOperatingOverlay(params: {
 export function buildOperatingLayerConfig(params: {
   mode: CrewCmdOperatingMode;
   rolePack: CrewCmdRolePack;
+  modelProfile?: string | null;
+  fallbackProfiles?: string[];
   callsign?: string | null;
   workspaceId?: string | null;
   mirroredFiles?: CrewCmdOperatingLayerConfig["mirroredFiles"];
@@ -154,6 +158,8 @@ export function buildOperatingLayerConfig(params: {
     version: "0.1.1",
     mode: params.mode,
     rolePack: params.rolePack,
+    modelProfile: params.modelProfile ?? undefined,
+    fallbackProfiles: params.fallbackProfiles,
     overlayContent:
       params.overlayContent ??
       buildOperatingOverlay({
@@ -189,6 +195,8 @@ export function buildOperatingLayerConfig(params: {
 export function buildBlueprintOperatingLayer(params: {
   callsign: string;
   rolePack?: string | null;
+  modelProfile?: string | null;
+  fallbackProfiles?: string[];
   workspaceId?: string | null;
   curatedSkills?: CrewCmdCuratedSkill[];
   identityRaw?: string;
@@ -201,6 +209,8 @@ export function buildBlueprintOperatingLayer(params: {
   return buildOperatingLayerConfig({
     mode: "blueprint-owned",
     rolePack,
+    modelProfile: params.modelProfile,
+    fallbackProfiles: params.fallbackProfiles,
     callsign: params.callsign,
     workspaceId: params.workspaceId,
     curatedSkills: params.curatedSkills,

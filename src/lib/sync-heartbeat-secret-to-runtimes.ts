@@ -3,6 +3,8 @@ import { db, withRetry } from "@/db";
 import { buildRuntimeReadWhere, type AgentAccessContext } from "@/lib/agent-access";
 import { GatewayClient, resolveDeviceIdentity } from "@/lib/gateway-client";
 
+const CREWCMD_MANAGEMENT_SKILL_KEY = "crewcmd-management";
+
 interface RuntimeSyncResult {
   runtimeId: string;
   ok: boolean;
@@ -49,6 +51,12 @@ export async function syncHeartbeatSecretToAccessibleRuntimes(params: {
           },
         },
         note: "CrewCmd rotated HEARTBEAT_SECRET",
+      });
+      await client.skillsUpdate({
+        skillKey: CREWCMD_MANAGEMENT_SKILL_KEY,
+        env: {
+          HEARTBEAT_SECRET: params.secret,
+        },
       });
       await client.secretsReload();
       results.push({ runtimeId: runtime.id, ok: true });

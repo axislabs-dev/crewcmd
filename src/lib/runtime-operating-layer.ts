@@ -293,6 +293,7 @@ export async function cleanupCrewCmdRuntimeOperatingLayer(runtimeId: string): Pr
     const skillResources = resources.filter(
       (resource) => resource.resourceType === "agent-skill"
     );
+    const skillAgentIdsBySkillId = new Map<string, string>();
     for (const resource of skillResources) {
       const payload = (resource.payload || {}) as Record<string, unknown>;
       const skillId =
@@ -301,10 +302,38 @@ export async function cleanupCrewCmdRuntimeOperatingLayer(runtimeId: string): Pr
         typeof payload.agentId === "string" ? payload.agentId : resource.targetAgentId;
       if (!skillId || !agentId) continue;
 
+      if (!skillAgentIdsBySkillId.has(skillId)) {
+        skillAgentIdsBySkillId.set(skillId, agentId);
+      }
+
       await uninstallSkillFromOpenClaw({
         skillId,
         agentId,
         companyId: runtime.companyId,
+      });
+    }
+
+    const skillEntryResources = resources.filter(
+      (resource) => resource.resourceType === "skill-entry"
+    );
+    for (const resource of skillEntryResources) {
+      const payload = (resource.payload || {}) as Record<string, unknown>;
+      const skillId =
+        typeof payload.skillId === "string"
+          ? payload.skillId
+          : typeof resource.externalId === "string"
+            ? resource.externalId
+            : null;
+      if (!skillId) continue;
+
+      const agentId = skillAgentIdsBySkillId.get(skillId);
+      if (!agentId) continue;
+
+      await uninstallSkillFromOpenClaw({
+        skillId,
+        agentId,
+        companyId: runtime.companyId,
+        forceRemoveRuntimeConfigEntry: true,
       });
     }
 

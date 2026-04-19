@@ -15,6 +15,7 @@ export interface UninstallSkillOptions {
   skillId: string;
   agentId: string;
   companyId: string;
+  forceRemoveRuntimeConfigEntry?: boolean;
 }
 
 export interface UninstallSkillResult {
@@ -89,6 +90,7 @@ export async function uninstallSkillFromOpenClaw(
     skillId: opts.skillId,
     runtimeId: data.agent.runtimeId ?? null,
     agentId: opts.agentId,
+    force: opts.forceRemoveRuntimeConfigEntry === true,
   });
 
   let removedConfigEntry = false;
@@ -175,7 +177,9 @@ async function shouldRemoveRuntimeConfigEntry(params: {
   skillId: string;
   runtimeId: string | null;
   agentId: string;
+  force?: boolean;
 }): Promise<boolean> {
+  if (params.force) return true;
   if (!db) return false;
   if (!params.runtimeId) return true;
   const runtimeId = params.runtimeId;

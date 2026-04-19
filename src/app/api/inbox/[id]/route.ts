@@ -4,6 +4,7 @@ import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
 import { normalizeInboxMessage } from "@/lib/inbox-response";
+import { extractSqlRows } from "@/lib/sql-result";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export async function PATCH(
       `))
     );
 
-    const rows = (result.rows ?? []) as unknown as InboxMessage[];
+    const rows = extractSqlRows<InboxMessage>(result);
 
     if (rows.length === 0) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 });

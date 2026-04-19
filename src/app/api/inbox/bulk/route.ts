@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
+import { extractSqlRows } from "@/lib/sql-result";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       ))
     );
 
-    const rows = (result.rows ?? []) as unknown as Array<{ id: string }>;
+    const rows = extractSqlRows<{ id: string }>(result);
 
     return NextResponse.json({ updated: rows.length });
   } catch (error) {

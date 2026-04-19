@@ -38,6 +38,14 @@ export interface Agent {
     totalTokens: number;
     sessionCount: number;
   } | null;
+  modelAssessment?: {
+    profile: string;
+    fallbackProfiles: string[];
+    currentModel: string | null;
+    recommendedModel: string | null;
+    fallbackModels: string[];
+    status: "matched" | "acceptable" | "needs_review" | "unresolved";
+  } | null;
 }
 
 export interface Task {

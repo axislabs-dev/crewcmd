@@ -18,6 +18,15 @@ export interface ResolvedModelSelection {
   status: "resolved" | "partial" | "missing";
 }
 
+export interface AgentModelAssessment {
+  profile: CrewCmdModelProfile;
+  fallbackProfiles: CrewCmdModelProfile[];
+  currentModel: string | null;
+  recommendedModel: string | null;
+  fallbackModels: string[];
+  status: "matched" | "acceptable" | "needs_review" | "unresolved";
+}
+
 const MODEL_PROFILE_LABELS: Record<CrewCmdModelProfile, string> = {
   orchestrator_reasoning: "Orchestrator Reasoning",
   developer_primary: "Developer Primary",
@@ -92,6 +101,57 @@ export function resolveBlueprintAgentModelSelection(
     fallbackModels,
     status: primaryModel ? "resolved" : fallbackModels.length > 0 ? "partial" : "missing",
   };
+}
+
+export function assessAgentModelSelection(agent: {
+  model?: string | null;
+  modelProfile?: string | null;
+  fallbackProfiles?: string[] | null;
+  rolePack?: string | null;
+} , runtimeCapabilities?: RuntimeCapabilitySnapshot | null): AgentModelAssessment {
+  const rolePack = normalizeRolePack(agent.rolePack);
+  const profile = normalizeModelProfile(agent.modelProfile) ?? defaultModelProfileForRolePack(rolePack);
+  const fallbackProfiles = (agent.fallbackProfiles ?? [])
+    .map((value) => normalizeModelProfile(value))
+    .filter((value): value is CrewCmdModelProfile => value !== null);
+  const resolved = resolveBlueprintAgentModelSelection(
+    {
+      model: agent.model ?? undefined,
+      modelProfile: profile,
+      fallbackProfiles,
+      rolePack,
+    },
+    runtimeCapabilities
+  );
+  const currentModel = agent.model ?? null;
+  const acceptableModels = new Set<string>(
+    [resolved.primaryModel, ...resolved.fallbackModels].filter((value): value is string => Boolean(value))
+  );
+
+  let status: AgentModelAssessment["status"] = "unresolved";
+  if (currentModel && resolved.primaryModel && currentModel === resolved.primaryModel) {
+    status = "matched";
+  } else if (currentModel && acceptableModels.has(currentModel)) {
+    status = "acceptable";
+  } else if (resolved.primaryModel) {
+    status = "needs_review";
+  }
+
+  return {
+    profile: resolved.profile,
+    fallbackProfiles: resolved.fallbackProfiles,
+    currentModel,
+    recommendedModel: resolved.primaryModel,
+    fallbackModels: resolved.fallbackModels,
+    status,
+  };
+}
+
+export function listSupportedModelProfiles(runtimeCapabilities?: RuntimeCapabilitySnapshot | null): CrewCmdModelProfile[] {
+  if (!runtimeCapabilities) return [];
+  return (Object.keys(MODEL_PROFILE_LABELS) as CrewCmdModelProfile[]).filter((profile) =>
+    Boolean(resolvePrimaryModel(profile, runtimeCapabilities))
+  );
 }
 
 function resolvePrimaryModel(
@@ -176,4 +236,18 @@ function scoreModel(
   }
 
   return score;
+}
+
+function normalizeRolePack(value: string | null | undefined): CrewCmdRolePack {
+  switch (value) {
+    case "orchestrator":
+    case "developer":
+    case "reviewer":
+    case "researcher":
+    case "growth":
+    case "ops":
+      return value;
+    default:
+      return "developer";
+  }
 }

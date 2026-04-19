@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUILT_IN_BLUEPRINTS, type BuiltInBlueprint } from "@/lib/blueprints-data";
+import { labelModelProfile, normalizeModelProfile } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 
 // ─── Category pills ──────────────────────────────────────────────────
@@ -670,6 +671,7 @@ export default function OnboardingPage() {
                 <div className="space-y-1">
                   {selectedBlueprint.template.agents.map((agent) => {
                     const isLead = !agent.reportsTo;
+                    const modelProfile = normalizeModelProfile(agent.modelProfile);
                     return (
                       <div
                         key={agent.callsign}
@@ -682,9 +684,14 @@ export default function OnboardingPage() {
                           <span className="font-mono text-[11px] font-bold text-[var(--text-primary)]">
                             {agent.name}
                           </span>
-                          <span className="ml-2 text-[10px] text-[var(--text-tertiary)]">
-                            {agent.title}
-                          </span>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+                            <span>{agent.title}</span>
+                            {modelProfile && (
+                              <span className="rounded-full bg-[var(--bg-surface-hover)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-secondary)]">
+                                {labelModelProfile(modelProfile).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span
                           className="h-2 w-2 rounded-full shrink-0"

@@ -19,6 +19,7 @@ import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
 import { getHeartbeatSecret } from "./heartbeat-secret";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { addSkillToGatewayAgentAllowlist } from "./openclaw-gateway-skill-assignment";
+import { generateCrewCmdSkill } from "./crewcmd-skill-template";
 import {
   defaultOpenClawWorkspaceRoot,
   resolveOpenClawWorkspaceRoot,
@@ -52,6 +53,7 @@ interface SkillData {
 // ─── Constants ──────────────────────────────────────────────────────
 
 const META_VERSION = "0.1.0";
+const CREWCMD_MANAGEMENT_SLUG = "crewcmd-management";
 
 // ─── Public API ─────────────────────────────────────────────────────
 
@@ -83,7 +85,10 @@ export async function syncSkillToOpenClaw(
       ? skillData.assignment.config
       : {};
 
-  const skillMdContent = generateSkillMd(skillData.skill);
+  const skillMdContent = renderSkillMd(
+    skillData.skill,
+    assignmentConfig as Record<string, unknown>
+  );
   const checksum = "sha256:" + sha256(skillMdContent);
   const metaContent = JSON.stringify(
     {
@@ -228,6 +233,38 @@ function generateSkillMd(skill: typeof skills.$inferSelect): string {
   ].join("\n");
 
   return frontmatter + content;
+}
+
+function renderSkillMd(
+  skill: typeof skills.$inferSelect,
+  assignmentConfig: Record<string, unknown>
+): string {
+  if (skill.slug !== CREWCMD_MANAGEMENT_SLUG) {
+    return generateSkillMd(skill);
+  }
+
+  const baseUrl = typeof assignmentConfig.baseUrl === "string"
+    ? assignmentConfig.baseUrl.trim()
+    : "";
+  const workspaceId = typeof assignmentConfig.workspaceId === "string"
+    ? assignmentConfig.workspaceId.trim()
+    : "";
+  const companyId = typeof assignmentConfig.companyId === "string"
+    ? assignmentConfig.companyId.trim()
+    : null;
+
+  if (!baseUrl || !workspaceId) {
+    return generateSkillMd(skill);
+  }
+
+  return generateSkillMd({
+    ...skill,
+    content: generateCrewCmdSkill({
+      baseUrl,
+      workspaceId,
+      companyId,
+    }),
+  });
 }
 
 function extractOpenclawMetadata(

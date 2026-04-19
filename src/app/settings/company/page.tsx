@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCompany } from "@/components/company-context";
+import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
+import { labelModelProfile, listSupportedModelProfiles } from "@/lib/model-profiles";
 
 interface Company {
   id: string;
@@ -38,6 +40,7 @@ interface RuntimeRecord {
   status: string;
   lastPing: string | null;
   metadata: Record<string, unknown> | null;
+  capabilitySnapshot?: RuntimeCapabilitySnapshot | null;
   createdAt: string;
   ownerType: "user" | "company";
   ownerUserId: string | null;
@@ -833,6 +836,26 @@ export default function CompanySettingsPage() {
                       ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
                       : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
                   </p>
+                  {runtime.capabilitySnapshot && (
+                    <div className="mt-2 space-y-1 text-[10px] text-[var(--text-tertiary)]">
+                      <p>
+                        {runtime.capabilitySnapshot.providerCount} providers · default model{" "}
+                        <span className="font-mono">{runtime.capabilitySnapshot.defaultModel || "not set"}</span>
+                      </p>
+                      {listSupportedModelProfiles(runtime.capabilitySnapshot).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {listSupportedModelProfiles(runtime.capabilitySnapshot).map((profile) => (
+                            <span
+                              key={profile}
+                              className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]"
+                            >
+                              {labelModelProfile(profile).toUpperCase()}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button

@@ -5,6 +5,8 @@ import { signOut } from "next-auth/react";
 import { Avatar } from "@/components/avatar";
 import { useWorkspace } from "@/components/company-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
+import { labelModelProfile, listSupportedModelProfiles } from "@/lib/model-profiles";
 
 interface Profile {
   id: string;
@@ -30,6 +32,7 @@ interface RuntimeRecord {
   lastPing: string | null;
   createdAt: string;
   ownerType: "user" | "company";
+  capabilitySnapshot?: RuntimeCapabilitySnapshot | null;
 }
 
 const inputClassName = "w-full rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)] focus:bg-[var(--accent-soft)]";
@@ -518,6 +521,26 @@ export default function SettingsPage() {
                                 ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
                                 : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
                             </p>
+                            {runtime.capabilitySnapshot && (
+                              <div className="mt-2 space-y-1 text-[11px] text-[var(--text-tertiary)]">
+                                <p>
+                                  {runtime.capabilitySnapshot.providerCount} providers · default model{" "}
+                                  <span className="font-mono">{runtime.capabilitySnapshot.defaultModel || "not set"}</span>
+                                </p>
+                                {listSupportedModelProfiles(runtime.capabilitySnapshot).length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {listSupportedModelProfiles(runtime.capabilitySnapshot).map((profile) => (
+                                      <span
+                                        key={profile}
+                                        className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]"
+                                      >
+                                        {labelModelProfile(profile).toUpperCase()}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <button
                             type="button"

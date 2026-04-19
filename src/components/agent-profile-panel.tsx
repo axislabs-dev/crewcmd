@@ -18,6 +18,7 @@ import { timeAgo } from "@/lib/utils";
 import { AgentControlPanel } from "@/components/agent-control-panel";
 import { AgentOutputViewer } from "@/components/agent-output-viewer";
 import { AgentAvatar } from "@/components/avatar";
+import { labelModelProfile } from "@/lib/model-profiles";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -66,6 +67,8 @@ interface AgentDetail extends Agent {
 interface OperatingLayerView {
   mode?: string;
   rolePack?: string;
+  modelProfile?: string;
+  fallbackProfiles?: string[];
   overlayContent?: string;
   mirroredFiles?: {
     identityRaw?: string;
@@ -217,6 +220,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
   const [visible, setVisible] = useState(false);
   const [overlayDraft, setOverlayDraft] = useState("");
   const [savingOverlay, setSavingOverlay] = useState(false);
+  const [applyingModel, setApplyingModel] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -385,6 +389,31 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
     }
   }, [agent, operatingLayer, overlayDraft, runtimeConfig]);
 
+  const applyRecommendedModel = useCallback(async () => {
+    if (!agent?.modelAssessment?.recommendedModel) return;
+    setApplyingModel(true);
+    try {
+      const response = await fetch(`/api/agents/${agent.callsign.toLowerCase()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: agent.modelAssessment.recommendedModel,
+          modelAssessment: {
+            fallbackModels: agent.modelAssessment.fallbackModels,
+          },
+        }),
+      });
+      const updated = await response.json();
+      if (response.ok && !updated.error) {
+        setAgent(updated);
+      }
+    } catch {
+      // ignore inline save failures
+    } finally {
+      setApplyingModel(false);
+    }
+  }, [agent]);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
@@ -510,6 +539,8 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               onOverlayChange={setOverlayDraft}
               onSaveOverlay={saveOverlay}
               savingOverlay={savingOverlay}
+              applyingModel={applyingModel}
+              onApplyRecommendedModel={applyRecommendedModel}
             />
           )}
           {activeTab === "skills" && (
@@ -565,6 +596,8 @@ function SummaryTab({
   onOverlayChange,
   onSaveOverlay,
   savingOverlay,
+  applyingModel,
+  onApplyRecommendedModel,
 }: {
   agent: AgentDetail | null;
   loading: boolean;
@@ -576,6 +609,8 @@ function SummaryTab({
   onOverlayChange: (value: string) => void;
   onSaveOverlay: () => void;
   savingOverlay: boolean;
+  applyingModel: boolean;
+  onApplyRecommendedModel: () => void;
 }) {
   if (loading) return <SummarySkeleton />;
   if (!agent) return null;
@@ -604,6 +639,51 @@ function SummaryTab({
           <InfoRow label="Model">
             <span className="font-mono text-xs">{agent.model}</span>
           </InfoRow>
+        )}
+
+        {agent.modelAssessment && (
+          <>
+            <InfoRow label="Recommended Profile">
+              <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] tracking-wider text-[var(--accent)]">
+                {labelModelProfile(agent.modelAssessment.profile as never).toUpperCase()}
+              </span>
+            </InfoRow>
+
+            <InfoRow label="Model Compliance">
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] tracking-wider ${
+                  agent.modelAssessment.status === "matched"
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : agent.modelAssessment.status === "acceptable"
+                      ? "bg-amber-500/15 text-amber-400"
+                      : agent.modelAssessment.status === "needs_review"
+                        ? "bg-red-500/15 text-red-300"
+                        : "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
+                }`}
+              >
+                {agent.modelAssessment.status.replace("_", " ").toUpperCase()}
+              </span>
+            </InfoRow>
+
+            {agent.modelAssessment.recommendedModel && (
+              <InfoRow label="Recommended Model">
+                <div className="space-y-2">
+                  <div className="font-mono text-xs text-[var(--text-secondary)] break-all">
+                    {agent.modelAssessment.recommendedModel}
+                  </div>
+                  {agent.runtimeId && agent.modelAssessment.status !== "matched" && (
+                    <button
+                      onClick={onApplyRecommendedModel}
+                      disabled={applyingModel}
+                      className="rounded border border-[var(--border-medium)] px-2 py-1 text-[10px] tracking-[0.15em] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                    >
+                      {applyingModel ? "APPLYING" : "APPLY RECOMMENDED MODEL"}
+                    </button>
+                  )}
+                </div>
+              </InfoRow>
+            )}
+          </>
         )}
 
         {agent.provider && (

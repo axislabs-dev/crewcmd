@@ -73,6 +73,7 @@ export interface ParsedAgent {
   reportsTo?: string;
   identityRaw?: string;
   soulRaw?: string;
+  agentsRaw?: string;
 }
 
 export interface ParseResult {
@@ -186,6 +187,7 @@ export async function parseOpenClawConfig(
     // Read workspace files if workspace path is available
     let identityRaw: string | undefined;
     let soulRaw: string | undefined;
+    let agentsRaw: string | undefined;
     let name = agentConfig.name || agentConfig.identity?.name || agentConfig.id;
     let emoji = agentConfig.identity?.emoji || "🤖";
     let title = "Agent";
@@ -217,12 +219,10 @@ export async function parseOpenClawConfig(
       }
 
       // Read AGENTS.md for reportsTo (only if SOUL.md didn't provide one)
-      if (!reportsTo) {
-        const agentsPath = join(workspacePath, "AGENTS.md");
-        const agentsMd = await readFileContent(agentsPath);
-        if (agentsMd) {
-          reportsTo = parseReportsTo(agentsMd);
-        }
+      const agentsPath = join(workspacePath, "AGENTS.md");
+      agentsRaw = (await readFileContent(agentsPath)) ?? undefined;
+      if (!reportsTo && agentsRaw) {
+        reportsTo = parseReportsTo(agentsRaw);
       }
     }
 
@@ -238,6 +238,7 @@ export async function parseOpenClawConfig(
       reportsTo,
       identityRaw,
       soulRaw,
+      agentsRaw,
     });
   }
 

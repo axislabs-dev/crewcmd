@@ -22,6 +22,7 @@ import {
   resolveAccessibleWorkspace,
   resolveRuntimeWorkspace,
 } from "@/lib/workspace";
+import { buildOperatingLayerConfig, inferRolePack } from "@/lib/operating-layer";
 
 export const dynamic = "force-dynamic";
 
@@ -211,6 +212,25 @@ export async function POST(request: Request) {
       const agentToReattach = existingByRef ?? existingDetached;
       if (agentToReattach) {
         try {
+          const existingRuntimeConfig =
+            typeof agentToReattach.runtimeConfig === "object" && agentToReattach.runtimeConfig !== null
+              ? (agentToReattach.runtimeConfig as Record<string, unknown>)
+              : {};
+          const operatingLayer = buildOperatingLayerConfig({
+            mode: "imported-overlay",
+            rolePack: inferRolePack({
+              role: agentToReattach.role ?? null,
+              title: agent.title ?? agentToReattach.title,
+              callsign,
+            }),
+            callsign,
+            workspaceId: targetWorkspace.id,
+            mirroredFiles: {
+              identityRaw: agent.identityRaw,
+              soulRaw: agent.soulRaw,
+              agentsRaw: agent.agentsRaw,
+            },
+          });
           const conflictingRow = existingAgents.find((row) => {
             if (row.id === agentToReattach.id) return false;
             if (row.callsign.toLowerCase() !== callsign.toLowerCase()) return false;
@@ -237,7 +257,7 @@ export async function POST(request: Request) {
               emoji: agent.emoji || "🤖",
               color: agentToReattach.color || COLORS[i % COLORS.length],
               status: "online",
-              soulContent: agent.description || null,
+              soulContent: agent.soulRaw || agent.description || null,
               adapterType: "openclaw_gateway",
               adapterConfig: {
                 url: runtime.httpUrl,
@@ -252,6 +272,10 @@ export async function POST(request: Request) {
               runtimeRef: agent.id,
               reportsTo: agent.reportsTo || null,
               avatarUrl: agent.avatarUrl || null,
+              runtimeConfig: {
+                ...existingRuntimeConfig,
+                operatingLayer,
+              },
               ownerType: agentToReattach.ownerType || effectiveOwnerType,
               ownerUserId: agentToReattach.ownerUserId ?? effectiveOwnerUserId,
               ownerCompanyId: agentToReattach.ownerCompanyId ?? effectiveOwnerCompanyId,
@@ -316,6 +340,20 @@ export async function POST(request: Request) {
       const color = COLORS[i % COLORS.length];
 
       try {
+        const operatingLayer = buildOperatingLayerConfig({
+          mode: "imported-overlay",
+          rolePack: inferRolePack({
+            title: agent.title,
+            callsign: finalCallsign,
+          }),
+          callsign: finalCallsign,
+          workspaceId: targetWorkspace.id,
+          mirroredFiles: {
+            identityRaw: agent.identityRaw,
+            soulRaw: agent.soulRaw,
+            agentsRaw: agent.agentsRaw,
+          },
+        });
         const [created_agent] = await withRetry(() => db!
           .insert(agents)
           .values({
@@ -325,7 +363,7 @@ export async function POST(request: Request) {
             emoji: agent.emoji || "🤖",
             color,
             status: "online",
-            soulContent: agent.description || null,
+            soulContent: agent.soulRaw || agent.description || null,
             companyId: targetWorkspace.companyId,
             adapterType: "openclaw_gateway",
             adapterConfig: {
@@ -337,6 +375,9 @@ export async function POST(request: Request) {
             role: "engineer",
             model: agent.model || null,
             workspacePath: agent.workspace || null,
+            runtimeConfig: {
+              operatingLayer,
+            },
             runtimeId,
             runtimeRef: agent.id,
             reportsTo: agent.reportsTo || null,

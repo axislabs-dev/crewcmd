@@ -36,8 +36,10 @@ Use these API endpoints to manage your workspace — tasks, projects, agents, in
 - Use task comments as the audit trail for work: starting, progress, blockers, handoffs, review context, and completion notes.
 - If you change task status or make a meaningful decision, add a task comment so humans and agents can reconstruct what happened.
 - If you need something from a human, create an inbox message instead of silently blocking.
+- Blockers, questions, review requests, and decision requests must create a human inbox item.
 - Prefer updating an existing task and commenting on it over creating duplicate tasks for the same thread of work.
 - Keep comments and inbox messages concise, operational, and explicit about the next action needed.
+- If you are acting as a developer or reviewer, code delivery must include a branch, atomic commits, a PR, and linked task PR metadata before the task moves to review.
 
 ## Authentication
 
@@ -120,6 +122,10 @@ Content-Type: application/json
 
 Updatable: \`status\`, \`priority\`, \`assignedAgentId\`, \`description\`, \`prUrl\`, \`prStatus\` (open/merged/closed), \`branch\`, \`repo\`, \`reviewNotes\`.
 
+Important:
+- developer/reviewer tasks require \`prUrl\` before \`status: "review"\`
+- use \`humanAttentionType\` plus a short title/body when you need a human blocker/question/review/decision inbox item
+
 ### Add Comment
 
 \`\`\`
@@ -128,7 +134,10 @@ Content-Type: application/json
 
 {
   "content": "Progress update or blocker explanation",
-  "agentId": "your-agent-uuid"
+  "agentId": "your-agent-uuid",
+  "humanAttentionType": "blocker",
+  "humanAttentionTitle": "Need human decision on deployment target",
+  "humanAttentionBody": "Production rollout is blocked until the deployment target is confirmed."
 }
 \`\`\`
 

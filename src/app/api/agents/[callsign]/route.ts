@@ -4,6 +4,8 @@ import * as schema from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { canReadAgent, canUpdateAgent, getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/agent-access";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
+import { logAudit, saveConfigVersion } from "@/lib/governance";
+import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 
 export const dynamic = "force-dynamic";
 interface RouteParams { params: Promise<{ callsign: string }>; }
@@ -129,6 +131,39 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (Object.keys(updates).length === 0) return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     const [updated] = await withRetry(() => db!.update(schema.agents).set(updates).where(eq(schema.agents.id, agent.id)).returning());
+
+    if (updates.runtimeConfig && updated) {
+      const configCompanyId = updated.companyId ?? updated.ownerCompanyId ?? null;
+      if (configCompanyId) {
+        await saveConfigVersion(
+          configCompanyId,
+          "agent_runtime_config",
+          updated.id,
+          (updated.runtimeConfig ?? {}) as Record<string, unknown>,
+          access.userId ?? "system",
+          "Updated CrewCmd operating layer"
+        ).catch(() => null);
+        await logAudit(
+          configCompanyId,
+          access.userId ?? "system",
+          "updated",
+          "agent_runtime_config",
+          updated.id,
+          { callsign: updated.callsign }
+        ).catch(() => null);
+      }
+
+      if (updated.runtimeId) {
+        await pushSkillToRuntime(updated.runtimeId).catch((err) => {
+          console.warn(
+            `[api/agents/callsign] Failed to resync runtime skills after config update: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        });
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (err) {
     console.error("[api/agents/callsign] PATCH Error:", err);

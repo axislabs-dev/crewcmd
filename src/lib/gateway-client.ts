@@ -154,6 +154,7 @@ export interface DiscoveredAgent {
   avatarUrl?: string;
   identityRaw?: string;
   soulRaw?: string;
+  agentsRaw?: string;
 }
 
 export interface ProbeResult {
@@ -910,5 +911,6 @@ function parseAgentIdentity(
     avatarUrl: agent.identity?.avatarUrl || agent.identity?.avatar || undefined,
     identityRaw,
     soulRaw,
+    agentsRaw: agentsMdRaw,
   };
 }

@@ -20,6 +20,7 @@ import { getHeartbeatSecret } from "./heartbeat-secret";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { addSkillToGatewayAgentAllowlist } from "./openclaw-gateway-skill-assignment";
 import { generateCrewCmdSkill } from "./crewcmd-skill-template";
+import { generateCrewCmdOperatingLayerSkill } from "./crewcmd-operating-skill-template";
 import {
   defaultOpenClawWorkspaceRoot,
   resolveOpenClawWorkspaceRoot,
@@ -52,8 +53,9 @@ interface SkillData {
 
 // ─── Constants ──────────────────────────────────────────────────────
 
-const META_VERSION = "0.1.0";
+const META_VERSION = "0.1.1";
 const CREWCMD_MANAGEMENT_SLUG = "crewcmd-management";
+const CREWCMD_OPERATING_LAYER_SLUG = "crewcmd-operating-layer";
 
 // ─── Public API ─────────────────────────────────────────────────────
 
@@ -162,12 +164,12 @@ async function loadSkillData(
     db!
       .select()
       .from(agents)
-      .where(and(eq(agents.id, agentId), eq(agents.companyId, companyId)))
+      .where(eq(agents.id, agentId))
       .limit(1)
   );
 
   if (!agentRows) {
-    throw new Error(`Agent ${agentId} not found for company ${companyId}`);
+    throw new Error(`Agent ${agentId} not found`);
   }
 
   // Load skill
@@ -239,6 +241,31 @@ function renderSkillMd(
   skill: typeof skills.$inferSelect,
   assignmentConfig: Record<string, unknown>
 ): string {
+  if (skill.slug === CREWCMD_OPERATING_LAYER_SLUG) {
+    const rolePack = typeof assignmentConfig.rolePack === "string"
+      ? assignmentConfig.rolePack.trim()
+      : "developer";
+    const mode = typeof assignmentConfig.mode === "string"
+      ? assignmentConfig.mode.trim()
+      : "imported-overlay";
+    const overlayContent = typeof assignmentConfig.overlayContent === "string"
+      ? assignmentConfig.overlayContent.trim()
+      : "";
+
+    if (!overlayContent) {
+      return generateSkillMd(skill);
+    }
+
+    return generateSkillMd({
+      ...skill,
+      content: generateCrewCmdOperatingLayerSkill({
+        rolePack,
+        mode,
+        overlayContent,
+      }),
+    });
+  }
+
   if (skill.slug !== CREWCMD_MANAGEMENT_SLUG) {
     return generateSkillMd(skill);
   }
@@ -273,6 +300,10 @@ function extractOpenclawMetadata(
 ): Record<string, unknown> {
   let envVars: string[] = [];
   let primaryEnv: string | undefined;
+  const authType =
+    metadata && typeof (metadata.auth as Record<string, unknown> | undefined)?.type === "string"
+      ? ((metadata.auth as Record<string, unknown>).type as string)
+      : undefined;
 
   if (metadata) {
     const openclaw = metadata.openclaw as Record<string, unknown> | undefined;
@@ -293,7 +324,7 @@ function extractOpenclawMetadata(
   }
 
   // Fallback: derive from slug
-  if (envVars.length === 0) {
+  if (envVars.length === 0 && authType !== "none") {
     const derived = slug.toUpperCase().replace(/[^A-Z0-9_-]/g, "") + "_API_KEY";
     envVars = [derived];
   }

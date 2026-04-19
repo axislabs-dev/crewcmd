@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const timestamp = new Date().toISOString();
-  const version = process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0";
+  const version = process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1";
   const uptime = Math.floor(process.uptime());
 
   let database: "connected" | "error" = "connected";

@@ -268,8 +268,8 @@ async function seed() {
     {
       agentId: cipher.id,
       actionType: "deploy",
-      description: "Deployed CrewCmd v0.1.0 to staging",
-      metadata: { environment: "staging", version: "0.1.0" },
+      description: "Deployed CrewCmd v0.1.1 to staging",
+      metadata: { environment: "staging", version: "0.1.1" },
     },
     {
       agentId: neo.id,

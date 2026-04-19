@@ -718,6 +718,22 @@ export interface BlueprintAgentTemplate {
   reportsTo?: string;
   promptTemplate?: string;
   skills?: string[];
+  rolePack?: string;
+  identityContent?: string;
+  soulContent?: string;
+  agentsContent?: string;
+  userContent?: string;
+  toolsContent?: string;
+  heartbeatContent?: string;
+  bootstrapContent?: string;
+  curatedSkillMetadata?: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    source: "crewcmd-curated" | "community-fork";
+    sourceUrl?: string;
+    version?: string;
+  }>;
 }
 
 /** Full blueprint template containing agents, hierarchy, and metadata */

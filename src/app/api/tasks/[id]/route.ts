@@ -3,12 +3,28 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
-import { uploadImage } from "@/lib/image-storage";
+import { createHumanAttentionInbox, type HumanAttentionType } from "@/lib/human-attention";
+import { isDeveloperWorkflowRole, type CrewCmdRolePack } from "@/lib/operating-layer";
 
 export const dynamic = "force-dynamic";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+async function resolveTaskWhere(rawId: string) {
+  const tskMatch = rawId.match(/^TSK-(\d+)$/i);
+  return tskMatch
+    ? eq(schema.tasks.shortId, parseInt(tskMatch[1], 10))
+    : eq(schema.tasks.id, rawId);
+}
+
+function getOperatingRolePack(agent: typeof schema.agents.$inferSelect | undefined): CrewCmdRolePack | null {
+  if (!agent?.runtimeConfig || typeof agent.runtimeConfig !== "object") return null;
+  const operatingLayer = (agent.runtimeConfig as Record<string, unknown>).operatingLayer;
+  if (!operatingLayer || typeof operatingLayer !== "object") return null;
+  const rolePack = (operatingLayer as Record<string, unknown>).rolePack;
+  return typeof rolePack === "string" ? (rolePack as CrewCmdRolePack) : null;
 }
 
 export async function GET(
@@ -23,10 +39,7 @@ export async function GET(
     const { id } = await params;
 
     // Support TSK-NNNN format lookup
-    const tskMatch = id.match(/^TSK-(\d+)$/i);
-    const whereClause = tskMatch
-      ? eq(schema.tasks.shortId, parseInt(tskMatch[1], 10))
-      : eq(schema.tasks.id, id);
+    const whereClause = await resolveTaskWhere(id);
 
     const [task] = await db.select().from(schema.tasks).where(whereClause);
 
@@ -95,8 +108,31 @@ export async function PATCH(
     if (body.source !== undefined) updates.source = body.source;
     if (body.images !== undefined) updates.images = body.images;
 
-    const [oldTask] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
-    const [task] = await db.update(schema.tasks).set(updates).where(eq(schema.tasks.id, id)).returning();
+    const whereClause = await resolveTaskWhere(id);
+    const [oldTask] = await db.select().from(schema.tasks).where(whereClause);
+    if (!oldTask) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const nextAssignedAgentId = body.assignedAgentId ?? oldTask.assignedAgentId ?? null;
+    const [assignedAgent] = nextAssignedAgentId
+      ? await db.select().from(schema.agents).where(eq(schema.agents.id, nextAssignedAgentId)).limit(1)
+      : [null];
+    const rolePack = getOperatingRolePack(assignedAgent ?? undefined);
+    const nextPrUrl = body.prUrl ?? oldTask.prUrl ?? null;
+
+    if (
+      body.status === "review" &&
+      isDeveloperWorkflowRole(rolePack) &&
+      (!nextPrUrl || (typeof nextPrUrl === "string" && nextPrUrl.trim().length === 0))
+    ) {
+      return NextResponse.json(
+        { error: "Developer and reviewer tasks require prUrl before moving to review" },
+        { status: 400 }
+      );
+    }
+
+    const [task] = await db.update(schema.tasks).set(updates).where(whereClause).returning();
 
     if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -163,6 +199,35 @@ export async function PATCH(
       }
     }
 
+    const inferredAttentionType: HumanAttentionType | null =
+      typeof body.humanAttentionType === "string"
+        ? (body.humanAttentionType as HumanAttentionType)
+        : body.status === "blocked"
+          ? "blocker"
+          : body.status === "review"
+            ? "review"
+            : null;
+
+    if (inferredAttentionType) {
+      await createHumanAttentionInbox({
+        taskId: task.id,
+        fromAgentId: body.agentId || task.assignedAgentId || null,
+        type: inferredAttentionType,
+        title:
+          body.humanAttentionTitle ||
+          `${inferredAttentionType.toUpperCase()}: ${task.title}`,
+        body:
+          body.humanAttentionBody ||
+          (inferredAttentionType === "review"
+            ? `Task ${task.title} is ready for review.`
+            : `Task ${task.title} needs human attention.`),
+        priority:
+          body.humanAttentionPriority ||
+          (inferredAttentionType === "blocker" ? "high" : "normal"),
+        relatedAgents: task.assignedAgentId ? [task.assignedAgentId] : undefined,
+      }).catch(() => null);
+    }
+
     return NextResponse.json(task);
   } catch {
     return NextResponse.json(
@@ -184,7 +249,8 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  const [task] = await db.delete(schema.tasks).where(eq(schema.tasks.id, id)).returning();
+  const whereClause = await resolveTaskWhere(id);
+  const [task] = await db.delete(schema.tasks).where(whereClause).returning();
 
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -192,4 +258,3 @@ export async function DELETE(
 
   return NextResponse.json(task);
 }
-

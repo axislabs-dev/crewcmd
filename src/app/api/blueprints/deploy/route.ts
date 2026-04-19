@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { BUILT_IN_BLUEPRINTS } from "@/lib/blueprints-data";
 import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
+import { buildBlueprintOperatingLayer } from "@/lib/operating-layer";
 
 /**
  * POST /api/blueprints/deploy — Deploy a blueprint to a company.
@@ -92,9 +93,19 @@ export async function POST(request: NextRequest) {
           adapterType: tmpl.adapterType,
           model: tmpl.model ?? null,
           adapterConfig,
-          runtimeConfig: {},
+          runtimeConfig: {
+            operatingLayer: buildBlueprintOperatingLayer({
+              callsign: tmpl.callsign.toUpperCase(),
+              rolePack: tmpl.rolePack,
+              curatedSkills: tmpl.curatedSkillMetadata,
+              identityRaw: tmpl.identityContent,
+              soulRaw: tmpl.soulContent,
+              agentsRaw: tmpl.agentsContent,
+            }),
+          },
           companyId,
           reportsTo: null, // Set in second pass
+          soulContent: tmpl.soulContent ?? tmpl.promptTemplate ?? null,
         }).returning()
       );
 

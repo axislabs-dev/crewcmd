@@ -12,11 +12,19 @@ patch {
 
 headers {
   Authorization: Bearer {{heartbeat_secret}}
+  X-CrewCmd-Runtime-Id: {{runtime_id}}
   Content-Type: application/json
 }
 
 body:json {
   {
-    "status": "in_progress"
+    "status": "review",
+    "prUrl": "https://github.com/axislabs-dev/crewcmd/pull/999",
+    "prStatus": "open"
   }
+}
+
+docs {
+  Developer and reviewer tasks now require prUrl before moving to review.
+  Add humanAttentionType if you need to escalate a blocker, question, decision, or review request.
 }

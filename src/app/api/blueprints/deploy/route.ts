@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { BUILT_IN_BLUEPRINTS } from "@/lib/blueprints-data";
 import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
 import { buildBlueprintOperatingLayer } from "@/lib/operating-layer";
+import { resolveBlueprintAgentModelSelection } from "@/lib/model-profiles";
+import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 
 /**
  * POST /api/blueprints/deploy — Deploy a blueprint to a company.
@@ -57,6 +59,7 @@ export async function POST(request: NextRequest) {
       const overrides = customize?.agents?.[idx];
       return overrides ? { ...agent, ...overrides } : { ...agent };
     });
+    const runtimeCapabilities = await loadPrimaryRuntimeCapabilities(companyId);
 
     // Fetch existing company skills for auto-attach
     let companySkills: { id: string; slug: string }[] = [];
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest) {
       if (tmpl.adapterType === "openrouter") {
         adapterConfig.baseUrl = "https://openrouter.ai/api/v1";
       }
+      const resolvedModel = resolveBlueprintAgentModelSelection(tmpl, runtimeCapabilities);
 
       const [created] = await withRetry(() =>
         db!.insert(schema.agents).values({
@@ -91,12 +95,14 @@ export async function POST(request: NextRequest) {
           color: tmpl.color,
           role: tmpl.role,
           adapterType: tmpl.adapterType,
-          model: tmpl.model ?? null,
+          model: resolvedModel.primaryModel ?? tmpl.model ?? null,
           adapterConfig,
           runtimeConfig: {
             operatingLayer: buildBlueprintOperatingLayer({
               callsign: tmpl.callsign.toUpperCase(),
               rolePack: tmpl.rolePack,
+              modelProfile: resolvedModel.profile,
+              fallbackProfiles: resolvedModel.fallbackProfiles,
               curatedSkills: tmpl.curatedSkillMetadata,
               identityRaw: tmpl.identityContent,
               soulRaw: tmpl.soulContent,
@@ -187,4 +193,33 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ error: "Failed to deploy blueprint" }, { status: 500 });
   }
+}
+
+async function loadPrimaryRuntimeCapabilities(companyId: string): Promise<RuntimeCapabilitySnapshot | null> {
+  const [runtime] = await withRetry(() =>
+    db!
+      .select({ metadata: schema.companyRuntimes.metadata })
+      .from(schema.companyRuntimes)
+      .where(
+        and(
+          eq(schema.companyRuntimes.companyId, companyId),
+          eq(schema.companyRuntimes.ownerType, "company"),
+          eq(schema.companyRuntimes.isPrimary, true)
+        )
+      )
+      .orderBy(desc(schema.companyRuntimes.updatedAt))
+      .limit(1)
+  );
+
+  const metadata =
+    runtime?.metadata && typeof runtime.metadata === "object" && !Array.isArray(runtime.metadata)
+      ? (runtime.metadata as Record<string, unknown>)
+      : null;
+  const snapshot = metadata?.capabilitySnapshot;
+
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return null;
+  }
+
+  return snapshot as RuntimeCapabilitySnapshot;
 }

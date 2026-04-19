@@ -715,6 +715,8 @@ export interface BlueprintAgentTemplate {
   role: string;
   adapterType: string;
   model?: string;
+  modelProfile?: string;
+  fallbackProfiles?: string[];
   reportsTo?: string;
   promptTemplate?: string;
   skills?: string[];

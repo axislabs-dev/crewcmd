@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
+import { normalizeInboxMessage, normalizeInboxMessages } from "@/lib/inbox-response";
 import {
   getCompanyIdForWorkspace,
   isHeartbeatBearerRequest,
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
     );
 
     const rows = (result.rows ?? []) as unknown as InboxMessage[];
-    let messages: InboxMessage[] = [...rows];
+    let messages: InboxMessage[] = normalizeInboxMessages(rows);
 
     // Apply filters
     if (status) {
@@ -208,7 +209,7 @@ export async function POST(request: NextRequest) {
     );
 
     const rows = (result.rows ?? []) as unknown as InboxMessage[];
-    return NextResponse.json(rows[0], { status: 201 });
+    return NextResponse.json(normalizeInboxMessage(rows[0]), { status: 201 });
   } catch (error) {
     console.error("[api/inbox] POST error:", error);
     return NextResponse.json({ error: "Failed to create inbox message" }, { status: 500 });

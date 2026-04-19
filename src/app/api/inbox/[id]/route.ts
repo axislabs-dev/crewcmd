@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { requireAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
+import { normalizeInboxMessage } from "@/lib/inbox-response";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +79,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Message not found" }, { status: 404 });
     }
 
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(normalizeInboxMessage(rows[0]));
   } catch (error) {
     console.error("[api/inbox/[id]] PATCH error:", error);
     return NextResponse.json({ error: "Failed to update message" }, { status: 500 });

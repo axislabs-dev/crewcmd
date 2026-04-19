@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- CrewCmd operating layer for imported runtimes and blueprint-owned teams
+- Mirrored imported IDENTITY.md, SOUL.md, and AGENTS.md content with editable CrewCmd overlays
+- Three flagship CrewCmd blueprints: Solo Founder Kit, Startup Dev Squad, and Growth Team
+- Human-attention inbox enforcement for blockers, questions, decisions, and review requests
+- Developer/reviewer review-state enforcement requiring linked PR metadata
+- CrewCmd operating skill sync alongside crewcmd-management
 - Agent execution engine with adapter-specific executors and control panel UI
 - Multi-adapter agent support (OpenClaw Gateway, OpenRouter, HTTP, custom)
 - Team blueprints for one-click agent team deployment

@@ -37,7 +37,8 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   const baseUrl = resolveRuntimeCallbackUrl({ runtime });
   const workspace = await resolveRuntimeWorkspace(runtime);
   if (!workspace) throw new Error(`Workspace for runtime ${runtimeId} not found`);
-  if (!runtime.companyId) {
+  const storageCompanyId = runtime.companyId ?? runtime.ownerCompanyId ?? null;
+  if (!storageCompanyId) {
     throw new Error(`Runtime ${runtimeId} is missing company skill storage scope`);
   }
 
@@ -46,7 +47,7 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   const skillContent = generateCrewCmdSkill({
     baseUrl,
     workspaceId: workspace.id,
-    companyId: runtime.companyId ?? null,
+    companyId: workspace.companyId ?? null,
   });
 
   const runtimeAgents = await withRetry(() =>
@@ -55,14 +56,14 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
 
   // Create or update the system skill record in DB
   const skillRecord = await upsertSystemSkill(
-    runtime.companyId,
+    storageCompanyId,
     skillContent,
     workspace.id,
   );
 
   await upsertRuntimeManagedResource({
     runtimeId,
-    companyId: runtime.companyId,
+    companyId: storageCompanyId,
     resourceType: "skill-entry",
     resourceKey: SYSTEM_SKILL_SLUG,
     externalId: skillRecord.id,
@@ -80,7 +81,8 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     skillId: skillRecord.id,
     runtimeAgents,
     baseUrl,
-    companyId: runtime.companyId,
+    companyId: workspace.companyId ?? null,
+    storageCompanyId,
     workspaceId: workspace.id,
     runtimeId: runtime.id,
   });
@@ -90,11 +92,11 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     await syncSkillToOpenClaw({
         skillId: skillRecord.id,
         agentId: agent.id,
-        companyId: runtime.companyId,
+        companyId: storageCompanyId,
       });
       await upsertRuntimeManagedResource({
         runtimeId,
-        companyId: runtime.companyId,
+        companyId: storageCompanyId,
         resourceType: "agent-skill",
         resourceKey: `${agent.id}:${skillRecord.id}`,
         targetAgentId: agent.id,
@@ -190,7 +192,8 @@ async function linkSkillToAgents(params: {
   skillId: string;
   runtimeAgents: (typeof agents.$inferSelect)[];
   baseUrl: string;
-  companyId: string;
+  companyId: string | null;
+  storageCompanyId: string;
   workspaceId: string;
   runtimeId: string;
 }): Promise<void> {

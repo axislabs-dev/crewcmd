@@ -192,8 +192,9 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
   if (!workspace) {
     throw new Error(`Workspace for runtime ${runtimeId} not found`);
   }
-  if (!runtime.companyId) {
-    throw new Error(`Runtime ${runtimeId} is missing company skill storage scope`);
+  const storageCompanyId = runtime.companyId ?? runtime.ownerCompanyId ?? null;
+  if (!storageCompanyId) {
+    throw new Error(`Runtime ${runtimeId} is missing company resource storage scope`);
   }
   const deviceKeyPem =
     typeof metadata.devicePrivateKeyPem === "string"
@@ -212,12 +213,12 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
     const dispatchMessage = buildQueueDispatchPrompt({
       baseUrl,
       workspaceId: workspace.id,
-      companyId: runtime.companyId ?? null,
+      companyId: workspace.companyId ?? null,
     });
     await ensureManagedCronJob({
       client,
       runtimeId: runtime.id,
-      companyId: runtime.companyId,
+      companyId: storageCompanyId,
       resourceKey: DISPATCH_JOB_NAME,
       agentId: defaultAgentId,
       description: "CrewCmd-managed queue dispatcher",
@@ -232,12 +233,12 @@ export async function ensureCrewCmdRuntimeOperatingLayer(
     const dailyBriefMessage = buildDailyBriefPrompt({
       baseUrl,
       workspaceId: workspace.id,
-      companyId: runtime.companyId ?? null,
+      companyId: workspace.companyId ?? null,
     });
     await ensureManagedCronJob({
       client,
       runtimeId: runtime.id,
-      companyId: runtime.companyId,
+      companyId: storageCompanyId,
       resourceKey: DAILY_BRIEF_JOB_NAME,
       agentId: defaultAgentId,
       description: "CrewCmd-managed daily brief",
@@ -260,9 +261,9 @@ export async function cleanupCrewCmdRuntimeOperatingLayer(runtimeId: string): Pr
     db!.select().from(companyRuntimes).where(eq(companyRuntimes.id, runtimeId)).limit(1)
   );
   if (!runtime) return;
-  if (!runtime.companyId) return;
 
   const resources = await listRuntimeManagedResources(runtimeId);
+  const storageCompanyId = runtime.companyId ?? runtime.ownerCompanyId ?? null;
   const metadata = (runtime.metadata || {}) as Record<string, unknown>;
   const deviceKeyPem =
     typeof metadata.devicePrivateKeyPem === "string"
@@ -309,7 +310,7 @@ export async function cleanupCrewCmdRuntimeOperatingLayer(runtimeId: string): Pr
       await uninstallSkillFromOpenClaw({
         skillId,
         agentId,
-        companyId: runtime.companyId,
+        companyId: storageCompanyId ?? "",
       });
     }
 
@@ -332,7 +333,7 @@ export async function cleanupCrewCmdRuntimeOperatingLayer(runtimeId: string): Pr
       await uninstallSkillFromOpenClaw({
         skillId,
         agentId,
-        companyId: runtime.companyId,
+        companyId: storageCompanyId ?? "",
         forceRemoveRuntimeConfigEntry: true,
       });
     }

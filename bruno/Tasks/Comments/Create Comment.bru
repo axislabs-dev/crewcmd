@@ -12,12 +12,16 @@ post {
 
 headers {
   Authorization: Bearer {{heartbeat_secret}}
+  X-CrewCmd-Runtime-Id: {{runtime_id}}
   Content-Type: application/json
 }
 
 body:json {
   {
     "content": "This is a comment on the task.",
-    "agentId": "agent-forge"
+    "agentId": "agent-forge",
+    "humanAttentionType": "question",
+    "humanAttentionTitle": "QUESTION: Need human review",
+    "humanAttentionBody": "Please confirm the next step for this task."
   }
 }

@@ -1,0 +1,33 @@
+meta {
+  name: Update Agent
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{base_url}}/api/agents/{{callsign}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  X-CrewCmd-Runtime-Id: {{runtime_id}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "model": "openai-codex/gpt-5.4",
+    "modelAssessment": {
+      "fallbackModels": [
+        "openrouter/qwen/qwen3.6-plus"
+      ]
+    }
+  }
+}
+
+docs {
+  Updates an agent and, for runtime-backed agents, also patches the OpenClaw runtime model config.
+  Use a model that already exists on the connected runtime.
+}

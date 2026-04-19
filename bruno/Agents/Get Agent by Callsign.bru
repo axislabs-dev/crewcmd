@@ -9,3 +9,8 @@ get {
   body: none
   auth: none
 }
+
+headers {
+  Authorization: Bearer {{heartbeat_secret}}
+  X-CrewCmd-Runtime-Id: {{runtime_id}}
+}

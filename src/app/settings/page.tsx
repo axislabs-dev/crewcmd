@@ -52,6 +52,11 @@ export default function SettingsPage() {
   const [runtimes, setRuntimes] = useState<RuntimeRecord[]>([]);
   const [loadingRuntimes, setLoadingRuntimes] = useState(true);
   const [deletingRuntimeId, setDeletingRuntimeId] = useState<string | null>(null);
+  const [heartbeatSecret, setHeartbeatSecret] = useState<string | null>(null);
+  const [heartbeatSecretLoading, setHeartbeatSecretLoading] = useState(false);
+  const [heartbeatSecretRevealed, setHeartbeatSecretRevealed] = useState(false);
+  const [heartbeatRotating, setHeartbeatRotating] = useState(false);
+  const [heartbeatSecretCopied, setHeartbeatSecretCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -61,6 +66,12 @@ export default function SettingsPage() {
   useEffect(() => {
     void loadRuntimes();
   }, []);
+
+  useEffect(() => {
+    if (workspace?.type === "personal") {
+      void fetchHeartbeatSecret();
+    }
+  }, [workspace?.type]);
 
   const roleLabel = useMemo(() => profile?.role?.replaceAll("_", " ").toUpperCase() ?? "USER", [profile?.role]);
 
@@ -116,6 +127,56 @@ export default function SettingsPage() {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to delete runtime" });
     } finally {
       setDeletingRuntimeId(null);
+    }
+  }
+
+  async function fetchHeartbeatSecret() {
+    setHeartbeatSecretLoading(true);
+    try {
+      const res = await fetch("/api/system-settings?key=heartbeat_secret", { cache: "no-store" });
+      const data = await res.json().catch(() => ({ value: null }));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load heartbeat secret");
+      }
+      setHeartbeatSecret(data.value ?? null);
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to load heartbeat secret" });
+    } finally {
+      setHeartbeatSecretLoading(false);
+    }
+  }
+
+  async function handleRotateHeartbeatSecret() {
+    setHeartbeatRotating(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/system-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "regenerate" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to rotate heartbeat secret");
+      }
+      setHeartbeatSecret(data.token ?? null);
+      setHeartbeatSecretRevealed(true);
+      setMessage({ type: "success", text: "Heartbeat secret rotated." });
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to rotate heartbeat secret" });
+    } finally {
+      setHeartbeatRotating(false);
+    }
+  }
+
+  async function handleCopyHeartbeatSecret() {
+    if (!heartbeatSecret) return;
+    try {
+      await navigator.clipboard.writeText(heartbeatSecret);
+      setHeartbeatSecretCopied(true);
+      setTimeout(() => setHeartbeatSecretCopied(false), 2000);
+    } catch {
+      setMessage({ type: "error", text: "Failed to copy heartbeat secret" });
     }
   }
 
@@ -357,64 +418,122 @@ export default function SettingsPage() {
           </div>
 
           {workspace?.type === "personal" ? (
-            <div className={cardClassName}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">Personal Runtime</h2>
-                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                    Connect and manage the OpenClaw runtime that powers your personal agents.
+            <>
+              <div className={cardClassName}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">Integrations</h2>
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      Personal agents authenticate to CrewCmd using the heartbeat secret below.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleRotateHeartbeatSecret()}
+                    disabled={heartbeatRotating}
+                    className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                  >
+                    {heartbeatRotating ? "Rotating..." : "Rotate"}
+                  </button>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] p-4">
+                  <p className="text-[10px] font-semibold tracking-[0.18em] text-[var(--text-tertiary)]">HEARTBEAT SECRET</p>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Used by OpenClaw agents to authenticate heartbeat check-ins and CrewCmd API writes.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <code className="flex-1 overflow-x-auto rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)]">
+                      {heartbeatSecretLoading
+                        ? "Loading..."
+                        : heartbeatSecret
+                          ? (heartbeatSecretRevealed ? heartbeatSecret : `${heartbeatSecret.slice(0, 12)}...`)
+                          : "Not configured"}
+                    </code>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setHeartbeatSecretRevealed((prev) => !prev)}
+                        disabled={!heartbeatSecret || heartbeatSecretLoading}
+                        className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                      >
+                        {heartbeatSecretRevealed ? "Hide" : "Reveal"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyHeartbeatSecret()}
+                        disabled={!heartbeatSecret || heartbeatSecretLoading}
+                        className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                      >
+                        {heartbeatSecretCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-[var(--text-tertiary)]">
+                    Local OpenClaw agents discover this automatically from <code>~/.crewcmd/heartbeat-secret</code>.
                   </p>
                 </div>
-                <a
-                  href="/onboarding?mode=connect&ownerType=user"
-                  className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                >
-                  Connect runtime
-                </a>
               </div>
 
-              <div className="mt-5 space-y-3">
-                {loadingRuntimes ? (
-                  <p className="text-sm text-[var(--text-secondary)]">Loading runtimes...</p>
-                ) : runtimes.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">No personal runtimes connected yet.</p>
-                ) : (
-                  runtimes.map((runtime) => (
-                    <div key={runtime.id} className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
-                            {runtime.isPrimary ? (
-                              <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
-                                PRIMARY
+              <div className={cardClassName}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">Personal Runtime</h2>
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      Connect and manage the OpenClaw runtime that powers your personal agents.
+                    </p>
+                  </div>
+                  <a
+                    href="/onboarding?mode=connect&ownerType=user"
+                    className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  >
+                    Connect runtime
+                  </a>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {loadingRuntimes ? (
+                    <p className="text-sm text-[var(--text-secondary)]">Loading runtimes...</p>
+                  ) : runtimes.length === 0 ? (
+                    <p className="text-sm text-[var(--text-secondary)]">No personal runtimes connected yet.</p>
+                  ) : (
+                    runtimes.map((runtime) => (
+                      <div key={runtime.id} className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
+                              {runtime.isPrimary ? (
+                                <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
+                                  PRIMARY
+                                </span>
+                              ) : null}
+                              <span className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                                {runtime.runtimeType.toUpperCase()}
                               </span>
-                            ) : null}
-                            <span className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
-                              {runtime.runtimeType.toUpperCase()}
-                            </span>
+                            </div>
+                            <p className="mt-2 truncate font-mono text-[11px] text-[var(--text-secondary)]">{runtime.gatewayUrl}</p>
+                            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                              {runtime.lastPing
+                                ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
+                                : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
+                            </p>
                           </div>
-                          <p className="mt-2 truncate font-mono text-[11px] text-[var(--text-secondary)]">{runtime.gatewayUrl}</p>
-                          <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                            {runtime.lastPing
-                              ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
-                              : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteRuntime(runtime.id)}
+                            disabled={deletingRuntimeId === runtime.id}
+                            className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
+                          >
+                            {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteRuntime(runtime.id)}
-                          disabled={deletingRuntimeId === runtime.id}
-                          className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
-                        >
-                          {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
-                        </button>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
+            </>
           ) : null}
 
           <div className={cardClassName}>

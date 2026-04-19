@@ -33,6 +33,18 @@ async function isOwnerOrAdmin(req: NextRequest): Promise<boolean> {
   return membership?.role === "owner" || membership?.role === "admin";
 }
 
+async function canManageSystemSettings(req: NextRequest): Promise<boolean> {
+  const user = await resolveCurrentUser(req);
+  if (!user) return false;
+
+  const companyId = req.headers.get("x-company-id") ?? req.nextUrl.searchParams.get("companyId");
+  if (!companyId) {
+    return true;
+  }
+
+  return isOwnerOrAdmin(req);
+}
+
 /** Keys that any authenticated user can read (non-sensitive) */
 const PUBLIC_KEYS = new Set(["chat.stopWords"]);
 
@@ -47,7 +59,7 @@ export async function GET(request: NextRequest) {
   // Generic key lookup
   if (key) {
     // Non-public keys require owner/admin
-    if (!PUBLIC_KEYS.has(key) && !(await isOwnerOrAdmin(request))) {
+    if (!PUBLIC_KEYS.has(key) && !(await canManageSystemSettings(request))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const [row] = await db
@@ -59,7 +71,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Legacy: return heartbeat_secret (owner/admin only)
-  if (!(await isOwnerOrAdmin(request))) {
+  if (!(await canManageSystemSettings(request))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -72,13 +84,13 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ token: row?.value ?? null });
 }
 
-/** POST /api/system-settings — regenerate heartbeat_secret (owner/admin only) */
+/** POST /api/system-settings — regenerate heartbeat_secret */
 export async function POST(request: NextRequest) {
   const authError = await requireAuth(request);
   if (authError) return authError;
   if (!db) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
 
-  if (!(await isOwnerOrAdmin(request))) {
+  if (!(await canManageSystemSettings(request))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -1,34 +1,34 @@
 /**
- * Push the CrewCmd Management skill to all imported agents on a runtime
- * using the same shared-skill sync path as other OpenClaw-native skills.
+ * Push the CrewCmd system skills to all imported agents on a runtime.
  *
- * Flow:
- * 1. Upsert the system skill record in CrewCmd
- * 2. Upsert agent skill assignments with runtime-specific config
- * 3. Sync each assignment through syncSkillToOpenClaw(), which writes to
- *    the shared OpenClaw workspace skill root, updates skills.entries,
- *    and patches the per-agent allowlist.
+ * This includes:
+ * - crewcmd-management
+ * - crewcmd-operating-layer
  */
 
+import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { companyRuntimes, skills, agentSkills, agents } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { generateCrewCmdSkill } from "./crewcmd-skill-template";
+import { generateCrewCmdOperatingLayerSkill } from "./crewcmd-operating-skill-template";
 import { CREWCMD_MANAGEMENT_SKILL_METADATA } from "./skills/crewcmd-management";
+import { CREWCMD_OPERATING_LAYER_SKILL_METADATA } from "./skills/crewcmd-operating-layer";
 import { syncSkillToOpenClaw } from "./sync-skill-to-openclaw";
 import { resolveRuntimeCallbackUrl } from "./runtime-callback-url";
 import { upsertRuntimeManagedResource } from "./runtime-managed-resources";
 import { resolveRuntimeWorkspace } from "./workspace";
 import { getHeartbeatSecret } from "./heartbeat-secret";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
+import { buildOperatingLayerConfig, inferRolePack } from "./operating-layer";
 
-const SYSTEM_SKILL_SLUG = "crewcmd-management";
-const SYSTEM_SKILL_NAME = "CrewCmd Management";
+const MANAGEMENT_SKILL_SLUG = "crewcmd-management";
+const MANAGEMENT_SKILL_NAME = "CrewCmd Management";
+const OPERATING_SKILL_SLUG = "crewcmd-operating-layer";
+const OPERATING_SKILL_NAME = "CrewCmd Operating Layer";
 
 export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
   if (!db) throw new Error("Database not available");
 
-  // Load runtime
   const [runtime] = await withRetry(() =>
     db!.select().from(companyRuntimes).where(eq(companyRuntimes.id, runtimeId))
   );
@@ -42,144 +42,168 @@ export async function pushSkillToRuntime(runtimeId: string): Promise<void> {
     throw new Error(`Runtime ${runtimeId} is missing company skill storage scope`);
   }
 
-  // Generate the SKILL.md content
-  // Auth token is NOT embedded — agents read $HEARTBEAT_SECRET from their environment at runtime
-  const skillContent = generateCrewCmdSkill({
-    baseUrl,
-    workspaceId: workspace.id,
-    companyId: workspace.companyId ?? null,
-  });
-
   const runtimeAgents = await withRetry(() =>
     db!.select().from(agents).where(eq(agents.runtimeId, runtimeId))
   );
 
-  // Create or update the system skill record in DB
-  const skillRecord = await upsertSystemSkill(
-    storageCompanyId,
-    skillContent,
-    workspace.id,
-  );
+  const managementContent = generateCrewCmdSkill({
+    baseUrl,
+    workspaceId: workspace.id,
+    companyId: workspace.companyId ?? null,
+  });
+  const operatingContent = generateCrewCmdOperatingLayerSkill({
+    rolePack: "developer",
+    mode: "imported-overlay",
+    overlayContent: "CrewCmd operating overlay is configured per-agent at assignment sync time.",
+  });
+
+  const managementSkill = await upsertSystemSkill({
+    companyId: storageCompanyId,
+    slug: MANAGEMENT_SKILL_SLUG,
+    name: MANAGEMENT_SKILL_NAME,
+    description:
+      "Full workspace management — tasks, projects, agents, inbox, blueprints, budgets, docs, org chart, and activity.",
+    content: managementContent,
+    metadata: {
+      ...CREWCMD_MANAGEMENT_SKILL_METADATA,
+      configExample: {
+        ...CREWCMD_MANAGEMENT_SKILL_METADATA.configExample,
+        companyId: storageCompanyId,
+        workspaceId: workspace.id,
+        runtimeId: runtime.id,
+      },
+    },
+  });
+  const operatingSkill = await upsertSystemSkill({
+    companyId: storageCompanyId,
+    slug: OPERATING_SKILL_SLUG,
+    name: OPERATING_SKILL_NAME,
+    description:
+      "CrewCmd operating overlay for workflow, audit, human-attention escalation, and developer delivery rules.",
+    content: operatingContent,
+    metadata: CREWCMD_OPERATING_LAYER_SKILL_METADATA,
+  });
 
   await upsertRuntimeManagedResource({
     runtimeId,
     companyId: storageCompanyId,
     resourceType: "skill-entry",
-    resourceKey: SYSTEM_SKILL_SLUG,
-    externalId: skillRecord.id,
-      payload: {
-        skillId: skillRecord.id,
-        slug: SYSTEM_SKILL_SLUG,
-        baseUrl,
-        workspaceId: workspace.id,
-        runtimeId: runtime.id,
-      },
+    resourceKey: MANAGEMENT_SKILL_SLUG,
+    externalId: managementSkill.id,
+    payload: {
+      skillId: managementSkill.id,
+      slug: MANAGEMENT_SKILL_SLUG,
+      baseUrl,
+      workspaceId: workspace.id,
+      runtimeId: runtime.id,
+    },
+  });
+  await upsertRuntimeManagedResource({
+    runtimeId,
+    companyId: storageCompanyId,
+    resourceType: "skill-entry",
+    resourceKey: OPERATING_SKILL_SLUG,
+    externalId: operatingSkill.id,
+    payload: {
+      skillId: operatingSkill.id,
+      slug: OPERATING_SKILL_SLUG,
+      workspaceId: workspace.id,
+      runtimeId: runtime.id,
+    },
   });
 
-  // Link skill to all agents on this runtime
   await linkSkillToAgents({
-    skillId: skillRecord.id,
+    skillId: managementSkill.id,
     runtimeAgents,
     baseUrl,
     companyId: workspace.companyId ?? null,
-    storageCompanyId,
     workspaceId: workspace.id,
     runtimeId: runtime.id,
   });
+  await linkSkillToAgents({
+    skillId: operatingSkill.id,
+    runtimeAgents,
+    baseUrl,
+    companyId: workspace.companyId ?? null,
+    workspaceId: workspace.id,
+    runtimeId: runtime.id,
+    isOperatingLayer: true,
+  });
 
   for (const agent of runtimeAgents) {
-    try {
-    await syncSkillToOpenClaw({
-        skillId: skillRecord.id,
-        agentId: agent.id,
-        companyId: storageCompanyId,
-      });
-      await upsertRuntimeManagedResource({
-        runtimeId,
-        companyId: storageCompanyId,
-        resourceType: "agent-skill",
-        resourceKey: `${agent.id}:${skillRecord.id}`,
-        targetAgentId: agent.id,
-        targetAgentRef: agent.runtimeRef ?? agent.id,
-        externalId: skillRecord.id,
-        payload: {
-          skillId: skillRecord.id,
-          slug: SYSTEM_SKILL_SLUG,
-          agentId: agent.id,
-          runtimeRef: agent.runtimeRef ?? agent.id,
-        },
-      });
-    } catch (err) {
-      console.warn(
-        `[push-skill] Failed to sync CrewCmd management skill for ${agent.callsign}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    }
+    await syncAssignment({
+      runtimeId,
+      storageCompanyId,
+      agent,
+      skillId: managementSkill.id,
+      slug: MANAGEMENT_SKILL_SLUG,
+    });
+    await syncAssignment({
+      runtimeId,
+      storageCompanyId,
+      agent,
+      skillId: operatingSkill.id,
+      slug: OPERATING_SKILL_SLUG,
+    });
   }
 
-  await syncCrewCmdSkillHeartbeatSecret(runtime, SYSTEM_SKILL_SLUG);
+  await syncCrewCmdSkillHeartbeatSecret(runtime, MANAGEMENT_SKILL_SLUG);
 
   console.log(
-    `[push-skill] Pushed CrewCmd skill to runtime ${runtimeId}: ${runtimeAgents.length} agents, baseUrl=${baseUrl}`
+    `[push-skill] Pushed CrewCmd skills to runtime ${runtimeId}: ${runtimeAgents.length} agents, baseUrl=${baseUrl}`
   );
 }
 
-async function upsertSystemSkill(
-  companyId: string,
-  content: string,
-  workspaceId?: string
-): Promise<{ id: string }> {
+async function upsertSystemSkill(params: {
+  companyId: string;
+  slug: string;
+  name: string;
+  description: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}): Promise<{ id: string }> {
   if (!db) throw new Error("Database not available");
 
-  const metadata = {
-    ...CREWCMD_MANAGEMENT_SKILL_METADATA,
-    configExample: {
-      ...CREWCMD_MANAGEMENT_SKILL_METADATA.configExample,
-      companyId,
-      ...(workspaceId ? { workspaceId } : {}),
-      runtimeId: "$(runtime-id)",
-    },
-  };
-
-  // Check if system skill already exists for this company
   const [existing] = await withRetry(() =>
     db!
       .select()
       .from(skills)
       .where(
         and(
-          eq(skills.companyId, companyId),
-          eq(skills.slug, SYSTEM_SKILL_SLUG),
+          eq(skills.companyId, params.companyId),
+          eq(skills.slug, params.slug),
           eq(skills.source, "system")
         )
       )
   );
 
   if (existing) {
-    // Update content
     await withRetry(() =>
       db!
         .update(skills)
-        .set({ content, metadata, updatedAt: new Date() })
+        .set({
+          name: params.name,
+          description: params.description,
+          content: params.content,
+          metadata: params.metadata,
+          updatedAt: new Date(),
+        })
         .where(eq(skills.id, existing.id))
     );
     return { id: existing.id };
   }
 
-  // Create new
   const [created] = await withRetry(() =>
     db!
       .insert(skills)
       .values({
-        companyId,
-        name: SYSTEM_SKILL_NAME,
-        slug: SYSTEM_SKILL_SLUG,
-        description:
-          "Full workspace management — tasks, projects, agents, inbox, blueprints, budgets, docs, org chart, and activity.",
+        companyId: params.companyId,
+        name: params.name,
+        slug: params.slug,
+        description: params.description,
         source: "system",
-        content,
-        metadata,
+        content: params.content,
+        metadata: params.metadata,
         installed: true,
       })
       .returning({ id: skills.id })
@@ -193,28 +217,46 @@ async function linkSkillToAgents(params: {
   runtimeAgents: (typeof agents.$inferSelect)[];
   baseUrl: string;
   companyId: string | null;
-  storageCompanyId: string;
   workspaceId: string;
   runtimeId: string;
-}): Promise<void> {
+  isOperatingLayer?: boolean;
+}) {
   if (!db || params.runtimeAgents.length === 0) return;
 
-  const assignmentConfig = {
-    baseUrl: params.baseUrl,
-    companyId: params.companyId,
-    workspaceId: params.workspaceId,
-    runtimeId: params.runtimeId,
-  };
-
   for (const agent of params.runtimeAgents) {
-    // Check if already linked
+    const existingConfig =
+      typeof agent.runtimeConfig === "object" && agent.runtimeConfig !== null
+        ? (agent.runtimeConfig as Record<string, unknown>)
+        : {};
+    const persistedOperatingLayer =
+      typeof existingConfig.operatingLayer === "object" && existingConfig.operatingLayer !== null
+        ? (existingConfig.operatingLayer as Record<string, unknown>)
+        : null;
+
+    const assignmentConfig = params.isOperatingLayer
+      ? persistedOperatingLayer ?? buildOperatingLayerConfig({
+          mode: "imported-overlay",
+          rolePack: inferRolePack({
+            role: agent.role,
+            title: agent.title,
+            callsign: agent.callsign,
+          }),
+          callsign: agent.callsign,
+          workspaceId: params.workspaceId,
+        })
+      : {
+          baseUrl: params.baseUrl,
+          companyId: params.companyId,
+          workspaceId: params.workspaceId,
+          runtimeId: params.runtimeId,
+        };
+    const assignmentConfigRecord = assignmentConfig as Record<string, unknown>;
+
     const [existing] = await withRetry(() =>
       db!
         .select()
         .from(agentSkills)
-        .where(
-          and(eq(agentSkills.agentId, agent.id), eq(agentSkills.skillId, params.skillId))
-        )
+        .where(and(eq(agentSkills.agentId, agent.id), eq(agentSkills.skillId, params.skillId)))
     );
 
     if (!existing) {
@@ -223,7 +265,7 @@ async function linkSkillToAgents(params: {
           agentId: agent.id,
           skillId: params.skillId,
           enabled: true,
-          config: assignmentConfig,
+          config: assignmentConfigRecord,
         })
       );
       continue;
@@ -234,9 +276,46 @@ async function linkSkillToAgents(params: {
         .update(agentSkills)
         .set({
           enabled: true,
-          config: assignmentConfig,
+          config: assignmentConfigRecord,
         })
         .where(eq(agentSkills.id, existing.id))
+    );
+  }
+}
+
+async function syncAssignment(params: {
+  runtimeId: string;
+  storageCompanyId: string;
+  agent: typeof agents.$inferSelect;
+  skillId: string;
+  slug: string;
+}) {
+  try {
+    await syncSkillToOpenClaw({
+      skillId: params.skillId,
+      agentId: params.agent.id,
+      companyId: params.storageCompanyId,
+    });
+    await upsertRuntimeManagedResource({
+      runtimeId: params.runtimeId,
+      companyId: params.storageCompanyId,
+      resourceType: "agent-skill",
+      resourceKey: `${params.agent.id}:${params.skillId}`,
+      targetAgentId: params.agent.id,
+      targetAgentRef: params.agent.runtimeRef ?? params.agent.id,
+      externalId: params.skillId,
+      payload: {
+        skillId: params.skillId,
+        slug: params.slug,
+        agentId: params.agent.id,
+        runtimeRef: params.agent.runtimeRef ?? params.agent.id,
+      },
+    });
+  } catch (err) {
+    console.warn(
+      `[push-skill] Failed to sync ${params.slug} for ${params.agent.callsign}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
     );
   }
 }

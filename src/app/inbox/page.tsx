@@ -94,8 +94,7 @@ function AgentTag({ callsign }: { callsign: string }) {
 
 /** Agent Inbox — centralized communication hub for agent-human interactions */
 export default function InboxPage() {
-  const { company } = useCompany();
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const { company, workspace } = useCompany();
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [stats, setStats] = useState<InboxStats | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -117,7 +116,7 @@ export default function InboxPage() {
   const fetchMessages = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (workspaceId) params.set("workspaceId", workspaceId);
+      if (workspace?.id) params.set("workspaceId", workspace.id);
       if (company?.id) params.set("company_id", company.id);
       if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`/api/inbox?${params.toString()}`);
@@ -128,12 +127,12 @@ export default function InboxPage() {
     } catch {
       /* network error — keep existing messages */
     }
-  }, [company?.id, workspaceId, statusFilter]);
+  }, [company?.id, workspace?.id, statusFilter]);
 
   const fetchStats = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (workspaceId) params.set("workspaceId", workspaceId);
+      if (workspace?.id) params.set("workspaceId", workspace.id);
       if (company?.id) params.set("company_id", company.id);
       const res = await fetch(`/api/inbox/stats?${params.toString()}`);
       if (res.ok) {
@@ -142,14 +141,7 @@ export default function InboxPage() {
     } catch {
       /* ignore */
     }
-  }, [company?.id, workspaceId]);
-
-  useEffect(() => {
-    const activeWorkspaceCookie = document.cookie
-      .split("; ")
-      .find((c) => c.startsWith("active_workspace="));
-    setWorkspaceId(activeWorkspaceCookie?.split("=")[1] ?? null);
-  }, []);
+  }, [company?.id, workspace?.id]);
 
   useEffect(() => {
     setLoading(true);

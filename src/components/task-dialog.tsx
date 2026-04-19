@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Agent, Project, Task } from "@/lib/data";
+import { useWorkspace } from "@/components/company-context";
 
 interface TaskDialogProps {
   agent: Agent;
@@ -19,6 +20,7 @@ interface TaskResult {
  * Shows agent info, prompt input, and result panel after submission.
  */
 export function TaskDialog({ agent, onClose }: TaskDialogProps) {
+  const { workspace } = useWorkspace();
   const [prompt, setPrompt] = useState("");
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -31,14 +33,17 @@ export function TaskDialog({ agent, onClose }: TaskDialogProps) {
   const [showOptional, setShowOptional] = useState(false);
 
   useEffect(() => {
+    const params = workspace?.id
+      ? `?workspaceId=${encodeURIComponent(workspace.id)}`
+      : "";
     Promise.all([
-      fetch("/api/projects").then((r) => r.ok ? r.json() : []),
-      fetch("/api/tasks").then((r) => r.ok ? r.json() : []),
+      fetch(`/api/projects${params}`).then((r) => r.ok ? r.json() : []),
+      fetch(`/api/tasks${params}`).then((r) => r.ok ? r.json() : []),
     ]).then(([projData, taskData]) => {
       setProjects(Array.isArray(projData) ? projData : projData.projects || []);
       setTasks(Array.isArray(taskData) ? taskData : []);
     }).catch(() => {});
-  }, []);
+  }, [workspace?.id]);
 
   async function handleSubmit() {
     if (!prompt.trim()) return;

@@ -28,6 +28,7 @@ interface TaskComment {
 
 interface TaskBoardProps {
   initialTasks: Task[];
+  workspaceId?: string | null;
   agents: Agent[];
   projects?: Project[];
   agentsLoading?: boolean;
@@ -59,7 +60,7 @@ const priorityStyles: Record<string, string> = {
   critical: "text-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]",
 };
 
-export function TaskBoard({ initialTasks, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
   const [boardTasks, setBoardTasks] = useState<Task[]>(initialTasks);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -303,7 +304,10 @@ export function TaskBoard({ initialTasks, agents, projects = [], agentsLoading =
   useEffect(() => {
     const refresh = async () => {
       try {
-        const res = await fetch("/api/tasks");
+        const params = workspaceId
+          ? `?workspaceId=${encodeURIComponent(workspaceId)}`
+          : "";
+        const res = await fetch(`/api/tasks${params}`);
         if (res.ok) {
           const fresh = await res.json();
           setBoardTasks((current) => {
@@ -319,7 +323,7 @@ export function TaskBoard({ initialTasks, agents, projects = [], agentsLoading =
 
     const interval = setInterval(refresh, 30_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [workspaceId]);
 
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);

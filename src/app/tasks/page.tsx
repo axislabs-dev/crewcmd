@@ -6,6 +6,7 @@ import type { Agent, Task, TaskStatus, TaskPriority } from "@/lib/data";
 import { TaskBoard } from "@/components/task-board";
 import { TaskTable } from "@/components/task-table";
 import { getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
+import { useWorkspace } from "@/components/company-context";
 
 interface Project {
   id: string;
@@ -18,6 +19,7 @@ type ViewMode = "board" | "table";
 const VIEW_STORAGE_KEY = "mc_task_view";
 
 export default function TasksPage() {
+  const { workspace, loading: workspaceLoading } = useWorkspace();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -44,13 +46,18 @@ export default function TasksPage() {
   }
 
   const refresh = useCallback(async () => {
+    if (workspaceLoading) return;
+
     setAgentsLoading(true);
     setAgentsError(null);
     try {
+      const params = workspace?.id
+        ? `?workspaceId=${encodeURIComponent(workspace.id)}`
+        : "";
       const [tasksRes, agentsRes, projRes] = await Promise.all([
-        fetch("/api/tasks").catch(() => null),
-        fetch("/api/agents").catch(() => null),
-        fetch("/api/projects").catch(() => null),
+        fetch(`/api/tasks${params}`).catch(() => null),
+        fetch(`/api/agents${params}`).catch(() => null),
+        fetch(`/api/projects${params}`).catch(() => null),
       ]);
 
       if (tasksRes?.ok) {
@@ -74,7 +81,7 @@ export default function TasksPage() {
     } finally {
       setAgentsLoading(false);
     }
-  }, []);
+  }, [workspace?.id, workspaceLoading]);
 
   useEffect(() => {
     refresh();
@@ -301,6 +308,7 @@ export default function TasksPage() {
                         status: newTask.status,
                         createdBy: "roger",
                       };
+                      if (workspace?.id) body.workspaceId = workspace.id;
                       if (newTask.projectId) body.projectId = newTask.projectId;
                       const res = await fetch("/api/tasks", {
                         method: "POST",
@@ -336,6 +344,7 @@ export default function TasksPage() {
           {viewMode === "board" ? (
             <TaskBoard
               initialTasks={boardTasks}
+              workspaceId={workspace?.id ?? null}
               agents={agents}
               projects={projects}
               agentsLoading={agentsLoading}

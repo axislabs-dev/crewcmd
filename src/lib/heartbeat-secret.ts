@@ -7,25 +7,26 @@ let cachedAt = 0;
 const CACHE_TTL_MS = 5000;
 
 export async function getHeartbeatSecret(): Promise<string | null> {
-  const envSecret = process.env.HEARTBEAT_SECRET?.trim();
-  if (envSecret) return envSecret;
-
-  if (!db) return null;
-
   const now = Date.now();
   if (cachedHeartbeatSecret && now - cachedAt < CACHE_TTL_MS) {
     return cachedHeartbeatSecret;
   }
 
-  const [row] = await withRetry(() =>
-    db!
-      .select({ value: systemSettings.value })
-      .from(systemSettings)
-      .where(eq(systemSettings.key, "heartbeat_secret"))
-      .limit(1)
-  );
+  let dbSecret: string | null = null;
 
-  cachedHeartbeatSecret = row?.value?.trim() ?? null;
+  if (db) {
+    const [row] = await withRetry(() =>
+      db!
+        .select({ value: systemSettings.value })
+        .from(systemSettings)
+        .where(eq(systemSettings.key, "heartbeat_secret"))
+        .limit(1)
+    );
+    dbSecret = row?.value?.trim() ?? null;
+  }
+
+  const envSecret = process.env.HEARTBEAT_SECRET?.trim() || null;
+  cachedHeartbeatSecret = dbSecret || envSecret;
   cachedAt = now;
   return cachedHeartbeatSecret;
 }

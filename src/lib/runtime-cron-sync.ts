@@ -3,7 +3,13 @@ import { db, withRetry } from "@/db";
 import { companyRuntimes, cronJobs } from "@/db/schema";
 import { getAgentAccessContext, buildRuntimeReadWhere } from "@/lib/agent-access";
 import { GatewayClient, resolveDeviceIdentity, type GatewayCronJob } from "./gateway-client";
+import {
+  DAILY_BRIEF_JOB_NAME,
+  DISPATCH_JOB_NAME,
+  ensureCrewCmdRuntimeOperatingLayer,
+} from "./runtime-operating-layer";
 import { getWorkspaceAccessContext, getWorkspaceById } from "./workspace";
+import { listRuntimeManagedResources } from "./runtime-managed-resources";
 
 function humanSchedule(sched: Record<string, unknown>): string {
   if (!sched || typeof sched !== "object") return "unknown";
@@ -102,6 +108,19 @@ export async function listCronJobsFromRuntime() {
   const runtime = await resolvePrimaryReadableRuntimeForActiveWorkspace();
   if (!runtime) {
     return { runtime: null, jobs: [] as GatewayCronJob[] };
+  }
+
+  const managedResources = await listRuntimeManagedResources(runtime.id);
+  const managedCronKeys = new Set(
+    managedResources
+      .filter((resource) => resource.resourceType === "cron-job")
+      .map((resource) => resource.resourceKey)
+  );
+  const hasCrewCmdOperatingLayer =
+    managedCronKeys.has(DISPATCH_JOB_NAME) && managedCronKeys.has(DAILY_BRIEF_JOB_NAME);
+
+  if (!hasCrewCmdOperatingLayer) {
+    await ensureCrewCmdRuntimeOperatingLayer(runtime.id);
   }
 
   const meta = (runtime.metadata || {}) as Record<string, unknown>;

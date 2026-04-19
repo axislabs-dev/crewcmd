@@ -373,14 +373,22 @@ export async function POST(request: Request) {
     // Always refresh the CrewCmd management skill on runtime import/reconnect.
     // This keeps existing linked agents updated even when this import pass
     // did not create or reattach any new database rows.
+    const warnings: string[] = [];
     try {
       await pushSkillToRuntime(runtimeId);
-      await ensureCrewCmdRuntimeOperatingLayer(runtimeId);
     } catch (skillErr) {
-      console.warn(
-        "[api/runtimes/import] Skill push failed (non-fatal):",
-        skillErr instanceof Error ? skillErr.message : String(skillErr)
-      );
+      const message = skillErr instanceof Error ? skillErr.message : String(skillErr);
+      warnings.push(`CrewCmd skill sync failed: ${message}`);
+      console.warn("[api/runtimes/import] CrewCmd skill sync failed:", message);
+    }
+
+    try {
+      await ensureCrewCmdRuntimeOperatingLayer(runtimeId);
+    } catch (operatingLayerErr) {
+      const message =
+        operatingLayerErr instanceof Error ? operatingLayerErr.message : String(operatingLayerErr);
+      warnings.push(`CrewCmd automation provisioning failed: ${message}`);
+      console.warn("[api/runtimes/import] CrewCmd automation provisioning failed:", message);
     }
 
     const responseBody = {
@@ -389,6 +397,7 @@ export async function POST(request: Request) {
       skipped: skipped.length,
       agents: [...reattached, ...created],
       skippedDetails: skipped,
+      warnings,
     };
 
     if (created.length === 0 && reattached.length === 0 && skipped.length > 0) {

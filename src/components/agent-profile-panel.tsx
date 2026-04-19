@@ -63,6 +63,25 @@ interface AgentDetail extends Agent {
   companyId?: string;
 }
 
+interface OperatingLayerView {
+  mode?: string;
+  rolePack?: string;
+  overlayContent?: string;
+  mirroredFiles?: {
+    identityRaw?: string;
+    soulRaw?: string;
+    agentsRaw?: string;
+  };
+  curatedSkills?: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    source: string;
+    sourceUrl?: string;
+    version?: string;
+  }>;
+}
+
 type Tab = "summary" | "skills" | "config" | "terminal" | "activity";
 
 interface AgentProfilePanelProps {
@@ -196,6 +215,8 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [overlayDraft, setOverlayDraft] = useState("");
+  const [savingOverlay, setSavingOverlay] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -320,6 +341,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
   const roleLabel = ROLES.find((r) => r.value === agent?.role)?.label ?? agent?.role ?? "—";
 
   const runtimeConfig = (agent?.runtimeConfig ?? {}) as Record<string, unknown>;
+  const operatingLayer = (runtimeConfig.operatingLayer ?? {}) as OperatingLayerView;
   const heartbeat = (runtimeConfig.heartbeat ?? {}) as Record<string, unknown>;
   const adapterConfig = (agent?.adapterConfig ?? {}) as Record<string, unknown>;
   const envVars = (adapterConfig.envVars ?? {}) as Record<string, string>;
@@ -331,6 +353,37 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
     { key: "terminal", label: "Terminal" },
     { key: "activity", label: "Activity" },
   ];
+
+  useEffect(() => {
+    setOverlayDraft(typeof operatingLayer.overlayContent === "string" ? operatingLayer.overlayContent : "");
+  }, [operatingLayer.overlayContent]);
+
+  const saveOverlay = useCallback(async () => {
+    if (!agent) return;
+    setSavingOverlay(true);
+    try {
+      const nextRuntimeConfig = {
+        ...runtimeConfig,
+        operatingLayer: {
+          ...(operatingLayer ?? {}),
+          overlayContent: overlayDraft,
+        },
+      };
+      const response = await fetch(`/api/agents/${agent.callsign.toLowerCase()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runtimeConfig: nextRuntimeConfig }),
+      });
+      const updated = await response.json();
+      if (response.ok && !updated.error) {
+        setAgent(updated);
+      }
+    } catch {
+      // ignore inline save failures; panel remains editable
+    } finally {
+      setSavingOverlay(false);
+    }
+  }, [agent, operatingLayer, overlayDraft, runtimeConfig]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -452,6 +505,11 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               agentColor={agentColor}
               roleLabel={roleLabel}
               onEdit={onEdit}
+              operatingLayer={operatingLayer}
+              overlayDraft={overlayDraft}
+              onOverlayChange={setOverlayDraft}
+              onSaveOverlay={saveOverlay}
+              savingOverlay={savingOverlay}
             />
           )}
           {activeTab === "skills" && (
@@ -502,12 +560,22 @@ function SummaryTab({
   agentColor,
   roleLabel,
   onEdit,
+  operatingLayer,
+  overlayDraft,
+  onOverlayChange,
+  onSaveOverlay,
+  savingOverlay,
 }: {
   agent: AgentDetail | null;
   loading: boolean;
   agentColor: string;
   roleLabel: string;
   onEdit: (callsign: string) => void;
+  operatingLayer: OperatingLayerView;
+  overlayDraft: string;
+  onOverlayChange: (value: string) => void;
+  onSaveOverlay: () => void;
+  savingOverlay: boolean;
 }) {
   if (loading) return <SummarySkeleton />;
   if (!agent) return null;
@@ -575,7 +643,86 @@ function SummaryTab({
             {agent.lastActive ? timeAgo(agent.lastActive) : "Never"}
           </span>
         </InfoRow>
+
+        {operatingLayer.mode && (
+          <InfoRow label="Operating Mode">
+            <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[10px] tracking-wider text-[var(--text-secondary)]">
+              {operatingLayer.mode}
+            </span>
+          </InfoRow>
+        )}
+
+        {operatingLayer.rolePack && (
+          <InfoRow label="Role Pack">
+            <span className="font-mono text-xs text-[var(--text-secondary)]">
+              {operatingLayer.rolePack}
+            </span>
+          </InfoRow>
+        )}
       </dl>
+
+      {!!operatingLayer.curatedSkills?.length && (
+        <div className="space-y-2">
+          <div className="text-[10px] tracking-[0.15em] uppercase text-[var(--text-tertiary)]">
+            Managed Skills
+          </div>
+          <div className="space-y-2">
+            {operatingLayer.curatedSkills.map((skill) => (
+              <div key={skill.slug} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-[var(--text-primary)]">{skill.name}</div>
+                  <div className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
+                    {skill.source}
+                  </div>
+                </div>
+                <div className="mt-1 text-xs text-[var(--text-secondary)]">{skill.description}</div>
+                {(skill.version || skill.sourceUrl) && (
+                  <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+                    {[skill.version ? `version ${skill.version}` : null, skill.sourceUrl || null].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(operatingLayer.mirroredFiles?.identityRaw || operatingLayer.mirroredFiles?.soulRaw || operatingLayer.mirroredFiles?.agentsRaw) && (
+        <div className="space-y-3">
+          <div className="text-[10px] tracking-[0.15em] uppercase text-[var(--text-tertiary)]">
+            Imported Mirrors
+          </div>
+          {operatingLayer.mirroredFiles?.identityRaw && (
+            <MirrorBlock label="IDENTITY.md" content={operatingLayer.mirroredFiles.identityRaw} />
+          )}
+          {operatingLayer.mirroredFiles?.soulRaw && (
+            <MirrorBlock label="SOUL.md" content={operatingLayer.mirroredFiles.soulRaw} />
+          )}
+          {operatingLayer.mirroredFiles?.agentsRaw && (
+            <MirrorBlock label="AGENTS.md" content={operatingLayer.mirroredFiles.agentsRaw} />
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] tracking-[0.15em] uppercase text-[var(--text-tertiary)]">
+            CrewCmd Overlay
+          </div>
+          <button
+            onClick={onSaveOverlay}
+            disabled={savingOverlay}
+            className="rounded border border-[var(--border-medium)] px-2 py-1 text-[10px] tracking-[0.15em] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-50"
+          >
+            {savingOverlay ? "SAVING" : "SAVE"}
+          </button>
+        </div>
+        <textarea
+          value={overlayDraft}
+          onChange={(event) => onOverlayChange(event.target.value)}
+          className="min-h-[180px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-3 font-mono text-xs text-[var(--text-secondary)] outline-none transition focus:border-[var(--border-medium)]"
+        />
+      </div>
 
       {/* Edit button */}
       <button
@@ -584,6 +731,19 @@ function SummaryTab({
       >
         EDIT AGENT
       </button>
+    </div>
+  );
+}
+
+function MirrorBlock({ label, content }: { label: string; content: string }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[10px] tracking-[0.15em] uppercase text-[var(--text-tertiary)]">
+        {label}
+      </div>
+      <pre className="max-h-40 overflow-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-3 text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap">
+        {content}
+      </pre>
     </div>
   );
 }

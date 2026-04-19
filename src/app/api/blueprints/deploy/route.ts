@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { BUILT_IN_BLUEPRINTS } from "@/lib/blueprints-data";
 import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
 import { buildBlueprintOperatingLayer } from "@/lib/operating-layer";
 import { resolveBlueprintAgentModelSelection } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
+import { provisionBlueprintAgentsToRuntime } from "@/lib/blueprint-runtime-provisioning";
+import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 
 /**
  * POST /api/blueprints/deploy — Deploy a blueprint to a company.
@@ -59,7 +61,25 @@ export async function POST(request: NextRequest) {
       const overrides = customize?.agents?.[idx];
       return overrides ? { ...agent, ...overrides } : { ...agent };
     });
-    const runtimeCapabilities = await loadPrimaryRuntimeCapabilities(companyId);
+    const runtimeContext = await loadPrimaryRuntimeContext(companyId);
+    const runtimeCapabilities = runtimeContext.capabilities;
+
+    await assertBlueprintCallsignsAvailable(agentTemplates);
+
+    let provisionedAgentsByCallsign = new Map<string, { runtimeRef: string; workspacePath: string | null }>();
+    if (runtimeContext.runtime) {
+      const provisioned = await provisionBlueprintAgentsToRuntime({
+        runtime: runtimeContext.runtime,
+        agentTemplates,
+        runtimeCapabilities,
+      });
+      provisionedAgentsByCallsign = new Map(
+        provisioned.agents.map((agent) => [
+          agent.callsign.toUpperCase(),
+          { runtimeRef: agent.runtimeRef, workspacePath: agent.workspacePath },
+        ])
+      );
+    }
 
     // Fetch existing company skills for auto-attach
     let companySkills: { id: string; slug: string }[] = [];
@@ -85,6 +105,15 @@ export async function POST(request: NextRequest) {
         adapterConfig.baseUrl = "https://openrouter.ai/api/v1";
       }
       const resolvedModel = resolveBlueprintAgentModelSelection(tmpl, runtimeCapabilities);
+      const provisionedAgent = provisionedAgentsByCallsign.get(tmpl.callsign.toUpperCase());
+      const runtimeAdapterConfig = runtimeContext.runtime
+        ? {
+            url: runtimeContext.runtime.httpUrl,
+            headers: runtimeContext.runtime.authToken
+              ? { Authorization: `Bearer ${runtimeContext.runtime.authToken}` }
+              : undefined,
+          }
+        : null;
 
       const [created] = await withRetry(() =>
         db!.insert(schema.agents).values({
@@ -94,9 +123,12 @@ export async function POST(request: NextRequest) {
           emoji: tmpl.emoji,
           color: tmpl.color,
           role: tmpl.role,
-          adapterType: tmpl.adapterType,
+          adapterType: runtimeContext.runtime ? "openclaw_gateway" : tmpl.adapterType,
           model: resolvedModel.primaryModel ?? tmpl.model ?? null,
-          adapterConfig,
+          adapterConfig: runtimeAdapterConfig ?? adapterConfig,
+          workspacePath: provisionedAgent?.workspacePath ?? null,
+          runtimeId: runtimeContext.runtime?.id ?? null,
+          runtimeRef: provisionedAgent?.runtimeRef ?? null,
           runtimeConfig: {
             operatingLayer: buildBlueprintOperatingLayer({
               callsign: tmpl.callsign.toUpperCase(),
@@ -160,6 +192,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (runtimeContext.runtime) {
+      await pushSkillToRuntime(runtimeContext.runtime.id);
+    }
+
     // Increment popularity if it's a DB blueprint
     if (!isBuiltIn) {
       try {
@@ -181,7 +217,15 @@ export async function POST(request: NextRequest) {
     }
 
     const agents = Object.values(createdAgents);
-    return NextResponse.json({ success: true, agents, count: agents.length }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        agents,
+        count: agents.length,
+        runtimeProvisioned: Boolean(runtimeContext.runtime),
+      },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[api/blueprints/deploy] Error:", err);
     const msg = err instanceof Error ? err.message : String(err);
@@ -195,10 +239,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function loadPrimaryRuntimeCapabilities(companyId: string): Promise<RuntimeCapabilitySnapshot | null> {
+async function loadPrimaryRuntimeContext(companyId: string): Promise<{
+  runtime: {
+    id: string;
+    gatewayUrl: string;
+    httpUrl: string;
+    authToken: string | null;
+    metadata: Record<string, unknown> | null;
+  } | null;
+  capabilities: RuntimeCapabilitySnapshot | null;
+}> {
   const [runtime] = await withRetry(() =>
     db!
-      .select({ metadata: schema.companyRuntimes.metadata })
+      .select({
+        id: schema.companyRuntimes.id,
+        gatewayUrl: schema.companyRuntimes.gatewayUrl,
+        httpUrl: schema.companyRuntimes.httpUrl,
+        authToken: schema.companyRuntimes.authToken,
+        metadata: schema.companyRuntimes.metadata,
+      })
       .from(schema.companyRuntimes)
       .where(
         and(
@@ -218,8 +277,47 @@ async function loadPrimaryRuntimeCapabilities(companyId: string): Promise<Runtim
   const snapshot = metadata?.capabilitySnapshot;
 
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
-    return null;
+    return {
+      runtime: runtime
+        ? {
+            id: runtime.id,
+            gatewayUrl: runtime.gatewayUrl,
+            httpUrl: runtime.httpUrl,
+            authToken: runtime.authToken,
+            metadata,
+          }
+        : null,
+      capabilities: null,
+    };
   }
 
-  return snapshot as RuntimeCapabilitySnapshot;
+  return {
+    runtime: runtime
+      ? {
+          id: runtime.id,
+          gatewayUrl: runtime.gatewayUrl,
+          httpUrl: runtime.httpUrl,
+          authToken: runtime.authToken,
+          metadata,
+        }
+      : null,
+    capabilities: snapshot as RuntimeCapabilitySnapshot,
+  };
+}
+
+async function assertBlueprintCallsignsAvailable(
+  agentTemplates: BlueprintAgentTemplate[]
+): Promise<void> {
+  const callsigns = agentTemplates.map((agent) => agent.callsign.toUpperCase());
+  const existing = await withRetry(() =>
+    db!
+      .select({ callsign: schema.agents.callsign })
+      .from(schema.agents)
+      .where(inArray(schema.agents.callsign, callsigns))
+  );
+
+  const taken = new Set(existing.map((row) => row.callsign.toUpperCase()));
+  if (callsigns.some((callsign) => taken.has(callsign))) {
+    throw new Error("One or more agent callsigns already exist. Rename agents before deploying.");
+  }
 }

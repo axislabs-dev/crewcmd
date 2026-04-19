@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
+import { labelModelProfile, normalizeModelProfile } from "@/lib/model-profiles";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -57,6 +58,52 @@ function adapterLabel(t: string): string {
     pi_local: "Pi",
   };
   return map[t] ?? t;
+}
+
+function BlueprintAgentCard({ agent }: { agent: BlueprintAgentTemplate }) {
+  const modelProfile = normalizeModelProfile(agent.modelProfile);
+  const fallbackProfiles = (agent.fallbackProfiles ?? [])
+    .map((value) => normalizeModelProfile(value))
+    .filter((value): value is NonNullable<typeof value> => value !== null);
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
+      <span className="text-xl">{agent.emoji}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className="font-mono text-[12px] font-bold tracking-wider"
+            style={{ color: agent.color }}
+          >
+            {agent.callsign}
+          </span>
+          <span className="font-mono text-[11px] text-[var(--text-secondary)]">{agent.name}</span>
+        </div>
+        <p className="mt-0.5 font-mono text-[10px] text-[var(--text-tertiary)]">
+          {agent.title} · {adapterLabel(agent.adapterType)}
+          {agent.reportsTo && <span> · reports to {agent.reportsTo}</span>}
+        </p>
+        {modelProfile && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-[var(--accent)]">
+              {labelModelProfile(modelProfile).toUpperCase()}
+            </span>
+            {fallbackProfiles.map((fallback) => (
+              <span
+                key={fallback}
+                className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]"
+              >
+                {labelModelProfile(fallback).toUpperCase()}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
+        {agent.role.toUpperCase()}
+      </span>
+    </div>
+  );
 }
 
 // ─── Page ───────────────────────────────────────────────────────────
@@ -331,30 +378,7 @@ export default function BlueprintsPage() {
                 </h3>
                 <div className="mt-3 space-y-2">
                   {selected.template.agents.map((agent) => (
-                    <div
-                      key={agent.callsign}
-                      className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
-                    >
-                      <span className="text-xl">{agent.emoji}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="font-mono text-[12px] font-bold tracking-wider"
-                            style={{ color: agent.color }}
-                          >
-                            {agent.callsign}
-                          </span>
-                          <span className="font-mono text-[11px] text-[var(--text-secondary)]">{agent.name}</span>
-                        </div>
-                        <p className="mt-0.5 font-mono text-[10px] text-[var(--text-tertiary)]">
-                          {agent.title} · {adapterLabel(agent.adapterType)}
-                          {agent.reportsTo && <span> · reports to {agent.reportsTo}</span>}
-                        </p>
-                      </div>
-                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">
-                        {agent.role.toUpperCase()}
-                      </span>
-                    </div>
+                    <BlueprintAgentCard key={agent.callsign} agent={agent} />
                   ))}
                 </div>
               </div>

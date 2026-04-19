@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import { Sidebar } from "@/components/sidebar";
 import { Providers } from "@/components/providers";
+import "@xyflow/react/dist/style.css";
 import "./globals.css";
 
 const manrope = Manrope({

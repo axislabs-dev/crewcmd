@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
-@import "@xyflow/react/dist/style.css";
 
 @theme {
   --color-neo: #2f8f83;

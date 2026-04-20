@@ -284,7 +284,7 @@ export default function ServiceSecretsPage() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={saving || !company}
+                disabled={saving || !workspace}
                 className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-5 py-2 text-xs font-bold tracking-wider text-[var(--accent)] transition hover:bg-[var(--accent-soft)] disabled:opacity-50"
               >
                 {saving ? "SAVING..." : isEditing ? "UPDATE SECRET" : "SAVE SECRET"}

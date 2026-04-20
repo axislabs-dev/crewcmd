@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useCompany } from "@/components/company-context";
+import { useWorkspace } from "@/components/company-context";
 
 interface SecretMetadata {
   id: string;
@@ -21,7 +21,7 @@ const emptyForm = {
 };
 
 export default function ServiceSecretsPage() {
-  const { company, loading: companyLoading } = useCompany();
+  const { workspace, company, loading: workspaceLoading } = useWorkspace();
   const [secrets, setSecrets] = useState<SecretMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,7 +37,7 @@ export default function ServiceSecretsPage() {
   );
 
   const loadSecrets = useCallback(async () => {
-    if (!company?.id) {
+    if (!workspace?.id) {
       setSecrets([]);
       setLoading(false);
       return;
@@ -46,7 +46,9 @@ export default function ServiceSecretsPage() {
     try {
       setLoading(true);
       setError("");
-      const res = await fetch(`/api/service-secrets?companyId=${company.id}`);
+      const params = new URLSearchParams({ workspaceId: workspace.id });
+      if (company?.id) params.set("companyId", company.id);
+      const res = await fetch(`/api/service-secrets?${params.toString()}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -62,7 +64,7 @@ export default function ServiceSecretsPage() {
     } finally {
       setLoading(false);
     }
-  }, [company?.id]);
+  }, [workspace?.id, company?.id]);
 
   useEffect(() => {
     loadSecrets();
@@ -76,7 +78,7 @@ export default function ServiceSecretsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!company?.id) return;
+    if (!workspace?.id) return;
 
     setSaving(true);
     setError("");
@@ -84,7 +86,8 @@ export default function ServiceSecretsPage() {
 
     try {
       const payload = {
-        companyId: company.id,
+        workspaceId: workspace.id,
+        companyId: company?.id ?? null,
         name: form.name.trim(),
         description: form.description.trim() || null,
         value: form.value,
@@ -137,7 +140,7 @@ export default function ServiceSecretsPage() {
             SERVICE SECRETS
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--text-tertiary)]">
-            Manage company-level secrets that can be referenced by skills and agent config via <code className="rounded bg-[var(--bg-surface)] px-1 py-0.5 text-xs">secretRef</code>.
+            Manage workspace-level secrets that can be referenced by skills and agent config via <code className="rounded bg-[var(--bg-surface)] px-1 py-0.5 text-xs">secretRef</code>.
           </p>
         </div>
         <Link
@@ -148,15 +151,21 @@ export default function ServiceSecretsPage() {
         </Link>
       </div>
 
-      {!companyLoading && !company && (
+      {!workspaceLoading && !workspace && (
         <div className="glass-card rounded-2xl p-6 text-sm text-amber-300" style={{ borderColor: "rgba(251, 191, 36, 0.18)" }}>
-          Select or create a company first. Secrets are stored per company.
+          Select a workspace first. Secrets are stored separately per workspace.
         </div>
       )}
 
-      {company && (
+      {workspace && (
         <div className="mb-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-4 py-3 text-sm text-[var(--text-secondary)]">
-          Active company: <span className="font-semibold text-[var(--text-primary)]">{company.name}</span>
+          Active workspace:{" "}
+          <span className="font-semibold text-[var(--text-primary)]">
+            {workspace.type === "company" ? (company?.name ?? workspace.name) : workspace.name}
+          </span>
+          <span className="ml-2 rounded-full border border-[var(--border-medium)] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+            {workspace.type}
+          </span>
         </div>
       )}
 

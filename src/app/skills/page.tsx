@@ -960,11 +960,11 @@ export default function SkillsPage() {
                 ) : (
                   <button
                     onClick={() => handleInstall(selectedMarketplace)}
-                    disabled={!companyId || installing === selectedMarketplace.slug}
+                    disabled={(!workspaceId && !companyId) || installing === selectedMarketplace.slug}
                     className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                   >
-                    {!companyId
-                      ? "COMPANY ONLY"
+                    {(!workspaceId && !companyId)
+                      ? "SELECT WORKSPACE"
                       : installing === selectedMarketplace.slug
                         ? "INSTALLING..."
                         : "INSTALL SKILL"}

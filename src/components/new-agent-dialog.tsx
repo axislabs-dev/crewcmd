@@ -30,6 +30,14 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
   const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
   const [ownerType, setOwnerType] = useState<"user" | "company">("user");
   const [visibility, setVisibility] = useState<"private" | "team" | "org">("private");
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const workspaceCookie = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("active_workspace="));
+    setWorkspaceId(workspaceCookie?.split("=")[1] ?? null);
+  }, []);
 
   // Fetch existing agents for reports-to picker
   useEffect(() => {
@@ -188,6 +196,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
             onChange={handleChange}
             existingAgents={existingAgents}
             companyId={companyId}
+            workspaceId={workspaceId}
           />
         </div>
 

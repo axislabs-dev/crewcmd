@@ -197,6 +197,7 @@ interface AgentConfigFieldsProps {
   existingAgents?: { id: string; name: string; callsign: string }[];
   companySkills?: CompanySkill[];
   companyId?: string | null;
+  workspaceId?: string | null;
 }
 
 // ─── Styling ────────────────────────────────────────────────────────────
@@ -682,26 +683,34 @@ function SkillsGrid({
   values,
   onChange,
   companyId,
+  workspaceId,
   companySkills,
 }: {
   values: AgentConfigValues;
   onChange: (patch: Partial<AgentConfigValues>) => void;
   companyId?: string | null;
+  workspaceId?: string | null;
   companySkills?: CompanySkill[];
 }) {
   const [apiSkills, setApiSkills] = useState<CompanySkill[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!companyId) return;
-    fetch(`/api/skills?company_id=${companyId}`)
+    if (!workspaceId && !companyId) return;
+    const params = new URLSearchParams();
+    if (workspaceId) {
+      params.set("workspaceId", workspaceId);
+    } else if (companyId) {
+      params.set("company_id", companyId);
+    }
+    fetch(`/api/skills?${params.toString()}`)
       .then((r) => r.json())
       .then((data: CompanySkill[]) => {
         if (Array.isArray(data)) setApiSkills(data);
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
-  }, [companyId]);
+  }, [companyId, workspaceId]);
 
   // Merge API skills with any passed-in company skills (dedup by id)
   const allSkills = (() => {
@@ -810,7 +819,7 @@ function SkillsGrid({
   );
 }
 
-export function AgentConfigFields({ values, onChange, existingAgents, companySkills, companyId }: AgentConfigFieldsProps) {
+export function AgentConfigFields({ values, onChange, existingAgents, companySkills, companyId, workspaceId }: AgentConfigFieldsProps) {
   const isLocal = LOCAL_ADAPTERS.includes(values.adapterType);
   const isGateway = GATEWAY_ADAPTERS.includes(values.adapterType);
   const isHttp = HTTP_ADAPTERS.includes(values.adapterType);
@@ -1222,12 +1231,13 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
 
       {/* ── SKILLS ── */}
       <Section title="Skills" defaultOpen>
-        <SkillsGrid
-          values={values}
-          onChange={onChange}
-          companyId={companyId}
-          companySkills={companySkills}
-        />
+            <SkillsGrid
+              values={values}
+              onChange={onChange}
+              companyId={companyId}
+              workspaceId={workspaceId}
+              companySkills={companySkills}
+            />
       </Section>
     </div>
   );

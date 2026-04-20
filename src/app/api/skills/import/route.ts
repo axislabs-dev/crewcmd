@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     });
     const resolvedCompanyId = workspace?.companyId ?? companyId ?? null;
 
-    if (!resolvedCompanyId) {
-      return NextResponse.json({ error: "a company-backed workspace is required" }, { status: 400 });
+    if (!workspace) {
+      return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
     }
 
     if (metadata !== undefined && (!metadata || typeof metadata !== "object" || Array.isArray(metadata))) {
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
 
     const [created] = await withRetry(() =>
       db!.insert(schema.skills).values({
+        workspaceId: workspace.id,
         name: skillName,
         slug: skillSlug,
         description: description || null,

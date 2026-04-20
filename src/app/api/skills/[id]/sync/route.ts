@@ -31,6 +31,11 @@ export async function POST(
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
   }
 
+  if (!skill.companyId) {
+    return NextResponse.json({ error: "Skill sync is only available for company-backed skills" }, { status: 400 });
+  }
+  const skillCompanyId = skill.companyId;
+
   const assignments = await withRetry(() =>
     db!
       .select({ agentId: agentSkills.agentId })
@@ -39,7 +44,7 @@ export async function POST(
       .where(
         and(
           eq(agentSkills.skillId, skillId),
-          eq(agents.companyId, skill.companyId)
+          eq(agents.companyId, skillCompanyId)
         )
       )
   );
@@ -55,7 +60,7 @@ export async function POST(
       const result = await syncSkillToOpenClaw({
         skillId,
         agentId: assignment.agentId,
-        companyId: skill.companyId,
+        companyId: skillCompanyId,
       });
 
       if (result.success) {
@@ -78,7 +83,7 @@ export async function POST(
       const secretResult = await pushSecretsToGateway({
         skillId,
         agentId: assignment.agentId,
-        companyId: skill.companyId,
+        companyId: skillCompanyId,
       });
 
       if (secretResult.ok) {

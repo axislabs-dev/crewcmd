@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 
 interface Skill {
   id: string;
+  workspaceId: string | null;
   companyId: string | null;
   name: string;
   slug: string;
@@ -222,7 +223,7 @@ export default function SkillsPage() {
 
   // Ensure a built-in skill has a DB record, returns the real DB skill ID
   const ensureBuiltInSkill = useCallback(async (skill: Skill): Promise<string | null> => {
-    if (!companyId || !workspaceId) return null;
+    if (!workspaceId) return null;
     // Check if a DB record already exists for this slug
     const existing = skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"));
     if (existing) return existing.id;
@@ -238,8 +239,8 @@ export default function SkillsPage() {
           slug: skill.slug,
           description: skill.description,
           source: "built-in",
-          companyId,
           workspaceId,
+          companyId,
           metadata: skill.metadata || {},
         }),
       });
@@ -338,7 +339,7 @@ export default function SkillsPage() {
   }
 
   async function handleInstall(ms: MarketplaceSkill) {
-    if (!companyId || !workspaceId) return;
+    if (!workspaceId) return;
     setInstalling(ms.slug);
     try {
       const res = await fetch("/api/skills/import", {
@@ -353,8 +354,8 @@ export default function SkillsPage() {
           sourceUrl: ms.sourceUrl,
           content: ms.content,
           metadata: ms.metadata,
-          companyId,
           workspaceId,
+          companyId,
         }),
       });
       if (res.ok) {
@@ -384,8 +385,8 @@ export default function SkillsPage() {
           description: customDescription || null,
           content: customContent || null,
           source: "custom",
-          companyId,
           workspaceId,
+          companyId,
         }),
       });
       if (res.ok) {
@@ -635,10 +636,10 @@ export default function SkillsPage() {
                               e.stopPropagation();
                               handleInstall(ms);
                             }}
-                            disabled={!companyId || installing === ms.slug}
+                            disabled={!workspaceId || installing === ms.slug}
                             className="rounded-full border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                           >
-                            {!companyId ? "COMPANY ONLY" : installing === ms.slug ? "..." : "INSTALL"}
+                            {!workspaceId ? "SELECT WORKSPACE" : installing === ms.slug ? "..." : "INSTALL"}
                           </button>
                         )}
                       </div>
@@ -692,7 +693,7 @@ export default function SkillsPage() {
           {tab === "custom" && !companyId && (
             <div className="py-8 text-center">
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">Custom skills are company-scoped.</p>
-              <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">Switch to a company workspace to create or install them.</p>
+              <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">Switch to a company workspace to create them.</p>
             </div>
           )}
         </div>
@@ -960,10 +961,10 @@ export default function SkillsPage() {
                 ) : (
                   <button
                     onClick={() => handleInstall(selectedMarketplace)}
-                    disabled={(!workspaceId && !companyId) || installing === selectedMarketplace.slug}
+                    disabled={!workspaceId || installing === selectedMarketplace.slug}
                     className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                   >
-                    {(!workspaceId && !companyId)
+                    {(!workspaceId)
                       ? "SELECT WORKSPACE"
                       : installing === selectedMarketplace.slug
                         ? "INSTALLING..."

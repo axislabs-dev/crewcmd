@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useWorkspace } from "@/components/company-context";
 
 interface User {
   id: string;
@@ -14,6 +15,7 @@ interface User {
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const { workspace } = useWorkspace();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteUsername, setInviteUsername] = useState("");
@@ -173,7 +175,7 @@ export default function SettingsPage() {
               SERVICE SECRETS / VAULT
             </h2>
             <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-              Manage shared company secrets for skills and agent config without calling the API manually.
+              Manage secrets for the active {workspace?.type === "personal" ? "personal" : "company"} workspace without calling the API manually.
             </p>
           </div>
           <a

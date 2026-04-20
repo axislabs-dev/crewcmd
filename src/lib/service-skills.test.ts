@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockAgentsFrom,
+  mockWorkspaceWhere,
   mockSkillsWhere,
   mockAgentSkillsWhere,
   mockSecretWhere,
+  workspacesTable,
   agentsTable,
   skillsTable,
   agentSkillsTable,
@@ -14,6 +16,7 @@ const {
   mockSkillsWhere: vi.fn(),
   mockAgentSkillsWhere: vi.fn(),
   mockSecretWhere: vi.fn(),
+  mockWorkspaceWhere: vi.fn(),
   agentsTable: { __table: Symbol.for("agents") },
   skillsTable: {
     __table: Symbol.for("skills"),
@@ -31,6 +34,11 @@ const {
     value: Symbol.for("serviceSecrets.value"),
     companyId: Symbol.for("serviceSecrets.companyId"),
     name: Symbol.for("serviceSecrets.name"),
+  },
+  workspacesTable: {
+    __table: Symbol.for("workspaces"),
+    id: Symbol.for("workspaces.id"),
+    companyId: Symbol.for("workspaces.companyId"),
   },
 }));
 
@@ -50,6 +58,9 @@ vi.mock("@/db", () => ({
         if (table === serviceSecretsTable) {
           return { where: mockSecretWhere };
         }
+        if (table === workspacesTable) {
+          return { where: mockWorkspaceWhere };
+        }
         return { where: vi.fn() };
       },
     }),
@@ -62,11 +73,16 @@ vi.mock("@/db/schema", () => ({
   skills: skillsTable,
   agentSkills: agentSkillsTable,
   serviceSecrets: serviceSecretsTable,
+  workspaces: workspacesTable,
 }));
 
 vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
   eq: vi.fn(),
+}));
+
+vi.mock("@/lib/workspace", () => ({
+  resolveRuntimeWorkspace: vi.fn(async () => ({ id: "ws_1", companyId: "co_1" })),
 }));
 
 import { invokeServiceSkill } from "@/lib/service-skills";
@@ -76,8 +92,12 @@ describe("invokeServiceSkill", () => {
     vi.clearAllMocks();
 
     mockAgentsFrom.mockResolvedValue([
-      { id: "agent_1", callsign: "Cipher", companyId: "co_1" },
+      { id: "agent_1", callsign: "Cipher", companyId: "co_1", ownerType: "company", ownerUserId: null, ownerCompanyId: "co_1" },
     ]);
+
+    mockWorkspaceWhere.mockReturnValue({
+      limit: vi.fn().mockResolvedValue([{ id: "ws_1", companyId: "co_1" }]),
+    });
 
     mockSkillsWhere.mockReturnValue({
       limit: vi.fn().mockResolvedValue([

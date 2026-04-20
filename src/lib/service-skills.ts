@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
+import { resolveRuntimeWorkspace } from "@/lib/workspace";
 import { resolveSecretRef } from "@/lib/service-secrets";
 
 export interface ServiceSkillInvocation {
@@ -17,7 +18,8 @@ export interface ServiceSkillResult {
 }
 
 export interface ServiceSkillHandlerContext {
-  companyId: string;
+  companyId: string | null;
+  workspaceId: string | null;
   agent: typeof agents.$inferSelect;
   skill: typeof skills.$inferSelect;
   assignment: typeof agentSkills.$inferSelect;
@@ -43,15 +45,18 @@ async function resolveAssignment(agentCallsign: string, skillSlug: string) {
     throw new Error(`Agent not found: ${agentCallsign}`);
   }
 
-  if (!agent.companyId) {
-    throw new Error(`Agent ${agent.callsign} is not attached to a company`);
-  }
+  const workspace = await resolveRuntimeWorkspace({
+    ownerType: agent.ownerType,
+    ownerUserId: agent.ownerUserId ?? null,
+    ownerCompanyId: agent.ownerCompanyId ?? null,
+    companyId: agent.companyId ?? null,
+  });
 
   const [skill] = await withRetry(() =>
     db!
       .select()
       .from(skills)
-      .where(and(eq(skills.companyId, agent.companyId!), eq(skills.slug, skillSlug)))
+      .where(and(eq(skills.slug, skillSlug), workspace?.companyId ? eq(skills.companyId, workspace.companyId) : eq(skills.companyId, null as never)))
       .limit(1)
   );
 
@@ -76,7 +81,7 @@ async function resolveAssignment(agentCallsign: string, skillSlug: string) {
     throw new Error(`Skill ${skillSlug} is not a service skill`);
   }
 
-  return { agent, skill, assignment, metadata };
+  return { agent, skill, assignment, metadata, workspace };
 }
 
 function getCapabilities(metadata: Record<string, unknown>): string[] {
@@ -95,13 +100,14 @@ async function createContext(invocation: ServiceSkillInvocation): Promise<Servic
     throw new Error(`Action ${invocation.action} is not declared by skill ${invocation.skillSlug}`);
   }
 
-  const secretValue = await resolveSecretRef(resolved.agent.companyId!, config.secretRef);
+  const secretValue = await resolveSecretRef({ workspaceId: resolved.workspace?.id ?? null, companyId: resolved.workspace?.companyId ?? resolved.agent.companyId ?? null }, config.secretRef);
   if (secretValue) {
     config.__resolvedSecret = secretValue;
   }
 
   return {
-    companyId: resolved.agent.companyId!,
+    companyId: resolved.workspace?.companyId ?? resolved.agent.companyId ?? null,
+    workspaceId: resolved.workspace?.id ?? null,
     agent: resolved.agent,
     skill: resolved.skill,
     assignment: resolved.assignment,

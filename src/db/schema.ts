@@ -689,15 +689,17 @@ export const companyProviderKeys = pgTable("company_provider_keys", {
 
 export const serviceSecrets = pgTable("service_secrets", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   companyId: uuid("company_id")
-    .references(() => companies.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => companies.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   value: text("value").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
+  workspaceSecretNameUnique: unique().on(table.workspaceId, table.name),
   companySecretNameUnique: unique().on(table.companyId, table.name),
 }));
 

@@ -183,7 +183,7 @@ async function resolveEnvMap(
 
   // Resolve each secret
   for (const name of secretNames) {
-    const value = await resolveSecretRef(companyId, { secretRef: { name } });
+    const value = await resolveSecretRef({ companyId }, { secretRef: { name } });
     if (!value) {
       errors.push(`Secret "${name}" not found in vault`);
       continue;

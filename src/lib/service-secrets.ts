@@ -1,6 +1,6 @@
 import { db, withRetry } from "@/db";
-import { serviceSecrets } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { serviceSecrets, workspaces } from "@/db/schema";
+import { and, eq, isNull, or } from "drizzle-orm";
 
 export interface SecretRefValue {
   secretRef: {
@@ -38,8 +38,31 @@ export function isSecretRefValue(value: unknown): value is SecretRefValue {
   return isObject(secretRef) && typeof secretRef.name === "string" && secretRef.name.trim().length > 0;
 }
 
-export async function resolveSecretRef(companyId: string | null | undefined, secretRef: unknown): Promise<string | null> {
-  if (!companyId || !db) {
+async function resolveSecretScope(scope: { workspaceId?: string | null; companyId?: string | null | undefined }) {
+  const workspaceId = scope.workspaceId ?? null;
+  const companyId = scope.companyId ?? null;
+
+  if (!db) {
+    return { workspaceId: null, companyId };
+  }
+
+  if (workspaceId) {
+    const [workspace] = await withRetry(() =>
+      db!
+        .select({ id: workspaces.id, companyId: workspaces.companyId })
+        .from(workspaces)
+        .where(eq(workspaces.id, workspaceId))
+        .limit(1)
+    );
+
+    return { workspaceId: workspace?.id ?? workspaceId, companyId: workspace?.companyId ?? companyId };
+  }
+
+  return { workspaceId: null, companyId };
+}
+
+export async function resolveSecretRef(scope: { workspaceId?: string | null; companyId?: string | null | undefined }, secretRef: unknown): Promise<string | null> {
+  if (!db) {
     return null;
   }
 
@@ -53,23 +76,33 @@ export async function resolveSecretRef(companyId: string | null | undefined, sec
     return null;
   }
 
+  const resolved = await resolveSecretScope(scope);
+  if (!resolved.workspaceId && !resolved.companyId) {
+    return null;
+  }
+
   const [secret] = await withRetry(() =>
     db!
       .select({ value: serviceSecrets.value })
       .from(serviceSecrets)
-      .where(and(eq(serviceSecrets.companyId, companyId), eq(serviceSecrets.name, normalized)))
+      .where(and(
+        eq(serviceSecrets.name, normalized),
+        resolved.workspaceId ? eq(serviceSecrets.workspaceId, resolved.workspaceId) : isNull(serviceSecrets.workspaceId),
+        resolved.companyId ? eq(serviceSecrets.companyId, resolved.companyId) : isNull(serviceSecrets.companyId),
+      ))
       .limit(1)
   );
 
   return secret?.value ?? null;
 }
 
-export async function validateSkillConfigSecretRefs(companyId: string | null | undefined, config: unknown) {
+export async function validateSkillConfigSecretRefs(scope: { workspaceId?: string | null; companyId?: string | null | undefined }, config: unknown) {
   const names = [...collectSecretRefNames(config)];
   if (names.length === 0) return { ok: true as const };
 
-  if (!companyId) {
-    return { ok: false as const, error: "Secret references require an agent with a companyId" };
+  const resolved = await resolveSecretScope(scope);
+  if (!resolved.workspaceId && !resolved.companyId) {
+    return { ok: false as const, error: "Secret references require an agent workspace or company scope" };
   }
 
   if (!db) {
@@ -77,7 +110,7 @@ export async function validateSkillConfigSecretRefs(companyId: string | null | u
   }
 
   for (const name of names) {
-    const secret = await resolveSecretRef(companyId, { secretRef: { name } });
+    const secret = await resolveSecretRef(resolved, { secretRef: { name } });
 
     if (!secret) {
       return { ok: false as const, error: `Unknown secretRef: ${name}` };

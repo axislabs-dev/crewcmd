@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "@/lib/require-auth";
 import { toSecretMetadata } from "@/lib/service-secrets";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +11,7 @@ interface RouteParams {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const { requireAuth } = await import("@/lib/require-auth");
   const authError = await requireAuth(request);
   if (authError) return authError;
 

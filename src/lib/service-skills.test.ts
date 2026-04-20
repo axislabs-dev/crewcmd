@@ -5,15 +5,18 @@ const {
   mockSkillsWhere,
   mockAgentSkillsWhere,
   mockSecretWhere,
+  mockAgentWorkspaceGrantsWhere,
   agentsTable,
   skillsTable,
   agentSkillsTable,
   serviceSecretsTable,
+  agentWorkspaceGrantsTable,
 } = vi.hoisted(() => ({
   mockAgentsFrom: vi.fn(),
   mockSkillsWhere: vi.fn(),
   mockAgentSkillsWhere: vi.fn(),
   mockSecretWhere: vi.fn(),
+  mockAgentWorkspaceGrantsWhere: vi.fn(),
   agentsTable: { __table: Symbol.for("agents") },
   skillsTable: {
     __table: Symbol.for("skills"),
@@ -31,6 +34,11 @@ const {
     value: Symbol.for("serviceSecrets.value"),
     companyId: Symbol.for("serviceSecrets.companyId"),
     name: Symbol.for("serviceSecrets.name"),
+  },
+  agentWorkspaceGrantsTable: {
+    __table: Symbol.for("agentWorkspaceGrants"),
+    agentId: Symbol.for("agentWorkspaceGrants.agentId"),
+    workspaceId: Symbol.for("agentWorkspaceGrants.workspaceId"),
   },
 }));
 
@@ -50,6 +58,9 @@ vi.mock("@/db", () => ({
         if (table === serviceSecretsTable) {
           return { where: mockSecretWhere };
         }
+        if (table === agentWorkspaceGrantsTable) {
+          return { where: mockAgentWorkspaceGrantsWhere };
+        }
         return { where: vi.fn() };
       },
     }),
@@ -62,6 +73,7 @@ vi.mock("@/db/schema", () => ({
   skills: skillsTable,
   agentSkills: agentSkillsTable,
   serviceSecrets: serviceSecretsTable,
+  agentWorkspaceGrants: agentWorkspaceGrantsTable,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -79,19 +91,18 @@ describe("invokeServiceSkill", () => {
       { id: "agent_1", callsign: "Cipher", companyId: "co_1" },
     ]);
 
-    mockSkillsWhere.mockReturnValue({
-      limit: vi.fn().mockResolvedValue([
-        {
-          id: "skill_1",
-          slug: "evercontent",
-          metadata: {
-            kind: "service-skill",
-            service: "evercontent",
-            capabilities: ["posts:list", "posts:publish"],
-          },
+    mockSkillsWhere.mockResolvedValue([
+      {
+        id: "skill_1",
+        slug: "evercontent",
+        workspaceId: "ws_1",
+        metadata: {
+          kind: "service-skill",
+          service: "evercontent",
+          capabilities: ["posts:list", "posts:publish"],
         },
-      ]),
-    });
+      },
+    ]);
 
     mockAgentSkillsWhere.mockReturnValue({
       limit: vi.fn().mockResolvedValue([
@@ -111,6 +122,8 @@ describe("invokeServiceSkill", () => {
     mockSecretWhere.mockReturnValue({
       limit: vi.fn().mockResolvedValue([{ value: "secret_123" }]),
     });
+
+    mockAgentWorkspaceGrantsWhere.mockResolvedValue([{ workspaceId: "ws_1" }]);
   });
 
   it("invokes EverContent list posts inside allowed scope", async () => {

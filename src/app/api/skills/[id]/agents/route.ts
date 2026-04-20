@@ -126,31 +126,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let uninstall:
         | { ok: boolean; error?: string; warnings?: string[]; removedPaths?: string[]; removedConfigEntry?: boolean }
         | undefined;
-      try {
-        const result = await uninstallSkillFromOpenClaw({
-          skillId: id,
-          agentId,
-          companyId: agent.companyId,
-        });
-        uninstall = result.success
-          ? {
-              ok: true,
-              warnings: result.warnings,
-              removedPaths: result.removedPaths,
-              removedConfigEntry: result.removedConfigEntry,
-            }
-          : {
-              ok: false,
-              error: result.errors.join("; ") || "Workspace cleanup failed",
-              warnings: result.warnings,
-              removedPaths: result.removedPaths,
-              removedConfigEntry: result.removedConfigEntry,
-            };
-      } catch (err) {
-        uninstall = {
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        };
+      if (agent.companyId) {
+        try {
+          const result = await uninstallSkillFromOpenClaw({
+            skillId: id,
+            agentId,
+            companyId: agent.companyId,
+          });
+          uninstall = result.success
+            ? {
+                ok: true,
+                warnings: result.warnings,
+                removedPaths: result.removedPaths,
+                removedConfigEntry: result.removedConfigEntry,
+              }
+            : {
+                ok: false,
+                error: result.errors.join("; ") || "Workspace cleanup failed",
+                warnings: result.warnings,
+                removedPaths: result.removedPaths,
+                removedConfigEntry: result.removedConfigEntry,
+              };
+        } catch (err) {
+          uninstall = {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
       }
 
       // Unassign
@@ -176,23 +178,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let sync: { ok: boolean; error?: string } | undefined;
     let secrets: { ok: boolean; error?: string } | undefined;
 
-    try {
-      const result = await syncSkillToOpenClaw({
-        skillId: id,
-        agentId,
-        companyId: agent.companyId,
-      });
-      sync = result.success
-        ? { ok: true }
-        : { ok: false, error: result.errors.join("; ") || "Sync failed" };
-    } catch (err) {
-      sync = {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
+    if (agent.companyId) {
+      try {
+        const result = await syncSkillToOpenClaw({
+          skillId: id,
+          agentId,
+          companyId: agent.companyId,
+        });
+        sync = result.success
+          ? { ok: true }
+          : { ok: false, error: result.errors.join("; ") || "Sync failed" };
+      } catch (err) {
+        sync = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     }
 
-    if (agent.runtimeId) {
+    if (agent.runtimeId && agent.companyId) {
       try {
         const result = await pushSecretsToGateway({
           skillId: id,

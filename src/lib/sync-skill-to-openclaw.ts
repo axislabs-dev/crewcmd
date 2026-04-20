@@ -31,7 +31,8 @@ import {
 export interface SyncSkillOptions {
   skillId: string;
   agentId: string;
-  companyId: string;
+  companyId?: string | null;
+  workspaceId?: string | null;
   dryRun?: boolean;
 }
 
@@ -71,7 +72,10 @@ export async function syncSkillToOpenClaw(
 
   let skillData: SkillData;
   try {
-    skillData = await loadSkillData(opts.skillId, opts.agentId, opts.companyId);
+    skillData = await loadSkillData(opts.skillId, opts.agentId, {
+      companyId: opts.companyId ?? null,
+      workspaceId: opts.workspaceId ?? null,
+    });
   } catch (err) {
     return makeFailure(
       "Failed to load skill data from database",
@@ -107,7 +111,10 @@ export async function syncSkillToOpenClaw(
     2
   );
   const resolvedEnv = await resolveSkillEnvVars(
-    opts.companyId,
+    {
+      companyId: opts.companyId ?? skillData.skill.companyId ?? null,
+      workspaceId: opts.workspaceId ?? skillData.skill.workspaceId ?? null,
+    },
     slug,
     skillData.skill.metadata,
     assignmentConfig as Record<string, unknown>
@@ -155,7 +162,7 @@ export async function syncSkillToOpenClaw(
 async function loadSkillData(
   skillId: string,
   agentId: string,
-  companyId: string
+  scope: { companyId?: string | null; workspaceId?: string | null }
 ): Promise<SkillData> {
   if (!db) throw new Error("Database not initialized");
 
@@ -173,16 +180,30 @@ async function loadSkillData(
   }
 
   // Load skill
-  const [skillRows] = await withRetry(() =>
-    db!
+  const [skillRows] = await withRetry(() => {
+    if (scope.workspaceId) {
+      return db!
+        .select()
+        .from(skills)
+        .where(and(eq(skills.id, skillId), eq(skills.workspaceId, scope.workspaceId)))
+        .limit(1);
+    }
+    if (scope.companyId) {
+      return db!
+        .select()
+        .from(skills)
+        .where(and(eq(skills.id, skillId), eq(skills.companyId, scope.companyId)))
+        .limit(1);
+    }
+    return db!
       .select()
       .from(skills)
-      .where(and(eq(skills.id, skillId), eq(skills.companyId, companyId)))
-      .limit(1)
-  );
+      .where(eq(skills.id, skillId))
+      .limit(1);
+  });
 
   if (!skillRows) {
-    throw new Error(`Skill ${skillId} not found for company ${companyId}`);
+    throw new Error(`Skill ${skillId} not found for the provided scope`);
   }
 
   // Load agent-skill assignment
@@ -388,7 +409,7 @@ function buildSkillEntry(
  * for writing into openclaw.json.
  */
 async function resolveSkillEnvVars(
-  companyId: string,
+  scope: { companyId?: string | null; workspaceId?: string | null },
   slug: string,
   metadata: Record<string, unknown> | null | undefined,
   config: Record<string, unknown>
@@ -412,7 +433,7 @@ async function resolveSkillEnvVars(
   if (secretNames.size === 0) return env;
 
   for (const name of secretNames) {
-    const value = await resolveSecretRef({ companyId }, { secretRef: { name } });
+    const value = await resolveSecretRef(scope, { secretRef: { name } });
     if (value) {
       env[primaryEnvVar] = value;
     }

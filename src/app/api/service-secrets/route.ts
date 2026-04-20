@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 import { toSecretMetadata } from "@/lib/service-secrets";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const companyId = request.nextUrl.searchParams.get("companyId");
-  if (!companyId) {
-    return NextResponse.json({ error: "companyId is required" }, { status: 400 });
+  const requestedCompanyId = request.nextUrl.searchParams.get("companyId");
+  const requestedWorkspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const workspace = await resolveAccessibleWorkspace({
+    request,
+    explicitWorkspaceId: requestedWorkspaceId,
+    explicitCompanyId: requestedCompanyId,
+  });
+
+  if (!workspace) {
+    return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
   }
 
   if (!db) {
@@ -22,7 +30,12 @@ export async function GET(request: NextRequest) {
       db!
         .select()
         .from(schema.serviceSecrets)
-        .where(eq(schema.serviceSecrets.companyId, companyId))
+        .where(and(
+          eq(schema.serviceSecrets.workspaceId, workspace.id),
+          workspace.companyId
+            ? eq(schema.serviceSecrets.companyId, workspace.companyId)
+            : isNull(schema.serviceSecrets.companyId),
+        ))
     );
 
     return NextResponse.json({ secrets: secrets.map(toSecretMetadata) });
@@ -42,10 +55,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyId, name, value, description } = body;
+    const { companyId, workspaceId, name, value, description } = body;
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? null,
+      explicitCompanyId: companyId ?? null,
+    });
 
-    if (!companyId || !name || value === undefined) {
-      return NextResponse.json({ error: "companyId, name, and value are required" }, { status: 400 });
+    if (!workspace || !name || value === undefined) {
+      return NextResponse.json({ error: "workspaceId or companyId, name, and value are required" }, { status: 400 });
     }
 
     if (typeof value !== "string" || value.length === 0) {
@@ -63,7 +81,10 @@ export async function POST(request: NextRequest) {
         .from(schema.serviceSecrets)
         .where(
           and(
-            eq(schema.serviceSecrets.companyId, companyId),
+            eq(schema.serviceSecrets.workspaceId, workspace.id),
+            workspace.companyId
+              ? eq(schema.serviceSecrets.companyId, workspace.companyId)
+              : isNull(schema.serviceSecrets.companyId),
             eq(schema.serviceSecrets.name, normalizedName)
           )
         )
@@ -90,7 +111,8 @@ export async function POST(request: NextRequest) {
       db!
         .insert(schema.serviceSecrets)
         .values({
-          companyId,
+          workspaceId: workspace.id,
+          companyId: workspace.companyId ?? null,
           name: normalizedName,
           description: description ?? null,
           value,

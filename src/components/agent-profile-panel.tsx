@@ -1058,21 +1058,36 @@ function SkillsTab({
   const [configDrafts, setConfigDrafts] = useState<Record<string, string>>({});
   const [formConfigs, setFormConfigs] = useState<Record<string, Record<string, unknown>>>({});
   const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretOption[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [advancedOpenBySkillId, setAdvancedOpenBySkillId] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    const workspaceCookie = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("active_workspace="));
+    setActiveWorkspaceId(workspaceCookie?.split("=")[1] ?? null);
+  }, []);
+
   const loadServiceSecrets = useCallback(async () => {
-    if (!agent?.companyId) {
+    if (!activeWorkspaceId && !agent?.companyId) {
       setServiceSecrets([]);
       return;
     }
 
-    const res = await fetch(`/api/service-secrets?companyId=${agent.companyId}`);
+    const params = new URLSearchParams();
+    if (activeWorkspaceId) {
+      params.set("workspaceId", activeWorkspaceId);
+    } else if (agent?.companyId) {
+      params.set("companyId", agent.companyId);
+    }
+
+    const res = await fetch(`/api/service-secrets?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Failed to load service secrets");
     setServiceSecrets(Array.isArray(data.secrets) ? data.secrets : []);
-  }, [agent?.companyId]);
+  }, [activeWorkspaceId, agent?.companyId]);
 
   useEffect(() => {
     loadServiceSecrets().catch(() => setServiceSecrets([]));
@@ -1210,7 +1225,7 @@ function SkillsTab({
 
   async function createSecret(args: { row: AgentSkillRow; fieldKey: string; name: string; value: string; description: string }) {
     try {
-      if (!agent?.companyId) throw new Error("Select a company before creating secrets.");
+      if (!activeWorkspaceId && !agent?.companyId) throw new Error("Select a workspace before creating secrets.");
 
       const name = args.name.trim();
       if (!name || !args.value.trim()) {
@@ -1221,7 +1236,8 @@ function SkillsTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: agent.companyId,
+          workspaceId: activeWorkspaceId,
+          companyId: agent?.companyId ?? null,
           name,
           value: args.value,
           description: args.description.trim() || null,

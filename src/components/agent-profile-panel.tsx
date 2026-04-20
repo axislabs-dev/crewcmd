@@ -218,12 +218,20 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [overlayDraft, setOverlayDraft] = useState("");
   const [savingOverlay, setSavingOverlay] = useState(false);
   const [applyingModel, setApplyingModel] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const workspaceCookie = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("active_workspace="));
+    setWorkspaceId(workspaceCookie?.split("=")[1] ?? null);
+  }, []);
 
   // Animate in on mount
   useEffect(() => {
@@ -299,14 +307,20 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
 
   // Fetch available skills for this agent company
   useEffect(() => {
-    if (!agent?.companyId) return;
-    fetch(`/api/skills?company_id=${agent.companyId}`)
+    if (!workspaceId && !agent?.companyId) return;
+    const params = new URLSearchParams();
+    if (workspaceId) {
+      params.set("workspaceId", workspaceId);
+    } else if (agent?.companyId) {
+      params.set("company_id", agent.companyId);
+    }
+    fetch(`/api/skills?${params.toString()}`)
       .then((r) => r.json())
       .then((rows) => {
         if (Array.isArray(rows)) setAvailableSkills(rows);
       })
       .catch(() => {});
-  }, [agent?.companyId]);
+  }, [agent?.companyId, workspaceId]);
 
   // Fetch tasks when activity tab is selected (or eagerly)
   useEffect(() => {

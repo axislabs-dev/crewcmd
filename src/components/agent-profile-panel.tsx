@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { Agent, Task, Activity } from "@/lib/data";
 import { ROLES } from "@/components/agent-config-fields";
+import { useWorkspace } from "@/components/company-context";
 import {
   getInitialSkillConfig,
   getSecretRefName,
@@ -947,7 +948,7 @@ function SkillConfigFields({
                     onChange={(e) => onChange(setSecretRefName(config, field.key, e.target.value))}
                     className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
                   >
-                    <option value="">Select a company secret…</option>
+                    <option value="">Select a workspace secret…</option>
                     {secrets.map((secret) => (
                       <option key={secret.id} value={secret.name}>{secret.name}</option>
                     ))}
@@ -1054,21 +1055,15 @@ function SkillsTab({
   agentColor: string;
   onSkillsChange: (skills: AgentSkillRow[]) => void;
 }) {
+  const { workspace } = useWorkspace();
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [configDrafts, setConfigDrafts] = useState<Record<string, string>>({});
   const [formConfigs, setFormConfigs] = useState<Record<string, Record<string, unknown>>>({});
   const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretOption[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [advancedOpenBySkillId, setAdvancedOpenBySkillId] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    const workspaceCookie = document.cookie
-      .split("; ")
-      .find((c) => c.startsWith("active_workspace="));
-    setActiveWorkspaceId(workspaceCookie?.split("=")[1] ?? null);
-  }, []);
+  const activeWorkspaceId = workspace?.id ?? null;
 
   const loadServiceSecrets = useCallback(async () => {
     if (!activeWorkspaceId && !agent?.companyId) {

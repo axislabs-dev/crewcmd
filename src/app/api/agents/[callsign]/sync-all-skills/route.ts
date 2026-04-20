@@ -4,6 +4,7 @@ import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { resolveRuntimeWorkspace } from "@/lib/workspace";
 
 export async function POST(
   request: NextRequest,
@@ -20,17 +21,33 @@ export async function POST(
 
   const [agent] = await withRetry(() =>
     db!
-      .select({ id: agents.id, companyId: agents.companyId })
+      .select({
+        id: agents.id,
+        companyId: agents.companyId,
+        ownerType: agents.ownerType,
+        ownerUserId: agents.ownerUserId,
+        ownerCompanyId: agents.ownerCompanyId,
+      })
       .from(agents)
       .where(eq(agents.callsign, callsignParam))
       .limit(1)
   );
 
-  if (!agent || !agent.companyId) {
+  if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const companyId = agent.companyId;
+  const workspace = await resolveRuntimeWorkspace({
+    ownerType: agent.ownerType,
+    ownerUserId: agent.ownerUserId ?? null,
+    ownerCompanyId: agent.ownerCompanyId ?? null,
+    companyId: agent.companyId ?? null,
+  });
+  if (!workspace) {
+    return NextResponse.json({ error: "Agent workspace not found" }, { status: 404 });
+  }
+
+  const companyId = workspace.companyId ?? agent.companyId ?? null;
   const agentId = agent.id;
 
   const assignments = await withRetry(() =>
@@ -41,7 +58,7 @@ export async function POST(
       .where(
         and(
           eq(agentSkills.agentId, agentId),
-          eq(skills.companyId, companyId)
+          eq(skills.workspaceId, workspace.id)
         )
       )
   );
@@ -55,6 +72,7 @@ export async function POST(
         skillId: assignment.skillId,
         agentId,
         companyId,
+        workspaceId: workspace.id,
       });
 
       if (result.success) {

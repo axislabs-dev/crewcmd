@@ -86,13 +86,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     let sync: { ok: boolean; error?: string } | undefined;
     let secrets: { ok: boolean; error?: string } | undefined;
+    const runtimeWorkspace = await resolveRuntimeWorkspace({
+      ownerType: agent.ownerType,
+      ownerUserId: agent.ownerUserId ?? null,
+      ownerCompanyId: agent.ownerCompanyId ?? null,
+      companyId: agent.companyId ?? null,
+    });
 
-    if (agent.companyId) {
+    if (runtimeWorkspace) {
       try {
         const result = await syncSkillToOpenClaw({
           skillId,
           agentId: agent.id,
-          companyId: agent.companyId,
+          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
+          workspaceId: runtimeWorkspace.id,
         });
         sync = result.success
           ? { ok: true }
@@ -105,12 +112,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (agent.companyId && agent.runtimeId) {
+    if (runtimeWorkspace && agent.runtimeId) {
       try {
         const result = await pushSecretsToGateway({
           skillId,
           agentId: agent.id,
-          companyId: agent.companyId,
+          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
+          workspaceId: runtimeWorkspace.id,
         });
         secrets = result.ok
           ? { ok: true }
@@ -149,12 +157,19 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     let uninstall:
       | { ok: boolean; error?: string; warnings?: string[]; removedPaths?: string[]; removedConfigEntry?: boolean }
       | undefined;
-    if (agent.companyId) {
+    const runtimeWorkspace = await resolveRuntimeWorkspace({
+      ownerType: agent.ownerType,
+      ownerUserId: agent.ownerUserId ?? null,
+      ownerCompanyId: agent.ownerCompanyId ?? null,
+      companyId: agent.companyId ?? null,
+    });
+    if (runtimeWorkspace) {
       try {
         const result = await uninstallSkillFromOpenClaw({
           skillId,
           agentId: agent.id,
-          companyId: agent.companyId,
+          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
+          workspaceId: runtimeWorkspace.id,
         });
         uninstall = result.success
           ? {

@@ -24,7 +24,8 @@ import { derivePrimaryEnvVar } from "./sync-skill-to-openclaw";
 export interface PushSecretsOptions {
   skillId: string;
   agentId: string;
-  companyId: string;
+  companyId?: string | null;
+  workspaceId?: string | null;
 }
 
 export interface PushSecretsResult {
@@ -51,7 +52,7 @@ export async function pushSecretsToGateway(
     db!
       .select()
       .from(agents)
-      .where(and(eq(agents.id, opts.agentId), eq(agents.companyId, opts.companyId)))
+      .where(eq(agents.id, opts.agentId))
       .limit(1)
   );
 
@@ -73,13 +74,27 @@ export async function pushSecretsToGateway(
   }
 
   // Load skill + assignment
-  const [skill] = await withRetry(() =>
-    db!
+  const [skill] = await withRetry(() => {
+    if (opts.workspaceId) {
+      return db!
+        .select()
+        .from(skills)
+        .where(and(eq(skills.id, opts.skillId), eq(skills.workspaceId, opts.workspaceId)))
+        .limit(1);
+    }
+    if (opts.companyId) {
+      return db!
+        .select()
+        .from(skills)
+        .where(and(eq(skills.id, opts.skillId), eq(skills.companyId, opts.companyId)))
+        .limit(1);
+    }
+    return db!
       .select()
       .from(skills)
-      .where(and(eq(skills.id, opts.skillId), eq(skills.companyId, opts.companyId)))
-      .limit(1)
-  );
+      .where(eq(skills.id, opts.skillId))
+      .limit(1);
+  });
 
   if (!skill) {
     return { ok: false, envVarsPushed: [], errors: [`Skill ${opts.skillId} not found`] };
@@ -99,7 +114,11 @@ export async function pushSecretsToGateway(
 
   // Resolve secrets from config
   const config = isRecord(assignment.config) ? assignment.config : {};
-  const envMap = await resolveEnvMap(opts.companyId, skill, config);
+  const envMap = await resolveEnvMap(
+    { companyId: opts.companyId ?? skill.companyId ?? null, workspaceId: opts.workspaceId ?? skill.workspaceId ?? null },
+    skill,
+    config
+  );
 
   if (envMap.errors.length > 0) {
     return { ok: false, envVarsPushed: [], errors: envMap.errors };
@@ -163,7 +182,7 @@ interface EnvMapResult {
  * 3. Derived from slug: SLUG_API_KEY
  */
 async function resolveEnvMap(
-  companyId: string,
+  scope: { companyId?: string | null; workspaceId?: string | null },
   skill: typeof skills.$inferSelect,
   config: Record<string, unknown>
 ): Promise<EnvMapResult> {
@@ -183,7 +202,7 @@ async function resolveEnvMap(
 
   // Resolve each secret
   for (const name of secretNames) {
-    const value = await resolveSecretRef({ companyId }, { secretRef: { name } });
+    const value = await resolveSecretRef(scope, { secretRef: { name } });
     if (!value) {
       errors.push(`Secret "${name}" not found in vault`);
       continue;

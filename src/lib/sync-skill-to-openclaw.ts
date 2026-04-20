@@ -412,7 +412,7 @@ async function resolveSkillEnvVars(
   if (secretNames.size === 0) return env;
 
   for (const name of secretNames) {
-    const value = await resolveSecretRef(companyId, { secretRef: { name } });
+    const value = await resolveSecretRef({ companyId }, { secretRef: { name } });
     if (value) {
       env[primaryEnvVar] = value;
     }

@@ -4,6 +4,7 @@ import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { resolveRuntimeWorkspace } from "@/lib/workspace";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
 
@@ -96,7 +97,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (config !== undefined) {
-      const validation = await validateSkillConfigSecretRefs(agent.companyId, config);
+      const workspace = await resolveRuntimeWorkspace({
+        ownerType: agent.ownerType,
+        ownerUserId: agent.ownerUserId ?? null,
+        ownerCompanyId: agent.ownerCompanyId ?? null,
+        companyId: agent.companyId ?? null,
+      });
+      const validation = await validateSkillConfigSecretRefs({ workspaceId: workspace?.id ?? null, companyId: workspace?.companyId ?? agent.companyId ?? null }, config);
       if (!validation.ok) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }

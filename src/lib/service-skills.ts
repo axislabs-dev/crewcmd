@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
 import { resolveSecretRef } from "@/lib/service-secrets";
+import { findScopedSkillBySlug } from "@/lib/skill-scope";
 
 export interface ServiceSkillInvocation {
   agentCallsign: string;
@@ -17,7 +18,7 @@ export interface ServiceSkillResult {
 }
 
 export interface ServiceSkillHandlerContext {
-  companyId: string;
+  companyId: string | null;
   agent: typeof agents.$inferSelect;
   skill: typeof skills.$inferSelect;
   assignment: typeof agentSkills.$inferSelect;
@@ -37,27 +38,12 @@ async function resolveAssignment(agentCallsign: string, skillSlug: string) {
     throw new Error("Database not available");
   }
 
-  const dbAgents = await withRetry(() => db!.select().from(agents));
-  const agent = dbAgents.find((row) => row.callsign.toLowerCase() === agentCallsign.toLowerCase());
-  if (!agent) {
-    throw new Error(`Agent not found: ${agentCallsign}`);
-  }
-
-  if (!agent.companyId) {
-    throw new Error(`Agent ${agent.callsign} is not attached to a company`);
-  }
-
-  const [skill] = await withRetry(() =>
-    db!
-      .select()
-      .from(skills)
-      .where(and(eq(skills.companyId, agent.companyId!), eq(skills.slug, skillSlug)))
-      .limit(1)
-  );
-
-  if (!skill) {
+  const scoped = await findScopedSkillBySlug({ agentCallsign, skillSlug });
+  if (!scoped) {
     throw new Error(`Skill not found: ${skillSlug}`);
   }
+
+  const { agent, skill } = scoped;
 
   const [assignment] = await withRetry(() =>
     db!
@@ -95,13 +81,13 @@ async function createContext(invocation: ServiceSkillInvocation): Promise<Servic
     throw new Error(`Action ${invocation.action} is not declared by skill ${invocation.skillSlug}`);
   }
 
-  const secretValue = await resolveSecretRef(resolved.agent.companyId!, config.secretRef);
+  const secretValue = await resolveSecretRef(resolved.agent.companyId ?? null, config.secretRef);
   if (secretValue) {
     config.__resolvedSecret = secretValue;
   }
 
   return {
-    companyId: resolved.agent.companyId!,
+    companyId: resolved.agent.companyId ?? null,
     agent: resolved.agent,
     skill: resolved.skill,
     assignment: resolved.assignment,

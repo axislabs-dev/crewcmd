@@ -6,6 +6,7 @@ import { db, withRetry } from "@/db";
 import { agentSkills, agents, companyRuntimes, skills } from "@/db/schema";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { removeSkillFromGatewayAgentAllowlist } from "./openclaw-gateway-skill-assignment";
+import { loadScopedSkillForAgent } from "./skill-scope";
 import {
   defaultOpenClawWorkspaceRoot,
   resolveOpenClawWorkspaceRoot,
@@ -14,7 +15,7 @@ import {
 export interface UninstallSkillOptions {
   skillId: string;
   agentId: string;
-  companyId: string;
+  companyId?: string | null;
   forceRemoveRuntimeConfigEntry?: boolean;
 }
 
@@ -133,28 +134,17 @@ async function loadSkillRemovalData(
 ): Promise<SkillRemovalData> {
   if (!db) throw new Error("Database not initialized");
 
-  const [agent] = await withRetry(() =>
-    db!
-      .select()
-      .from(agents)
-      .where(and(eq(agents.id, opts.agentId), eq(agents.companyId, opts.companyId)))
-      .limit(1)
-  );
+  const scoped = await loadScopedSkillForAgent({ skillId: opts.skillId, agentId: opts.agentId });
+  const agent = scoped?.agent;
 
   if (!agent) {
-    throw new Error(`Agent ${opts.agentId} not found for company ${opts.companyId}`);
+    throw new Error(`Agent ${opts.agentId} not found`);
   }
 
-  const [skill] = await withRetry(() =>
-    db!
-      .select()
-      .from(skills)
-      .where(and(eq(skills.id, opts.skillId), eq(skills.companyId, opts.companyId)))
-      .limit(1)
-  );
+  const skill = scoped?.skill;
 
   if (!skill) {
-    throw new Error(`Skill ${opts.skillId} not found for company ${opts.companyId}`);
+    throw new Error(`Skill ${opts.skillId} not found`);
   }
 
   let runtime: typeof companyRuntimes.$inferSelect | null = null;

@@ -222,7 +222,7 @@ export default function SkillsPage() {
 
   // Ensure a built-in skill has a DB record, returns the real DB skill ID
   const ensureBuiltInSkill = useCallback(async (skill: Skill): Promise<string | null> => {
-    if (!companyId || !workspaceId) return null;
+    if (!workspaceId) return null;
     // Check if a DB record already exists for this slug
     const existing = skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"));
     if (existing) return existing.id;
@@ -338,7 +338,7 @@ export default function SkillsPage() {
   }
 
   async function handleInstall(ms: MarketplaceSkill) {
-    if (!companyId || !workspaceId) return;
+    if (!workspaceId) return;
     setInstalling(ms.slug);
     try {
       const res = await fetch("/api/skills/import", {
@@ -371,7 +371,7 @@ export default function SkillsPage() {
   }
 
   async function handleCreateCustom() {
-    if (!companyId || !workspaceId || !customName.trim()) return;
+    if (!workspaceId || !customName.trim()) return;
     setSavingCustom(true);
     try {
       const slug = customName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");

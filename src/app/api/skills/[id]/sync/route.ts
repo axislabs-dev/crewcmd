@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { agentSkills, agents, skills } from "@/db/schema";
+import { agentSkills, skills } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
@@ -21,7 +21,7 @@ export async function POST(
 
   const [skill] = await withRetry(() =>
     db!
-      .select({ id: skills.id, companyId: skills.companyId })
+      .select({ id: skills.id, companyId: skills.companyId, workspaceId: skills.workspaceId })
       .from(skills)
       .where(eq(skills.id, skillId))
       .limit(1)
@@ -35,13 +35,7 @@ export async function POST(
     db!
       .select({ agentId: agentSkills.agentId })
       .from(agentSkills)
-      .innerJoin(agents, eq(agentSkills.agentId, agents.id))
-      .where(
-        and(
-          eq(agentSkills.skillId, skillId),
-          eq(agents.companyId, skill.companyId)
-        )
-      )
+      .where(eq(agentSkills.skillId, skillId))
   );
 
   const failed: Array<{ agentId: string; error: string }> = [];

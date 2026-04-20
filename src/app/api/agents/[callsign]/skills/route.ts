@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { getAgentWithWorkspaceIds, loadScopedSkillForAgent, skillMatchesAgentScope } from "@/lib/skill-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -101,8 +102,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let sync: { ok: boolean; error?: string } | undefined;
     let secrets: { ok: boolean; error?: string } | undefined;
 
-    if (agent.companyId) {
-      try {
+    try {
         const result = await syncSkillToOpenClaw({
           skillId,
           agentId: agent.id,
@@ -117,10 +117,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           error: err instanceof Error ? err.message : String(err),
         };
       }
-    }
 
     // Push secrets to gateway after the runtime files/config are in place.
-    if (agent.companyId && agent.runtimeId) {
+    if (agent.runtimeId) {
       try {
         const result = await pushSecretsToGateway({
           skillId,

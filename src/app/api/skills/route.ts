@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
   }
   const companyId = workspace.companyId ?? null;
+  const workspaceId = workspace.id;
 
   // Built-in skills are always returned, regardless of DB state
   const builtIns = BUILT_IN_SKILLS.map((s) => ({
@@ -47,13 +48,13 @@ export async function GET(request: NextRequest) {
     updatedAt: new Date().toISOString(),
   }));
 
-  if (!db || !companyId) {
+  if (!db) {
     return NextResponse.json(builtIns);
   }
 
   try {
     const rows = await withRetry(() =>
-      db!.select().from(schema.skills).where(eq(schema.skills.companyId, companyId))
+      db!.select().from(schema.skills).where(eq(schema.skills.workspaceId, workspaceId))
     );
 
     return NextResponse.json([...builtIns, ...rows]);
@@ -79,8 +80,8 @@ export async function POST(request: NextRequest) {
     });
     const resolvedCompanyId = workspace?.companyId ?? companyId ?? null;
 
-    if (!name || !slug || !resolvedCompanyId) {
-      return NextResponse.json({ error: "name, slug, and a company-backed workspace are required" }, { status: 400 });
+    if (!name || !slug || !workspace) {
+      return NextResponse.json({ error: "name, slug, and workspace are required" }, { status: 400 });
     }
 
     const [created] = await withRetry(() =>
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
         version: version || null,
         content: content || null,
         companyId: resolvedCompanyId,
+        workspaceId: workspace.id,
         metadata: metadata || {},
         installed: true,
       }).returning()

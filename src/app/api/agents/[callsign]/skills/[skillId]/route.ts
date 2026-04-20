@@ -80,8 +80,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     let sync: { ok: boolean; error?: string } | undefined;
     let secrets: { ok: boolean; error?: string } | undefined;
 
-    if (agent.companyId) {
-      try {
+    try {
         const result = await syncSkillToOpenClaw({
           skillId,
           agentId: agent.id,
@@ -96,9 +95,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           error: err instanceof Error ? err.message : String(err),
         };
       }
-    }
 
-    if (agent.companyId && agent.runtimeId) {
+    if (agent.runtimeId) {
       try {
         const result = await pushSecretsToGateway({
           skillId,
@@ -142,8 +140,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     let uninstall:
       | { ok: boolean; error?: string; warnings?: string[]; removedPaths?: string[]; removedConfigEntry?: boolean }
       | undefined;
-    if (agent.companyId) {
-      try {
+    try {
         const result = await uninstallSkillFromOpenClaw({
           skillId,
           agentId: agent.id,
@@ -163,13 +160,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
               removedPaths: result.removedPaths,
               removedConfigEntry: result.removedConfigEntry,
             };
-      } catch (err) {
+    } catch (err) {
         uninstall = {
           ok: false,
           error: err instanceof Error ? err.message : String(err),
         };
       }
-    }
 
     await withRetry(() =>
       db!.delete(schema.agentSkills).where(

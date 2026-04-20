@@ -14,17 +14,18 @@
 
 import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { agents, agentSkills, companyRuntimes, skills } from "@/db/schema";
+import { agentSkills, companyRuntimes, skills } from "@/db/schema";
 import { collectSecretRefNames, resolveSecretRef } from "./service-secrets";
 import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { derivePrimaryEnvVar } from "./sync-skill-to-openclaw";
+import { loadScopedSkillForAgent } from "./skill-scope";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface PushSecretsOptions {
   skillId: string;
   agentId: string;
-  companyId: string;
+  companyId?: string | null;
 }
 
 export interface PushSecretsResult {
@@ -47,13 +48,8 @@ export async function pushSecretsToGateway(
   }
 
   // Load agent + runtime
-  const [agent] = await withRetry(() =>
-    db!
-      .select()
-      .from(agents)
-      .where(and(eq(agents.id, opts.agentId), eq(agents.companyId, opts.companyId)))
-      .limit(1)
-  );
+  const scoped = await loadScopedSkillForAgent({ skillId: opts.skillId, agentId: opts.agentId });
+  const agent = scoped?.agent;
 
   if (!agent) {
     return { ok: false, envVarsPushed: [], errors: [`Agent ${opts.agentId} not found`] };
@@ -73,13 +69,7 @@ export async function pushSecretsToGateway(
   }
 
   // Load skill + assignment
-  const [skill] = await withRetry(() =>
-    db!
-      .select()
-      .from(skills)
-      .where(and(eq(skills.id, opts.skillId), eq(skills.companyId, opts.companyId)))
-      .limit(1)
-  );
+  const skill = scoped?.skill;
 
   if (!skill) {
     return { ok: false, envVarsPushed: [], errors: [`Skill ${opts.skillId} not found`] };
@@ -99,7 +89,7 @@ export async function pushSecretsToGateway(
 
   // Resolve secrets from config
   const config = isRecord(assignment.config) ? assignment.config : {};
-  const envMap = await resolveEnvMap(opts.companyId, skill, config);
+  const envMap = await resolveEnvMap(agent.companyId ?? null, skill, config);
 
   if (envMap.errors.length > 0) {
     return { ok: false, envVarsPushed: [], errors: envMap.errors };
@@ -163,7 +153,7 @@ interface EnvMapResult {
  * 3. Derived from slug: SLUG_API_KEY
  */
 async function resolveEnvMap(
-  companyId: string,
+  companyId: string | null,
   skill: typeof skills.$inferSelect,
   config: Record<string, unknown>
 ): Promise<EnvMapResult> {

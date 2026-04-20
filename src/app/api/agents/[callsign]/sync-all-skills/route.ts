@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { agentSkills, agents, skills } from "@/db/schema";
+import { agentSkills, agents } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 
@@ -26,24 +26,18 @@ export async function POST(
       .limit(1)
   );
 
-  if (!agent || !agent.companyId) {
+  if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const companyId = agent.companyId;
+  const companyId = agent.companyId ?? null;
   const agentId = agent.id;
 
   const assignments = await withRetry(() =>
     db!
       .select({ skillId: agentSkills.skillId })
       .from(agentSkills)
-      .innerJoin(skills, eq(agentSkills.skillId, skills.id))
-      .where(
-        and(
-          eq(agentSkills.agentId, agentId),
-          eq(skills.companyId, companyId)
-        )
-      )
+      .where(eq(agentSkills.agentId, agentId))
   );
 
   const failed: Array<{ skillId: string; error: string }> = [];

@@ -1,3 +1,4 @@
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
       source,
       query,
       companyId,
+      workspaceId,
       name,
       slug,
       description,
@@ -24,8 +26,10 @@ export async function POST(request: NextRequest) {
       metadata,
     } = body;
 
-    if (!source || !companyId) {
-      return NextResponse.json({ error: "source and companyId are required" }, { status: 400 });
+    const workspace = await resolveAccessibleWorkspace({ request, explicitWorkspaceId: workspaceId ?? null, explicitCompanyId: companyId ?? null });
+
+    if (!source || !workspace) {
+      return NextResponse.json({ error: "source and workspaceId/companyId are required" }, { status: 400 });
     }
 
     if (metadata !== undefined && (!metadata || typeof metadata !== "object" || Array.isArray(metadata))) {
@@ -44,7 +48,8 @@ export async function POST(request: NextRequest) {
         sourceUrl: sourceUrl || null,
         version: version || null,
         content: content || null,
-        companyId,
+        companyId: workspace.companyId ?? null,
+        workspaceId: workspace.id,
         metadata: metadata || {},
         installed: true,
       }).returning()

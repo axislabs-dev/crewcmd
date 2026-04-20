@@ -103,12 +103,12 @@ export async function DELETE(
     const uninstallWarnings: Array<{ agentId: string; warnings: string[] }> = [];
 
     for (const assignment of assignments) {
-      if (!assignment.companyId) continue;
+      
       try {
         const result = await uninstallSkillFromOpenClaw({
           skillId: id,
           agentId: assignment.agentId,
-          companyId: assignment.companyId,
+          companyId: assignment.companyId ?? null,
         });
         if (!result.success) {
           uninstallFailures.push({

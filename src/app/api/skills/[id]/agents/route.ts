@@ -4,6 +4,7 @@ import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
+import { getAgentWithWorkspaceIds, skillMatchesAgentScope } from "@/lib/skill-scope";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
 
@@ -67,13 +68,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "config must be an object when provided" }, { status: 400 });
     }
 
-    const [agent] = await withRetry(() =>
-      db!
-        .select()
-        .from(schema.agents)
-        .where(eq(schema.agents.id, agentId))
-        .limit(1)
-    );
+    const scopedAgent = await getAgentWithWorkspaceIds(agentId);
+    const agent = scopedAgent?.agent;
 
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
@@ -91,8 +87,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Skill not found" }, { status: 404 });
     }
 
-    if (agent.companyId !== skill.companyId) {
-      return NextResponse.json({ error: "Agent and skill belong to different companies" }, { status: 400 });
+    if (!scopedAgent || !skillMatchesAgentScope(skill, agent, scopedAgent.workspaceIds)) {
+      return NextResponse.json({ error: "Agent cannot access this skill workspace" }, { status: 400 });
     }
 
     if (config !== undefined) {

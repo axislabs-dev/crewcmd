@@ -618,8 +618,8 @@ export const escalationPaths = pgTable("escalation_paths", {
 export const skills = pgTable("skills", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id")
-    .references(() => companies.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   description: text("description"),

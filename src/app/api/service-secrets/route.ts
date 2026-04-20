@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { requireAuth } from "@/lib/require-auth";
 import { toSecretMetadata } from "@/lib/service-secrets";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
@@ -46,6 +45,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const { requireAuth } = await import("@/lib/require-auth");
   const authError = await requireAuth(request);
   if (authError) return authError;
 

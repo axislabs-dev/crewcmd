@@ -19,6 +19,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   serviceSecrets: {
     id: Symbol("id"),
+    workspaceId: Symbol("workspaceId"),
     companyId: Symbol("companyId"),
     name: Symbol("name"),
   },
@@ -32,6 +33,12 @@ vi.mock("@/lib/require-auth", () => ({
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
   and: vi.fn(),
+  isNull: vi.fn(),
+}));
+
+const mockResolveAccessibleWorkspace = vi.fn();
+vi.mock("@/lib/workspace", () => ({
+  resolveAccessibleWorkspace: (...a: unknown[]) => mockResolveAccessibleWorkspace(...a),
 }));
 
 import { GET, POST } from "./route";
@@ -44,6 +51,10 @@ describe("/api/service-secrets", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({
+      id: "ws_1",
+      companyId: "co_1",
+    });
     mockWhere.mockResolvedValue([]);
     mockSelectWhere.mockImplementation(() => ({ limit: mockLimit }));
     mockReturning.mockResolvedValue([{
@@ -68,7 +79,7 @@ describe("/api/service-secrets", () => {
       updatedAt: new Date("2026-04-08T00:00:00Z"),
     }]);
 
-    const res = await GET(makeRequest("/api/service-secrets?companyId=co_1"));
+    const res = await GET(makeRequest("/api/service-secrets?workspaceId=ws_1"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -81,7 +92,7 @@ describe("/api/service-secrets", () => {
   it("creates a secret and never returns the raw value", async () => {
     const res = await POST(makeRequest("/api/service-secrets", {
       method: "POST",
-      body: JSON.stringify({ companyId: "co_1", name: "evercontent-api-key", value: "abcd1234" }),
+      body: JSON.stringify({ workspaceId: "ws_1", name: "evercontent-api-key", value: "abcd1234" }),
     }));
     const body = await res.json();
 
@@ -95,7 +106,7 @@ describe("/api/service-secrets", () => {
 
     const res = await POST(makeRequest("/api/service-secrets", {
       method: "POST",
-      body: JSON.stringify({ companyId: "co_1", name: "x", value: "y" }),
+      body: JSON.stringify({ workspaceId: "ws_1", name: "x", value: "y" }),
     }));
     const body = await res.json();
 

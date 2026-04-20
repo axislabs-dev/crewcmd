@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
       source,
       query,
       companyId,
+      workspaceId,
       name,
       slug,
       description,
@@ -24,8 +26,19 @@ export async function POST(request: NextRequest) {
       metadata,
     } = body;
 
-    if (!source || !companyId) {
-      return NextResponse.json({ error: "source and companyId are required" }, { status: 400 });
+    if (!source) {
+      return NextResponse.json({ error: "source is required" }, { status: 400 });
+    }
+
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? null,
+      explicitCompanyId: companyId ?? null,
+    });
+    const resolvedCompanyId = workspace?.companyId ?? companyId ?? null;
+
+    if (!resolvedCompanyId) {
+      return NextResponse.json({ error: "a company-backed workspace is required" }, { status: 400 });
     }
 
     if (metadata !== undefined && (!metadata || typeof metadata !== "object" || Array.isArray(metadata))) {
@@ -44,7 +57,7 @@ export async function POST(request: NextRequest) {
         sourceUrl: sourceUrl || null,
         version: version || null,
         content: content || null,
-        companyId,
+        companyId: resolvedCompanyId,
         metadata: metadata || {},
         installed: true,
       }).returning()

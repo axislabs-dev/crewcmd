@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
-import { requireAuth } from "@/lib/require-auth";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
-import { resolveRuntimeWorkspace } from "@/lib/workspace";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ callsign: string }> }
 ) {
+  const { requireAuth } = await import("@/lib/require-auth");
   const authError = await requireAuth(request);
   if (authError) return authError;
 
@@ -37,30 +36,18 @@ export async function POST(
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const workspace = await resolveRuntimeWorkspace({
-    ownerType: agent.ownerType,
-    ownerUserId: agent.ownerUserId ?? null,
-    ownerCompanyId: agent.ownerCompanyId ?? null,
-    companyId: agent.companyId ?? null,
-  });
-  if (!workspace) {
-    return NextResponse.json({ error: "Agent workspace not found" }, { status: 404 });
-  }
-
-  const companyId = workspace.companyId ?? agent.companyId ?? null;
   const agentId = agent.id;
 
   const assignments = await withRetry(() =>
     db!
-      .select({ skillId: agentSkills.skillId })
+      .select({
+        skillId: agentSkills.skillId,
+        workspaceId: skills.workspaceId,
+        companyId: skills.companyId,
+      })
       .from(agentSkills)
       .innerJoin(skills, eq(agentSkills.skillId, skills.id))
-      .where(
-        and(
-          eq(agentSkills.agentId, agentId),
-          eq(skills.workspaceId, workspace.id)
-        )
-      )
+      .where(eq(agentSkills.agentId, agentId))
   );
 
   const failed: Array<{ skillId: string; error: string }> = [];
@@ -68,12 +55,12 @@ export async function POST(
 
   for (const assignment of assignments) {
     try {
-      const result = await syncSkillToOpenClaw({
-        skillId: assignment.skillId,
-        agentId,
-        companyId,
-        workspaceId: workspace.id,
-      });
+        const result = await syncSkillToOpenClaw({
+          skillId: assignment.skillId,
+          agentId,
+          companyId: assignment.companyId ?? null,
+          workspaceId: assignment.workspaceId ?? null,
+        });
 
       if (result.success) {
         synced += 1;

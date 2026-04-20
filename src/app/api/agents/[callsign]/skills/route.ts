@@ -18,6 +18,22 @@ async function findAgent(callsign: string) {
   return dbAgents.find((a) => a.callsign.toLowerCase() === callsign.toLowerCase());
 }
 
+async function findSkill(skillId: string) {
+  const [skill] = await withRetry(() =>
+    db!
+      .select({
+        id: schema.skills.id,
+        workspaceId: schema.skills.workspaceId,
+        companyId: schema.skills.companyId,
+      })
+      .from(schema.skills)
+      .where(eq(schema.skills.id, skillId))
+      .limit(1)
+  );
+
+  return skill ?? null;
+}
+
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   if (!db) {
     return NextResponse.json([]);
@@ -75,6 +91,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "skillId is required" }, { status: 400 });
     }
 
+    const skill = await findSkill(skillId);
+    if (!skill) {
+      return NextResponse.json({ error: "Skill not found" }, { status: 404 });
+    }
+
     if (enabled !== undefined && typeof enabled !== "boolean") {
       return NextResponse.json({ error: "enabled must be a boolean when provided" }, { status: 400 });
     }
@@ -84,13 +105,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (config !== undefined) {
-      const workspace = await resolveRuntimeWorkspace({
+      const runtimeWorkspace = await resolveRuntimeWorkspace({
         ownerType: agent.ownerType,
         ownerUserId: agent.ownerUserId ?? null,
         ownerCompanyId: agent.ownerCompanyId ?? null,
         companyId: agent.companyId ?? null,
       });
-      const validation = await validateSkillConfigSecretRefs({ workspaceId: workspace?.id ?? null, companyId: workspace?.companyId ?? agent.companyId ?? null }, config);
+      const validation = await validateSkillConfigSecretRefs({
+        workspaceId: skill.workspaceId ?? runtimeWorkspace?.id ?? null,
+        companyId: skill.companyId ?? runtimeWorkspace?.companyId ?? agent.companyId ?? null,
+      }, config);
       if (!validation.ok) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }
@@ -107,20 +131,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     let sync: { ok: boolean; error?: string } | undefined;
     let secrets: { ok: boolean; error?: string } | undefined;
-    const runtimeWorkspace = await resolveRuntimeWorkspace({
-      ownerType: agent.ownerType,
-      ownerUserId: agent.ownerUserId ?? null,
-      ownerCompanyId: agent.ownerCompanyId ?? null,
-      companyId: agent.companyId ?? null,
-    });
+    const syncWorkspaceId = skill.workspaceId ?? null;
+    const syncCompanyId = skill.companyId ?? null;
 
-    if (runtimeWorkspace) {
+    if (syncWorkspaceId || syncCompanyId) {
       try {
         const result = await syncSkillToOpenClaw({
           skillId,
           agentId: agent.id,
-          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
-          workspaceId: runtimeWorkspace.id,
+          companyId: syncCompanyId,
+          workspaceId: syncWorkspaceId,
         });
         sync = result.success
           ? { ok: true }
@@ -134,13 +154,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Push secrets to gateway after the runtime files/config are in place.
-    if (runtimeWorkspace && agent.runtimeId) {
+    if ((syncWorkspaceId || syncCompanyId) && agent.runtimeId) {
       try {
         const result = await pushSecretsToGateway({
           skillId,
           agentId: agent.id,
-          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
-          workspaceId: runtimeWorkspace.id,
+          companyId: syncCompanyId,
+          workspaceId: syncWorkspaceId,
         });
         secrets = result.ok
           ? { ok: true }

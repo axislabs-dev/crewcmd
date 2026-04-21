@@ -4,7 +4,7 @@ import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
-import { resolveRuntimeWorkspace } from "@/lib/workspace";
+import { getAgentWorkspaceIds, resolveRuntimeWorkspace } from "@/lib/workspace";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
 
@@ -92,18 +92,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Skill not found" }, { status: 404 });
     }
 
-    if (agent.companyId !== skill.companyId) {
+    const skillWorkspaceId = skill.workspaceId ?? null;
+    const skillCompanyId = skill.companyId ?? null;
+    const agentWorkspaceIds = await getAgentWorkspaceIds(agent.id);
+
+    if (skillWorkspaceId && !agentWorkspaceIds.includes(skillWorkspaceId)) {
+      return NextResponse.json({ error: "Agent is not visible in this skill workspace" }, { status: 400 });
+    }
+
+    if (!skillWorkspaceId && agent.companyId !== skillCompanyId) {
       return NextResponse.json({ error: "Agent and skill belong to different companies" }, { status: 400 });
     }
 
     if (config !== undefined) {
-      const workspace = await resolveRuntimeWorkspace({
-        ownerType: agent.ownerType,
-        ownerUserId: agent.ownerUserId ?? null,
-        ownerCompanyId: agent.ownerCompanyId ?? null,
-        companyId: agent.companyId ?? null,
-      });
-      const validation = await validateSkillConfigSecretRefs({ workspaceId: workspace?.id ?? null, companyId: workspace?.companyId ?? agent.companyId ?? null }, config);
+      const validation = await validateSkillConfigSecretRefs({
+        workspaceId: skillWorkspaceId,
+        companyId: skillCompanyId,
+      }, config);
       if (!validation.ok) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }
@@ -126,19 +131,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let uninstall:
         | { ok: boolean; error?: string; warnings?: string[]; removedPaths?: string[]; removedConfigEntry?: boolean }
         | undefined;
-      const runtimeWorkspace = await resolveRuntimeWorkspace({
-        ownerType: agent.ownerType,
-        ownerUserId: agent.ownerUserId ?? null,
-        ownerCompanyId: agent.ownerCompanyId ?? null,
-        companyId: agent.companyId ?? null,
-      });
-      if (runtimeWorkspace) {
+      const runtimeWorkspace = skillWorkspaceId || skillCompanyId
+        ? { id: skillWorkspaceId, companyId: skillCompanyId }
+        : await resolveRuntimeWorkspace({
+            ownerType: agent.ownerType,
+            ownerUserId: agent.ownerUserId ?? null,
+            ownerCompanyId: agent.ownerCompanyId ?? null,
+            companyId: agent.companyId ?? null,
+          });
+      if (runtimeWorkspace?.id || runtimeWorkspace?.companyId) {
         try {
           const result = await uninstallSkillFromOpenClaw({
             skillId: id,
             agentId,
-            companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
-            workspaceId: runtimeWorkspace.id,
+            companyId: runtimeWorkspace.companyId ?? null,
+            workspaceId: runtimeWorkspace.id ?? null,
           });
           uninstall = result.success
             ? {
@@ -184,20 +191,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     let sync: { ok: boolean; error?: string } | undefined;
     let secrets: { ok: boolean; error?: string } | undefined;
-    const runtimeWorkspace = await resolveRuntimeWorkspace({
-      ownerType: agent.ownerType,
-      ownerUserId: agent.ownerUserId ?? null,
-      ownerCompanyId: agent.ownerCompanyId ?? null,
-      companyId: agent.companyId ?? null,
-    });
+    const runtimeWorkspace = skillWorkspaceId || skillCompanyId
+      ? { id: skillWorkspaceId, companyId: skillCompanyId }
+      : await resolveRuntimeWorkspace({
+          ownerType: agent.ownerType,
+          ownerUserId: agent.ownerUserId ?? null,
+          ownerCompanyId: agent.ownerCompanyId ?? null,
+          companyId: agent.companyId ?? null,
+        });
 
-    if (runtimeWorkspace) {
+    if (runtimeWorkspace?.id || runtimeWorkspace?.companyId) {
       try {
         const result = await syncSkillToOpenClaw({
           skillId: id,
           agentId,
-          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
-          workspaceId: runtimeWorkspace.id,
+          companyId: runtimeWorkspace.companyId ?? null,
+          workspaceId: runtimeWorkspace.id ?? null,
         });
         sync = result.success
           ? { ok: true }
@@ -210,13 +219,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (agent.runtimeId && runtimeWorkspace) {
+    if (agent.runtimeId && (runtimeWorkspace?.id || runtimeWorkspace?.companyId)) {
       try {
         const result = await pushSecretsToGateway({
           skillId: id,
           agentId,
-          companyId: runtimeWorkspace.companyId ?? agent.companyId ?? null,
-          workspaceId: runtimeWorkspace.id,
+          companyId: runtimeWorkspace.companyId ?? null,
+          workspaceId: runtimeWorkspace.id ?? null,
         });
         secrets = result.ok
           ? { ok: true }

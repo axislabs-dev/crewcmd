@@ -26,20 +26,33 @@ Attach the skill to an agent, then save config like:
 ```
 
 Optional fields:
-- `defaultCustomerId`
 - `defaultProjectId`
-- `allowedCustomerIds`
-- `defaultScope` (`v1`, `customer`, or `project`)
+- `allowedProjectIds`
+- `canPublish`
 
-## What this first pass does
+## Current workflow
 
 - makes EverContent installable/importable in CrewCmd
 - makes the service contract visible in skill metadata
 - supports per-agent scoped config
 - keeps publish permissions opt-in
+- supports live service actions for:
+  - `projects.list`
+  - `posts.list`
+  - `posts.get`
+  - `posts.create`
+  - `posts.update`
+  - `posts.generate`
+  - `posts.generateBulk`
+  - `posts.shareLink`
+  - `posts.publish`
 
-## Remaining runtime gap
+## Review-safe flow
 
-This first pass packages the skill cleanly, but it does not yet add a generic service-skill executor that turns actions like `posts.create` into live EverContent API calls from CrewCmd runtime.
+For review passes, the recommended agent flow is:
 
-That follow-up should stay generic so future SaaS skills can reuse it.
+1. `posts.get`
+2. `posts.update`
+3. `posts.shareLink`
+
+That gives the agent a stable draft edit path plus a preview URL it can hand back to a human reviewer.

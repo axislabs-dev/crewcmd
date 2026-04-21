@@ -107,7 +107,7 @@ describe("invokeServiceSkill", () => {
           metadata: {
             kind: "service-skill",
             service: "evercontent",
-            capabilities: ["posts:list", "posts:publish"],
+            capabilities: ["posts:list", "posts:update", "posts:shareLink", "posts:publish"],
           },
         },
       ]),
@@ -150,7 +150,7 @@ describe("invokeServiceSkill", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toEqual({ items: [{ id: "post_1" }] });
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://app.evercontent.io/api/v1/posts?projectId=project_456",
+      "https://app.evercontent.com/api/v1/posts?projectId=project_456",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: "Bearer secret_123" }),
       })
@@ -179,5 +179,52 @@ describe("invokeServiceSkill", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("Publishing is disabled");
+  });
+
+  it("updates a post through the v1 patch endpoint", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => "application/json" },
+      json: async () => ({ success: true, post: { id: "post_1" } }),
+    } as unknown as Response);
+
+    const result = await invokeServiceSkill({
+      agentCallsign: "cipher",
+      skillSlug: "evercontent",
+      action: "posts.update",
+      input: { postId: "post_1", title: "Revised", content: "# Revised body" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://app.evercontent.com/api/v1/posts/post_1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "Revised", content: "# Revised body" }),
+      })
+    );
+  });
+
+  it("creates or returns a share link for a draft", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => "application/json" },
+      json: async () => ({ success: true, shareLink: { publicUrl: "https://app.evercontent.io/preview/token" } }),
+    } as unknown as Response);
+
+    const result = await invokeServiceSkill({
+      agentCallsign: "cipher",
+      skillSlug: "evercontent",
+      action: "posts.shareLink",
+      input: { postId: "post_1" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://app.evercontent.com/api/v1/posts/post_1/share-link",
+      expect.objectContaining({
+        method: "POST",
+      })
+    );
   });
 });

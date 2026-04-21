@@ -55,7 +55,11 @@ async function resolveSecretScope(scope: { workspaceId?: string | null; companyI
         .limit(1)
     );
 
-    return { workspaceId: workspace?.id ?? workspaceId, companyId: workspace?.companyId ?? companyId };
+    if (workspace) {
+      return { workspaceId: workspace.id, companyId: workspace.companyId ?? null };
+    }
+
+    return { workspaceId, companyId };
   }
 
   return { workspaceId: null, companyId };

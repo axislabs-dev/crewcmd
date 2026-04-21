@@ -15,11 +15,11 @@ export const EVERCONTENT_SKILL_TEMPLATE: InstallableSkillTemplate = {
   description:
     "Create, review, and manage EverContent drafts with scoped project access and publish disabled by default.",
   source: "system",
-  version: "0.4.0",
+  version: "0.5.0",
   sourceUrl: "https://evercontent.co",
   content: `# EverContent Skill
 
-Use EverContent directly from OpenClaw via the external API-key surface to discover projects, inspect posts, create drafts, and publish only when explicitly enabled.
+Use EverContent directly from OpenClaw via the external API-key surface to discover projects, inspect posts, create drafts, update drafts for review passes, generate public preview links, and publish only when explicitly enabled.
 
 ## Runtime contract
 This is a native OpenClaw skill.
@@ -80,14 +80,18 @@ curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" -H "content-type: applic
 - \`posts.list\`
 - \`posts.get\`
 - \`posts.create\`
+- \`posts.update\`
 - \`posts.generate\`
 - \`posts.generateBulk\`
+- \`posts.shareLink\`
 - \`posts.publish\` (only when \`canPublish\` is \`true\`)
 
 ## When to use each operation
 - Use \`posts.create\` when the user already has the article copy and wants to save a draft directly.
+- Use \`posts.update\` when you need to revise an existing draft after a review pass. Fetch first with \`posts.get\`, then PATCH only the fields you are changing.
 - Use \`posts.generate\` when the user gives a keyword, title idea, brief, transcript, or content direction and wants EverContent to generate the draft internally.
 - Use \`posts.generateBulk\` when the user provides multiple keywords or article briefs and wants multiple generated drafts queued at once.
+- Use \`posts.shareLink\` when the user needs a public draft preview URL they can send to a reviewer or customer.
 - Use \`posts.publish\` only when the user explicitly asks to publish and \`canPublish\` is \`true\`.
 
 ## API patterns
@@ -109,6 +113,21 @@ Get a post:
 
 \`\`\`bash
 curl -s -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  "https://app.evercontent.io/api/v1/posts/POST_ID"
+\`\`\`
+
+Update a draft post:
+
+\`\`\`bash
+curl -s -X PATCH \\
+  -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "title": "Updated draft title",
+    "content": "# Updated content",
+    "excerpt": "Updated excerpt",
+    "status": "draft"
+  }' \\
   "https://app.evercontent.io/api/v1/posts/POST_ID"
 \`\`\`
 
@@ -168,6 +187,16 @@ curl -s -X POST \\
   "https://app.evercontent.io/api/v1/posts/generate-bulk"
 \`\`\`
 
+Get or create a public preview link for a draft:
+
+\`\`\`bash
+curl -s -X POST \\
+  -H "Authorization: Bearer $EVERCONTENT_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{}' \\
+  "https://app.evercontent.io/api/v1/posts/POST_ID/share-link"
+\`\`\`
+
 Publish a post:
 
 \`\`\`bash
@@ -188,6 +217,7 @@ curl -s -X POST \\
 ## Safety
 - Default to draft creation and review-safe behavior.
 - Prefer \`posts.generate\` or \`posts.generateBulk\` when the user wants EverContent to create the article body internally.
+- For review passes, use \`posts.get\` first, then \`posts.update\`, then \`posts.shareLink\` if the reviewer needs a draft URL.
 - Treat publish as privileged.
 - If \`canPublish\` is not \`true\`, refuse publish and explain that publishing is disabled.
 - Never print the API key in output.
@@ -195,6 +225,19 @@ curl -s -X POST \\
 `,
   metadata: {
     version: 1,
+    kind: "service-skill",
+    service: "evercontent",
+    capabilities: [
+      "projects:list",
+      "posts:list",
+      "posts:get",
+      "posts:create",
+      "posts:update",
+      "posts:generate",
+      "posts:generateBulk",
+      "posts:shareLink",
+      "posts:publish",
+    ],
     category: "content",
     icon: "📝",
     reviewSafeByDefault: true,

@@ -3,6 +3,7 @@ import type { ServiceSkillHandler } from "@/lib/service-skills";
 const EVERCONTENT_BASE_URL = "https://app.evercontent.io";
 
 interface EverContentConfig {
+  baseUrl?: string;
   defaultProjectId?: string;
   allowedProjectIds?: string[];
   canPublish?: boolean;
@@ -11,6 +12,7 @@ interface EverContentConfig {
 
 function asConfig(config: Record<string, unknown>): EverContentConfig {
   return {
+    baseUrl: typeof config.baseUrl === "string" && config.baseUrl.trim() ? config.baseUrl.trim() : undefined,
     defaultProjectId: typeof config.defaultProjectId === "string" ? config.defaultProjectId : undefined,
     allowedProjectIds: Array.isArray(config.allowedProjectIds)
       ? config.allowedProjectIds.filter((value): value is string => typeof value === "string")
@@ -46,8 +48,9 @@ async function request(
   init?: RequestInit
 ): Promise<unknown> {
   if (!config.__resolvedSecret) throw new Error("EverContent config.secretRef could not be resolved");
+  const baseUrl = config.baseUrl || EVERCONTENT_BASE_URL;
 
-  const response = await fetch(new URL(path, EVERCONTENT_BASE_URL).toString(), {
+  const response = await fetch(new URL(path, baseUrl).toString(), {
     ...init,
     headers: {
       "content-type": "application/json",
@@ -120,6 +123,73 @@ export const evercontentServiceSkillHandler: ServiceSkillHandler = {
         return request(config, "/api/v1/posts", {
           method: "POST",
           body: JSON.stringify(payload),
+        });
+      }
+
+      case "posts.update": {
+        const postId = requireString(input?.postId, "postId");
+        const payload: Record<string, unknown> = {};
+
+        if (typeof input?.title === "string") payload.title = input.title;
+        if (typeof input?.content === "string") payload.content = input.content;
+        if (typeof input?.contentMarkdown === "string") payload.content = input.contentMarkdown;
+        if (typeof input?.slug === "string") payload.slug = input.slug;
+        if (typeof input?.excerpt === "string") payload.excerpt = input.excerpt;
+        if (typeof input?.featuredImageUrl === "string") payload.featuredImageUrl = input.featuredImageUrl;
+        if (typeof input?.status === "string") payload.status = input.status;
+        if (typeof input?.topicId === "string") payload.topicId = input.topicId;
+        if (typeof input?.seoMeta === "object" && input?.seoMeta !== null) payload.seoMeta = input.seoMeta;
+
+        if (Object.keys(payload).length === 0) {
+          throw new Error("At least one field is required for posts.update");
+        }
+
+        return request(config, `/api/v1/posts/${encodeURIComponent(postId)}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      case "posts.generate": {
+        const projectId = resolveProjectId(input, config);
+        const primaryKeyword = requireString(input?.primaryKeyword, "primaryKeyword");
+
+        return request(config, "/api/v1/posts/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            projectId,
+            primaryKeyword,
+            title: typeof input?.title === "string" ? input.title : undefined,
+            targetAudience: typeof input?.targetAudience === "string" ? input.targetAudience : undefined,
+            industry: typeof input?.industry === "string" ? input.industry : undefined,
+            customInstructions: typeof input?.customInstructions === "string" ? input.customInstructions : undefined,
+            contentType: typeof input?.contentType === "string" ? input.contentType : undefined,
+            brief: typeof input?.brief === "string" ? input.brief : undefined,
+          }),
+        });
+      }
+
+      case "posts.generateBulk": {
+        const projectId = resolveProjectId(input, config);
+        const jobs = Array.isArray(input?.jobs) ? input.jobs : null;
+        if (!jobs || jobs.length === 0) {
+          throw new Error("jobs array is required");
+        }
+
+        return request(config, "/api/v1/posts/generate-bulk", {
+          method: "POST",
+          body: JSON.stringify({
+            projectId,
+            jobs,
+          }),
+        });
+      }
+
+      case "posts.shareLink": {
+        const postId = requireString(input?.postId, "postId");
+        return request(config, `/api/v1/posts/${encodeURIComponent(postId)}/share-link`, {
+          method: "POST",
+          body: JSON.stringify({}),
         });
       }
 

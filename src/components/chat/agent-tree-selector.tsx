@@ -17,15 +17,16 @@ interface AgentTreeSelectorProps {
   unreadCounts: Record<string, number>;
 }
 
-function buildTree(agents: Agent[]): AgentTreeNode[] {
-  const byCallsign = new Map<string, Agent>();
-  for (const a of agents) {
-    byCallsign.set(a.callsign.toLowerCase(), a);
-  }
+function compareAgents(a: Agent, b: Agent): number {
+  return a.callsign.localeCompare(b.callsign, undefined, { sensitivity: "base" });
+}
 
-  // Find children for a given agent
+function buildTree(agents: Agent[]): AgentTreeNode[] {
+  const sortedAgents = [...agents].sort(compareAgents);
+
+  // Find children for a given agent, with stable sibling order
   const childrenOf = (parentCallsign: string | null): Agent[] =>
-    agents.filter((a) => {
+    sortedAgents.filter((a) => {
       if (!parentCallsign) return !a.reportsTo;
       return a.reportsTo?.toLowerCase() === parentCallsign.toLowerCase();
     });
@@ -43,7 +44,7 @@ function buildTree(agents: Agent[]): AgentTreeNode[] {
   // If no roots found (all agents have reportsTo set to non-existent parents),
   // fall back to flat list
   if (roots.length === 0) {
-    return agents.map((agent) => ({ agent, depth: 0, children: [] }));
+    return sortedAgents.map((agent) => ({ agent, depth: 0, children: [] }));
   }
 
   return roots;
@@ -215,7 +216,8 @@ export function AgentTreeSelector({
  */
 export function findDefaultAgent(agents: Agent[]): Agent | null {
   if (agents.length === 0) return null;
-  return agents.find((a) => !a.reportsTo) || agents[0];
+  const sortedAgents = [...agents].sort(compareAgents);
+  return sortedAgents.find((a) => !a.reportsTo) || sortedAgents[0];
 }
 
 /**

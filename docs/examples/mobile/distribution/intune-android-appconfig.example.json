@@ -1,0 +1,9 @@
+{
+  "serverUrl": "https://crewcmd.acme.tailnet.ts.net",
+  "environmentLabel": "Production",
+  "profileId": "acme-prod",
+  "lockToSingleServer": true,
+  "tailscaleRequired": true,
+  "allowManualServerOverride": false,
+  "supportEmail": "it@acme.example"
+}

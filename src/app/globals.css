@@ -81,6 +81,10 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   overflow: hidden;
 }
 
+.voice-agent-reactor-immersive {
+  filter: saturate(1.08);
+}
+
 .voice-agent-reactor::before {
   content: "";
   position: absolute;
@@ -89,6 +93,31 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: radial-gradient(circle at center, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.16), rgba(8, 14, 20, 0.92) 62%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.voice-agent-aura {
+  position: absolute;
+  inset: 5%;
+  border-radius: 999px;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.voice-agent-aura-outer {
+  background:
+    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.16) 0%, transparent 56%),
+    conic-gradient(from 90deg, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.2), transparent 24%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.28), transparent 68%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.14));
+  filter: blur(24px);
+  animation: voice-agent-drift calc(14s - var(--voice-motion, 0) * 4s) ease-in-out infinite;
+}
+
+.voice-agent-aura-inner {
+  inset: 14%;
+  background:
+    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.22) 0%, transparent 52%),
+    radial-gradient(circle at 50% 62%, rgba(255, 255, 255, 0.08), transparent 40%);
+  filter: blur(16px);
+  animation: voice-agent-breathe calc(4.6s - var(--voice-motion, 0) * 1.4s) ease-in-out infinite;
 }
 
 .voice-agent-ring {
@@ -110,21 +139,25 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   box-shadow: 0 0 18px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.85);
 }
 
+.voice-agent-ring-immersive {
+  border-color: rgba(var(--voice-accent-rgb, 99, 183, 170), 0.16);
+}
+
 .voice-agent-ring-outer {
   inset: 0;
-  animation: voice-agent-spin 18s linear infinite;
+  animation: voice-agent-spin calc(24s - var(--voice-motion, 0) * 4s) linear infinite;
 }
 
 .voice-agent-ring-middle {
   inset: 11%;
   border-color: rgba(255, 255, 255, 0.1);
-  animation: voice-agent-spin-reverse 13s linear infinite;
+  animation: voice-agent-spin-reverse calc(17s - var(--voice-motion, 0) * 3s) linear infinite;
 }
 
 .voice-agent-ring-inner {
   inset: 22%;
   border-color: rgba(var(--voice-accent-rgb, 99, 183, 170), 0.22);
-  animation: voice-agent-breathe 4.2s ease-in-out infinite;
+  animation: voice-agent-breathe calc(4.2s - var(--voice-motion, 0) * 1.3s) ease-in-out infinite;
 }
 
 .voice-agent-grid {
@@ -139,9 +172,134 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 52%, transparent 75%);
 }
 
+.voice-agent-grid-immersive {
+  inset: 13%;
+  border-color: rgba(255, 255, 255, 0.06);
+  background-size: 14px 14px;
+  opacity: 0.7;
+}
+
 .voice-agent-core {
   z-index: 1;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.voice-agent-orbit-shell {
+  position: absolute;
+  inset: 9%;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--voice-accent-rgb, 99, 183, 170), 0.18);
+  box-shadow: inset 0 0 24px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.1);
+  transform: rotate(8deg);
+  animation: voice-agent-spin calc(30s - var(--voice-motion, 0) * 5s) linear infinite;
+}
+
+.voice-agent-orbit-shell-reverse {
+  inset: 17%;
+  opacity: 0.8;
+  transform: rotate(-14deg);
+  animation: voice-agent-spin-reverse calc(22s - var(--voice-motion, 0) * 4s) linear infinite;
+}
+
+.voice-agent-spectrum {
+  position: absolute;
+  inset: 18%;
+  border-radius: 999px;
+  border: 18px solid transparent;
+  border-top-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.16 + var(--voice-volume, 0) * 0.28));
+  border-bottom-color: rgba(192, 132, 252, calc(0.12 + var(--voice-volume, 0) * 0.18));
+  opacity: calc(0.58 + var(--voice-motion, 0) * 0.3);
+  filter: blur(0.2px);
+  animation: voice-agent-spin calc(11s - var(--voice-motion, 0) * 3s) linear infinite;
+}
+
+.voice-agent-spectrum-inner {
+  inset: 24%;
+  border-width: 10px;
+  border-top-color: rgba(255, 255, 255, calc(0.08 + var(--voice-volume, 0) * 0.14));
+  border-bottom-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.1 + var(--voice-volume, 0) * 0.2));
+  opacity: calc(0.42 + var(--voice-motion, 0) * 0.28);
+  animation: voice-agent-spin-reverse calc(8.5s - var(--voice-motion, 0) * 2.6s) linear infinite;
+}
+
+.voice-agent-particle-cloud {
+  position: absolute;
+  inset: 6%;
+  pointer-events: none;
+}
+
+.voice-agent-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: rgba(var(--voice-accent-rgb, 99, 183, 170), 0.9);
+  box-shadow: 0 0 12px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.7);
+  transform:
+    rotate(var(--particle-angle))
+    translateY(calc(-1 * var(--particle-radius)))
+    scale(calc(0.7 + var(--voice-volume, 0) * 0.45 + var(--voice-motion, 0) * 0.45));
+  opacity: calc(0.28 + var(--voice-volume, 0) * 0.35 + var(--voice-motion, 0) * 0.35);
+  animation: voice-agent-particle-orbit var(--particle-duration) ease-in-out infinite;
+  animation-delay: var(--particle-delay);
+}
+
+.voice-agent-orbital-core {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.voice-agent-core-grid,
+.voice-agent-core-lattice,
+.voice-agent-core-pulse,
+.voice-agent-core-highlight {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+}
+
+.voice-agent-core-grid {
+  inset: 14%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 65%, transparent 100%);
+}
+
+.voice-agent-core-lattice {
+  inset: 19%;
+  background:
+    repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 11px),
+    repeating-linear-gradient(-60deg, rgba(255, 255, 255, 0.14) 0 1px, transparent 1px 11px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.1) 0 1px, transparent 1px 11px);
+  opacity: 0.85;
+  mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 68%, transparent 95%);
+}
+
+.voice-agent-core-pulse {
+  inset: 27%;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 0 20px rgba(255, 255, 255, 0.12),
+    0 0 calc(48px + var(--voice-volume, 0) * 16px + var(--voice-motion, 0) * 36px) rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.24 + var(--voice-volume, 0) * 0.12 + var(--voice-motion, 0) * 0.16));
+  animation: voice-agent-breathe calc(3.8s - var(--voice-motion, 0) * 1.2s) ease-in-out infinite;
+}
+
+.voice-agent-core-highlight {
+  inset: 10%;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 50% 58%, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-volume, 0) * 0.18)), transparent 48%);
+  filter: blur(18px);
 }
 
 @keyframes voice-agent-spin {
@@ -157,4 +315,24 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 @keyframes voice-agent-breathe {
   0%, 100% { transform: scale(1); opacity: 0.7; }
   50% { transform: scale(1.035); opacity: 1; }
+}
+
+@keyframes voice-agent-drift {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.5; }
+  50% { transform: scale(1.06) rotate(12deg); opacity: 0.82; }
+}
+
+@keyframes voice-agent-particle-orbit {
+  0%, 100% {
+    transform:
+      rotate(var(--particle-angle))
+      translateY(calc(-1 * var(--particle-radius)))
+      scale(calc(0.72 + var(--voice-volume, 0) * 0.3 + var(--voice-motion, 0) * 0.32));
+  }
+  50% {
+    transform:
+      rotate(calc(var(--particle-angle) + 14deg))
+      translateY(calc(-1 * (var(--particle-radius) + 2% + var(--voice-motion, 0) * 5%)))
+      scale(calc(1 + var(--voice-volume, 0) * 0.4 + var(--voice-motion, 0) * 0.62));
+  }
 }

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1179 2556" role="img" aria-label="CrewCmd splash placeholder">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="42%">
+      <stop offset="0%" stop-color="#0EFBFF" stop-opacity="0.85" />
+      <stop offset="55%" stop-color="#0A7B83" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#020809" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1179" height="2556" fill="#010405" />
+  <circle cx="589.5" cy="1180" r="560" fill="url(#glow)" />
+  <circle cx="589.5" cy="1180" r="260" fill="none" stroke="#8AF5FF" stroke-width="12" opacity="0.9" />
+  <circle cx="589.5" cy="1180" r="178" fill="none" stroke="#F7B500" stroke-width="10" opacity="0.85" />
+  <circle cx="589.5" cy="1180" r="84" fill="#F6FFFE" />
+  <text x="589.5" y="1620" text-anchor="middle" fill="#C9F8FA" font-size="74" font-family="Helvetica, Arial, sans-serif" letter-spacing="10">
+    CREWCMD
+  </text>
+</svg>

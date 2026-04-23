@@ -1,0 +1,43 @@
+{
+  "$schema": "./org.mobile.schema.json",
+  "app": {
+    "slug": "acme-crewcmd",
+    "displayName": "Acme CrewCmd",
+    "iosBundleId": "com.acme.crewcmd",
+    "androidApplicationId": "com.acme.crewcmd"
+  },
+  "branding": {
+    "orgName": "Acme Robotics",
+    "profileId": "acme-prod",
+    "primaryColor": "#0A7B83",
+    "secondaryColor": "#F7B500",
+    "iconPath": "./branding/icon.svg",
+    "splashPath": "./branding/splash.svg"
+  },
+  "distribution": {
+    "channel": "private-enterprise",
+    "ios": {
+      "teamName": "Acme Robotics IT",
+      "distributionNote": "Use Apple Business Manager Custom App or MDM for employee-only rollout."
+    },
+    "android": {
+      "distributionNote": "Use Managed Google Play private app or MDM-managed APK deployment."
+    },
+    "managedMetadataLabel": "Acme CrewCmd Mobile"
+  },
+  "server": {
+    "defaultBaseUrl": "https://crewcmd.acme.tailnet.ts.net",
+    "bootstrapMode": "qr-or-url",
+    "lockToSingleServer": true,
+    "tailscaleRequired": true
+  },
+  "deepLinks": {
+    "scheme": "crewcmd",
+    "host": "mobile"
+  },
+  "managedConfig": {
+    "allowManualServerOverride": false,
+    "supportEmail": "it@acme.example",
+    "environmentLabel": "Production"
+  }
+}

@@ -6,6 +6,7 @@ These files define the contract for self-distributed CrewCmd mobile builds.
 - `org.mobile.schema.json`: JSON schema for branding manifests.
 - `bootstrap-payload.example.json`: example first-run bootstrap payload that can be encoded into a QR code or deep link.
 - `branding/`: placeholder icon and splash assets that make the example manifest validate out of the box.
+- `distribution/`: private distribution checklists and managed-app-config examples for enterprise rollout.
 
 Validate a manifest:
 

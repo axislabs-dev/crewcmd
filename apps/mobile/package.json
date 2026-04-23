@@ -4,7 +4,7 @@
   "private": true,
   "description": "CrewCmd mobile shell for self-hosted and enterprise distribution.",
   "scripts": {
-    "brand": "node scripts/apply-branding.mjs ../../docs/examples/mobile/org.mobile.example.json",
+    "brand": "CREWCMD_MOBILE_MANIFEST=../../docs/examples/mobile/org.mobile.example.json node scripts/apply-branding.mjs",
     "brand:manifest": "node scripts/apply-branding.mjs",
     "check": "node scripts/check-web-assets.mjs",
     "copy": "npx cap copy",

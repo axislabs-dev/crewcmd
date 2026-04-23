@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [, , manifestArg] = process.argv;
+const [, , manifestArgFromCli] = process.argv;
+const manifestArg = manifestArgFromCli || process.env.CREWCMD_MOBILE_MANIFEST;
+const outputDirName = process.env.CREWCMD_MOBILE_OUTPUT_DIR || ".generated";
 
 if (!manifestArg) {
   console.error("Usage: node scripts/apply-branding.mjs <path-to-org.mobile.json>");
@@ -18,13 +20,17 @@ if (!fs.existsSync(manifestPath)) {
 }
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-const generatedDir = path.join(appDir, ".generated");
+const generatedDir = path.join(appDir, outputDirName);
 fs.mkdirSync(generatedDir, { recursive: true });
+const channel = process.env.CREWCMD_MOBILE_CHANNEL || manifest.distribution.channel;
 
 const runtimeConfig = {
   app: manifest.app,
   branding: manifest.branding,
-  distribution: manifest.distribution,
+  distribution: {
+    ...manifest.distribution,
+    channel
+  },
   server: manifest.server,
   deepLinks: manifest.deepLinks,
   managedConfig: manifest.managedConfig,
@@ -68,6 +74,7 @@ Display name: ${manifest.app.displayName}
 iOS bundle ID: ${manifest.app.iosBundleId}
 Android application ID: ${manifest.app.androidApplicationId}
 Managed label: ${manifest.distribution.managedMetadataLabel}
+Build channel: ${channel}
 Default server URL: ${manifest.server.defaultBaseUrl}
 Bootstrap mode: ${manifest.server.bootstrapMode}
 Manual server override allowed: ${manifest.managedConfig.allowManualServerOverride ? "yes" : "no"}

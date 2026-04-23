@@ -98,6 +98,7 @@ export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [stats, setStats] = useState<InboxStats | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [actionedMap, setActionedMap] = useState<Record<string, string>>({});
@@ -240,12 +241,23 @@ export default function InboxPage() {
     return true;
   });
 
-  // Auto-select first message
+  // Keep selection aligned with the current filter set.
   useEffect(() => {
+    if (selectedId && !filteredMessages.some((message) => message.id === selectedId)) {
+      setSelectedId(filteredMessages[0]?.id ?? null);
+      setMobileDetailOpen(false);
+      return;
+    }
+
     if (!selectedId && filteredMessages.length > 0) {
       setSelectedId(filteredMessages[0].id);
     }
   }, [filteredMessages, selectedId]);
+
+  function openMessage(messageId: string) {
+    setSelectedId(messageId);
+    setMobileDetailOpen(true);
+  }
 
   // ── Render ──────────────────────────────────────────────────────────
 
@@ -278,7 +290,7 @@ export default function InboxPage() {
         {/* ── Header ───────────────────────────────────────────────── */}
         <div className="mb-4 space-y-3">
           {/* Title + stats bar */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--text-primary)]">
                 INBOX
@@ -292,7 +304,7 @@ export default function InboxPage() {
 
             {/* Stats counters */}
             {stats && stats.total > 0 && (
-              <div className="hidden items-center gap-4 font-mono text-[11px] tracking-wider sm:flex">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] tracking-wider sm:justify-end">
                 {stats.byPriority.critical > 0 && (
                   <span className="flex items-center gap-1.5 text-red-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]" />
@@ -316,13 +328,17 @@ export default function InboxPage() {
           </div>
 
           {/* Filter pills */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <div className="flex min-w-max items-center gap-2 pb-1">
             {/* Type filters */}
             <div className="flex items-center gap-1">
               {typeFilters.map((f) => (
                 <button
                   key={f.value}
-                  onClick={() => setTypeFilter(f.value)}
+                  onClick={() => {
+                    setTypeFilter(f.value);
+                    setMobileDetailOpen(false);
+                  }}
                   className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-wider transition-colors ${
                     typeFilter === f.value
                       ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30"
@@ -341,7 +357,10 @@ export default function InboxPage() {
               {priorityFilters.map((f) => (
                 <button
                   key={f.value}
-                  onClick={() => setPriorityFilter(f.value)}
+                  onClick={() => {
+                    setPriorityFilter(f.value);
+                    setMobileDetailOpen(false);
+                  }}
                   className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-wider transition-colors ${
                     priorityFilter === f.value
                       ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30"
@@ -360,7 +379,11 @@ export default function InboxPage() {
               {statusFilters.map((f) => (
                 <button
                   key={f.value}
-                  onClick={() => { setStatusFilter(f.value); setSelectedId(null); }}
+                  onClick={() => {
+                    setStatusFilter(f.value);
+                    setSelectedId(null);
+                    setMobileDetailOpen(false);
+                  }}
                   className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-wider transition-colors ${
                     statusFilter === f.value
                       ? "bg-[#00f0ff]/15 text-[#00f0ff] border border-[#00f0ff]/30"
@@ -370,6 +393,7 @@ export default function InboxPage() {
                   {f.label}
                 </button>
               ))}
+            </div>
             </div>
           </div>
         </div>
@@ -402,11 +426,11 @@ export default function InboxPage() {
 
         {/* ── Split panel ──────────────────────────────────────────── */}
         {!loading && filteredMessages.length > 0 && (
-          <div className="flex gap-0 overflow-hidden rounded-lg border border-[var(--border-subtle)]" style={{ height: "calc(100vh - 220px)" }}>
+          <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)] md:flex md:h-[calc(100vh-220px)]">
             {/* ── Message List (left) ─────────────────────────────── */}
             <div
               ref={listRef}
-              className="w-[450px] min-w-[320px] flex-shrink-0 overflow-y-auto border-r border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+              className={`${mobileDetailOpen ? "hidden md:block" : "block"} w-full overflow-y-auto border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] md:w-[420px] md:min-w-[320px] md:flex-shrink-0 md:border-b-0 md:border-r`}
             >
               {filteredMessages.map((msg) => {
                 const isSelected = msg.id === selectedId;
@@ -416,7 +440,7 @@ export default function InboxPage() {
                 return (
                   <button
                     key={msg.id}
-                    onClick={() => setSelectedId(msg.id)}
+                    onClick={() => openMessage(msg.id)}
                     className={`w-full text-left border-l-[3px] border-b border-b-[var(--border-subtle)] px-3 py-3 transition-colors ${
                       PRIORITY_BORDER[msg.priority]
                     } ${
@@ -458,20 +482,32 @@ export default function InboxPage() {
             </div>
 
             {/* ── Detail Panel (right) ────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto bg-[var(--bg-primary)] p-6">
+            <div className={`${mobileDetailOpen ? "block" : "hidden"} bg-[var(--bg-primary)] p-4 sm:p-6 md:block md:flex-1 md:overflow-y-auto`}>
               {!selected ? (
-                <div className="flex h-full items-center justify-center">
+                <div className="flex min-h-[40vh] items-center justify-center md:h-full md:min-h-0">
                   <p className="text-sm text-[var(--text-tertiary)]">Select a message</p>
                 </div>
               ) : (
                 <div className="space-y-5">
                   {/* Header */}
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center justify-between gap-3 md:hidden">
+                      <button
+                        onClick={() => setMobileDetailOpen(false)}
+                        className="inline-flex items-center gap-1 rounded-md border border-[var(--border-medium)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-[11px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <span aria-hidden="true">←</span>
+                        Inbox
+                      </button>
+                      <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                        {new Date(selected.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <AgentTag callsign={selected.fromAgentId} />
                       <TypeBadge type={selected.type} />
                       <PriorityBadge priority={selected.priority} />
-                      <span className="ml-auto font-mono text-[11px] text-[var(--text-tertiary)]">
+                      <span className="hidden font-mono text-[11px] text-[var(--text-tertiary)] md:ml-auto md:inline">
                         {new Date(selected.createdAt).toLocaleString()}
                       </span>
                     </div>
@@ -489,7 +525,7 @@ export default function InboxPage() {
 
                   {/* Context links */}
                   {selected.context && (
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       {selected.context.taskId && (
                         <a
                           href={`/tasks`}
@@ -599,7 +635,7 @@ export default function InboxPage() {
                   )}
 
                   {/* Keyboard hints */}
-                  <div className="flex items-center gap-4 border-t border-[var(--border-subtle)] pt-3">
+                  <div className="hidden items-center gap-4 border-t border-[var(--border-subtle)] pt-3 md:flex">
                     <span className="font-mono text-[10px] text-[var(--text-tertiary)] tracking-wider">
                       <kbd className="rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1 py-0.5 text-[9px]">&uarr;</kbd>
                       <kbd className="ml-0.5 rounded border border-[var(--border-medium)] bg-[var(--bg-surface)] px-1 py-0.5 text-[9px]">&darr;</kbd>

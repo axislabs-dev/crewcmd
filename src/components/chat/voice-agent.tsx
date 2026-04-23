@@ -12,6 +12,8 @@ interface VoiceAgentProps {
   onInterrupt: () => void;
   isLoading: boolean;
   accentColor?: string;
+  autoActivate?: boolean;
+  immersive?: boolean;
 }
 
 function hexToRgb(hex: string): string {
@@ -23,6 +25,10 @@ function hexToRgb(hex: string): string {
   const b = value & 255;
   return `${r}, ${g}, ${b}`;
 }
+
+const LISTENING_COLOR = "#fbbf24";
+const SPEAKING_COLOR = "#60a5fa";
+const PROCESSING_COLOR = "#fbbf24";
 
 // VAD configuration
 const SILENCE_THRESHOLD = 0.015; // RMS threshold for "silence"
@@ -38,6 +44,8 @@ export function VoiceAgent({
   onInterrupt,
   isLoading,
   accentColor = "#63b7aa",
+  autoActivate = false,
+  immersive = false,
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -50,6 +58,7 @@ export function VoiceAgent({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const rafRef = useRef<number>(0);
+  const hasAutoActivatedRef = useRef(false);
 
   // VAD timing refs
   const speechStartTimeRef = useRef<number>(0);
@@ -365,6 +374,12 @@ export function VoiceAgent({
     };
   }, [isActive, runVAD]);
 
+  useEffect(() => {
+    if (!autoActivate || isActive || hasAutoActivatedRef.current) return;
+    hasAutoActivatedRef.current = true;
+    void activate();
+  }, [activate, autoActivate, isActive]);
+
   // Update state based on external signals
   useEffect(() => {
     if (!isActive) return;
@@ -390,18 +405,54 @@ export function VoiceAgent({
   };
 
   const accentRgb = hexToRgb(accentColor);
+  const listeningRgb = hexToRgb(LISTENING_COLOR);
+  const speakingRgb = hexToRgb(SPEAKING_COLOR);
+  const processingRgb = hexToRgb(PROCESSING_COLOR);
+  const activeColor =
+    state === "listening"
+      ? LISTENING_COLOR
+      : state === "speaking"
+        ? SPEAKING_COLOR
+        : state === "processing"
+          ? PROCESSING_COLOR
+          : accentColor;
+  const activeRgb =
+    state === "listening"
+      ? listeningRgb
+      : state === "speaking"
+        ? speakingRgb
+        : state === "processing"
+          ? processingRgb
+          : accentRgb;
   const stateColor =
     state === "listening"
-      ? accentColor
+      ? LISTENING_COLOR
       : state === "processing"
-        ? "#fbbf24"
+        ? PROCESSING_COLOR
         : state === "speaking"
-          ? "#c084fc"
+          ? SPEAKING_COLOR
           : "var(--text-tertiary)";
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
+  const particleCount = immersive ? 36 : 0;
+  const motionLevel =
+    state === "speaking"
+      ? Math.min(1, 0.35 + volumeLevel * 1.25)
+      : state === "listening"
+        ? volumeLevel
+        : state === "processing"
+          ? Math.min(1, 0.22 + volumeLevel * 0.45)
+          : 0;
+  const haloSize = immersive ? 285 + motionLevel * 75 : 170 + motionLevel * 90;
+  const orbScale = immersive
+    ? 1.22 + motionLevel * (state === "speaking" ? 0.06 : 0.045)
+    : 1 + motionLevel * 0.06;
+  const listeningActive = isActive && state === "listening";
+  const speakingActive = isActive && state === "speaking";
+  const thinkingActive = isActive && state === "processing";
+  const showCompactStatus = !immersive;
 
   return (
-    <div className="flex w-full flex-col items-center gap-5 py-3">
+    <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : "gap-5 py-3"}`}>
       {error && (
         <div className="w-full max-w-sm rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-center text-[11px] text-red-400">
           {error}
@@ -410,48 +461,77 @@ export function VoiceAgent({
 
       <button
         onClick={isActive ? deactivate : activate}
-        className="voice-agent-reactor relative flex h-[18rem] w-[18rem] max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] sm:h-[20rem] sm:w-[20rem]"
+        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${immersive ? "voice-agent-reactor-immersive h-[30rem] w-[30rem] sm:h-[36rem] sm:w-[36rem]" : "h-[18rem] w-[18rem] sm:h-[20rem] sm:w-[20rem]"}`}
         style={
           {
-            "--voice-accent-rgb": accentRgb,
+            "--voice-accent-rgb": activeRgb,
+            "--voice-volume": `${volumeLevel}`,
+            "--voice-motion": `${motionLevel}`,
           } as CSSProperties
         }
       >
+        {immersive ? (
+          <>
+            <div className="voice-agent-aura voice-agent-aura-outer" />
+            <div className="voice-agent-aura voice-agent-aura-inner" />
+            <div className="voice-agent-orbit-shell" />
+            <div className="voice-agent-orbit-shell voice-agent-orbit-shell-reverse" />
+            <div className="voice-agent-spectrum" />
+            <div className="voice-agent-spectrum voice-agent-spectrum-inner" />
+            <div className="voice-agent-particle-cloud">
+              {Array.from({ length: particleCount }).map((_, i) => (
+                <span
+                  key={i}
+                  className="voice-agent-particle"
+                  style={
+                    {
+                      "--particle-angle": `${(360 / particleCount) * i}deg`,
+                      "--particle-delay": `${(i % 12) * 0.18}s`,
+                      "--particle-duration": `${6 + (i % 5) * 0.7}s`,
+                      "--particle-radius": `${47 + (i % 7) * 1.5}%`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
+
         <div
-          className="absolute inset-[8%] rounded-full blur-3xl transition-all duration-500"
+          className={`absolute rounded-full blur-3xl transition-all duration-500 ${immersive ? "inset-[2%]" : "inset-[8%]"}`}
           style={{
             background:
               state === "speaking"
-                ? `radial-gradient(circle, rgba(192,132,252,${0.18 + volumeLevel * 0.18}) 0%, transparent 68%)`
+                ? `radial-gradient(circle, rgba(${speakingRgb},${0.24 + motionLevel * 0.24}) 0%, transparent 68%)`
                 : state === "processing"
-                  ? "radial-gradient(circle, rgba(251,191,36,0.18) 0%, transparent 68%)"
-                  : `radial-gradient(circle, rgba(${accentRgb}, ${glowStrength}) 0%, transparent 68%)`,
+                  ? `radial-gradient(circle, rgba(${processingRgb},0.18) 0%, transparent 68%)`
+                  : `radial-gradient(circle, rgba(${activeRgb}, ${glowStrength}) 0%, transparent 68%)`,
           }}
         />
 
-        <div className="voice-agent-ring voice-agent-ring-outer" />
-        <div className="voice-agent-ring voice-agent-ring-middle" />
-        <div className="voice-agent-ring voice-agent-ring-inner" />
-        <div className="voice-agent-grid" />
+        <div className={`voice-agent-ring voice-agent-ring-outer ${immersive ? "voice-agent-ring-immersive" : ""}`} />
+        <div className={`voice-agent-ring voice-agent-ring-middle ${immersive ? "voice-agent-ring-immersive" : ""}`} />
+        <div className={`voice-agent-ring voice-agent-ring-inner ${immersive ? "voice-agent-ring-immersive" : ""}`} />
+        <div className={`voice-agent-grid ${immersive ? "voice-agent-grid-immersive" : ""}`} />
 
         <div
           className={`absolute rounded-full transition-all duration-500 ${isActive ? "opacity-100" : "opacity-0"}`}
           style={{
-            width: `${170 + volumeLevel * 90}px`,
-            height: `${170 + volumeLevel * 90}px`,
+            width: `${haloSize}px`,
+            height: `${haloSize}px`,
             background:
               state === "listening"
-                ? `radial-gradient(circle, rgba(${accentRgb}, ${0.11 + volumeLevel * 0.16}) 0%, transparent 70%)`
+                ? `radial-gradient(circle, rgba(${listeningRgb}, ${0.11 + volumeLevel * 0.16}) 0%, transparent 70%)`
                 : state === "speaking"
-                  ? `radial-gradient(circle, rgba(167, 139, 250, ${0.08 + volumeLevel * 0.15}) 0%, transparent 70%)`
+                  ? `radial-gradient(circle, rgba(${speakingRgb}, ${0.14 + motionLevel * 0.22}) 0%, transparent 70%)`
                 : state === "processing"
-                    ? `radial-gradient(circle, rgba(251, 191, 36, 0.08) 0%, transparent 70%)`
+                    ? `radial-gradient(circle, rgba(${processingRgb}, 0.08) 0%, transparent 70%)`
                     : "none",
           }}
         />
 
         <div
-          className={`voice-agent-core relative flex h-34 w-34 items-center justify-center rounded-full border transition-all duration-300 sm:h-40 sm:w-40 ${
+          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${immersive ? "h-56 w-56 sm:h-72 sm:w-72" : "h-34 w-34 sm:h-40 sm:w-40"} ${
             state === "idle"
               ? "cursor-pointer border-[var(--border-medium)]"
               : state === "listening"
@@ -463,28 +543,37 @@ export function VoiceAgent({
           style={
             state === "listening"
               ? {
-                  borderColor: `rgba(${accentRgb}, ${0.48 + volumeLevel * 0.2})`,
-                  background: `radial-gradient(circle, rgba(${accentRgb}, 0.24), rgba(10, 20, 29, 0.92) 72%)`,
-                  boxShadow: `0 0 ${24 + volumeLevel * 34}px rgba(${accentRgb}, ${0.2 + volumeLevel * 0.28})`,
-                  transform: `scale(${1 + volumeLevel * 0.06})`,
+                  borderColor: `rgba(${listeningRgb}, ${0.48 + volumeLevel * 0.2})`,
+                  background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), rgba(10, 20, 29, 0.92) 72%)`,
+                  boxShadow: `0 0 ${24 + volumeLevel * 34}px rgba(${listeningRgb}, ${0.2 + volumeLevel * 0.28})`,
+                  transform: `scale(${orbScale})`,
                 }
               : state === "speaking"
                 ? {
-                    background: "radial-gradient(circle, rgba(192,132,252,0.24), rgba(16, 11, 29, 0.92) 72%)",
+                    borderColor: `rgba(${speakingRgb}, 0.55)`,
+                    background: `radial-gradient(circle, rgba(${speakingRgb},0.24), rgba(10, 14, 30, 0.92) 72%)`,
                     boxShadow:
-                      "0 0 30px rgba(167, 139, 250, 0.25), 0 0 60px rgba(167, 139, 250, 0.1)",
+                      `0 0 ${34 + motionLevel * 24}px rgba(${speakingRgb}, ${0.25 + motionLevel * 0.1}), 0 0 ${64 + motionLevel * 42}px rgba(${speakingRgb}, ${0.1 + motionLevel * 0.08})`,
+                    transform: `scale(${orbScale})`,
                   }
                 : state === "processing"
                   ? {
-                      background: "radial-gradient(circle, rgba(251,191,36,0.2), rgba(28, 21, 7, 0.94) 72%)",
-                      boxShadow: "0 0 20px rgba(251, 191, 36, 0.15)",
+                      background: `radial-gradient(circle, rgba(${processingRgb},0.2), rgba(28, 21, 7, 0.94) 72%)`,
+                      boxShadow: `0 0 20px rgba(${processingRgb}, 0.15)`,
                     }
                   : {
                       background: "radial-gradient(circle, rgba(255,255,255,0.08), rgba(12, 17, 23, 0.92) 72%)",
                     }
           }
         >
-          {state === "idle" ? (
+          {immersive ? (
+            <div className="voice-agent-orbital-core">
+              <div className="voice-agent-core-grid" />
+              <div className="voice-agent-core-lattice" />
+              <div className="voice-agent-core-pulse" />
+              <div className="voice-agent-core-highlight" />
+            </div>
+          ) : state === "idle" ? (
             <svg
               className="h-10 w-10 text-[var(--text-tertiary)] sm:h-12 sm:w-12"
               fill="none"
@@ -504,7 +593,7 @@ export function VoiceAgent({
                 className="h-10 w-10 sm:h-12 sm:w-12"
                 fill="none"
                 viewBox="0 0 24 24"
-                stroke={accentColor}
+                stroke={LISTENING_COLOR}
                 strokeWidth={1.5}
               >
                 <path
@@ -516,7 +605,7 @@ export function VoiceAgent({
               {isRecordingRef.current && (
                 <span
                   className="absolute inset-0 rounded-full border animate-ping"
-                  style={{ borderColor: `rgba(${accentRgb}, 0.45)` }}
+                  style={{ borderColor: `rgba(${listeningRgb}, 0.45)` }}
                 />
               )}
             </>
@@ -534,10 +623,10 @@ export function VoiceAgent({
             </div>
           ) : (
             <svg
-              className="h-10 w-10 text-violet-300 sm:h-12 sm:w-12"
+              className="h-10 w-10 sm:h-12 sm:w-12"
               fill="none"
               viewBox="0 0 24 24"
-              stroke="currentColor"
+              stroke={SPEAKING_COLOR}
               strokeWidth={1.5}
             >
               <path
@@ -550,31 +639,59 @@ export function VoiceAgent({
         </div>
       </button>
 
-      <div className="flex flex-col items-center gap-2">
-        <span
-          className="rounded-full border px-4 py-1.5 text-[11px] font-medium tracking-[0.28em] transition-colors duration-300"
-          style={{
-            color: stateColor,
-            borderColor: state === "idle" ? "var(--border-medium)" : `color-mix(in srgb, ${stateColor} 32%, transparent)`,
-            backgroundColor: state === "idle" ? "var(--bg-surface)" : `color-mix(in srgb, ${stateColor} 10%, transparent)`,
-          }}
-        >
-          {stateLabel[state]}
-        </span>
-        {isActive && (
-          <span className="text-center text-[11px] tracking-[0.16em] text-[var(--text-tertiary)]">
-            {state === "speaking"
-              ? "SPEAK TO INTERRUPT"
-              : state === "listening"
-                ? "SPEAK NATURALLY"
-                : state === "processing"
-                  ? "HOLD FOR A RESPONSE"
-                : ""}
+      {showCompactStatus ? (
+        <div className="flex flex-col items-center gap-2">
+          <span
+            className="rounded-full border px-4 py-1.5 text-[11px] font-medium tracking-[0.28em] transition-colors duration-300"
+            style={{
+              color: stateColor,
+              borderColor: state === "idle" ? "var(--border-medium)" : `color-mix(in srgb, ${stateColor} 32%, transparent)`,
+              backgroundColor: state === "idle" ? "var(--bg-surface)" : `color-mix(in srgb, ${stateColor} 10%, transparent)`,
+            }}
+          >
+            {stateLabel[state]}
           </span>
-        )}
-      </div>
+          {isActive && (
+            <span className="text-center text-[11px] tracking-[0.16em] text-[var(--text-tertiary)]">
+              {state === "speaking"
+                ? "SPEAK TO INTERRUPT"
+                : state === "listening"
+                  ? "SPEAK NATURALLY"
+                  : state === "processing"
+                    ? "HOLD FOR A RESPONSE"
+                  : ""}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-slate-300 backdrop-blur-xl">
+          <span className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 rounded-full transition-all ${listeningActive ? "animate-pulse" : ""}`}
+              style={{
+                backgroundColor: LISTENING_COLOR,
+                boxShadow: listeningActive ? `0 0 14px rgba(${listeningRgb}, 0.9)` : "none",
+                opacity: listeningActive ? 1 : 0.35,
+              }}
+            />
+            Mic
+          </span>
+          <span className="h-4 w-px bg-white/10" />
+          <span className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 rounded-full transition-all ${speakingActive ? "animate-pulse" : ""}`}
+              style={{
+                backgroundColor: SPEAKING_COLOR,
+                boxShadow: speakingActive ? `0 0 14px rgba(${speakingRgb},0.9)` : "none",
+                opacity: speakingActive ? 1 : thinkingActive ? 0.7 : 0.35,
+              }}
+            />
+            Agent
+          </span>
+        </div>
+      )}
 
-      {isActive && (
+      {isActive && !immersive && (
         <div className="flex h-12 items-end gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-4 py-2">
           {Array.from({ length: 24 }).map((_, i) => (
             <div
@@ -590,11 +707,11 @@ export function VoiceAgent({
                 )}px`,
                 backgroundColor:
                   state === "listening"
-                    ? accentColor
+                    ? LISTENING_COLOR
                     : state === "speaking"
-                      ? "#c084fc"
+                      ? SPEAKING_COLOR
                       : state === "processing"
-                        ? "#fbbf24"
+                        ? PROCESSING_COLOR
                         : "var(--text-tertiary)",
                 opacity:
                   i / 24 < volumeLevel

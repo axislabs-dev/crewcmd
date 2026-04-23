@@ -1,0 +1,18 @@
+{
+  "displayName": "Acme CrewCmd",
+  "orgName": "Acme Robotics",
+  "profileId": "acme-prod",
+  "primaryColor": "#0A7B83",
+  "secondaryColor": "#F7B500",
+  "defaultBaseUrl": "https://crewcmd.acme.tailnet.ts.net",
+  "bootstrapMode": "qr-or-url",
+  "lockToSingleServer": true,
+  "tailscaleRequired": true,
+  "allowManualServerOverride": false,
+  "supportEmail": "it@acme.example",
+  "environmentLabel": "Production",
+  "deepLinkScheme": "crewcmd",
+  "deepLinkHost": "mobile",
+  "iconPath": "../../../docs/examples/mobile/branding/icon.svg",
+  "splashPath": "../../../docs/examples/mobile/branding/splash.svg"
+}

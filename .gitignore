@@ -51,3 +51,10 @@ next-env.d.ts
 .data/
 certificates.pglite/
 .pglite/
+
+# mobile app artifacts
+/apps/mobile/node_modules
+/apps/mobile/dist
+/apps/mobile/.generated
+/apps/mobile/android
+/apps/mobile/ios

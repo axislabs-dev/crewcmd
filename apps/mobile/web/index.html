@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>CrewCmd Mobile</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="ambient ambient-a"></div>
+      <div class="ambient ambient-b"></div>
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">CrewCmd Mobile</p>
+          <h1 id="app-name">Connect to your self-hosted CrewCmd</h1>
+          <p id="app-subtitle" class="subtitle">
+            Bootstrap once, keep the deployment pinned, and hand off auth to the existing CrewCmd web flow.
+          </p>
+        </div>
+        <div class="orb-frame">
+          <div class="orb-core"></div>
+          <div class="orb-ring orb-ring-a"></div>
+          <div class="orb-ring orb-ring-b"></div>
+          <div class="orb-ring orb-ring-c"></div>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="panel status-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-label">Deployment</p>
+              <h2 id="org-name">Not configured</h2>
+            </div>
+            <span id="environment-chip" class="chip">Unconfigured</span>
+          </div>
+          <dl class="detail-grid">
+            <div>
+              <dt>Server</dt>
+              <dd id="server-url">No server selected</dd>
+            </div>
+            <div>
+              <dt>Profile</dt>
+              <dd id="profile-id">Not configured</dd>
+            </div>
+            <div>
+              <dt>Reachability</dt>
+              <dd id="network-hint">Waiting for bootstrap</dd>
+            </div>
+          </dl>
+          <div class="cta-row">
+            <button id="open-crewcmd" class="primary-button" type="button">Open CrewCmd</button>
+            <button id="test-connection" class="secondary-button" type="button">Test connection</button>
+          </div>
+          <p id="connection-status" class="status-line">Bootstrap the app with a QR payload or config link to begin.</p>
+        </section>
+
+        <section class="panel bootstrap-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-label">Bootstrap</p>
+              <h2>QR or signed link</h2>
+            </div>
+            <span id="lock-chip" class="chip chip-outline">Multi-server</span>
+          </div>
+          <p class="body-copy">
+            Open a `crewcmd://bootstrap?...` link from QR, MDM, email, or intranet. The payload pins the app to your self-hosted deployment and theme profile.
+          </p>
+          <label class="field">
+            <span>Paste bootstrap deep link or JSON payload</span>
+            <textarea id="bootstrap-input" rows="4" placeholder="crewcmd://bootstrap?payload=..."></textarea>
+          </label>
+          <div class="cta-row">
+            <button id="apply-bootstrap" class="primary-button" type="button">Apply bootstrap</button>
+            <button id="clear-bootstrap" class="ghost-button" type="button">Clear</button>
+          </div>
+        </section>
+
+        <section id="manual-panel" class="panel manual-panel hidden">
+          <div class="panel-header">
+            <div>
+              <p class="panel-label">Admin override</p>
+              <h2>Manual server URL</h2>
+            </div>
+          </div>
+          <label class="field">
+            <span>Server URL</span>
+            <input id="manual-server-input" type="url" placeholder="https://crewcmd.example.internal" />
+          </label>
+          <button id="apply-manual-server" class="secondary-button" type="button">Save override</button>
+        </section>
+
+        <section class="panel footer-panel">
+          <div class="footer-grid">
+            <div>
+              <p class="panel-label">Mobile features</p>
+              <ul class="feature-list">
+                <li>Chat and voice mode</li>
+                <li>Push and deep-link entry points</li>
+                <li>Secure local config storage</li>
+                <li>Tailscale-friendly deployment bootstrap</li>
+              </ul>
+            </div>
+            <div>
+              <p class="panel-label">Support</p>
+              <p id="support-line" class="body-copy">Contact your CrewCmd administrator.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

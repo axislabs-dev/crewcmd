@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useOrientationLock } from "@/hooks/use-orientation-lock";
 
@@ -10,6 +11,17 @@ interface VoiceAgentProps {
   isPlayingAudio: boolean;
   onInterrupt: () => void;
   isLoading: boolean;
+  accentColor?: string;
+}
+
+function hexToRgb(hex: string): string {
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return "99,183,170";
+  const value = parseInt(normalized, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `${r}, ${g}, ${b}`;
 }
 
 // VAD configuration
@@ -25,6 +37,7 @@ export function VoiceAgent({
   isPlayingAudio,
   onInterrupt,
   isLoading,
+  accentColor = "#63b7aa",
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -376,72 +389,104 @@ export function VoiceAgent({
     speaking: "SPEAKING",
   };
 
+  const accentRgb = hexToRgb(accentColor);
+  const stateColor =
+    state === "listening"
+      ? accentColor
+      : state === "processing"
+        ? "#fbbf24"
+        : state === "speaking"
+          ? "#c084fc"
+          : "var(--text-tertiary)";
+  const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
+
   return (
-    <div className="flex flex-col items-center gap-4 py-4 landscape:gap-2 landscape:py-2">
+    <div className="flex w-full flex-col items-center gap-5 py-3">
       {error && (
-        <div className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-400">
+        <div className="w-full max-w-sm rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-center text-[11px] text-red-400">
           {error}
         </div>
       )}
 
-      {/* Agent orb */}
       <button
         onClick={isActive ? deactivate : activate}
-        className="relative flex items-center justify-center select-none"
+        className="voice-agent-reactor relative flex h-[18rem] w-[18rem] max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] sm:h-[20rem] sm:w-[20rem]"
+        style={
+          {
+            "--voice-accent-rgb": accentRgb,
+          } as CSSProperties
+        }
       >
-        {/* Outer glow ring */}
         <div
-          className={`absolute rounded-full transition-all duration-500 landscape:scale-[0.55] ${
-            isActive ? "opacity-100" : "opacity-0"
-          }`}
+          className="absolute inset-[8%] rounded-full blur-3xl transition-all duration-500"
           style={{
-            width: `${100 + volumeLevel * 40}px`,
-            height: `${100 + volumeLevel * 40}px`,
+            background:
+              state === "speaking"
+                ? `radial-gradient(circle, rgba(192,132,252,${0.18 + volumeLevel * 0.18}) 0%, transparent 68%)`
+                : state === "processing"
+                  ? "radial-gradient(circle, rgba(251,191,36,0.18) 0%, transparent 68%)"
+                  : `radial-gradient(circle, rgba(${accentRgb}, ${glowStrength}) 0%, transparent 68%)`,
+          }}
+        />
+
+        <div className="voice-agent-ring voice-agent-ring-outer" />
+        <div className="voice-agent-ring voice-agent-ring-middle" />
+        <div className="voice-agent-ring voice-agent-ring-inner" />
+        <div className="voice-agent-grid" />
+
+        <div
+          className={`absolute rounded-full transition-all duration-500 ${isActive ? "opacity-100" : "opacity-0"}`}
+          style={{
+            width: `${170 + volumeLevel * 90}px`,
+            height: `${170 + volumeLevel * 90}px`,
             background:
               state === "listening"
-                ? `radial-gradient(circle, rgba(0, 240, 255, ${0.08 + volumeLevel * 0.15}) 0%, transparent 70%)`
+                ? `radial-gradient(circle, rgba(${accentRgb}, ${0.11 + volumeLevel * 0.16}) 0%, transparent 70%)`
                 : state === "speaking"
                   ? `radial-gradient(circle, rgba(167, 139, 250, ${0.08 + volumeLevel * 0.15}) 0%, transparent 70%)`
-                  : state === "processing"
+                : state === "processing"
                     ? `radial-gradient(circle, rgba(251, 191, 36, 0.08) 0%, transparent 70%)`
                     : "none",
           }}
         />
 
-        {/* Main orb */}
         <div
-          className={`relative flex h-20 w-20 landscape:h-12 landscape:w-12 items-center justify-center rounded-full border-2 transition-all duration-300 ${
+          className={`voice-agent-core relative flex h-34 w-34 items-center justify-center rounded-full border transition-all duration-300 sm:h-40 sm:w-40 ${
             state === "idle"
-              ? "border-[var(--text-tertiary)] bg-[var(--bg-surface-hover)] hover:border-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] cursor-pointer"
+              ? "cursor-pointer border-[var(--border-medium)]"
               : state === "listening"
-                ? "border-neo bg-neo/15 cursor-pointer"
+                ? "cursor-pointer"
                 : state === "processing"
-                  ? "border-amber-400/50 bg-amber-400/10 cursor-pointer"
-                  : "border-violet-400/50 bg-violet-400/10 cursor-pointer"
+                  ? "cursor-pointer border-amber-400/40"
+                  : "cursor-pointer border-violet-400/40"
           }`}
           style={
             state === "listening"
               ? {
-                  boxShadow: `0 0 ${20 + volumeLevel * 30}px rgba(0, 240, 255, ${0.2 + volumeLevel * 0.3})`,
-                  transform: `scale(${1 + volumeLevel * 0.08})`,
+                  borderColor: `rgba(${accentRgb}, ${0.48 + volumeLevel * 0.2})`,
+                  background: `radial-gradient(circle, rgba(${accentRgb}, 0.24), rgba(10, 20, 29, 0.92) 72%)`,
+                  boxShadow: `0 0 ${24 + volumeLevel * 34}px rgba(${accentRgb}, ${0.2 + volumeLevel * 0.28})`,
+                  transform: `scale(${1 + volumeLevel * 0.06})`,
                 }
               : state === "speaking"
                 ? {
+                    background: "radial-gradient(circle, rgba(192,132,252,0.24), rgba(16, 11, 29, 0.92) 72%)",
                     boxShadow:
                       "0 0 30px rgba(167, 139, 250, 0.25), 0 0 60px rgba(167, 139, 250, 0.1)",
                   }
                 : state === "processing"
                   ? {
+                      background: "radial-gradient(circle, rgba(251,191,36,0.2), rgba(28, 21, 7, 0.94) 72%)",
                       boxShadow: "0 0 20px rgba(251, 191, 36, 0.15)",
                     }
-                  : undefined
+                  : {
+                      background: "radial-gradient(circle, rgba(255,255,255,0.08), rgba(12, 17, 23, 0.92) 72%)",
+                    }
           }
         >
-          {/* Icon based on state */}
           {state === "idle" ? (
-            // Power icon
             <svg
-              className="h-8 w-8 landscape:h-5 landscape:w-5 text-[var(--text-tertiary)]"
+              className="h-10 w-10 text-[var(--text-tertiary)] sm:h-12 sm:w-12"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -454,13 +499,12 @@ export function VoiceAgent({
               />
             </svg>
           ) : state === "listening" ? (
-            // Mic icon with pulse
             <>
               <svg
-                className="h-8 w-8 landscape:h-5 landscape:w-5 text-neo"
+                className="h-10 w-10 sm:h-12 sm:w-12"
                 fill="none"
                 viewBox="0 0 24 24"
-                stroke="currentColor"
+                stroke={accentColor}
                 strokeWidth={1.5}
               >
                 <path
@@ -470,11 +514,13 @@ export function VoiceAgent({
                 />
               </svg>
               {isRecordingRef.current && (
-                <span className="absolute inset-0 rounded-full border-2 border-neo/40 animate-ping" />
+                <span
+                  className="absolute inset-0 rounded-full border animate-ping"
+                  style={{ borderColor: `rgba(${accentRgb}, 0.45)` }}
+                />
               )}
             </>
           ) : state === "processing" ? (
-            // Thinking spinner
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-amber-400/60 animate-pulse" />
               <span
@@ -487,9 +533,8 @@ export function VoiceAgent({
               />
             </div>
           ) : (
-            // Speaker icon for speaking
             <svg
-              className="h-8 w-8 landscape:h-5 landscape:w-5 text-violet-400"
+              className="h-10 w-10 text-violet-300 sm:h-12 sm:w-12"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -505,63 +550,61 @@ export function VoiceAgent({
         </div>
       </button>
 
-      {/* State label */}
-      <div className="flex flex-col items-center gap-1 landscape:gap-0.5">
+      <div className="flex flex-col items-center gap-2">
         <span
-          className={`text-[11px] landscape:text-[9px] tracking-[0.2em] font-medium transition-colors duration-300 ${
-            state === "idle"
-              ? "text-[var(--text-tertiary)]"
-              : state === "listening"
-                ? "text-[var(--accent)]"
-                : state === "processing"
-                  ? "text-amber-400"
-                  : "text-violet-400"
-          }`}
+          className="rounded-full border px-4 py-1.5 text-[11px] font-medium tracking-[0.28em] transition-colors duration-300"
+          style={{
+            color: stateColor,
+            borderColor: state === "idle" ? "var(--border-medium)" : `color-mix(in srgb, ${stateColor} 32%, transparent)`,
+            backgroundColor: state === "idle" ? "var(--bg-surface)" : `color-mix(in srgb, ${stateColor} 10%, transparent)`,
+          }}
         >
           {stateLabel[state]}
         </span>
         {isActive && (
-          <span className="text-[9px] tracking-wider text-[var(--text-tertiary)]">
+          <span className="text-center text-[11px] tracking-[0.16em] text-[var(--text-tertiary)]">
             {state === "speaking"
               ? "SPEAK TO INTERRUPT"
               : state === "listening"
                 ? "SPEAK NATURALLY"
+                : state === "processing"
+                  ? "HOLD FOR A RESPONSE"
                 : ""}
           </span>
         )}
       </div>
 
-      {/* Volume meter */}
       {isActive && (
-        <div className="flex items-center gap-[2px] h-4 landscape:h-3">
-          {Array.from({ length: 20 }).map((_, i) => (
+        <div className="flex h-12 items-end gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-4 py-2">
+          {Array.from({ length: 24 }).map((_, i) => (
             <div
               key={i}
-              className={`w-[3px] rounded-full transition-all duration-75 ${
-                state === "listening"
-                  ? "bg-[var(--accent)]"
-                  : state === "speaking"
-                    ? "bg-violet-400"
-                    : "bg-[var(--text-tertiary)]"
-              }`}
+              className="w-[4px] rounded-full transition-all duration-75"
               style={{
                 height: `${Math.max(
-                  2,
+                  4,
                   Math.min(
-                    16,
-                    volumeLevel * 16 * (0.5 + Math.random() * 0.5)
+                    28,
+                    volumeLevel * 28 * (0.45 + Math.random() * 0.65)
                   )
                 )}px`,
+                backgroundColor:
+                  state === "listening"
+                    ? accentColor
+                    : state === "speaking"
+                      ? "#c084fc"
+                      : state === "processing"
+                        ? "#fbbf24"
+                        : "var(--text-tertiary)",
                 opacity:
-                  i / 20 < volumeLevel
+                  i / 24 < volumeLevel
                     ? 0.3 + volumeLevel * 0.7
-                    : 0.1,
+                    : 0.14,
               }}
             />
           ))}
         </div>
       )}
-
     </div>
   );
 }

@@ -40,15 +40,6 @@ const navSections = [
           </svg>
         ),
       },
-      {
-        href: "/jarvis",
-        label: "Jarvis Mode",
-        icon: (
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75c-1.657 0-3 1.343-3 3v1.125a3 3 0 0 1-1.318 2.49l-.907.604A3 3 0 0 0 5.25 13.47v1.78a3 3 0 0 0 1.525 2.622l.907.604A3 3 0 0 1 9 20.965V21.75m3-18c1.657 0 3 1.343 3 3v1.125a3 3 0 0 0 1.318 2.49l.907.604a3 3 0 0 1 1.525 2.622v1.78a3 3 0 0 1-1.525 2.622l-.907.604A3 3 0 0 0 15 20.965V21.75M9 9.75h6m-7.5 4.5h9" />
-          </svg>
-        ),
-      },
     ],
   },
   {

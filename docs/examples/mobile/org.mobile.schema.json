@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CrewCmd Mobile Branding Manifest",
+  "type": "object",
+  "required": [
+    "app",
+    "branding",
+    "distribution",
+    "server",
+    "deepLinks",
+    "managedConfig"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "app": {
+      "type": "object",
+      "required": [
+        "slug",
+        "displayName",
+        "iosBundleId",
+        "androidApplicationId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "iosBundleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z0-9-]+)+$"
+        },
+        "androidApplicationId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$"
+        }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "required": [
+        "orgName",
+        "profileId",
+        "primaryColor",
+        "secondaryColor",
+        "iconPath",
+        "splashPath"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "orgName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profileId": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "primaryColor": {
+          "type": "string",
+          "pattern": "^#[A-Fa-f0-9]{6}$"
+        },
+        "secondaryColor": {
+          "type": "string",
+          "pattern": "^#[A-Fa-f0-9]{6}$"
+        },
+        "iconPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "splashPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "required": [
+        "channel",
+        "ios",
+        "android",
+        "managedMetadataLabel"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "private-enterprise",
+            "private-beta"
+          ]
+        },
+        "ios": {
+          "type": "object",
+          "required": [
+            "teamName",
+            "distributionNote"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "teamName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "distributionNote": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "android": {
+          "type": "object",
+          "required": [
+            "distributionNote"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "distributionNote": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "managedMetadataLabel": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "server": {
+      "type": "object",
+      "required": [
+        "defaultBaseUrl",
+        "bootstrapMode",
+        "lockToSingleServer",
+        "tailscaleRequired"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "defaultBaseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "bootstrapMode": {
+          "type": "string",
+          "enum": [
+            "qr-or-url",
+            "url-only"
+          ]
+        },
+        "lockToSingleServer": {
+          "type": "boolean"
+        },
+        "tailscaleRequired": {
+          "type": "boolean"
+        }
+      }
+    },
+    "deepLinks": {
+      "type": "object",
+      "required": [
+        "scheme",
+        "host"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "scheme": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*$"
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "managedConfig": {
+      "type": "object",
+      "required": [
+        "allowManualServerOverride",
+        "supportEmail",
+        "environmentLabel"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allowManualServerOverride": {
+          "type": "boolean"
+        },
+        "supportEmail": {
+          "type": "string",
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+        },
+        "environmentLabel": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

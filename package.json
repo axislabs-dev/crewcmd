@@ -21,6 +21,8 @@
     "start": "next start",
     "lint": "eslint . --fix",
     "typecheck": "tsc --noEmit",
+    "mobile:validate-branding": "node scripts/mobile/validate-mobile-branding.mjs",
+    "mobile:bootstrap-url": "node scripts/mobile/build-bootstrap-url.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "orgName": "Acme Robotics",
+  "profileId": "acme-prod",
+  "serverUrl": "https://crewcmd.acme.tailnet.ts.net",
+  "environmentLabel": "Production",
+  "lockToSingleServer": true,
+  "tailscaleRequired": true,
+  "branding": {
+    "displayName": "Acme CrewCmd",
+    "primaryColor": "#0A7B83",
+    "secondaryColor": "#F7B500"
+  },
+  "support": {
+    "email": "it@acme.example"
+  }
+}

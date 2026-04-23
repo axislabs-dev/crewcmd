@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Manrope, JetBrains_Mono } from "next/font/google";
-import { Sidebar } from "@/components/sidebar";
 import { Providers } from "@/components/providers";
+import { AppShell } from "@/components/app-shell";
 import "@xyflow/react/dist/style.css";
 import "./globals.css";
 
@@ -50,12 +50,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         <Providers>
-          <div className="grid-bg scanlines min-h-screen">
-            <Sidebar />
-            <main className="pt-16 lg:pl-[272px] lg:pt-0">
-              {children}
-            </main>
-          </div>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

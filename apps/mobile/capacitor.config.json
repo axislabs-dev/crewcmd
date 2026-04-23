@@ -1,0 +1,20 @@
+{
+  "appId": "dev.axislabs.crewcmd.mobile",
+  "appName": "CrewCmd Mobile",
+  "webDir": "web",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#020405",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#020405"
+    }
+  }
+}

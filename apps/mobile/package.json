@@ -1,0 +1,27 @@
+{
+  "name": "@crewcmd/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CrewCmd mobile shell for self-hosted and enterprise distribution.",
+  "scripts": {
+    "brand": "node scripts/apply-branding.mjs ../../docs/examples/mobile/org.mobile.example.json",
+    "brand:manifest": "node scripts/apply-branding.mjs",
+    "check": "node scripts/check-web-assets.mjs",
+    "copy": "npx cap copy",
+    "sync": "npx cap sync",
+    "open:ios": "npx cap open ios",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/browser": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/haptics": "^7.0.2",
+    "@capacitor/ios": "^7.4.3",
+    "@capacitor/preferences": "^7.0.2",
+    "@capacitor/push-notifications": "^7.0.2",
+    "@capacitor/splash-screen": "^7.0.2",
+    "@capacitor/status-bar": "^7.0.2"
+  }
+}

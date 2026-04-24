@@ -1338,11 +1338,7 @@ export default function ChatPage() {
           className="fixed inset-0 z-50 overflow-hidden"
           style={{
             color: "var(--text-primary)",
-            background: [
-              "radial-gradient(circle at top, var(--accent-soft), transparent 24%)",
-              "radial-gradient(circle at bottom, color-mix(in srgb, var(--info) 10%, transparent), transparent 28%)",
-              "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 98%, transparent), color-mix(in srgb, var(--bg-secondary) 96%, transparent))",
-            ].join(", "),
+            background: "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))",
           }}
         >
           <div

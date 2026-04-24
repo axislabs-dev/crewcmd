@@ -17,6 +17,7 @@ import { networkInterfaces } from "node:os";
 import { mkdirSync, readFileSync, existsSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 const certDir = join(process.cwd(), ".data", "certs");
 mkdirSync(certDir, { recursive: true });
@@ -25,10 +26,41 @@ const keyPath = join(certDir, "dev-key.pem");
 const certPath = join(certDir, "dev-cert.pem");
 const hashFile = join(certDir, ".ip-hash");
 
+function tryReadHostname(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function getManifestHostnames() {
+  const hostnames = new Set();
+  const manifestPath = process.env.CREWCMD_MOBILE_MANIFEST
+    ? path.resolve(process.cwd(), process.env.CREWCMD_MOBILE_MANIFEST)
+    : join(process.cwd(), "docs", "examples", "mobile", "org.mobile.local.json");
+
+  if (!existsSync(manifestPath)) {
+    return [];
+  }
+
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const hostname = tryReadHostname(manifest?.server?.defaultBaseUrl);
+    if (hostname) hostnames.add(hostname);
+  } catch {
+    // Ignore malformed local manifests during startup.
+  }
+
+  return [...hostnames];
+}
+
 // ---------------------------------------------------------------------------
-// 1. Collect all IPv4 addresses (LAN, Tailscale, loopback)
+// 1. Collect all IPv4 addresses plus configured DNS hostnames
 // ---------------------------------------------------------------------------
 const ips = new Set(["127.0.0.1"]);
+const hostnames = new Set(["localhost"]);
 const ifaces = networkInterfaces();
 for (const addrs of Object.values(ifaces)) {
   if (!addrs) continue;
@@ -36,7 +68,18 @@ for (const addrs of Object.values(ifaces)) {
     if (addr.family === "IPv4") ips.add(addr.address);
   }
 }
+
+for (const hostname of [
+  tryReadHostname(process.env.NEXT_PUBLIC_APP_URL),
+  tryReadHostname(process.env.NEXTAUTH_URL),
+  tryReadHostname(process.env.CREWCMD_BASE_URL),
+  ...getManifestHostnames(),
+]) {
+  if (hostname) hostnames.add(hostname);
+}
+
 const ipList = [...ips];
+const hostnameList = [...hostnames];
 
 // ---------------------------------------------------------------------------
 // 2. Generate cert if needed (missing, IPs changed, or >30 days old)
@@ -45,15 +88,24 @@ function needsRegen() {
   if (!existsSync(keyPath) || !existsSync(certPath)) return true;
   const age = Date.now() - statSync(certPath).mtimeMs;
   if (age > 30 * 24 * 60 * 60 * 1000) return true;
-  const ipHash = createHash("sha256").update(ipList.sort().join(",")).digest("hex").slice(0, 16);
+  const endpointHash = createHash("sha256")
+    .update([...ipList].sort().join(","))
+    .update("|")
+    .update([...hostnameList].sort().join(","))
+    .digest("hex")
+    .slice(0, 16);
   if (!existsSync(hashFile)) return true;
-  return readFileSync(hashFile, "utf8").trim() !== ipHash;
+  return readFileSync(hashFile, "utf8").trim() !== endpointHash;
 }
 
 if (needsRegen()) {
-  const san = ["DNS:localhost", ...ipList.map((ip) => `IP:${ip}`)].join(",");
+  const san = [...hostnameList.map((hostname) => `DNS:${hostname}`), ...ipList.map((ip) => `IP:${ip}`)].join(",");
   const displayIps = ipList.filter((ip) => ip !== "127.0.0.1").join(", ");
-  console.log(`\n🔐 Generating HTTPS cert for: localhost${displayIps ? ", " + displayIps : ""}\n`);
+  const displayHosts = hostnameList.filter((hostname) => hostname !== "localhost").join(", ");
+  const displayParts = ["localhost"];
+  if (displayIps) displayParts.push(displayIps);
+  if (displayHosts) displayParts.push(displayHosts);
+  console.log(`\n🔐 Generating HTTPS cert for: ${displayParts.join(", ")}\n`);
 
   try {
     execSync(
@@ -74,11 +126,16 @@ if (needsRegen()) {
     process.exit(1);
   }
 
-  const ipHash = createHash("sha256").update(ipList.sort().join(",")).digest("hex").slice(0, 16);
-  writeFileSync(hashFile, ipHash);
+  const endpointHash = createHash("sha256")
+    .update([...ipList].sort().join(","))
+    .update("|")
+    .update([...hostnameList].sort().join(","))
+    .digest("hex")
+    .slice(0, 16);
+  writeFileSync(hashFile, endpointHash);
   console.log("✅ Certificate ready\n");
 } else {
-  console.log("\n🔐 Existing certificate is valid (IPs unchanged)\n");
+  console.log("\n🔐 Existing certificate is valid (IPs/hostnames unchanged)\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +214,10 @@ proxy.on("upgrade", (req, clientSocket, head) => {
 
 proxy.listen(publicPort, "0.0.0.0", () => {
   console.log("\n🔒 HTTPS proxy ready — access from any device:\n");
+  for (const hostname of hostnameList) {
+    if (hostname === "localhost") continue;
+    console.log(`  https://${hostname}:${publicPort}`);
+  }
   for (const ip of ipList) {
     if (ip === "127.0.0.1") continue;
     console.log(`  https://${ip}:${publicPort}`);

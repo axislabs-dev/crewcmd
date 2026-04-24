@@ -1451,7 +1451,7 @@ export default function ChatPage() {
       )}
 
       {/* Input area — Claude-style layout */}
-      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-3 pt-2 sm:px-4 lg:px-6 transition-opacity ${isPaused ? "opacity-60" : ""}`}>
+      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 transition-opacity ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           {/* Hidden file inputs */}
           <input
@@ -1620,7 +1620,7 @@ export default function ChatPage() {
                     title="Send message"
                     style={
                       !isLoading
-                        ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.25)" }
+                        ? { boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }
                         : undefined
                     }
                   >

@@ -90,9 +90,15 @@ export function AgentTreeSelector({
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono font-bold tracking-wider transition-all hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
         style={{ color: agentColor }}
+        aria-label={`Select active chat agent. Current agent: ${selectedAgent?.callsign ?? "MAIN"}`}
       >
         <span>{agentEmoji}</span>
-        <span>{agentCallsign}</span>
+        <span className="flex min-w-0 flex-col items-start leading-none">
+          <span>{agentCallsign}</span>
+          <span className="max-w-28 truncate text-[10px] font-normal tracking-normal text-[var(--text-tertiary)] sm:hidden">
+            {selectedAgent?.title || selectedAgent?.name || "Select agent"}
+          </span>
+        </span>
         <svg
           className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"

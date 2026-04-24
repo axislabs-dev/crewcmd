@@ -50,6 +50,8 @@ interface Message {
 type VoiceMode = "off" | "agent";
 type AgentOverlayMode = "transcript" | "immersive";
 
+const ACTIVE_CHAT_TARGET_STORAGE_KEY = "crewcmd.chat.active-target";
+
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
   "",
@@ -193,17 +195,66 @@ export default function ChatPage() {
           ? data
           : data.agents || [];
         setAgents(fetched);
-        // Default to team lead (top-level agent)
-        const defaultAgent = findDefaultAgent(fetched);
-        if (defaultAgent) {
-          setSelectedAgent(defaultAgent);
-        }
       } catch {
         // Agents unavailable
       }
     }
     fetchAgents();
   }, []);
+
+  const restoredChatTargetRef = useRef(false);
+
+  useEffect(() => {
+    if (agents.length === 0 || restoredChatTargetRef.current) return;
+
+    restoredChatTargetRef.current = true;
+
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_CHAT_TARGET_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          agentCallsign?: string;
+          sessionKey?: string | null;
+        };
+        const persistedAgent = parsed.agentCallsign
+          ? agents.find(
+              (agent) =>
+                agent.callsign.toLowerCase() === parsed.agentCallsign?.toLowerCase()
+            ) ?? null
+          : null;
+
+        if (persistedAgent) {
+          setSelectedAgent(persistedAgent);
+          selectSession(parsed.sessionKey ?? null);
+          return;
+        }
+      }
+    } catch {
+      // Ignore invalid persisted selection
+    }
+
+    const defaultAgent = findDefaultAgent(agents);
+    if (defaultAgent) {
+      setSelectedAgent(defaultAgent);
+      selectSession(null);
+    }
+  }, [agents, selectSession]);
+
+  useEffect(() => {
+    if (!selectedAgent) return;
+
+    try {
+      window.localStorage.setItem(
+        ACTIVE_CHAT_TARGET_STORAGE_KEY,
+        JSON.stringify({
+          agentCallsign: selectedAgent.callsign,
+          sessionKey: selectedSessionKey ?? null,
+        })
+      );
+    } catch {
+      // Storage unavailable
+    }
+  }, [selectedAgent, selectedSessionKey]);
 
   // Load configurable stop words from system settings
   useEffect(() => {

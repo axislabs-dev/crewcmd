@@ -290,7 +290,7 @@ export function Sidebar() {
           className="pointer-events-none absolute inset-x-0 top-0"
           style={{
             height: "calc(env(safe-area-inset-top) + 1rem)",
-            background: "linear-gradient(180deg, var(--status-shelf), color-mix(in srgb, var(--status-shelf) 70%, transparent) 55%, transparent 100%)",
+            background: "var(--status-shelf)",
           }}
         />
         <div className="relative flex items-center justify-between px-4 pb-3 pt-[max(0.875rem,env(safe-area-inset-top))]">
@@ -319,7 +319,7 @@ export function Sidebar() {
           className="pointer-events-none absolute inset-x-0 top-0"
           style={{
             height: "calc(env(safe-area-inset-top) + 1rem)",
-            background: "linear-gradient(180deg, var(--status-shelf), color-mix(in srgb, var(--status-shelf) 70%, transparent) 55%, transparent 100%)",
+            background: "var(--status-shelf)",
           }}
         />
         <div className="relative flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface-strong)_84%,var(--bg-primary)_16%)] px-5 py-4 backdrop-blur-xl">

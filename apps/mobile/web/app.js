@@ -6,6 +6,7 @@ const state = {
   bootstrap: null,
   connectionStatus: "Bootstrap the app with a QR payload or config link to begin.",
   autoOpened: false,
+  lastOpenTarget: "",
 };
 
 const elements = {};
@@ -178,6 +179,14 @@ function setStatus(message, isError = false) {
   elements.connectionStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
+function setOutageState(message = "", visible = false) {
+  if (!elements.outagePanel || !elements.outageMessage) return;
+  elements.outagePanel.classList.toggle("hidden", !visible);
+  if (message) {
+    elements.outageMessage.textContent = message;
+  }
+}
+
 function applyThemeColors(source) {
   if (!source) return;
   document.documentElement.style.setProperty("--accent", source.primaryColor);
@@ -235,6 +244,40 @@ function getActiveServerUrl() {
   return state.bootstrap?.serverUrl || state.brand?.defaultBaseUrl || "";
 }
 
+async function probeServer(serverUrl, timeoutMs = 3500) {
+  if (typeof navigator !== "undefined" && "onLine" in navigator && !navigator.onLine) {
+    throw new Error("This device appears to be offline.");
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${serverUrl}/api/health`, {
+      method: "GET",
+      mode: "cors",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Connection timed out.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function buildUnavailableMessage(targetUrl, error) {
+  const detail = error?.message || "Unknown connection failure.";
+  return `CrewCmd could not be reached at ${targetUrl}. ${detail} Check that the server is online, trusted on this device, and reachable from this network.`;
+}
+
 function shouldAutoOpenCrewCmd() {
   const bootstrap = state.bootstrap;
   const brand = state.brand;
@@ -257,19 +300,19 @@ async function openCrewCmd() {
   }
 
   const targetUrl = `${serverUrl}/chat`;
+  state.lastOpenTarget = targetUrl;
 
   try {
+    setOutageState("", false);
+    setStatus(`Checking ${targetUrl}`, false);
+    await probeServer(serverUrl);
     setStatus(`Opening ${targetUrl}`, false);
-    setTimeout(() => {
-      if (window.location.href.startsWith("capacitor://localhost")) {
-        showShell();
-        setStatus(`Unable to open ${targetUrl}. Check that the deployment is reachable and trusted on this device.`, true);
-      }
-    }, 1500);
     window.location.replace(targetUrl);
   } catch (error) {
     showShell();
-    setStatus(`Unable to open CrewCmd: ${error.message}`, true);
+    const message = buildUnavailableMessage(targetUrl, error);
+    setOutageState(message, true);
+    setStatus(message, true);
   }
 }
 
@@ -353,6 +396,20 @@ function bindEvents() {
     openCrewCmd().catch((error) => setStatus(error.message, true));
   });
 
+  elements.retryOpen.addEventListener("click", () => {
+    openCrewCmd().catch((error) => setStatus(error.message, true));
+  });
+
+  elements.openAnyway.addEventListener("click", () => {
+    const targetUrl = state.lastOpenTarget || `${getActiveServerUrl()}/chat`;
+    if (!targetUrl) {
+      setStatus("No CrewCmd server is configured yet.", true);
+      return;
+    }
+    setStatus(`Opening ${targetUrl} without a preflight check`, false);
+    window.location.replace(targetUrl);
+  });
+
   elements.applyManualServer.addEventListener("click", () => {
     applyManualServer().catch((error) => setStatus(error.message, true));
   });
@@ -394,9 +451,13 @@ function cacheElements() {
   elements.networkHint = $("network-hint");
   elements.environmentChip = $("environment-chip");
   elements.connectionStatus = $("connection-status");
+  elements.outagePanel = $("outage-panel");
+  elements.outageMessage = $("outage-message");
   elements.supportLine = $("support-line");
   elements.lockChip = $("lock-chip");
   elements.openCrewCmd = $("open-crewcmd");
+  elements.retryOpen = $("retry-open");
+  elements.openAnyway = $("open-anyway");
   elements.testConnection = $("test-connection");
   elements.bootstrapInput = $("bootstrap-input");
   elements.applyBootstrap = $("apply-bootstrap");
@@ -423,6 +484,7 @@ async function boot() {
 
   updateUI();
   showShell();
+  setOutageState("", false);
   setStatus(state.connectionStatus, false);
   await hideNativeSplash();
 }

@@ -56,6 +56,23 @@
           <p id="connection-status" class="status-line">Bootstrap the app with a QR payload or config link to begin.</p>
         </section>
 
+        <section id="outage-panel" class="panel outage-panel hidden">
+          <div class="panel-header">
+            <div>
+              <p class="panel-label">Connection issue</p>
+              <h2>CrewCmd server unavailable</h2>
+            </div>
+            <span class="chip chip-outline">Fallback</span>
+          </div>
+          <p id="outage-message" class="body-copy">
+            This device could not reach the configured CrewCmd deployment.
+          </p>
+          <div class="cta-row">
+            <button id="retry-open" class="primary-button" type="button">Retry connection</button>
+            <button id="open-anyway" class="ghost-button" type="button">Open anyway</button>
+          </div>
+        </section>
+
         <section class="panel bootstrap-panel">
           <div class="panel-header">
             <div>

@@ -546,14 +546,14 @@ export function VoiceAgent({
             state === "listening"
               ? {
                   borderColor: `rgba(${listeningRgb}, ${0.48 + volumeLevel * 0.2})`,
-                  background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), color-mix(in srgb, var(--bg-secondary) 92%, black 8%) 72%)`,
+                  background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), var(--voice-shell-bg-strong) 72%)`,
                   boxShadow: `0 0 ${24 + volumeLevel * 34}px rgba(${listeningRgb}, ${0.2 + volumeLevel * 0.28})`,
                   transform: `scale(${orbScale})`,
                 }
               : state === "speaking"
                 ? {
                     borderColor: `rgba(${speakingRgb}, 0.55)`,
-                    background: `radial-gradient(circle, rgba(${speakingRgb},0.24), color-mix(in srgb, var(--bg-secondary) 90%, black 10%) 72%)`,
+                    background: `radial-gradient(circle, rgba(${speakingRgb},0.24), var(--voice-shell-bg-strong) 72%)`,
                     boxShadow:
                       `0 0 ${34 + motionLevel * 24}px rgba(${speakingRgb}, ${0.25 + motionLevel * 0.1}), 0 0 ${64 + motionLevel * 42}px rgba(${speakingRgb}, ${0.1 + motionLevel * 0.08})`,
                     transform: `scale(${orbScale})`,
@@ -561,11 +561,11 @@ export function VoiceAgent({
                 : state === "processing"
                   ? {
                       borderColor: `rgba(${processingRgb}, 0.45)`,
-                      background: `radial-gradient(circle, rgba(${processingRgb},0.2), color-mix(in srgb, var(--bg-secondary) 92%, black 8%) 72%)`,
+                      background: `radial-gradient(circle, rgba(${processingRgb},0.2), var(--voice-shell-bg-strong) 72%)`,
                       boxShadow: `0 0 20px rgba(${processingRgb}, 0.15)`,
                     }
                   : {
-                      background: "radial-gradient(circle, color-mix(in srgb, white 10%, transparent), color-mix(in srgb, var(--bg-secondary) 92%, black 8%) 72%)",
+                      background: "radial-gradient(circle, color-mix(in srgb, var(--voice-shell-highlight) 90%, transparent), var(--voice-shell-bg-strong) 72%)",
                     }
           }
         >

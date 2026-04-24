@@ -92,7 +92,7 @@ export default function LoginPage() {
 
   return (
     <div className="grid-bg scanlines flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+      <div className="mx-auto w-full max-w-sm">
         {/* Logo / Branding */}
         <div className="mb-8 flex flex-col items-center gap-3">
           <div

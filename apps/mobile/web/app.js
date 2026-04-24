@@ -41,6 +41,15 @@ async function getAppPlugin() {
   return null;
 }
 
+async function getSplashScreenPlugin() {
+  const plugin = window.Capacitor?.Plugins?.SplashScreen;
+  if (plugin && typeof plugin.hide === "function") {
+    return plugin;
+  }
+
+  return null;
+}
+
 async function getHapticsPlugin() {
   const plugin = window.Capacitor?.Plugins?.Haptics;
   if (plugin && typeof plugin.impact === "function") {
@@ -48,6 +57,23 @@ async function getHapticsPlugin() {
   }
 
   return null;
+}
+
+function showShell() {
+  if (elements.appShell) {
+    elements.appShell.hidden = false;
+  }
+}
+
+async function hideNativeSplash() {
+  const splashScreen = await getSplashScreenPlugin();
+  if (!splashScreen) return;
+
+  try {
+    await splashScreen.hide();
+  } catch {
+    // Ignore hide failures during browser preview.
+  }
 }
 
 async function readStoredBootstrap() {
@@ -234,8 +260,15 @@ async function openCrewCmd() {
 
   try {
     setStatus(`Opening ${targetUrl}`, false);
+    setTimeout(() => {
+      if (window.location.href.startsWith("capacitor://localhost")) {
+        showShell();
+        setStatus(`Unable to open ${targetUrl}. Check that the deployment is reachable and trusted on this device.`, true);
+      }
+    }, 1500);
     window.location.replace(targetUrl);
   } catch (error) {
+    showShell();
     setStatus(`Unable to open CrewCmd: ${error.message}`, true);
   }
 }
@@ -353,6 +386,7 @@ async function handleInitialUrl() {
 }
 
 function cacheElements() {
+  elements.appShell = document.querySelector(".app-shell");
   elements.appName = $("app-name");
   elements.orgName = $("org-name");
   elements.serverUrl = $("server-url");
@@ -379,18 +413,23 @@ async function boot() {
   bindEvents();
   await wireDeepLinks();
   await handleInitialUrl();
-  updateUI();
-  setStatus(state.connectionStatus, false);
 
   if (shouldAutoOpenCrewCmd()) {
     state.autoOpened = true;
-    setStatus(`Opening ${getActiveServerUrl()}/chat`, false);
+    await hideNativeSplash();
     await openCrewCmd();
+    return;
   }
+
+  updateUI();
+  showShell();
+  setStatus(state.connectionStatus, false);
+  await hideNativeSplash();
 }
 
 boot().catch((error) => {
   console.error(error);
+  showShell();
   const fallback = $("connection-status");
   if (fallback) {
     fallback.textContent = `Failed to load mobile shell: ${error.message}`;

@@ -50,6 +50,9 @@ interface Message {
 type VoiceMode = "off" | "agent";
 type AgentOverlayMode = "transcript" | "immersive";
 
+const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
+const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
+
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
   "",
@@ -128,7 +131,6 @@ export default function ChatPage() {
   const {
     selectedSessionKey,
     selectSession,
-    clearSelection,
   } = useSessionBrowserStore();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -150,6 +152,8 @@ export default function ChatPage() {
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [preferredAgentCallsign, setPreferredAgentCallsign] = useState<string | null>(null);
+  const [preferredSessionKey, setPreferredSessionKey] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -183,6 +187,16 @@ export default function ChatPage() {
   // No unmount persistence needed — server-side /api/chat route persists
   // partial content on client disconnect via the cancel handler.
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedAgent = window.localStorage.getItem(CHAT_AGENT_STORAGE_KEY);
+    const storedSession = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+
+    setPreferredAgentCallsign(storedAgent ? storedAgent.toLowerCase() : null);
+    setPreferredSessionKey(storedSession || null);
+  }, []);
+
   // Fetch agents on mount
   useEffect(() => {
     async function fetchAgents() {
@@ -193,17 +207,34 @@ export default function ChatPage() {
           ? data
           : data.agents || [];
         setAgents(fetched);
-        // Default to team lead (top-level agent)
+
+        const restoredAgent = preferredAgentCallsign
+          ? fetched.find(
+              (agent) => agent.callsign.toLowerCase() === preferredAgentCallsign
+            ) ?? null
+          : null;
         const defaultAgent = findDefaultAgent(fetched);
+
+        if (restoredAgent) {
+          setSelectedAgent(restoredAgent);
+          if (preferredSessionKey) {
+            selectSession(preferredSessionKey);
+          }
+          return;
+        }
+
         if (defaultAgent) {
           setSelectedAgent(defaultAgent);
+          if (preferredSessionKey) {
+            selectSession(null);
+          }
         }
       } catch {
         // Agents unavailable
       }
     }
     fetchAgents();
-  }, []);
+  }, [preferredAgentCallsign, preferredSessionKey, selectSession]);
 
   // Load configurable stop words from system settings
   useEffect(() => {
@@ -427,7 +458,8 @@ export default function ChatPage() {
 
   const handleAgentSelect = useCallback(
     (agent: Agent, sessionKey?: string | null) => {
-      if (agent.id === selectedAgent?.id && sessionKey === selectedSessionKey) return;
+      const nextSessionKey = sessionKey ?? null;
+      if (agent.id === selectedAgent?.id && nextSessionKey === selectedSessionKey) return;
       // Abort any in-flight streaming to prevent cross-agent bleed
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -438,11 +470,32 @@ export default function ChatPage() {
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
-      selectSession(sessionKey ?? null);
+      selectSession(nextSessionKey);
       setSelectedAgent(agent);
     },
     [selectedAgent, selectedSessionKey, selectSession]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!selectedAgent?.callsign) return;
+
+    window.localStorage.setItem(
+      CHAT_AGENT_STORAGE_KEY,
+      selectedAgent.callsign.toLowerCase()
+    );
+  }, [selectedAgent]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (selectedSessionKey) {
+      window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, selectedSessionKey);
+      return;
+    }
+
+    window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+  }, [selectedSessionKey]);
 
   const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
 
@@ -491,7 +544,7 @@ export default function ChatPage() {
       }
     };
     // playTTS intentionally omitted to avoid re-firing on TTS ref changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isLoading, voiceMode, thinkingAcks]);
 
   // Escape key cancels in-flight chat request

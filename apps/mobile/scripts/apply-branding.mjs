@@ -25,6 +25,13 @@ const generatedDir = path.join(appDir, outputDirName);
 fs.mkdirSync(generatedDir, { recursive: true });
 const channel = process.env.CREWCMD_MOBILE_CHANNEL || manifest.distribution.channel;
 const iconSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.iconPath);
+const splashSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.splashPath);
+const defaultBaseUrl = new URL(manifest.server.defaultBaseUrl);
+const allowedNavigationHost = defaultBaseUrl.hostname;
+
+function writeJsonFile(targetPath, value) {
+  fs.writeFileSync(targetPath, `${JSON.stringify(value, null, 2)}\n`);
+}
 
 async function writeIosAppIcons() {
   const iosAppDir = path.join(appDir, "ios", "App", "App");
@@ -51,7 +58,7 @@ async function writeIosAppIcons() {
     .png()
     .toFile(iconOutputPath);
 
-  const contents = {
+  writeJsonFile(path.join(appIconSetDir, "Contents.json"), {
     images: [
       {
         filename: iconFilename,
@@ -64,9 +71,52 @@ async function writeIosAppIcons() {
       author: "xcode",
       version: 1,
     },
-  };
+  });
+}
 
-  fs.writeFileSync(path.join(appIconSetDir, "Contents.json"), `${JSON.stringify(contents, null, 2)}\n`);
+async function writeIosSplashAssets() {
+  const iosAppDir = path.join(appDir, "ios", "App", "App");
+  if (!fs.existsSync(iosAppDir)) {
+    return;
+  }
+
+  if (!fs.existsSync(splashSourcePath)) {
+    throw new Error(`Mobile splash source not found: ${splashSourcePath}`);
+  }
+
+  const assetCatalogDir = path.join(iosAppDir, "Assets.xcassets");
+  const splashSetDir = path.join(assetCatalogDir, "Splash.imageset");
+  fs.mkdirSync(splashSetDir, { recursive: true });
+
+  const splashFiles = [
+    "splash-2732x2732.png",
+    "splash-2732x2732-1.png",
+    "splash-2732x2732-2.png",
+  ];
+
+  const splashBuffer = await sharp(splashSourcePath)
+    .resize(2732, 2732, {
+      fit: "contain",
+      background: manifest.branding.primaryColor,
+    })
+    .png()
+    .toBuffer();
+
+  for (const filename of splashFiles) {
+    fs.writeFileSync(path.join(splashSetDir, filename), splashBuffer);
+  }
+
+  writeJsonFile(path.join(splashSetDir, "Contents.json"), {
+    images: [
+      { idiom: "universal", filename: "splash-2732x2732-2.png", scale: "1x" },
+      { idiom: "universal", filename: "splash-2732x2732-1.png", scale: "2x" },
+      { idiom: "universal", filename: "splash-2732x2732.png", scale: "3x" },
+    ],
+    info: {
+      version: 1,
+      author: "xcode",
+    },
+  });
 }
 
 const runtimeConfig = {
@@ -93,11 +143,12 @@ const capacitorConfig = {
   webDir: "web",
   bundledWebRuntime: false,
   server: {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    allowNavigation: [allowedNavigationHost],
   },
   plugins: {
     SplashScreen: {
-      launchAutoHide: false,
+      launchAutoHide: true,
       backgroundColor: manifest.branding.primaryColor,
       showSpinner: false
     },
@@ -108,10 +159,8 @@ const capacitorConfig = {
   }
 };
 
-fs.writeFileSync(
-  path.join(generatedDir, "capacitor.config.generated.json"),
-  `${JSON.stringify(capacitorConfig, null, 2)}\n`
-);
+writeJsonFile(path.join(appDir, "capacitor.config.json"), capacitorConfig);
+writeJsonFile(path.join(generatedDir, "capacitor.config.generated.json"), capacitorConfig);
 
 const nativeMetadata = `# Mobile Distribution Metadata
 
@@ -162,5 +211,6 @@ fs.writeFileSync(
 );
 
 await writeIosAppIcons();
+await writeIosSplashAssets();
 
 console.log(`Applied mobile branding manifest from ${path.relative(repoRoot, manifestPath)}`);

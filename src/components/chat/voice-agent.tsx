@@ -463,7 +463,7 @@ export function VoiceAgent({
 
       <button
         onClick={isActive ? deactivate : activate}
-        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${immersive ? "voice-agent-reactor-immersive h-[30rem] w-[30rem] sm:h-[36rem] sm:w-[36rem]" : "h-[18rem] w-[18rem] sm:h-[20rem] sm:w-[20rem]"}`}
+        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${immersive ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]" : "h-[18rem] w-[18rem] sm:h-[20rem] sm:w-[20rem]"}`}
         style={
           {
             "--voice-accent-rgb": activeRgb,

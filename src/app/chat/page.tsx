@@ -1342,13 +1342,6 @@ export default function ChatPage() {
           }}
         >
           <div
-            className="pointer-events-none absolute inset-x-0 top-0 z-0"
-            style={{
-              height: "calc(env(safe-area-inset-top) + 0.9rem)",
-              background: "linear-gradient(180deg, var(--voice-status-scrim), transparent)",
-            }}
-          />
-          <div
             className="absolute inset-0 opacity-60"
             style={{
               backgroundImage: [

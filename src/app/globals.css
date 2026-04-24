@@ -25,6 +25,7 @@
   --text-primary: #1f252c; --text-secondary: #505965; --text-tertiary: #7a8391;
   --accent: #2f8f83; --accent-hover: #26776d; --accent-soft: rgba(47,143,131,.10); --accent-medium: rgba(47,143,131,.18); --accent-strong: rgba(47,143,131,.28);
   --success: #2f9e75; --warning: #c59b4d; --danger: #c65b5b; --info: #5671b8;
+  --status-shelf: rgba(24,31,40,.72);
   --voice-listening-rgb: 47 143 131; --voice-speaking-rgb: 130 108 187; --voice-processing-rgb: 197 155 77;
   --voice-overlay-grid: rgba(80,89,101,.06); --voice-overlay-grid-soft: rgba(80,89,101,.035);
   --voice-status-scrim: rgba(22,28,35,.42);
@@ -41,6 +42,7 @@
   --text-primary: #ecf1f6; --text-secondary: #b3bfca; --text-tertiary: #7e8b99;
   --accent: #63b7aa; --accent-hover: #78c9bc; --accent-soft: rgba(99,183,170,.12); --accent-medium: rgba(99,183,170,.2); --accent-strong: rgba(99,183,170,.32);
   --success: #54c28d; --warning: #d9b46b; --danger: #de7676; --info: #88a1ea;
+  --status-shelf: rgba(7,12,18,.42);
   --voice-listening-rgb: 99 183 170; --voice-speaking-rgb: 167 139 250; --voice-processing-rgb: 217 180 107;
   --voice-overlay-grid: rgba(226,232,240,.06); --voice-overlay-grid-soft: rgba(226,232,240,.05);
   --voice-status-scrim: rgba(7,12,18,.18);
@@ -57,6 +59,7 @@
   --text-primary: #ecf1f6; --text-secondary: #b3bfca; --text-tertiary: #7e8b99;
   --accent: #63b7aa; --accent-hover: #78c9bc; --accent-soft: rgba(99,183,170,.12); --accent-medium: rgba(99,183,170,.2); --accent-strong: rgba(99,183,170,.32);
   --success: #54c28d; --warning: #d9b46b; --danger: #de7676; --info: #88a1ea;
+  --status-shelf: rgba(7,12,18,.42);
   --voice-listening-rgb: 99 183 170; --voice-speaking-rgb: 167 139 250; --voice-processing-rgb: 217 180 107;
   --voice-overlay-grid: rgba(226,232,240,.06); --voice-overlay-grid-soft: rgba(226,232,240,.05);
   --voice-status-scrim: rgba(7,12,18,.18);

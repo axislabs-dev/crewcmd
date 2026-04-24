@@ -285,28 +285,44 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--bg-primary)_12%)] px-4 pb-3 pt-[max(0.875rem,env(safe-area-inset-top))] shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:hidden">
-        <div className="flex items-center gap-2.5">
-          <BrandLogo size="sm" />
-          <BrandName />
+      <div className="fixed top-0 left-0 right-0 z-50 overflow-hidden border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--bg-primary)_12%)] shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:hidden">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0"
+          style={{
+            height: "calc(env(safe-area-inset-top) + 1rem)",
+            background: "linear-gradient(180deg, var(--status-shelf), color-mix(in srgb, var(--status-shelf) 70%, transparent) 55%, transparent 100%)",
+          }}
+        />
+        <div className="relative flex items-center justify-between px-4 pb-3 pt-[max(0.875rem,env(safe-area-inset-top))]">
+          <div className="flex items-center gap-2.5">
+            <BrandLogo size="sm" />
+            <BrandName />
+          </div>
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Toggle navigation">
+            {mobileOpen ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            )}
+          </button>
         </div>
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Toggle navigation">
-          {mobileOpen ? (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
-          )}
-        </button>
       </div>
 
       {mobileOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] pt-[env(safe-area-inset-top)] shadow-[0_18px_44px_rgba(15,23,42,0.18)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface-strong)_84%,var(--bg-primary)_16%)] px-5 py-4 backdrop-blur-xl">
+      <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col overflow-hidden border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] pt-[env(safe-area-inset-top)] shadow-[0_18px_44px_rgba(15,23,42,0.18)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0"
+          style={{
+            height: "calc(env(safe-area-inset-top) + 1rem)",
+            background: "linear-gradient(180deg, var(--status-shelf), color-mix(in srgb, var(--status-shelf) 70%, transparent) 55%, transparent 100%)",
+          }}
+        />
+        <div className="relative flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface-strong)_84%,var(--bg-primary)_16%)] px-5 py-4 backdrop-blur-xl">
           <div className="flex items-center gap-2.5">
             <BrandLogo size="sm" />
             <BrandName />

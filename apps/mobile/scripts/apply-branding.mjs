@@ -96,7 +96,7 @@ async function writeIosSplashAssets() {
 
   const splashBuffer = await sharp(splashSourcePath)
     .resize(2732, 2732, {
-      fit: "contain",
+      fit: "cover",
       background: manifest.branding.primaryColor,
     })
     .png()

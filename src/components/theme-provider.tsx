@@ -17,6 +17,18 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "crewcmd-theme";
 
+type NativeStatusBarPlugin = {
+  setStyle?: (options: { style: "LIGHT" | "DARK" }) => Promise<void>;
+  setBackgroundColor?: (options: { color: string }) => Promise<void>;
+};
+
+type NativeCapacitor = {
+  isNativePlatform?: () => boolean;
+  Plugins?: {
+    StatusBar?: NativeStatusBarPlugin;
+  };
+};
+
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -24,6 +36,29 @@ function getSystemTheme(): "light" | "dark" {
 
 function resolveTheme(theme: Theme): "light" | "dark" {
   return theme === "system" ? getSystemTheme() : theme;
+}
+
+function getNativeStatusBarPlugin(): NativeStatusBarPlugin | null {
+  if (typeof window === "undefined") return null;
+  const capacitor = (window as Window & { Capacitor?: NativeCapacitor }).Capacitor;
+  if (!capacitor?.isNativePlatform?.()) return null;
+  return capacitor.Plugins?.StatusBar ?? null;
+}
+
+async function syncNativeStatusBar(theme: "light" | "dark") {
+  const statusBar = getNativeStatusBarPlugin();
+  if (!statusBar) return;
+
+  const backgroundColor = getComputedStyle(document.documentElement)
+    .getPropertyValue("--bg-primary")
+    .trim() || (theme === "dark" ? "#161412" : "#f4f1eb");
+
+  try {
+    await statusBar.setStyle?.({ style: theme === "dark" ? "LIGHT" : "DARK" });
+    await statusBar.setBackgroundColor?.({ color: backgroundColor });
+  } catch {
+    // Native status bar sync is best-effort only.
+  }
 }
 
 /**
@@ -47,6 +82,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const resolved = resolveTheme(initial);
     setResolvedTheme(resolved);
     document.documentElement.setAttribute("data-theme", resolved);
+    void syncNativeStatusBar(resolved);
   }, []);
 
   // Listen for OS preference changes when theme is "system"
@@ -57,6 +93,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const resolved = getSystemTheme();
       setResolvedTheme(resolved);
       document.documentElement.setAttribute("data-theme", resolved);
+      void syncNativeStatusBar(resolved);
     };
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
@@ -68,6 +105,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const resolved = resolveTheme(newTheme);
     setResolvedTheme(resolved);
     document.documentElement.setAttribute("data-theme", resolved);
+    void syncNativeStatusBar(resolved);
   }, []);
 
   return (

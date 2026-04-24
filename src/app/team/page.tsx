@@ -9,6 +9,7 @@ import { TaskDialog } from "@/components/task-dialog";
 import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
 import { AgentAvatar } from "@/components/avatar";
 import type { Agent } from "@/lib/data";
+import { buildAgentHierarchy } from "@/lib/agent-hierarchy";
 
 const TeamCanvas = lazy(() =>
   import("@/components/team-canvas/team-canvas").then((m) => ({ default: m.TeamCanvas }))
@@ -36,48 +37,13 @@ function getCompanyId(): string | null {
 }
 
 function buildTree(agents: Agent[]): TreeNode[] {
-  const byCallsign = new Map<string, Agent>();
-  for (const a of agents) byCallsign.set(a.callsign.toLowerCase(), a);
-
-  const childrenOf = new Map<string | null, Agent[]>();
-  for (const a of agents) {
-    const parent = a.reportsTo?.toLowerCase() ?? null;
-    if (!childrenOf.has(parent)) childrenOf.set(parent, []);
-    childrenOf.get(parent)!.push(a);
-  }
-
-  function build(parentCallsign: string): TreeNode[] {
-    const kids = childrenOf.get(parentCallsign) ?? [];
-    return kids
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((agent) => ({
-        agent,
-        children: build(agent.callsign.toLowerCase()),
-      }));
-  }
-
-  const roots: Agent[] = [];
-  const orphans: Agent[] = [];
-  for (const a of agents) {
-    if (!a.reportsTo) {
-      roots.push(a);
-    } else if (!byCallsign.has(a.reportsTo.toLowerCase())) {
-      orphans.push(a);
-    }
-  }
-
-  const tree = roots
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((agent) => ({
-      agent,
-      children: build(agent.callsign.toLowerCase()),
+  const toTree = (nodes: ReturnType<typeof buildAgentHierarchy>): TreeNode[] =>
+    nodes.map((node) => ({
+      agent: node.agent,
+      children: toTree(node.children),
     }));
 
-  for (const a of orphans) {
-    tree.push({ agent: a, children: build(a.callsign.toLowerCase()) });
-  }
-
-  return tree;
+  return toTree(buildAgentHierarchy(agents));
 }
 
 function countNodes(nodes: TreeNode[]): number {

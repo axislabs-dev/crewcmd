@@ -2,6 +2,10 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { Agent } from "@/lib/data";
+import {
+  buildAgentHierarchy,
+  findDefaultHierarchyAgent,
+} from "@/lib/agent-hierarchy";
 import { SessionListDropdown } from "./session-list-dropdown";
 
 interface AgentTreeNode {
@@ -17,37 +21,18 @@ interface AgentTreeSelectorProps {
   unreadCounts: Record<string, number>;
 }
 
-function compareAgents(a: Agent, b: Agent): number {
-  return a.callsign.localeCompare(b.callsign, undefined, { sensitivity: "base" });
-}
-
 function buildTree(agents: Agent[]): AgentTreeNode[] {
-  const sortedAgents = [...agents].sort(compareAgents);
-
-  // Find children for a given agent, with stable sibling order
-  const childrenOf = (parentCallsign: string | null): Agent[] =>
-    sortedAgents.filter((a) => {
-      if (!parentCallsign) return !a.reportsTo;
-      return a.reportsTo?.toLowerCase() === parentCallsign.toLowerCase();
-    });
-
-  function buildNodes(parentCallsign: string | null, depth: number): AgentTreeNode[] {
-    return childrenOf(parentCallsign).map((agent) => ({
-      agent,
+  const toTree = (
+    nodes: ReturnType<typeof buildAgentHierarchy>,
+    depth: number
+  ): AgentTreeNode[] =>
+    nodes.map((node) => ({
+      agent: node.agent,
       depth,
-      children: buildNodes(agent.callsign, depth + 1),
+      children: toTree(node.children, depth + 1),
     }));
-  }
 
-  const roots = buildNodes(null, 0);
-
-  // If no roots found (all agents have reportsTo set to non-existent parents),
-  // fall back to flat list
-  if (roots.length === 0) {
-    return sortedAgents.map((agent) => ({ agent, depth: 0, children: [] }));
-  }
-
-  return roots;
+  return toTree(buildAgentHierarchy(agents), 0);
 }
 
 function flattenTree(nodes: AgentTreeNode[]): AgentTreeNode[] {
@@ -215,9 +200,7 @@ export function AgentTreeSelector({
  * Falls back to first agent if none found.
  */
 export function findDefaultAgent(agents: Agent[]): Agent | null {
-  if (agents.length === 0) return null;
-  const sortedAgents = [...agents].sort(compareAgents);
-  return sortedAgents.find((a) => !a.reportsTo) || sortedAgents[0];
+  return findDefaultHierarchyAgent(agents);
 }
 
 /**

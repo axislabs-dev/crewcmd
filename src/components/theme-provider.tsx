@@ -54,7 +54,7 @@ async function syncNativeStatusBar(theme: "light" | "dark") {
     .trim() || (theme === "dark" ? "#161412" : "#f4f1eb");
 
   try {
-    await statusBar.setStyle?.({ style: theme === "dark" ? "LIGHT" : "DARK" });
+    await statusBar.setStyle?.({ style: theme === "dark" ? "DARK" : "LIGHT" });
     await statusBar.setBackgroundColor?.({ color: backgroundColor });
   } catch {
     // Native status bar sync is best-effort only.

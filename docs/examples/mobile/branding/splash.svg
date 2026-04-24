@@ -7,11 +7,11 @@
     </radialGradient>
   </defs>
   <rect width="1179" height="2556" fill="#010405" />
-  <circle cx="589.5" cy="1180" r="560" fill="url(#glow)" />
-  <circle cx="589.5" cy="1180" r="260" fill="none" stroke="#8AF5FF" stroke-width="12" opacity="0.9" />
-  <circle cx="589.5" cy="1180" r="178" fill="none" stroke="#F7B500" stroke-width="10" opacity="0.85" />
-  <circle cx="589.5" cy="1180" r="84" fill="#F6FFFE" />
-  <text x="589.5" y="1620" text-anchor="middle" fill="#C9F8FA" font-size="74" font-family="Helvetica, Arial, sans-serif" letter-spacing="10">
+  <circle cx="589.5" cy="1140" r="400" fill="url(#glow)" />
+  <circle cx="589.5" cy="1140" r="186" fill="none" stroke="#8AF5FF" stroke-width="10" opacity="0.9" />
+  <circle cx="589.5" cy="1140" r="126" fill="none" stroke="#F7B500" stroke-width="8" opacity="0.85" />
+  <circle cx="589.5" cy="1140" r="58" fill="#F6FFFE" />
+  <text x="589.5" y="1488" text-anchor="middle" fill="#C9F8FA" font-size="52" font-family="Helvetica, Arial, sans-serif" letter-spacing="8">
     CREWCMD
   </text>
 </svg>

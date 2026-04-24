@@ -4,7 +4,8 @@ const CONFIG_PATH = "./brand.generated.json";
 const state = {
   brand: null,
   bootstrap: null,
-  connectionStatus: "Bootstrap the app with a QR payload or config link to begin."
+  connectionStatus: "Bootstrap the app with a QR payload or config link to begin.",
+  autoOpened: false,
 };
 
 const elements = {};
@@ -34,15 +35,6 @@ async function getPreferencesPlugin() {
 async function getAppPlugin() {
   const plugin = window.Capacitor?.Plugins?.App;
   if (plugin && typeof plugin.addListener === "function") {
-    return plugin;
-  }
-
-  return null;
-}
-
-async function getBrowserPlugin() {
-  const plugin = window.Capacitor?.Plugins?.Browser;
-  if (plugin && typeof plugin.open === "function") {
     return plugin;
   }
 
@@ -217,6 +209,20 @@ function getActiveServerUrl() {
   return state.bootstrap?.serverUrl || state.brand?.defaultBaseUrl || "";
 }
 
+function shouldAutoOpenCrewCmd() {
+  const bootstrap = state.bootstrap;
+  const brand = state.brand;
+  const serverUrl = getActiveServerUrl();
+
+  if (!serverUrl || state.autoOpened) return false;
+
+  const isLocked = Boolean(bootstrap?.lockToSingleServer ?? brand?.lockToSingleServer);
+  const allowsManualOverride = Boolean(bootstrap?.allowManualServerOverride ?? brand?.allowManualServerOverride);
+  const requiresBootstrap = brand?.bootstrapMode === "qr-or-url" && !bootstrap && !brand?.defaultBaseUrl;
+
+  return isLocked && !allowsManualOverride && !requiresBootstrap;
+}
+
 async function openCrewCmd() {
   const serverUrl = getActiveServerUrl();
   if (!serverUrl) {
@@ -225,16 +231,10 @@ async function openCrewCmd() {
   }
 
   const targetUrl = `${serverUrl}/chat`;
-  const browser = await getBrowserPlugin();
 
   try {
-    if (browser) {
-      await browser.open({ url: targetUrl, presentationStyle: "fullscreen" });
-    } else {
-      window.location.assign(targetUrl);
-    }
-
     setStatus(`Opening ${targetUrl}`, false);
+    window.location.replace(targetUrl);
   } catch (error) {
     setStatus(`Unable to open CrewCmd: ${error.message}`, true);
   }
@@ -381,6 +381,12 @@ async function boot() {
   await handleInitialUrl();
   updateUI();
   setStatus(state.connectionStatus, false);
+
+  if (shouldAutoOpenCrewCmd()) {
+    state.autoOpened = true;
+    setStatus(`Opening ${getActiveServerUrl()}/chat`, false);
+    await openCrewCmd();
+  }
 }
 
 boot().catch((error) => {

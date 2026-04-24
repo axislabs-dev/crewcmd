@@ -27,11 +27,12 @@
   --success: #2f9e75; --warning: #c59b4d; --danger: #c65b5b; --info: #5671b8;
   --status-shelf: rgba(24,31,40,.72);
   --voice-listening-rgb: 47 143 131; --voice-speaking-rgb: 130 108 187; --voice-processing-rgb: 197 155 77;
-  --voice-overlay-grid: rgba(80,89,101,.06); --voice-overlay-grid-soft: rgba(80,89,101,.035);
+  --voice-overlay-grid: rgba(80,89,101,.05); --voice-overlay-grid-soft: rgba(80,89,101,.03);
   --voice-status-scrim: rgba(22,28,35,.42);
-  --voice-shell-bg: rgba(255,255,255,.62); --voice-shell-bg-strong: rgba(247,243,236,.9); --voice-shell-border: rgba(80,89,101,.08); --voice-shell-border-strong: rgba(80,89,101,.14);
-  --voice-shell-grid: rgba(80,89,101,.075); --voice-shell-grid-soft: rgba(80,89,101,.045); --voice-shell-highlight: rgba(255,255,255,.56);
-  --voice-orbit-stroke: rgba(47,143,131,.12); --voice-orbit-stroke-strong: rgba(47,143,131,.18); --voice-spectrum-secondary: rgba(130,108,187,.16);
+  --voice-shell-bg: rgba(255,255,255,.56); --voice-shell-bg-strong: rgba(246,242,235,.84); --voice-shell-border: rgba(47,143,131,.12); --voice-shell-border-strong: rgba(47,143,131,.22);
+  --voice-shell-grid: rgba(47,143,131,.14); --voice-shell-grid-soft: rgba(86,113,184,.08); --voice-shell-highlight: rgba(255,255,255,.52);
+  --voice-orbit-stroke: rgba(47,143,131,.2); --voice-orbit-stroke-strong: rgba(47,143,131,.32); --voice-spectrum-secondary: rgba(130,108,187,.24);
+  --voice-reactor-wash: radial-gradient(circle at center, rgba(47,143,131,.16), rgba(86,113,184,.08) 48%, rgba(247,243,236,.82) 74%);
   --theme-shadow: 0 12px 32px rgba(31,37,44,.08); --theme-shadow-lg: 0 24px 64px rgba(31,37,44,.12); color-scheme: light;
 }
 [data-theme="dark"] {
@@ -49,6 +50,7 @@
   --voice-shell-bg: rgba(10,14,19,.82); --voice-shell-bg-strong: rgba(12,17,22,.96); --voice-shell-border: rgba(226,232,240,.12); --voice-shell-border-strong: rgba(226,232,240,.18);
   --voice-shell-grid: rgba(255,255,255,.14); --voice-shell-grid-soft: rgba(255,255,255,.06); --voice-shell-highlight: rgba(255,255,255,.18);
   --voice-orbit-stroke: rgba(99,183,170,.18); --voice-orbit-stroke-strong: rgba(99,183,170,.22); --voice-spectrum-secondary: rgba(192,132,252,.18);
+  --voice-reactor-wash: radial-gradient(circle at center, rgba(99,183,170,.16), rgba(12,17,22,.96) 68%);
   --theme-shadow: 0 18px 48px rgba(0,0,0,.32); --theme-shadow-lg: 0 30px 72px rgba(0,0,0,.42); color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -66,6 +68,7 @@
   --voice-shell-bg: rgba(10,14,19,.82); --voice-shell-bg-strong: rgba(12,17,22,.96); --voice-shell-border: rgba(226,232,240,.12); --voice-shell-border-strong: rgba(226,232,240,.18);
   --voice-shell-grid: rgba(255,255,255,.14); --voice-shell-grid-soft: rgba(255,255,255,.06); --voice-shell-highlight: rgba(255,255,255,.18);
   --voice-orbit-stroke: rgba(99,183,170,.18); --voice-orbit-stroke-strong: rgba(99,183,170,.22); --voice-spectrum-secondary: rgba(192,132,252,.18);
+  --voice-reactor-wash: radial-gradient(circle at center, rgba(99,183,170,.16), rgba(12,17,22,.96) 68%);
   --theme-shadow: 0 18px 48px rgba(0,0,0,.32); --theme-shadow-lg: 0 30px 72px rgba(0,0,0,.42); color-scheme: dark; } }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -112,7 +115,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   inset: 4%;
   border-radius: 999px;
   border: 1px solid var(--voice-shell-border);
-  background: radial-gradient(circle at center, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.16), var(--voice-shell-bg-strong) 62%);
+  background: var(--voice-reactor-wash);
   box-shadow: inset 0 1px 0 var(--voice-shell-highlight);
 }
 
@@ -126,9 +129,9 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 
 .voice-agent-aura-outer {
   background:
-    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.16) 0%, transparent 56%),
-    conic-gradient(from 90deg, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.2), transparent 24%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.28), transparent 68%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.14));
-  filter: blur(24px);
+    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.2) 0%, transparent 56%),
+    conic-gradient(from 90deg, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.22), transparent 24%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.32), transparent 68%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.18));
+  filter: blur(20px);
   animation: voice-agent-drift calc(14s - var(--voice-motion, 0) * 4s) ease-in-out infinite;
 }
 
@@ -144,7 +147,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 .voice-agent-ring {
   position: absolute;
   border-radius: 999px;
-  border: 1px solid var(--voice-shell-border);
+  border: 1px solid var(--voice-orbit-stroke);
 }
 
 .voice-agent-ring::after {
@@ -171,13 +174,13 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 
 .voice-agent-ring-middle {
   inset: 11%;
-  border-color: var(--voice-shell-border);
+  border-color: var(--voice-orbit-stroke-strong);
   animation: voice-agent-spin-reverse calc(17s - var(--voice-motion, 0) * 3s) linear infinite;
 }
 
 .voice-agent-ring-inner {
   inset: 22%;
-  border-color: rgba(var(--voice-accent-rgb, 99, 183, 170), 0.22);
+  border-color: var(--voice-orbit-stroke);
   animation: voice-agent-breathe calc(4.2s - var(--voice-motion, 0) * 1.3s) ease-in-out infinite;
 }
 
@@ -195,9 +198,9 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 
 .voice-agent-grid-immersive {
   inset: 13%;
-  border-color: var(--voice-shell-grid-soft);
+  border-color: var(--voice-shell-grid);
   background-size: 14px 14px;
-  opacity: 0.7;
+  opacity: 0.82;
 }
 
 .voice-agent-core {
@@ -210,7 +213,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   inset: 9%;
   border-radius: 999px;
   border: 1px solid var(--voice-orbit-stroke);
-  box-shadow: inset 0 0 24px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.06);
+  box-shadow: inset 0 0 24px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.1);
   transform: rotate(8deg);
   animation: voice-agent-spin calc(30s - var(--voice-motion, 0) * 5s) linear infinite;
 }
@@ -229,7 +232,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   border: 18px solid transparent;
   border-top-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.1 + var(--voice-volume, 0) * 0.18));
   border-bottom-color: color-mix(in srgb, var(--voice-spectrum-secondary) 100%, transparent);
-  opacity: calc(0.34 + var(--voice-motion, 0) * 0.18);
+  opacity: calc(0.48 + var(--voice-motion, 0) * 0.22);
   filter: blur(0.2px);
   animation: voice-agent-spin calc(11s - var(--voice-motion, 0) * 3s) linear infinite;
 }
@@ -239,7 +242,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   border-width: 10px;
   border-top-color: color-mix(in srgb, var(--voice-shell-highlight) 55%, transparent);
   border-bottom-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-volume, 0) * 0.14));
-  opacity: calc(0.26 + var(--voice-motion, 0) * 0.16);
+  opacity: calc(0.34 + var(--voice-motion, 0) * 0.18);
   animation: voice-agent-spin-reverse calc(8.5s - var(--voice-motion, 0) * 2.6s) linear infinite;
 }
 
@@ -288,7 +291,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 
 .voice-agent-core-grid {
   inset: 14%;
-  border: 1px solid var(--voice-shell-grid);
+  border: 1px solid color-mix(in srgb, var(--voice-shell-grid) 88%, white 12%);
   background-image:
     linear-gradient(var(--voice-shell-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--voice-shell-grid) 1px, transparent 1px);
@@ -311,7 +314,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   border: 1px solid var(--voice-shell-border-strong);
   box-shadow:
     0 0 20px color-mix(in srgb, var(--voice-shell-highlight) 65%, transparent),
-    0 0 calc(48px + var(--voice-volume, 0) * 16px + var(--voice-motion, 0) * 36px) rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.24 + var(--voice-volume, 0) * 0.12 + var(--voice-motion, 0) * 0.16));
+    0 0 calc(48px + var(--voice-volume, 0) * 16px + var(--voice-motion, 0) * 36px) rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.28 + var(--voice-volume, 0) * 0.16 + var(--voice-motion, 0) * 0.2));
   animation: voice-agent-breathe calc(3.8s - var(--voice-motion, 0) * 1.2s) ease-in-out infinite;
 }
 

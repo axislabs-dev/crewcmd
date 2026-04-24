@@ -1620,7 +1620,7 @@ export default function ChatPage() {
                     title="Send message"
                     style={
                       !isLoading
-                        ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.25)" }
+                        ? { boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }
                         : undefined
                     }
                   >

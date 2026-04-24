@@ -26,9 +26,11 @@
   --accent: #2f8f83; --accent-hover: #26776d; --accent-soft: rgba(47,143,131,.10); --accent-medium: rgba(47,143,131,.18); --accent-strong: rgba(47,143,131,.28);
   --success: #2f9e75; --warning: #c59b4d; --danger: #c65b5b; --info: #5671b8;
   --voice-listening-rgb: 47 143 131; --voice-speaking-rgb: 130 108 187; --voice-processing-rgb: 197 155 77;
-  --voice-overlay-grid: rgba(80,89,101,.08); --voice-overlay-grid-soft: rgba(80,89,101,.05);
-  --voice-shell-bg: rgba(255,255,255,.72); --voice-shell-bg-strong: rgba(248,245,239,.94); --voice-shell-border: rgba(62,52,43,.14); --voice-shell-border-strong: rgba(62,52,43,.22);
-  --voice-shell-grid: rgba(80,89,101,.12); --voice-shell-grid-soft: rgba(80,89,101,.07); --voice-shell-highlight: rgba(255,255,255,.68);
+  --voice-overlay-grid: rgba(80,89,101,.06); --voice-overlay-grid-soft: rgba(80,89,101,.035);
+  --voice-status-scrim: rgba(22,28,35,.42);
+  --voice-shell-bg: rgba(255,255,255,.62); --voice-shell-bg-strong: rgba(247,243,236,.9); --voice-shell-border: rgba(80,89,101,.08); --voice-shell-border-strong: rgba(80,89,101,.14);
+  --voice-shell-grid: rgba(80,89,101,.075); --voice-shell-grid-soft: rgba(80,89,101,.045); --voice-shell-highlight: rgba(255,255,255,.56);
+  --voice-orbit-stroke: rgba(47,143,131,.12); --voice-orbit-stroke-strong: rgba(47,143,131,.18); --voice-spectrum-secondary: rgba(130,108,187,.16);
   --theme-shadow: 0 12px 32px rgba(31,37,44,.08); --theme-shadow-lg: 0 24px 64px rgba(31,37,44,.12); color-scheme: light;
 }
 [data-theme="dark"] {
@@ -41,8 +43,10 @@
   --success: #54c28d; --warning: #d9b46b; --danger: #de7676; --info: #88a1ea;
   --voice-listening-rgb: 99 183 170; --voice-speaking-rgb: 167 139 250; --voice-processing-rgb: 217 180 107;
   --voice-overlay-grid: rgba(226,232,240,.06); --voice-overlay-grid-soft: rgba(226,232,240,.05);
+  --voice-status-scrim: rgba(7,12,18,.18);
   --voice-shell-bg: rgba(10,14,19,.82); --voice-shell-bg-strong: rgba(12,17,22,.96); --voice-shell-border: rgba(226,232,240,.12); --voice-shell-border-strong: rgba(226,232,240,.18);
   --voice-shell-grid: rgba(255,255,255,.14); --voice-shell-grid-soft: rgba(255,255,255,.06); --voice-shell-highlight: rgba(255,255,255,.18);
+  --voice-orbit-stroke: rgba(99,183,170,.18); --voice-orbit-stroke-strong: rgba(99,183,170,.22); --voice-spectrum-secondary: rgba(192,132,252,.18);
   --theme-shadow: 0 18px 48px rgba(0,0,0,.32); --theme-shadow-lg: 0 30px 72px rgba(0,0,0,.42); color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -55,8 +59,10 @@
   --success: #54c28d; --warning: #d9b46b; --danger: #de7676; --info: #88a1ea;
   --voice-listening-rgb: 99 183 170; --voice-speaking-rgb: 167 139 250; --voice-processing-rgb: 217 180 107;
   --voice-overlay-grid: rgba(226,232,240,.06); --voice-overlay-grid-soft: rgba(226,232,240,.05);
+  --voice-status-scrim: rgba(7,12,18,.18);
   --voice-shell-bg: rgba(10,14,19,.82); --voice-shell-bg-strong: rgba(12,17,22,.96); --voice-shell-border: rgba(226,232,240,.12); --voice-shell-border-strong: rgba(226,232,240,.18);
   --voice-shell-grid: rgba(255,255,255,.14); --voice-shell-grid-soft: rgba(255,255,255,.06); --voice-shell-highlight: rgba(255,255,255,.18);
+  --voice-orbit-stroke: rgba(99,183,170,.18); --voice-orbit-stroke-strong: rgba(99,183,170,.22); --voice-spectrum-secondary: rgba(192,132,252,.18);
   --theme-shadow: 0 18px 48px rgba(0,0,0,.32); --theme-shadow-lg: 0 30px 72px rgba(0,0,0,.42); color-scheme: dark; } }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -152,7 +158,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 }
 
 .voice-agent-ring-immersive {
-  border-color: rgba(var(--voice-accent-rgb, 99, 183, 170), 0.16);
+  border-color: var(--voice-orbit-stroke);
 }
 
 .voice-agent-ring-outer {
@@ -200,8 +206,8 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   position: absolute;
   inset: 9%;
   border-radius: 999px;
-  border: 1px solid rgba(var(--voice-accent-rgb, 99, 183, 170), 0.18);
-  box-shadow: inset 0 0 24px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.1);
+  border: 1px solid var(--voice-orbit-stroke);
+  box-shadow: inset 0 0 24px rgba(var(--voice-accent-rgb, 99, 183, 170), 0.06);
   transform: rotate(8deg);
   animation: voice-agent-spin calc(30s - var(--voice-motion, 0) * 5s) linear infinite;
 }
@@ -218,9 +224,9 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   inset: 18%;
   border-radius: 999px;
   border: 18px solid transparent;
-  border-top-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.16 + var(--voice-volume, 0) * 0.28));
-  border-bottom-color: rgba(192, 132, 252, calc(0.12 + var(--voice-volume, 0) * 0.18));
-  opacity: calc(0.58 + var(--voice-motion, 0) * 0.3);
+  border-top-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.1 + var(--voice-volume, 0) * 0.18));
+  border-bottom-color: color-mix(in srgb, var(--voice-spectrum-secondary) 100%, transparent);
+  opacity: calc(0.34 + var(--voice-motion, 0) * 0.18);
   filter: blur(0.2px);
   animation: voice-agent-spin calc(11s - var(--voice-motion, 0) * 3s) linear infinite;
 }
@@ -228,9 +234,9 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 .voice-agent-spectrum-inner {
   inset: 24%;
   border-width: 10px;
-  border-top-color: rgba(255, 255, 255, calc(0.08 + var(--voice-volume, 0) * 0.14));
-  border-bottom-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.1 + var(--voice-volume, 0) * 0.2));
-  opacity: calc(0.42 + var(--voice-motion, 0) * 0.28);
+  border-top-color: color-mix(in srgb, var(--voice-shell-highlight) 55%, transparent);
+  border-bottom-color: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-volume, 0) * 0.14));
+  opacity: calc(0.26 + var(--voice-motion, 0) * 0.16);
   animation: voice-agent-spin-reverse calc(8.5s - var(--voice-motion, 0) * 2.6s) linear infinite;
 }
 

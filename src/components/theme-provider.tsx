@@ -26,6 +26,28 @@ function resolveTheme(theme: Theme): "light" | "dark" {
   return theme === "system" ? getSystemTheme() : theme;
 }
 
+async function syncNativeStatusBar(resolvedTheme: "light" | "dark") {
+  if (typeof window === "undefined") return;
+
+  const statusBar = window.Capacitor?.Plugins?.StatusBar;
+  if (!statusBar) return;
+
+  const rootStyles = window.getComputedStyle(document.documentElement);
+  const backgroundColor = rootStyles.getPropertyValue("--bg-primary").trim();
+
+  try {
+    if (typeof statusBar.setStyle === "function") {
+      await statusBar.setStyle({ style: resolvedTheme === "dark" ? "LIGHT" : "DARK" });
+    }
+
+    if (backgroundColor && typeof statusBar.setBackgroundColor === "function") {
+      await statusBar.setBackgroundColor({ color: backgroundColor });
+    }
+  } catch {
+    // Ignore native status bar sync failures outside Capacitor.
+  }
+}
+
 /**
  * ThemeProvider manages light/dark theme state for the application.
  *
@@ -61,6 +83,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
   }, [theme]);
+
+  useEffect(() => {
+    void syncNativeStatusBar(resolvedTheme);
+  }, [resolvedTheme]);
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useId } from "react";
 import type { Agent } from "@/lib/data";
 import {
   buildAgentHierarchy,
@@ -65,6 +65,7 @@ export function AgentTreeSelector({
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"agents" | "sessions">("agents");
   const ref = useRef<HTMLDivElement>(null);
+  const panelId = useId();
 
   // Close on outside click
   useEffect(() => {
@@ -87,7 +88,11 @@ export function AgentTreeSelector({
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={panelId}
         className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono font-bold tracking-wider transition-all hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
         style={{ color: agentColor }}
       >
@@ -105,8 +110,34 @@ export function AgentTreeSelector({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 min-w-[280px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-xl border border-[var(--border-medium)] py-1 shadow-2xl" style={{ backgroundColor: "var(--bg-primary)" }}>
+        <>
+          <button
+            type="button"
+            aria-label="Close agent selector"
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            id={panelId}
+            role="dialog"
+            aria-label="Agent selector"
+            className="fixed inset-x-3 bottom-3 top-auto z-50 max-h-[min(70vh,32rem)] overflow-y-auto rounded-2xl border border-[var(--border-medium)] py-1 shadow-2xl md:absolute md:left-0 md:right-auto md:top-full md:mt-1 md:min-w-[280px] md:max-w-[calc(100vw-2rem)] md:max-h-[60vh]"
+            style={{ backgroundColor: "var(--bg-primary)" }}
+          >
           {/* Tab toggle */}
+          <div className="border-b border-[var(--border-subtle)] px-2 pt-2 md:hidden">
+            <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-[var(--border-medium)]" />
+            <div className="px-2 pb-2">
+              <div className="text-[10px] font-mono tracking-[0.24em] text-[var(--text-tertiary)]">
+                ACTIVE CHAT
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)]">
+                <span>{agentEmoji}</span>
+                <span>{agentCallsign}</span>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-0 px-2 py-1.5 border-b border-[var(--border-subtle)]">
             {(["agents", "sessions"] as const).map((t) => (
               <button
@@ -137,11 +168,12 @@ export function AgentTreeSelector({
                 return (
                   <button
                     key={agent.id}
+                    type="button"
                     onClick={() => {
                       onSelect(agent);
                       setOpen(false);
                     }}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] ${
+                    className={`flex w-full items-center gap-2 px-3 py-3 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] md:py-2 ${
                       isSelected
                         ? "bg-[var(--bg-surface-hover)] border-l-2 border-l-[var(--accent)]"
                         : ""
@@ -189,7 +221,8 @@ export function AgentTreeSelector({
               selectedAgentCallsign={selectedAgent?.callsign ?? null}
             />
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

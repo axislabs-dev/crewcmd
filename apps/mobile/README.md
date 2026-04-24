@@ -29,4 +29,8 @@ pnpm sync
 
 Generated branding output is written to `.generated/` and is intentionally ignored by git.
 
-When an iOS Capacitor project already exists under `apps/mobile/ios`, the branding step also renders the manifest icon into `Assets.xcassets/AppIcon.appiconset/` so Xcode picks up the branded home-screen icon automatically.
+When an iOS Capacitor project already exists under `apps/mobile/ios`, the branding step also:
+
+- renders the manifest icon into `Assets.xcassets/AppIcon.appiconset/` so Xcode picks up the branded home-screen icon automatically
+- renders the manifest splash artwork into `Assets.xcassets/Splash.imageset/`
+- rewrites `capacitor.config.json` with the branded app name, splash color, and `allowNavigation` host derived from the configured CrewCmd base URL

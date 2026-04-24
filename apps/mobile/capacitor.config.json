@@ -11,10 +11,6 @@
       "launchAutoHide": false,
       "backgroundColor": "#020405",
       "showSpinner": false
-    },
-    "StatusBar": {
-      "style": "dark",
-      "backgroundColor": "#020405"
     }
   }
 }

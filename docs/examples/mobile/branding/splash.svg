@@ -16,37 +16,37 @@
   </defs>
 
   <rect width="1179" height="2556" fill="#020405" />
-  <rect width="1179" height="2556" fill="url(#coreGlow)" opacity="0.72" />
+  <rect width="1179" height="2556" fill="url(#coreGlow)" opacity="0.5" />
 
-  <g transform="translate(589.5 1068)">
-    <circle r="318" fill="url(#coreGlow)" opacity="0.92" />
-    <circle r="224" fill="none" stroke="#DFFBFF" stroke-width="10" opacity="0.9" />
-    <circle r="154" fill="none" stroke="url(#ringWarm)" stroke-width="10" opacity="0.98" />
-    <circle r="72" fill="#F7FBFF" />
-    <circle r="42" fill="#FFDDB7" opacity="0.88" />
+  <g transform="translate(589.5 1032)">
+    <circle r="188" fill="url(#coreGlow)" opacity="0.88" />
+    <circle r="128" fill="none" stroke="#DFFBFF" stroke-width="8" opacity="0.9" />
+    <circle r="88" fill="none" stroke="url(#ringWarm)" stroke-width="8" opacity="0.98" />
+    <circle r="38" fill="#F7FBFF" />
+    <circle r="22" fill="#FFDDB7" opacity="0.88" />
   </g>
 
-  <g transform="translate(589.5 1460)">
+  <g transform="translate(589.5 1328)">
     <text
       x="0"
       y="0"
       text-anchor="middle"
       fill="url(#wordmark)"
-      font-size="64"
+      font-size="34"
       font-weight="600"
       font-family="Helvetica, Arial, sans-serif"
-      letter-spacing="10"
+      letter-spacing="8"
     >
       CREWCMD
     </text>
     <text
       x="0"
-      y="84"
+      y="52"
       text-anchor="middle"
       fill="#7ED5DB"
-      font-size="24"
+      font-size="14"
       font-family="Helvetica, Arial, sans-serif"
-      letter-spacing="7"
+      letter-spacing="5"
       opacity="0.82"
     >
       CREW OPERATIONS

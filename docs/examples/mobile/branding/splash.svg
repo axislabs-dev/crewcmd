@@ -1,17 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1179 2556" role="img" aria-label="CrewCmd splash placeholder">
   <defs>
-    <radialGradient id="glow" cx="50%" cy="42%" r="42%">
-      <stop offset="0%" stop-color="#0EFBFF" stop-opacity="0.85" />
-      <stop offset="55%" stop-color="#0A7B83" stop-opacity="0.35" />
-      <stop offset="100%" stop-color="#020809" stop-opacity="0" />
+    <radialGradient id="coreGlow" cx="50%" cy="42%" r="48%">
+      <stop offset="0%" stop-color="#9CF8FF" stop-opacity="0.95" />
+      <stop offset="38%" stop-color="#35D6E2" stop-opacity="0.36" />
+      <stop offset="100%" stop-color="#010405" stop-opacity="0" />
     </radialGradient>
+    <linearGradient id="ringWarm" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD56A" />
+      <stop offset="100%" stop-color="#F7B500" />
+    </linearGradient>
+    <linearGradient id="wordmark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F4FFFE" />
+      <stop offset="100%" stop-color="#C8F7FA" />
+    </linearGradient>
   </defs>
-  <rect width="1179" height="2556" fill="#010405" />
-  <circle cx="589.5" cy="1140" r="400" fill="url(#glow)" />
-  <circle cx="589.5" cy="1140" r="186" fill="none" stroke="#8AF5FF" stroke-width="10" opacity="0.9" />
-  <circle cx="589.5" cy="1140" r="126" fill="none" stroke="#F7B500" stroke-width="8" opacity="0.85" />
-  <circle cx="589.5" cy="1140" r="58" fill="#F6FFFE" />
-  <text x="589.5" y="1488" text-anchor="middle" fill="#C9F8FA" font-size="52" font-family="Helvetica, Arial, sans-serif" letter-spacing="8">
-    CREWCMD
-  </text>
+
+  <rect width="1179" height="2556" fill="#020405" />
+  <rect width="1179" height="2556" fill="url(#coreGlow)" opacity="0.72" />
+
+  <g transform="translate(589.5 1068)">
+    <circle r="318" fill="url(#coreGlow)" opacity="0.92" />
+    <circle r="224" fill="none" stroke="#DFFBFF" stroke-width="10" opacity="0.9" />
+    <circle r="154" fill="none" stroke="url(#ringWarm)" stroke-width="10" opacity="0.98" />
+    <circle r="72" fill="#F7FBFF" />
+    <circle r="42" fill="#FFDDB7" opacity="0.88" />
+  </g>
+
+  <g transform="translate(589.5 1460)">
+    <text
+      x="0"
+      y="0"
+      text-anchor="middle"
+      fill="url(#wordmark)"
+      font-size="64"
+      font-weight="600"
+      font-family="Helvetica, Arial, sans-serif"
+      letter-spacing="10"
+    >
+      CREWCMD
+    </text>
+    <text
+      x="0"
+      y="84"
+      text-anchor="middle"
+      fill="#7ED5DB"
+      font-size="24"
+      font-family="Helvetica, Arial, sans-serif"
+      letter-spacing="7"
+      opacity="0.82"
+    >
+      CREW OPERATIONS
+    </text>
+  </g>
 </svg>

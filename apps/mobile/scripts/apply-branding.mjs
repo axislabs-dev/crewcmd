@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 
 const [, , manifestArgFromCli] = process.argv;
 const manifestArg = manifestArgFromCli || process.env.CREWCMD_MOBILE_MANIFEST;
@@ -23,6 +24,50 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const generatedDir = path.join(appDir, outputDirName);
 fs.mkdirSync(generatedDir, { recursive: true });
 const channel = process.env.CREWCMD_MOBILE_CHANNEL || manifest.distribution.channel;
+const iconSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.iconPath);
+
+async function writeIosAppIcons() {
+  const iosAppDir = path.join(appDir, "ios", "App", "App");
+  if (!fs.existsSync(iosAppDir)) {
+    return;
+  }
+
+  if (!fs.existsSync(iconSourcePath)) {
+    throw new Error(`Mobile icon source not found: ${iconSourcePath}`);
+  }
+
+  const assetCatalogDir = path.join(iosAppDir, "Assets.xcassets");
+  const appIconSetDir = path.join(assetCatalogDir, "AppIcon.appiconset");
+  fs.mkdirSync(appIconSetDir, { recursive: true });
+
+  const iconFilename = "AppIcon-512@2x.png";
+  const iconOutputPath = path.join(appIconSetDir, iconFilename);
+
+  await sharp(iconSourcePath)
+    .resize(1024, 1024, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toFile(iconOutputPath);
+
+  const contents = {
+    images: [
+      {
+        filename: iconFilename,
+        idiom: "universal",
+        platform: "ios",
+        size: "1024x1024",
+      },
+    ],
+    info: {
+      author: "xcode",
+      version: 1,
+    },
+  };
+
+  fs.writeFileSync(path.join(appIconSetDir, "Contents.json"), `${JSON.stringify(contents, null, 2)}\n`);
+}
 
 const runtimeConfig = {
   app: manifest.app,
@@ -115,5 +160,7 @@ fs.writeFileSync(
   path.join(appDir, "web", "brand.generated.json"),
   `${JSON.stringify(webConfig, null, 2)}\n`
 );
+
+await writeIosAppIcons();
 
 console.log(`Applied mobile branding manifest from ${path.relative(repoRoot, manifestPath)}`);

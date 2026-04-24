@@ -7,10 +7,13 @@
     "brand": "CREWCMD_MOBILE_MANIFEST=../../docs/examples/mobile/org.mobile.example.json node scripts/apply-branding.mjs",
     "brand:manifest": "node scripts/apply-branding.mjs",
     "check": "node scripts/check-web-assets.mjs",
-    "copy": "npx cap copy",
-    "sync": "npx cap sync",
-    "open:ios": "npx cap open ios",
-    "open:android": "npx cap open android"
+    "copy": "pnpm exec cap copy",
+    "sync": "pnpm exec cap sync",
+    "open:ios": "pnpm exec cap open ios",
+    "open:android": "pnpm exec cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.1"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",

@@ -151,10 +151,6 @@ const capacitorConfig = {
       launchAutoHide: true,
       backgroundColor: manifest.branding.primaryColor,
       showSpinner: false
-    },
-    StatusBar: {
-      style: "dark",
-      backgroundColor: "#020405"
     }
   }
 };

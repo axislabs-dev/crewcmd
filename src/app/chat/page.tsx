@@ -85,12 +85,46 @@ function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
   return a.id === b.id || a.callsign.toLowerCase() === b.callsign.toLowerCase();
 }
 
-/** Load message history from the gateway session into the Zustand store for an agent */
-async function loadThreadHistoryIntoStore(agentId: string) {
+/** Load persisted CrewCmd message history, falling back to gateway history if no session exists. */
+async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | null) {
   try {
-    const res = await fetch(
-      `/api/chat/history?sessionKey=${encodeURIComponent(agentId)}&limit=200`
-    );
+    if (companyId) {
+      const params = new URLSearchParams({
+        agentId,
+        companyId,
+        limit: "200",
+      });
+      const res = await fetch(`/api/chat/messages?${params.toString()}`);
+      if (res.ok) {
+        const { messages, sessionId } = await res.json() as {
+          sessionId: string | null;
+          messages: {
+            id: string;
+            role: "user" | "assistant" | "system";
+            content: string;
+            createdAt: string;
+            metadata?: Record<string, unknown> | null;
+          }[];
+        };
+
+        if (sessionId) {
+          useChatStore.getState().loadSession(
+            agentId.toLowerCase(),
+            messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
+              id: m.id,
+              agentId: agentId.toLowerCase(),
+              role: m.role,
+              content: m.content,
+              createdAt: m.createdAt,
+              metadata: m.metadata ?? null,
+            }))
+          );
+          return;
+        }
+      }
+    }
+
+    const res = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(agentId)}&limit=200`);
     if (!res.ok) return;
 
     const { messages } = await res.json() as {
@@ -111,7 +145,7 @@ async function loadThreadHistoryIntoStore(agentId: string) {
       }))
     );
   } catch {
-    // Gateway unavailable
+    // History unavailable
   }
 }
 
@@ -339,7 +373,7 @@ export default function ChatPage() {
     } else if (!loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
       // Otherwise load standard thread history
       loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
-      loadThreadHistoryIntoStore(agentId).then(() => {
+      loadThreadHistoryIntoStore(agentId, company?.id).then(() => {
         if (cancelled) return;
         const updated = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
         setMessages(updated.map((m) => ({
@@ -356,7 +390,7 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead]);
+  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id]);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
@@ -1249,9 +1283,27 @@ export default function ChatPage() {
     }
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
     setMessages([]);
     storeClearAgent(activeSessionKey);
+    loadedAgentsRef.current.add(activeSessionKey);
+    loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
+
+    if (!company?.id) return;
+
+    try {
+      await fetch("/api/chat/messages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: agentCallsign,
+          companyId: company.id,
+          gatewaySessionKey: selectedSessionKey ?? undefined,
+        }),
+      });
+    } catch {
+      // Local clear still succeeds; persistence will retry on next explicit clear.
+    }
   };
 
   return (

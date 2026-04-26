@@ -13,6 +13,7 @@ import { getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/age
 import {
   grantAgentDefaultWorkspace,
   grantAgentToWorkspace,
+  listWorkspaceAgents,
   resolveAccessibleWorkspace,
   type WorkspaceRecord,
 } from "@/lib/workspace";
@@ -85,6 +86,15 @@ export async function POST(request: NextRequest) {
     });
     const runtimeContext = await loadPrimaryRuntimeContext(targetWorkspace);
     const runtimeCapabilities = runtimeContext.capabilities;
+    const blueprintCallsigns = new Set(agentTemplates.map((agent) => agent.callsign.toUpperCase()));
+    const runtimeMainAgent = runtimeContext.runtime
+      ? await resolveRuntimeMainWorkspaceAgent({
+          workspaceId: targetWorkspace.id,
+          runtimeId: runtimeContext.runtime.id,
+          defaultAgentId: readRuntimeDefaultAgentId(runtimeContext.runtime.metadata),
+          excludeCallsigns: blueprintCallsigns,
+        })
+      : null;
     const workspaceOwnerType = targetWorkspace.type === "personal" ? "user" : "company";
     const effectiveOwnerType = runtimeContext.runtime?.ownerType ?? workspaceOwnerType;
     const effectiveOwnerUserId =
@@ -203,8 +213,10 @@ export async function POST(request: NextRequest) {
 
     // Set up reportsTo relationships (second pass)
     for (const tmpl of agentTemplates) {
+      const agent = createdAgents[tmpl.callsign.toUpperCase()];
+      if (!agent) continue;
+
       if (tmpl.reportsTo) {
-        const agent = createdAgents[tmpl.callsign.toUpperCase()];
         const manager = createdAgents[tmpl.reportsTo.toUpperCase()];
         if (agent && manager) {
           await withRetry(() =>
@@ -214,6 +226,13 @@ export async function POST(request: NextRequest) {
               .where(eq(schema.agents.id, agent.id))
           );
         }
+      } else if (runtimeMainAgent) {
+        await withRetry(() =>
+          db!
+            .update(schema.agents)
+            .set({ reportsTo: runtimeMainAgent.callsign })
+            .where(eq(schema.agents.id, agent.id))
+        );
       }
     }
 
@@ -387,6 +406,40 @@ function buildPrimaryRuntimeWhere(workspace: WorkspaceRecord) {
     )!,
     eq(schema.companyRuntimes.isPrimary, true)
   );
+}
+
+function readRuntimeDefaultAgentId(metadata: Record<string, unknown> | null): string | null {
+  const value = metadata?.defaultAgentId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function resolveRuntimeMainWorkspaceAgent(params: {
+  workspaceId: string;
+  runtimeId: string;
+  defaultAgentId: string | null;
+  excludeCallsigns: Set<string>;
+}): Promise<{ id: string; callsign: string } | null> {
+  const agents = await listWorkspaceAgents(params.workspaceId, {
+    runtimeId: params.runtimeId,
+    includeDetached: true,
+  });
+  const existingAgents = agents.filter(
+    (agent) => !params.excludeCallsigns.has(agent.callsign.toUpperCase())
+  );
+  if (existingAgents.length === 0) return null;
+
+  const defaultRuntimeRef = params.defaultAgentId?.toLowerCase();
+  const byRuntimeRef = (runtimeRef: string) =>
+    existingAgents.find((agent) => agent.runtimeRef?.toLowerCase() === runtimeRef);
+
+  const mainAgent =
+    (defaultRuntimeRef ? byRuntimeRef(defaultRuntimeRef) : null) ??
+    byRuntimeRef("main") ??
+    existingAgents.find((agent) => agent.callsign.toUpperCase() === "MAIN") ??
+    existingAgents.find((agent) => !agent.reportsTo) ??
+    existingAgents[0];
+
+  return mainAgent ? { id: mainAgent.id, callsign: mainAgent.callsign } : null;
 }
 
 async function assertBlueprintCallsignsAvailable(

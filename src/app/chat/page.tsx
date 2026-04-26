@@ -15,7 +15,7 @@ import { useSessionBrowserStore } from "@/lib/session-browser-store";
 import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
 import { useChatStore } from "@/lib/chat-store";
-import { useCompany } from "@/components/company-context";
+import { useWorkspace } from "@/components/company-context";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -62,6 +62,27 @@ const VOICE_SYSTEM_PROMPT = [
   "",
   "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
+
+function selectedSessionBelongsToAgent(
+  sessionKey: string | null,
+  callsign: string | null | undefined
+) {
+  if (!sessionKey || !callsign) return false;
+  const key = sessionKey.toLowerCase();
+  const agent = callsign.toLowerCase();
+  return key === agent || key.startsWith(`${agent}:`);
+}
+
+function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
+  const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
+  if (runtimeRef === "main") return "main";
+  return agent?.callsign.toLowerCase() ?? "main";
+}
+
+function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
+  if (!a || !b) return false;
+  return a.id === b.id || a.callsign.toLowerCase() === b.callsign.toLowerCase();
+}
 
 /** Load message history from the gateway session into the Zustand store for an agent */
 async function loadThreadHistoryIntoStore(agentId: string) {
@@ -125,7 +146,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
 }
 
 export default function ChatPage() {
-  const { company } = useCompany();
+  const { workspace, company } = useWorkspace();
   const storeMarkRead = useChatStore((s) => s.markRead);
   const storeClearAgent = useChatStore((s) => s.clearAgent);
   const {
@@ -200,13 +221,20 @@ export default function ChatPage() {
   // Fetch agents on mount
   useEffect(() => {
     async function fetchAgents() {
+      if (!workspace?.id) return;
       try {
-        const res = await fetch("/api/agents");
+        const params = new URLSearchParams({ workspaceId: workspace.id });
+        const res = await fetch(`/api/agents?${params.toString()}`);
         const data = await res.json();
         const fetched: Agent[] = Array.isArray(data)
           ? data
           : data.agents || [];
         setAgents(fetched);
+        if (fetched.length === 0) {
+          setSelectedAgent(null);
+          selectSession(null);
+          return;
+        }
 
         const restoredAgent = preferredAgentCallsign
           ? fetched.find(
@@ -234,7 +262,7 @@ export default function ChatPage() {
       }
     }
     fetchAgents();
-  }, [preferredAgentCallsign, preferredSessionKey, selectSession]);
+  }, [preferredAgentCallsign, preferredSessionKey, selectSession, workspace?.id]);
 
   // Load configurable stop words from system settings
   useEffect(() => {
@@ -455,6 +483,14 @@ export default function ChatPage() {
     () => (selectedAgent ? findParentAgent(selectedAgent, agents) : null),
     [selectedAgent, agents]
   );
+  const defaultAgent = useMemo(() => findDefaultAgent(agents), [agents]);
+  const delegatedViaAgent = useMemo(
+    () =>
+      selectedAgent && defaultAgent && !sameAgent(selectedAgent, defaultAgent)
+        ? defaultAgent
+        : null,
+    [selectedAgent, defaultAgent]
+  );
 
   const handleAgentSelect = useCallback(
     (agent: Agent, sessionKey?: string | null) => {
@@ -471,6 +507,9 @@ export default function ChatPage() {
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
       selectSession(nextSessionKey);
+      if (typeof window !== "undefined" && !nextSessionKey) {
+        window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+      }
       setSelectedAgent(agent);
     },
     [selectedAgent, selectedSessionKey, selectSession]
@@ -1032,9 +1071,22 @@ export default function ChatPage() {
           body: JSON.stringify({
             messages: chatMessages,
             agent: selectedAgent?.callsign,
+            gatewayAgent: delegatedViaAgent?.callsign ?? selectedAgent?.callsign,
+            targetAgent: delegatedViaAgent && selectedAgent
+              ? {
+                  callsign: selectedAgent.callsign,
+                  name: selectedAgent.name,
+                  title: selectedAgent.title,
+                  runtimeRef: selectedAgent.runtimeRef,
+                }
+              : undefined,
             companyId: company?.id,
             metadata,
-            sessionKey: selectedSessionKey ?? undefined,
+            sessionKey: delegatedViaAgent
+              ? gatewaySessionKeyForAgent(delegatedViaAgent)
+              : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+              ? selectedSessionKey ?? undefined
+              : undefined,
           }),
           signal: controller.signal,
         });
@@ -1166,7 +1218,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1190,12 +1242,12 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] lg:h-dvh flex-col">
+    <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
       {/* Header */}
-      <div className="shrink-0 relative z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 lg:px-6">
+      <div className="sticky top-0 z-30 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -1228,7 +1280,11 @@ export default function ChatPage() {
                   {selectedAgent.title || selectedAgent.name}
                 </span>
                 <span className="text-[10px] text-[var(--text-tertiary)]">
-                  {parentAgent ? (
+                  {delegatedViaAgent ? (
+                    <>
+                      Via: {delegatedViaAgent.emoji} {delegatedViaAgent.callsign}
+                    </>
+                  ) : parentAgent ? (
                     <>
                       Reports to: {parentAgent.emoji} {parentAgent.callsign}
                     </>
@@ -1253,7 +1309,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages area */}
-      <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -1275,6 +1331,10 @@ export default function ChatPage() {
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
                 {`Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
+                  delegatedViaAgent
+                    ? ` CrewCmd will route this through ${delegatedViaAgent.callsign}.`
+                    : ""
+                }${
                   parentAgent
                     ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
                     : ""

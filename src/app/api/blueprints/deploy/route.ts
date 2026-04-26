@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { BUILT_IN_BLUEPRINTS } from "@/lib/blueprints-data";
 import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
 import { buildBlueprintOperatingLayer } from "@/lib/operating-layer";
@@ -9,6 +9,13 @@ import { resolveBlueprintAgentModelSelection } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 import { provisionBlueprintAgentsToRuntime } from "@/lib/blueprint-runtime-provisioning";
 import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
+import { getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/agent-access";
+import {
+  grantAgentDefaultWorkspace,
+  grantAgentToWorkspace,
+  resolveAccessibleWorkspace,
+  type WorkspaceRecord,
+} from "@/lib/workspace";
 
 /**
  * POST /api/blueprints/deploy — Deploy a blueprint to a company.
@@ -21,17 +28,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { blueprintId, companyId, customize } = body as {
+    const { blueprintId, companyId, workspaceId, customize } = body as {
       blueprintId: string;
-      companyId: string;
+      companyId?: string;
+      workspaceId?: string;
       customize?: { agents?: Partial<BlueprintAgentTemplate>[] };
     };
 
-    if (!blueprintId || !companyId) {
+    if (!blueprintId) {
       return NextResponse.json(
-        { error: "blueprintId and companyId are required" },
+        { error: "blueprintId is required" },
         { status: 400 }
       );
+    }
+
+    const access = await getAgentAccessContext();
+    if (!access.userId) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const targetWorkspace = await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: workspaceId ?? null,
+      explicitCompanyId: companyId ?? null,
+    });
+    if (!targetWorkspace) {
+      return NextResponse.json({ error: "A readable workspace is required" }, { status: 400 });
     }
 
     // Resolve the blueprint template
@@ -61,8 +83,18 @@ export async function POST(request: NextRequest) {
       const overrides = customize?.agents?.[idx];
       return overrides ? { ...agent, ...overrides } : { ...agent };
     });
-    const runtimeContext = await loadPrimaryRuntimeContext(companyId);
+    const runtimeContext = await loadPrimaryRuntimeContext(targetWorkspace);
     const runtimeCapabilities = runtimeContext.capabilities;
+    const workspaceOwnerType = targetWorkspace.type === "personal" ? "user" : "company";
+    const effectiveOwnerType = runtimeContext.runtime?.ownerType ?? workspaceOwnerType;
+    const effectiveOwnerUserId =
+      runtimeContext.runtime?.ownerUserId ??
+      (effectiveOwnerType === "user" ? targetWorkspace.ownerUserId ?? access.userId : null);
+    const effectiveOwnerCompanyId =
+      runtimeContext.runtime?.ownerCompanyId ??
+      (effectiveOwnerType === "company" ? targetWorkspace.companyId : null);
+    const effectiveVisibility = normalizeVisibilityForCreation({ ownerType: effectiveOwnerType });
+    const storageCompanyId = runtimeContext.runtime?.companyId ?? targetWorkspace.companyId ?? null;
 
     await assertBlueprintCallsignsAvailable(agentTemplates);
 
@@ -88,7 +120,7 @@ export async function POST(request: NextRequest) {
         db!
           .select({ id: schema.skills.id, slug: schema.skills.slug })
           .from(schema.skills)
-          .where(eq(schema.skills.companyId, companyId))
+          .where(storageCompanyId ? eq(schema.skills.companyId, storageCompanyId) : isNull(schema.skills.companyId))
       );
     } catch {
       // Skills lookup is best-effort
@@ -141,13 +173,32 @@ export async function POST(request: NextRequest) {
               agentsRaw: tmpl.agentsContent,
             }),
           },
-          companyId,
+          companyId: targetWorkspace.companyId,
+          ownerType: effectiveOwnerType,
+          ownerUserId: effectiveOwnerUserId,
+          ownerCompanyId: effectiveOwnerCompanyId,
+          visibility: effectiveVisibility,
           reportsTo: null, // Set in second pass
           soulContent: tmpl.soulContent ?? tmpl.promptTemplate ?? null,
         }).returning()
       );
 
       createdAgents[tmpl.callsign.toUpperCase()] = { id: created.id, callsign: created.callsign };
+
+      await grantAgentDefaultWorkspace({
+        agentId: created.id,
+        ownerType: effectiveOwnerType,
+        ownerUserId: effectiveOwnerUserId,
+        ownerCompanyId: effectiveOwnerCompanyId,
+        fallbackCompanyId: targetWorkspace.companyId,
+        grantedBy: access.userId,
+      });
+      await grantAgentToWorkspace({
+        agentId: created.id,
+        workspaceId: targetWorkspace.id,
+        accessLevel: effectiveOwnerType === "company" ? "operator" : "manager",
+        grantedBy: access.userId,
+      });
     }
 
     // Set up reportsTo relationships (second pass)
@@ -229,7 +280,11 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[api/blueprints/deploy] Error:", err);
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("unique") || msg.includes("duplicate")) {
+    if (
+      msg.includes("unique") ||
+      msg.includes("duplicate") ||
+      msg.toLowerCase().includes("callsigns already exist")
+    ) {
       return NextResponse.json(
         { error: "One or more agent callsigns already exist. Rename agents before deploying." },
         { status: 409 }
@@ -239,9 +294,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function loadPrimaryRuntimeContext(companyId: string): Promise<{
+async function loadPrimaryRuntimeContext(workspace: WorkspaceRecord): Promise<{
   runtime: {
     id: string;
+    companyId: string | null;
+    ownerType: "user" | "company";
+    ownerUserId: string | null;
+    ownerCompanyId: string | null;
     gatewayUrl: string;
     httpUrl: string;
     authToken: string | null;
@@ -253,19 +312,17 @@ async function loadPrimaryRuntimeContext(companyId: string): Promise<{
     db!
       .select({
         id: schema.companyRuntimes.id,
+        companyId: schema.companyRuntimes.companyId,
+        ownerType: schema.companyRuntimes.ownerType,
+        ownerUserId: schema.companyRuntimes.ownerUserId,
+        ownerCompanyId: schema.companyRuntimes.ownerCompanyId,
         gatewayUrl: schema.companyRuntimes.gatewayUrl,
         httpUrl: schema.companyRuntimes.httpUrl,
         authToken: schema.companyRuntimes.authToken,
         metadata: schema.companyRuntimes.metadata,
       })
       .from(schema.companyRuntimes)
-      .where(
-        and(
-          eq(schema.companyRuntimes.companyId, companyId),
-          eq(schema.companyRuntimes.ownerType, "company"),
-          eq(schema.companyRuntimes.isPrimary, true)
-        )
-      )
+      .where(buildPrimaryRuntimeWhere(workspace))
       .orderBy(desc(schema.companyRuntimes.updatedAt))
       .limit(1)
   );
@@ -281,6 +338,10 @@ async function loadPrimaryRuntimeContext(companyId: string): Promise<{
       runtime: runtime
         ? {
             id: runtime.id,
+            companyId: runtime.companyId,
+            ownerType: runtime.ownerType,
+            ownerUserId: runtime.ownerUserId,
+            ownerCompanyId: runtime.ownerCompanyId ?? runtime.companyId,
             gatewayUrl: runtime.gatewayUrl,
             httpUrl: runtime.httpUrl,
             authToken: runtime.authToken,
@@ -295,6 +356,10 @@ async function loadPrimaryRuntimeContext(companyId: string): Promise<{
     runtime: runtime
       ? {
           id: runtime.id,
+          companyId: runtime.companyId,
+          ownerType: runtime.ownerType,
+          ownerUserId: runtime.ownerUserId,
+          ownerCompanyId: runtime.ownerCompanyId ?? runtime.companyId,
           gatewayUrl: runtime.gatewayUrl,
           httpUrl: runtime.httpUrl,
           authToken: runtime.authToken,
@@ -303,6 +368,25 @@ async function loadPrimaryRuntimeContext(companyId: string): Promise<{
       : null,
     capabilities: snapshot as RuntimeCapabilitySnapshot,
   };
+}
+
+function buildPrimaryRuntimeWhere(workspace: WorkspaceRecord) {
+  if (workspace.type === "personal") {
+    return and(
+      eq(schema.companyRuntimes.ownerType, "user"),
+      eq(schema.companyRuntimes.ownerUserId, workspace.ownerUserId ?? ""),
+      eq(schema.companyRuntimes.isPrimary, true)
+    );
+  }
+
+  return and(
+    eq(schema.companyRuntimes.ownerType, "company"),
+    or(
+      eq(schema.companyRuntimes.ownerCompanyId, workspace.companyId ?? ""),
+      eq(schema.companyRuntimes.companyId, workspace.companyId ?? "")
+    )!,
+    eq(schema.companyRuntimes.isPrimary, true)
+  );
 }
 
 async function assertBlueprintCallsignsAvailable(

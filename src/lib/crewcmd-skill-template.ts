@@ -126,6 +126,49 @@ Important:
 - developer/reviewer tasks require \`prUrl\` before \`status: "review"\`
 - use \`humanAttentionType\` plus a short title/body when you need a human blocker/question/review/decision inbox item
 
+### Submit Completion Report
+
+\`\`\`
+POST ${baseUrl}/api/tasks/{id}/complete
+Content-Type: application/json
+
+{
+  "repo": "owner/repo",
+  "branch": "feat/my-feature",
+  "commits": [
+    { "hash": "abc1234", "message": "Fix the bug" },
+    { "hash": "def5678", "message": "Add tests" }
+  ],
+  "prUrl": "https://github.com/owner/repo/pull/42",
+  "validationRun": {
+    "ci": "pass",
+    "tests": "pass",
+    "lint": "pass",
+    "timestamp": "2026-04-26T04:00:00.000Z"
+  },
+  "executionSuccess": true,
+  "executionErrors": [],
+  "notes": "Task completed — all acceptance criteria met"
+}
+\`\`\`
+
+Fields:
+- \`repo\` (required) — GitHub repo in owner/repo format
+- \`branch\` (required) — Branch name containing the work
+- \`commits\` — Array of commit objects with \`hash\` (7+ hex chars) and \`message\`
+- \`prUrl\` — Pull request URL (strongly recommended for code-delivery tasks)
+- \`validationRun\` — CI/test/lint status and timestamp
+- \`executionSuccess\` — Whether the agent believes the work succeeded
+- \`executionErrors\` — Array of error strings if execution failed
+- \`notes\` — Free-form completion notes
+
+The supervisor validates the report and will reject it if:
+- Required fields (repo, branch) are missing
+- For developer/reviewer role packs: prUrl is required before review/done
+- Commit hashes are in invalid format
+
+On acceptance, the endpoint updates task metadata, logs the completion, and posts a summary comment.
+
 ### Add Comment
 
 \`\`\`

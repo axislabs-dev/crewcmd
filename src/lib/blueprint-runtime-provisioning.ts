@@ -18,6 +18,17 @@ export interface ProvisionedBlueprintAgent {
   workspacePath: string | null;
 }
 
+export type BlueprintRuntimeConfigPatch = Record<string, unknown> & {
+  agents: {
+    list: Array<Record<string, unknown>>;
+  };
+  acp: {
+    enabled: boolean;
+    defaultAgent?: string;
+    allowedAgents: string[];
+  };
+};
+
 export async function provisionBlueprintAgentsToRuntime(params: {
   runtime: RuntimeRecord;
   agentTemplates: BlueprintAgentTemplate[];
@@ -37,72 +48,127 @@ export async function provisionBlueprintAgentsToRuntime(params: {
   try {
     await client.connect();
     const snapshot = await client.configGet();
-    const existingAgents = readAgentList(snapshot.config);
-    const workspaceRoot = inferWorkspaceRoot(snapshot.config, existingAgents);
-    const agentRoot = inferAgentRoot(existingAgents);
+    const patch = buildBlueprintRuntimeConfigPatch({
+      config: snapshot.config,
+      agentTemplates: params.agentTemplates,
+      runtimeCapabilities: params.runtimeCapabilities,
+    });
 
-    if (!workspaceRoot || !agentRoot) {
-      throw new Error("Primary runtime config does not expose agent workspace roots");
+    try {
+      await client.configPatch({
+        patch,
+        baseHash: snapshot.hash,
+        note: "CrewCmd provisioned blueprint agents on the primary runtime",
+        restartDelayMs: 5000,
+      });
+    } catch (err) {
+      if (!isGatewayRestartError(err)) throw err;
+      await reconnectAfterGatewayRestart(client);
     }
-
-    const patchEntries = params.agentTemplates.map((tmpl) => {
-      const runtimeRef = buildRuntimeRef(tmpl.callsign);
-      const resolvedModel = resolveBlueprintAgentModelSelection(
-        tmpl,
-        params.runtimeCapabilities
-      );
-      const workspacePath = pathPosix.join(workspaceRoot, "agents", runtimeRef);
-      const agentDir = pathPosix.join(agentRoot, runtimeRef, "agent");
-
-      return {
-        id: runtimeRef,
-        name: runtimeRef,
-        workspace: workspacePath,
-        agentDir,
-        model: resolvedModel.primaryModel
-          ? {
-              primary: resolvedModel.primaryModel,
-              ...(resolvedModel.fallbackModels.length > 0
-                ? { fallbacks: resolvedModel.fallbackModels }
-                : {}),
-            }
-          : undefined,
-        skills: dedupeSkills(tmpl.skills ?? []),
-      };
-    });
-
-    await client.configPatch({
-      patch: {
-        agents: {
-          list: patchEntries,
-        },
-      },
-      baseHash: snapshot.hash,
-      note: "CrewCmd provisioned blueprint agents on the primary runtime",
-    });
 
     for (const tmpl of params.agentTemplates) {
       const runtimeRef = buildRuntimeRef(tmpl.callsign);
       await syncBlueprintFiles(client, runtimeRef, tmpl);
     }
 
+    const blueprintRefs = new Set(
+      params.agentTemplates.map((tmpl) => buildRuntimeRef(tmpl.callsign))
+    );
+
     return {
-      agents: patchEntries.map((entry) => ({
-        callsign: params.agentTemplates.find((tmpl) => buildRuntimeRef(tmpl.callsign) === entry.id)?.callsign.toUpperCase() ?? entry.id.toUpperCase(),
-        runtimeRef: entry.id,
-        workspacePath: entry.workspace ?? null,
-      })),
+      agents: patch.agents.list
+        .filter((entry) => blueprintRefs.has(String(entry.id)))
+        .map((entry) => ({
+          callsign: params.agentTemplates.find((tmpl) => buildRuntimeRef(tmpl.callsign) === entry.id)?.callsign.toUpperCase() ?? String(entry.id).toUpperCase(),
+          runtimeRef: String(entry.id),
+          workspacePath: typeof entry.workspace === "string" ? entry.workspace : null,
+        })),
     };
   } finally {
     client.close();
   }
 }
 
-function syncBlueprintFiles(
+export function buildBlueprintRuntimeConfigPatch(params: {
+  config: Record<string, unknown>;
+  agentTemplates: BlueprintAgentTemplate[];
+  runtimeCapabilities: RuntimeCapabilitySnapshot | null;
+}): BlueprintRuntimeConfigPatch {
+  const existingAgents = readAgentList(params.config);
+  const workspaceRoot = inferWorkspaceRoot(params.config, existingAgents);
+  const agentRoot = inferAgentRoot(existingAgents);
+
+  if (!workspaceRoot || !agentRoot) {
+    throw new Error("Primary runtime config does not expose agent workspace roots");
+  }
+
+  const blueprintEntries = params.agentTemplates.map((tmpl) => {
+    const runtimeRef = buildRuntimeRef(tmpl.callsign);
+    const resolvedModel = resolveBlueprintAgentModelSelection(
+      tmpl,
+      params.runtimeCapabilities
+    );
+    const workspacePath = pathPosix.join(workspaceRoot, "agents", runtimeRef);
+    const agentDir = pathPosix.join(agentRoot, runtimeRef, "agent");
+
+    return {
+      id: runtimeRef,
+      name: runtimeRef,
+      workspace: workspacePath,
+      agentDir,
+      model: resolvedModel.primaryModel
+        ? {
+            primary: resolvedModel.primaryModel,
+            ...(resolvedModel.fallbackModels.length > 0
+              ? { fallbacks: resolvedModel.fallbackModels }
+              : {}),
+          }
+        : undefined,
+      skills: dedupeSkills(tmpl.skills ?? []),
+    };
+  });
+
+  const acp = readAcpConfig(params.config);
+  const blueprintAgentIds = blueprintEntries.map((entry) => String(entry.id));
+
+  return {
+    agents: {
+      list: mergeAgentEntries(existingAgents, blueprintEntries),
+    },
+    acp: {
+      enabled: acp.enabled || blueprintAgentIds.length > 0,
+      ...(acp.defaultAgent ? { defaultAgent: acp.defaultAgent } : {}),
+      allowedAgents: mergeUnique(acp.allowedAgents, blueprintAgentIds),
+    },
+  };
+}
+
+function mergeAgentEntries(
+  existingAgents: Array<Record<string, unknown>>,
+  blueprintEntries: Array<Record<string, unknown>>
+): Array<Record<string, unknown>> {
+  const merged = new Map<string, Record<string, unknown>>();
+
+  for (const entry of existingAgents) {
+    const id = readAgentId(entry);
+    if (!id) continue;
+    merged.set(id, entry);
+  }
+
+  for (const entry of blueprintEntries) {
+    const id = readAgentId(entry);
+    if (!id) continue;
+    merged.set(id, entry);
+  }
+
+  return Array.from(merged.values());
+}
+
+async function syncBlueprintFiles(
   client: GatewayClient,
   runtimeRef: string,
   tmpl: BlueprintAgentTemplate
-): Promise<unknown[]> {
+): Promise<void> {
   const files = [
     ["IDENTITY.md", tmpl.identityContent],
     ["SOUL.md", tmpl.soulContent],
@@ -113,9 +179,62 @@ function syncBlueprintFiles(
     ["BOOTSTRAP.md", tmpl.bootstrapContent],
   ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0);
 
-  return Promise.all(
-    files.map(([name, content]) => client.setAgentFile(runtimeRef, name, content))
-  );
+  for (const [name, content] of files) {
+    await setAgentFileWithRestartRetry(client, runtimeRef, name, content);
+  }
+}
+
+async function setAgentFileWithRestartRetry(
+  client: GatewayClient,
+  runtimeRef: string,
+  name: string,
+  content: string
+) {
+  try {
+    await ensureGatewayConnected(client);
+    await client.setAgentFile(runtimeRef, name, content);
+  } catch (err) {
+    if (!isGatewayRestartError(err) && !isGatewayDisconnectedError(err)) throw err;
+    await reconnectAfterGatewayRestart(client);
+    await client.setAgentFile(runtimeRef, name, content);
+  }
+}
+
+async function ensureGatewayConnected(client: GatewayClient) {
+  if (client.isConnected) return;
+  await reconnectAfterGatewayRestart(client);
+}
+
+async function reconnectAfterGatewayRestart(client: GatewayClient) {
+  client.close();
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await sleep(attempt === 0 ? 1500 : 1000);
+    try {
+      await client.connect();
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Failed to reconnect to gateway: ${String(lastError)}`);
+}
+
+function isGatewayRestartError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /Connection closed \(1012\):.*service restart/i.test(message);
+}
+
+function isGatewayDisconnectedError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /Not connected to gateway/i.test(message);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildRuntimeRef(callsign: string): string {
@@ -137,6 +256,37 @@ function readAgentList(config: Record<string, unknown>): Array<Record<string, un
   const list = agentsConfig?.list;
   if (!Array.isArray(list)) return [];
   return list.filter(isPlainObject);
+}
+
+function readAgentId(entry: Record<string, unknown>): string | null {
+  const id = typeof entry.id === "string" ? entry.id.trim() : "";
+  return id || null;
+}
+
+function readAcpConfig(config: Record<string, unknown>): {
+  enabled: boolean;
+  defaultAgent?: string;
+  allowedAgents: string[];
+} {
+  const acp = isPlainObject(config.acp) ? config.acp : null;
+  const defaultAgent = typeof acp?.defaultAgent === "string" && acp.defaultAgent.trim()
+    ? acp.defaultAgent.trim()
+    : undefined;
+
+  return {
+    enabled: acp?.enabled === true,
+    ...(defaultAgent ? { defaultAgent } : {}),
+    allowedAgents: Array.isArray(acp?.allowedAgents)
+      ? acp.allowedAgents
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [],
+  };
+}
+
+function mergeUnique(existing: string[], next: string[]): string[] {
+  return Array.from(new Set([...existing, ...next].map((value) => value.trim()).filter(Boolean)));
 }
 
 function inferWorkspaceRoot(

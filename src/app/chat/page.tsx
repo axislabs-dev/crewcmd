@@ -15,7 +15,7 @@ import { useSessionBrowserStore } from "@/lib/session-browser-store";
 import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
 import { useChatStore } from "@/lib/chat-store";
-import { useCompany } from "@/components/company-context";
+import { useWorkspace } from "@/components/company-context";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -125,7 +125,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
 }
 
 export default function ChatPage() {
-  const { company } = useCompany();
+  const { workspace, company } = useWorkspace();
   const storeMarkRead = useChatStore((s) => s.markRead);
   const storeClearAgent = useChatStore((s) => s.clearAgent);
   const {
@@ -200,13 +200,20 @@ export default function ChatPage() {
   // Fetch agents on mount
   useEffect(() => {
     async function fetchAgents() {
+      if (!workspace?.id) return;
       try {
-        const res = await fetch("/api/agents");
+        const params = new URLSearchParams({ workspaceId: workspace.id });
+        const res = await fetch(`/api/agents?${params.toString()}`);
         const data = await res.json();
         const fetched: Agent[] = Array.isArray(data)
           ? data
           : data.agents || [];
         setAgents(fetched);
+        if (fetched.length === 0) {
+          setSelectedAgent(null);
+          selectSession(null);
+          return;
+        }
 
         const restoredAgent = preferredAgentCallsign
           ? fetched.find(
@@ -234,7 +241,7 @@ export default function ChatPage() {
       }
     }
     fetchAgents();
-  }, [preferredAgentCallsign, preferredSessionKey, selectSession]);
+  }, [preferredAgentCallsign, preferredSessionKey, selectSession, workspace?.id]);
 
   // Load configurable stop words from system settings
   useEffect(() => {

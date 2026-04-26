@@ -18,6 +18,17 @@ export interface ProvisionedBlueprintAgent {
   workspacePath: string | null;
 }
 
+export type BlueprintRuntimeConfigPatch = Record<string, unknown> & {
+  agents: {
+    list: Array<Record<string, unknown>>;
+  };
+  acp: {
+    enabled: boolean;
+    defaultAgent?: string;
+    allowedAgents: string[];
+  };
+};
+
 export async function provisionBlueprintAgentsToRuntime(params: {
   runtime: RuntimeRecord;
   agentTemplates: BlueprintAgentTemplate[];
@@ -37,46 +48,14 @@ export async function provisionBlueprintAgentsToRuntime(params: {
   try {
     await client.connect();
     const snapshot = await client.configGet();
-    const existingAgents = readAgentList(snapshot.config);
-    const workspaceRoot = inferWorkspaceRoot(snapshot.config, existingAgents);
-    const agentRoot = inferAgentRoot(existingAgents);
-
-    if (!workspaceRoot || !agentRoot) {
-      throw new Error("Primary runtime config does not expose agent workspace roots");
-    }
-
-    const patchEntries = params.agentTemplates.map((tmpl) => {
-      const runtimeRef = buildRuntimeRef(tmpl.callsign);
-      const resolvedModel = resolveBlueprintAgentModelSelection(
-        tmpl,
-        params.runtimeCapabilities
-      );
-      const workspacePath = pathPosix.join(workspaceRoot, "agents", runtimeRef);
-      const agentDir = pathPosix.join(agentRoot, runtimeRef, "agent");
-
-      return {
-        id: runtimeRef,
-        name: runtimeRef,
-        workspace: workspacePath,
-        agentDir,
-        model: resolvedModel.primaryModel
-          ? {
-              primary: resolvedModel.primaryModel,
-              ...(resolvedModel.fallbackModels.length > 0
-                ? { fallbacks: resolvedModel.fallbackModels }
-                : {}),
-            }
-          : undefined,
-        skills: dedupeSkills(tmpl.skills ?? []),
-      };
+    const patch = buildBlueprintRuntimeConfigPatch({
+      config: snapshot.config,
+      agentTemplates: params.agentTemplates,
+      runtimeCapabilities: params.runtimeCapabilities,
     });
 
     await client.configPatch({
-      patch: {
-        agents: {
-          list: patchEntries,
-        },
-      },
+      patch,
       baseHash: snapshot.hash,
       note: "CrewCmd provisioned blueprint agents on the primary runtime",
     });
@@ -87,15 +66,69 @@ export async function provisionBlueprintAgentsToRuntime(params: {
     }
 
     return {
-      agents: patchEntries.map((entry) => ({
-        callsign: params.agentTemplates.find((tmpl) => buildRuntimeRef(tmpl.callsign) === entry.id)?.callsign.toUpperCase() ?? entry.id.toUpperCase(),
-        runtimeRef: entry.id,
-        workspacePath: entry.workspace ?? null,
+      agents: patch.agents.list.map((entry) => ({
+        callsign: params.agentTemplates.find((tmpl) => buildRuntimeRef(tmpl.callsign) === entry.id)?.callsign.toUpperCase() ?? String(entry.id).toUpperCase(),
+        runtimeRef: String(entry.id),
+        workspacePath: typeof entry.workspace === "string" ? entry.workspace : null,
       })),
     };
   } finally {
     client.close();
   }
+}
+
+export function buildBlueprintRuntimeConfigPatch(params: {
+  config: Record<string, unknown>;
+  agentTemplates: BlueprintAgentTemplate[];
+  runtimeCapabilities: RuntimeCapabilitySnapshot | null;
+}): BlueprintRuntimeConfigPatch {
+  const existingAgents = readAgentList(params.config);
+  const workspaceRoot = inferWorkspaceRoot(params.config, existingAgents);
+  const agentRoot = inferAgentRoot(existingAgents);
+
+  if (!workspaceRoot || !agentRoot) {
+    throw new Error("Primary runtime config does not expose agent workspace roots");
+  }
+
+  const patchEntries = params.agentTemplates.map((tmpl) => {
+    const runtimeRef = buildRuntimeRef(tmpl.callsign);
+    const resolvedModel = resolveBlueprintAgentModelSelection(
+      tmpl,
+      params.runtimeCapabilities
+    );
+    const workspacePath = pathPosix.join(workspaceRoot, "agents", runtimeRef);
+    const agentDir = pathPosix.join(agentRoot, runtimeRef, "agent");
+
+    return {
+      id: runtimeRef,
+      name: runtimeRef,
+      workspace: workspacePath,
+      agentDir,
+      model: resolvedModel.primaryModel
+        ? {
+            primary: resolvedModel.primaryModel,
+            ...(resolvedModel.fallbackModels.length > 0
+              ? { fallbacks: resolvedModel.fallbackModels }
+              : {}),
+          }
+        : undefined,
+      skills: dedupeSkills(tmpl.skills ?? []),
+    };
+  });
+
+  const acp = readAcpConfig(params.config);
+  const blueprintAgentIds = patchEntries.map((entry) => String(entry.id));
+
+  return {
+    agents: {
+      list: patchEntries,
+    },
+    acp: {
+      enabled: acp.enabled || blueprintAgentIds.length > 0,
+      ...(acp.defaultAgent ? { defaultAgent: acp.defaultAgent } : {}),
+      allowedAgents: mergeUnique(acp.allowedAgents, blueprintAgentIds),
+    },
+  };
 }
 
 function syncBlueprintFiles(
@@ -137,6 +170,32 @@ function readAgentList(config: Record<string, unknown>): Array<Record<string, un
   const list = agentsConfig?.list;
   if (!Array.isArray(list)) return [];
   return list.filter(isPlainObject);
+}
+
+function readAcpConfig(config: Record<string, unknown>): {
+  enabled: boolean;
+  defaultAgent?: string;
+  allowedAgents: string[];
+} {
+  const acp = isPlainObject(config.acp) ? config.acp : null;
+  const defaultAgent = typeof acp?.defaultAgent === "string" && acp.defaultAgent.trim()
+    ? acp.defaultAgent.trim()
+    : undefined;
+
+  return {
+    enabled: acp?.enabled === true,
+    ...(defaultAgent ? { defaultAgent } : {}),
+    allowedAgents: Array.isArray(acp?.allowedAgents)
+      ? acp.allowedAgents
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [],
+  };
+}
+
+function mergeUnique(existing: string[], next: string[]): string[] {
+  return Array.from(new Set([...existing, ...next].map((value) => value.trim()).filter(Boolean)));
 }
 
 function inferWorkspaceRoot(

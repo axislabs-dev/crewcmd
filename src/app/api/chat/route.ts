@@ -71,6 +71,104 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    const str = asString(value);
+    if (str) return str;
+  }
+  return null;
+}
+
+function extractText(value: unknown, seen = new WeakSet<object>()): string {
+  if (typeof value === "string") return value;
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    return value.map((item) => extractText(item, seen)).filter(Boolean).join("");
+  }
+
+  const record = asRecord(value);
+  if (!record) return "";
+  if (seen.has(record)) return "";
+  seen.add(record);
+
+  const direct = firstString(
+    record.text,
+    record.content,
+    record.output,
+    record.result,
+    record.response,
+    record.answer,
+    record.finalOutput,
+    record.final_output,
+    record.message,
+    record.body,
+  );
+  if (direct) return direct;
+
+  const nestedKeys = [
+    "content",
+    "message",
+    "result",
+    "response",
+    "output",
+    "finalOutput",
+    "final_output",
+    "data",
+    "payload",
+  ];
+
+  for (const key of nestedKeys) {
+    const nested = extractText(record[key], seen);
+    if (nested) return nested;
+  }
+
+  return "";
+}
+
+function extractEventSession(payload: Record<string, unknown>) {
+  const session = asRecord(payload.session);
+  return firstString(
+    payload.sessionKey,
+    payload.session_key,
+    payload.session,
+    session?.key,
+    session?.sessionKey,
+    session?.session_key,
+  );
+}
+
+function extractEventRunIds(payload: Record<string, unknown>) {
+  return [
+    payload.runId,
+    payload.run_id,
+    payload.id,
+    payload.requestId,
+    payload.request_id,
+    payload.parentRunId,
+    payload.parent_run_id,
+  ].map(asString).filter((value): value is string => Boolean(value));
+}
+
+function sessionMatches(eventSession: string | null, allowedSessions: string[]) {
+  if (!eventSession) return true;
+  const event = eventSession.toLowerCase();
+
+  return allowedSessions.some((session) => {
+    const allowed = session.toLowerCase();
+    return event === allowed ||
+      event.startsWith(`${allowed}:`) ||
+      event.startsWith(`${allowed}-`) ||
+      event.endsWith(`:${allowed}`);
+  });
+}
+
 function buildDelegatedAgentMessage(params: {
   message: string;
   targetAgent: unknown;
@@ -186,6 +284,14 @@ export async function POST(request: NextRequest) {
     const agentId = asString(agent) || "main";
     const gatewayAgentId = asString(gatewayAgent) || agentId;
     const sessionKey = resolveSessionKeyForAgent(gatewayAgentId, bodySessionKey);
+    const targetAgentRecord = asRecord(targetAgent);
+    const targetAgentCallsign = asString(targetAgentRecord?.callsign);
+    const allowedEventSessions = [
+      sessionKey,
+      agentId,
+      gatewayAgentId,
+      targetAgentCallsign,
+    ].filter((value): value is string => Boolean(value));
     const outboundMessage = buildDelegatedAgentMessage({
       message: lastUserMessage.content,
       targetAgent,
@@ -230,6 +336,14 @@ export async function POST(request: NextRequest) {
     let lastStreamedText = "";
     let fullAssistantText = "";
     let assistantPersisted = false;
+    let activeRunId: string | null = null;
+    let released = false;
+
+    const releaseHeldClient = () => {
+      if (released) return;
+      released = true;
+      releaseClient(client);
+    };
 
     /**
      * Persist the assistant message (called on final, error, abort, cancel, timeout).
@@ -280,48 +394,36 @@ export async function POST(request: NextRequest) {
       },
       cancel() {
         // Client disconnected — persist whatever was streamed so far
+        client.chatAbort({ sessionKey }).catch((err) => {
+          console.error("[api/chat] chat.abort failed:", err);
+        });
         persistAssistant(true);
         for (const fn of cleanupFns) fn();
-        releaseClient(client);
+        releaseHeldClient();
       },
     });
-
-    // Extract text content from a gateway chat message object
-    function extractText(message: unknown): string {
-      if (typeof message === "string") return message;
-      if (!message || typeof message !== "object") return "";
-      const msg = message as Record<string, unknown>;
-
-      if (Array.isArray(msg.content)) {
-        return (msg.content as Array<Record<string, unknown>>)
-          .filter((c) => c.type === "text" && typeof c.text === "string")
-          .map((c) => c.text as string)
-          .join("");
-      }
-
-      if (typeof msg.content === "string") return msg.content;
-      if (typeof msg.text === "string") return msg.text;
-
-      return "";
-    }
 
     const chatHandler = (payload: unknown) => {
       if (!streamController || done) return;
       const p = payload as Record<string, unknown>;
 
       // Filter: only handle events for THIS session
-      const eventSession = ((p.sessionKey as string) || (p.session as string) || "").toLowerCase();
-      const ourSession = sessionKey.toLowerCase();
+      const eventSession = extractEventSession(p);
+      const eventRunIds = extractEventRunIds(p);
+      const matchesSession = sessionMatches(eventSession, allowedEventSessions);
+      const matchesRun = activeRunId
+        ? eventRunIds.includes(activeRunId)
+        : false;
 
-      if (eventSession && eventSession !== ourSession) {
-        const isMatch = eventSession.endsWith(`:${ourSession}`) || eventSession === ourSession;
-        if (!isMatch) return;
+      if (activeRunId && eventRunIds.length > 0 && !matchesRun && !matchesSession) {
+        return;
       }
+      if (!matchesSession) return;
 
       const state = p.state as string;
 
       if (state === "delta") {
-        const fullText = extractText(p.message);
+        const fullText = extractText(p.message || p);
         if (fullText && fullText.length > lastStreamedText.length) {
           const newContent = fullText.slice(lastStreamedText.length);
           lastStreamedText = fullText;
@@ -333,7 +435,7 @@ export async function POST(request: NextRequest) {
           streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         }
       } else if (state === "final") {
-        const finalText = extractText(p.message);
+        const finalText = extractText(p.message || p);
         if (finalText && finalText.length > lastStreamedText.length) {
           const remaining = finalText.slice(lastStreamedText.length);
           const chunk = JSON.stringify({
@@ -351,7 +453,7 @@ export async function POST(request: NextRequest) {
             streamController!.close();
           } catch { /* already closed */ }
           client.off("chat", chatHandler);
-          releaseClient(client);
+          releaseHeldClient();
         });
       } else if (state === "aborted") {
         persistAssistant(true).then(() => {
@@ -361,7 +463,7 @@ export async function POST(request: NextRequest) {
             streamController!.close();
           } catch { /* already closed */ }
           client.off("chat", chatHandler);
-          releaseClient(client);
+          releaseHeldClient();
         });
       } else if (state === "error") {
         const errorMsg = (p.errorMessage as string) || "Chat error";
@@ -378,7 +480,7 @@ export async function POST(request: NextRequest) {
             streamController!.close();
           } catch { /* already closed */ }
           client.off("chat", chatHandler);
-          releaseClient(client);
+          releaseHeldClient();
         });
       }
     };
@@ -390,13 +492,14 @@ export async function POST(request: NextRequest) {
 
     // Send the user's message to the gateway
     try {
-      await client.chatSend({
+      const sendResult = await client.chatSend({
         message: outboundMessage,
         sessionKey,
       });
+      activeRunId = asString(sendResult.runId);
     } catch (err) {
       client.off("chat", chatHandler);
-      releaseClient(client);
+      releaseHeldClient();
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[api/chat] chat.send failed:", msg);
       return Response.json(
@@ -415,7 +518,7 @@ export async function POST(request: NextRequest) {
             streamController!.close();
           } catch { /* already closed */ }
           client.off("chat", chatHandler);
-          releaseClient(client);
+          releaseHeldClient();
         });
       }
     }, 300_000);

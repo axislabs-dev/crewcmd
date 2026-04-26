@@ -67,6 +67,47 @@ function resolveSessionKeyForAgent(agentId: string, requestedSessionKey: unknown
   return agentKey;
 }
 
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function buildDelegatedAgentMessage(params: {
+  message: string;
+  targetAgent: unknown;
+}) {
+  if (!params.targetAgent || typeof params.targetAgent !== "object") {
+    return params.message;
+  }
+
+  const target = params.targetAgent as Record<string, unknown>;
+  const callsign = asString(target.callsign);
+  if (!callsign) return params.message;
+
+  const name = asString(target.name);
+  const title = asString(target.title);
+  const runtimeRef = asString(target.runtimeRef);
+
+  const identity = [
+    `callsign: ${callsign}`,
+    name ? `name: ${name}` : null,
+    title ? `role: ${title}` : null,
+    runtimeRef ? `runtimeRef: ${runtimeRef}` : null,
+  ].filter(Boolean).join(", ");
+
+  return [
+    "CrewCmd delegation request.",
+    "",
+    "OpenClaw only accepts direct chat through the runtime's main agent. The human selected a non-main agent in CrewCmd, so route this turn to that agent using your OpenClaw session/subagent tools and return the selected agent's response. Prefer sessions_send for an existing target session and sessions_spawn if a session does not exist.",
+    "",
+    `Selected agent: ${identity}`,
+    "",
+    "Do not answer as the main agent unless delegation fails. If delegation fails, say exactly why.",
+    "",
+    "Human message:",
+    params.message,
+  ].join("\n");
+}
+
 /**
  * Persist a message to the DB and publish to the event bus.
  * Returns the DB record.
@@ -117,7 +158,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages, agent, companyId: bodyCompanyId, sessionKey: bodySessionKey } = body;
+    const {
+      messages,
+      agent,
+      gatewayAgent,
+      targetAgent,
+      companyId: bodyCompanyId,
+      sessionKey: bodySessionKey,
+    } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return Response.json(
@@ -135,8 +183,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const agentId = agent || "main";
-    const sessionKey = resolveSessionKeyForAgent(agentId, bodySessionKey);
+    const agentId = asString(agent) || "main";
+    const gatewayAgentId = asString(gatewayAgent) || agentId;
+    const sessionKey = resolveSessionKeyForAgent(gatewayAgentId, bodySessionKey);
+    const outboundMessage = buildDelegatedAgentMessage({
+      message: lastUserMessage.content,
+      targetAgent,
+    });
 
     // Resolve company ID from body or cookie
     const companyId = bodyCompanyId ||
@@ -338,7 +391,7 @@ export async function POST(request: NextRequest) {
     // Send the user's message to the gateway
     try {
       await client.chatSend({
-        message: lastUserMessage.content,
+        message: outboundMessage,
         sessionKey,
       });
     } catch (err) {

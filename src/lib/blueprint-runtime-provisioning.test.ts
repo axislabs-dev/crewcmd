@@ -48,6 +48,7 @@ describe("buildBlueprintRuntimeConfigPatch", () => {
     });
 
     expect(patch.agents.list).toMatchObject([
+      { id: "main", agentDir: "/runtime/agents/main/agent" },
       { id: "cipher", workspace: "/workspace/agents/cipher", agentDir: "/runtime/agents/cipher/agent" },
       { id: "forge", workspace: "/workspace/agents/forge", agentDir: "/runtime/agents/forge/agent" },
     ]);
@@ -55,6 +56,98 @@ describe("buildBlueprintRuntimeConfigPatch", () => {
       enabled: true,
       defaultAgent: "openclaw",
       allowedAgents: ["openclaw", "cipher", "forge"],
+    });
+  });
+
+  it("preserves existing runtime agents when adding blueprint agents", () => {
+    const patch = buildBlueprintRuntimeConfigPatch({
+      config: {
+        agents: {
+          defaults: { workspace: "/workspace" },
+          list: [
+            {
+              id: "main",
+              name: "main",
+              workspace: "/workspace/agents/main",
+              agentDir: "/runtime/agents/main/agent",
+              skills: ["existing-skill"],
+            },
+            {
+              id: "support",
+              name: "support",
+              workspace: "/workspace/agents/support",
+              agentDir: "/runtime/agents/support/agent",
+            },
+          ],
+        },
+        acp: {
+          enabled: true,
+          allowedAgents: ["main"],
+        },
+      },
+      agentTemplates: [agent({ callsign: "Cipher" })],
+      runtimeCapabilities: null,
+    });
+
+    expect(patch.agents.list).toMatchObject([
+      {
+        id: "main",
+        name: "main",
+        workspace: "/workspace/agents/main",
+        agentDir: "/runtime/agents/main/agent",
+        skills: ["existing-skill"],
+      },
+      {
+        id: "support",
+        name: "support",
+        workspace: "/workspace/agents/support",
+        agentDir: "/runtime/agents/support/agent",
+      },
+      {
+        id: "cipher",
+        name: "cipher",
+        workspace: "/workspace/agents/cipher",
+        agentDir: "/runtime/agents/cipher/agent",
+      },
+    ]);
+    expect(patch.acp.allowedAgents).toEqual(["main", "cipher"]);
+  });
+
+  it("upserts blueprint agents without duplicating existing runtime ids", () => {
+    const patch = buildBlueprintRuntimeConfigPatch({
+      config: {
+        agents: {
+          defaults: { workspace: "/workspace" },
+          list: [
+            {
+              id: "cipher",
+              name: "old-cipher",
+              workspace: "/workspace/agents/cipher-old",
+              agentDir: "/runtime/agents/cipher/agent",
+              skills: ["old-skill"],
+            },
+          ],
+        },
+        acp: {
+          enabled: false,
+          allowedAgents: [],
+        },
+      },
+      agentTemplates: [agent({ callsign: "Cipher", skills: ["crewcmd-management", "crewcmd-management"] })],
+      runtimeCapabilities: null,
+    });
+
+    expect(patch.agents.list).toHaveLength(1);
+    expect(patch.agents.list[0]).toMatchObject({
+      id: "cipher",
+      name: "cipher",
+      workspace: "/workspace/agents/cipher",
+      agentDir: "/runtime/agents/cipher/agent",
+      skills: ["crewcmd-management"],
+    });
+    expect(patch.acp).toEqual({
+      enabled: true,
+      allowedAgents: ["cipher"],
     });
   });
 });

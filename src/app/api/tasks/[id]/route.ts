@@ -5,6 +5,10 @@ import * as schema from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { createHumanAttentionInbox, type HumanAttentionType } from "@/lib/human-attention";
 import { isDeveloperWorkflowRole, type CrewCmdRolePack } from "@/lib/operating-layer";
+import {
+  verifyTaskCompletion,
+  evaluateSupervisorRejection,
+} from "@/lib/agent-completion-verification";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +124,37 @@ export async function PATCH(
       : [null];
     const rolePack = getOperatingRolePack(assignedAgent ?? undefined);
     const nextPrUrl = body.prUrl ?? oldTask.prUrl ?? null;
+
+    // Agent completion verification gate
+    const targetStatus = body.status as string | undefined;
+    if (
+      (targetStatus === "review" || targetStatus === "done") &&
+      nextAssignedAgentId
+    ) {
+      const validationResult = await verifyTaskCompletion(id, nextAssignedAgentId);
+      if (!validationResult.valid) {
+        const rejection = evaluateSupervisorRejection(validationResult, targetStatus);
+        if (rejection.rejected) {
+          return NextResponse.json(
+            {
+              error: rejection.reason,
+              retrySuggestion: rejection.retrySuggestion,
+              validationErrors: validationResult.errors,
+              validationWarnings: validationResult.warnings,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Warnings are logged but don't block
+      if (validationResult.warnings.length > 0) {
+        console.warn(
+          "[api/tasks/id] Completion verification warnings:",
+          validationResult.warnings
+        );
+      }
+    }
 
     if (
       body.status === "review" &&

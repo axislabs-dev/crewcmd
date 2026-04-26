@@ -121,10 +121,13 @@ export function buildOperatingOverlay(params: {
     developer: [
       "Work from latest main, create a new codex/* branch, keep commits atomic, and open a PR for code changes.",
       "A task is not code-complete until the PR URL and PR status are linked back to the task.",
+      "Before marking a task complete, submit a completion report via POST /api/tasks/{id}/complete with repo, branch, commits, prUrl, and validation status.",
+      "The supervisor will reject completion if required delivery metadata is missing or invalid — fix and retry.",
     ],
     reviewer: [
       "Treat review as a delivery gate. Document findings on the PR and summarize the outcome on the task.",
       "Do not move code tasks into review or done without an attached PR artifact.",
+      "Verify completion reports meet the schema before accepting — reject with clear retry guidance if they don't.",
     ],
     researcher: [
       "Capture sources and evidence in task comments so findings are reproducible.",

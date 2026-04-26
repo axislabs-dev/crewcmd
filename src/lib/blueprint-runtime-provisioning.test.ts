@@ -59,6 +59,44 @@ describe("buildBlueprintRuntimeConfigPatch", () => {
     });
   });
 
+  it("maps blueprint reportsTo relationships into OpenClaw subagent allowlists", () => {
+    const patch = buildBlueprintRuntimeConfigPatch({
+      config: {
+        agents: {
+          defaults: { workspace: "/workspace" },
+          list: [{ id: "main", agentDir: "/runtime/agents/main/agent" }],
+        },
+        acp: {
+          enabled: true,
+          allowedAgents: ["main"],
+        },
+      },
+      agentTemplates: [
+        agent({ callsign: "Atlas" }),
+        agent({ callsign: "Pixel", reportsTo: "ATLAS" }),
+        agent({ callsign: "Test Forge", reportsTo: "ATLAS" }),
+      ],
+      runtimeCapabilities: null,
+    });
+
+    expect(patch.agents.list).toContainEqual(
+      expect.objectContaining({
+        id: "atlas",
+        subagents: {
+          allowAgents: ["pixel", "test-forge"],
+        },
+      })
+    );
+    expect(patch.agents.list).toContainEqual(
+      expect.objectContaining({
+        id: "pixel",
+      })
+    );
+    expect(
+      patch.agents.list.find((entry) => entry.id === "pixel")
+    ).not.toHaveProperty("subagents");
+  });
+
   it("preserves existing runtime agents when adding blueprint agents", () => {
     const patch = buildBlueprintRuntimeConfigPatch({
       config: {

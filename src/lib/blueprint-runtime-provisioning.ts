@@ -48,6 +48,7 @@ export async function provisionBlueprintAgentsToRuntime(params: {
   try {
     await client.connect();
     const snapshot = await client.configGet();
+    const directReports = buildDirectReportRuntimeRefs(params.agentTemplates);
     const patch = buildBlueprintRuntimeConfigPatch({
       config: snapshot.config,
       agentTemplates: params.agentTemplates,
@@ -68,7 +69,7 @@ export async function provisionBlueprintAgentsToRuntime(params: {
 
     for (const tmpl of params.agentTemplates) {
       const runtimeRef = buildRuntimeRef(tmpl.callsign);
-      await syncBlueprintFiles(client, runtimeRef, tmpl);
+      await syncBlueprintFiles(client, runtimeRef, tmpl, directReports.get(runtimeRef) ?? []);
     }
 
     const blueprintRefs = new Set(
@@ -97,6 +98,7 @@ export function buildBlueprintRuntimeConfigPatch(params: {
   const existingAgents = readAgentList(params.config);
   const workspaceRoot = inferWorkspaceRoot(params.config, existingAgents);
   const agentRoot = inferAgentRoot(existingAgents);
+  const directReports = buildDirectReportRuntimeRefs(params.agentTemplates);
 
   if (!workspaceRoot || !agentRoot) {
     throw new Error("Primary runtime config does not expose agent workspace roots");
@@ -104,6 +106,7 @@ export function buildBlueprintRuntimeConfigPatch(params: {
 
   const blueprintEntries = params.agentTemplates.map((tmpl) => {
     const runtimeRef = buildRuntimeRef(tmpl.callsign);
+    const directReportRefs = directReports.get(runtimeRef) ?? [];
     const resolvedModel = resolveBlueprintAgentModelSelection(
       tmpl,
       params.runtimeCapabilities
@@ -125,6 +128,13 @@ export function buildBlueprintRuntimeConfigPatch(params: {
           }
         : undefined,
       skills: dedupeSkills(tmpl.skills ?? []),
+      ...(directReportRefs.length > 0
+        ? {
+            subagents: {
+              allowAgents: directReportRefs,
+            },
+          }
+        : {}),
     };
   });
 
@@ -167,12 +177,13 @@ function mergeAgentEntries(
 async function syncBlueprintFiles(
   client: GatewayClient,
   runtimeRef: string,
-  tmpl: BlueprintAgentTemplate
+  tmpl: BlueprintAgentTemplate,
+  directReportRefs: string[]
 ): Promise<void> {
   const files = [
     ["IDENTITY.md", tmpl.identityContent],
     ["SOUL.md", tmpl.soulContent],
-    ["AGENTS.md", tmpl.agentsContent],
+    ["AGENTS.md", appendDirectReportsToAgentsContent(tmpl.agentsContent, directReportRefs)],
     ["USER.md", tmpl.userContent],
     ["TOOLS.md", tmpl.toolsContent],
     ["HEARTBEAT.md", tmpl.heartbeatContent],
@@ -239,6 +250,51 @@ function sleep(ms: number) {
 
 function buildRuntimeRef(callsign: string): string {
   return callsign.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+}
+
+function buildDirectReportRuntimeRefs(
+  agentTemplates: BlueprintAgentTemplate[]
+): Map<string, string[]> {
+  const byCallsign = new Map(
+    agentTemplates.map((tmpl) => [
+      tmpl.callsign.trim().toUpperCase(),
+      buildRuntimeRef(tmpl.callsign),
+    ])
+  );
+  const directReports = new Map<string, string[]>();
+
+  for (const tmpl of agentTemplates) {
+    if (!tmpl.reportsTo) continue;
+    const managerRef = byCallsign.get(tmpl.reportsTo.trim().toUpperCase());
+    if (!managerRef) continue;
+    const children = directReports.get(managerRef) ?? [];
+    children.push(buildRuntimeRef(tmpl.callsign));
+    directReports.set(managerRef, children);
+  }
+
+  return new Map(
+    Array.from(directReports.entries()).map(([managerRef, children]) => [
+      managerRef,
+      mergeUnique([], children),
+    ])
+  );
+}
+
+function appendDirectReportsToAgentsContent(
+  content: string | undefined,
+  directReportRefs: string[]
+): string | undefined {
+  if (directReportRefs.length === 0) return content;
+
+  const section = [
+    "## Direct Reports",
+    "",
+    "You may delegate work to these OpenClaw subagents with `sessions_spawn`:",
+    ...directReportRefs.map((ref) => `- ${ref}`),
+  ].join("\n");
+
+  if (!content?.trim()) return section;
+  return `${content.trimEnd()}\n\n${section}`;
 }
 
 function dedupeSkills(skills: string[]): string[] {

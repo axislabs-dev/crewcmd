@@ -52,6 +52,21 @@ async function resolveSessionId(
   return newSession.id;
 }
 
+function resolveSessionKeyForAgent(agentId: string, requestedSessionKey: unknown) {
+  const agentKey = agentId === "main" ? "main" : agentId.toLowerCase();
+  if (typeof requestedSessionKey !== "string" || !requestedSessionKey.trim()) {
+    return agentKey;
+  }
+
+  const sessionKey = requestedSessionKey.trim();
+  const lower = sessionKey.toLowerCase();
+  if (lower === agentKey || lower.startsWith(`${agentKey}:`)) {
+    return sessionKey;
+  }
+
+  return agentKey;
+}
+
 /**
  * Persist a message to the DB and publish to the event bus.
  * Returns the DB record.
@@ -121,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     const agentId = agent || "main";
-    const sessionKey = (bodySessionKey as string) || (agentId === "main" ? "main" : agentId);
+    const sessionKey = resolveSessionKeyForAgent(agentId, bodySessionKey);
 
     // Resolve company ID from body or cookie
     const companyId = bodyCompanyId ||

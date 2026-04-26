@@ -65,12 +65,18 @@ export async function provisionBlueprintAgentsToRuntime(params: {
       await syncBlueprintFiles(client, runtimeRef, tmpl);
     }
 
+    const blueprintRefs = new Set(
+      params.agentTemplates.map((tmpl) => buildRuntimeRef(tmpl.callsign))
+    );
+
     return {
-      agents: patch.agents.list.map((entry) => ({
-        callsign: params.agentTemplates.find((tmpl) => buildRuntimeRef(tmpl.callsign) === entry.id)?.callsign.toUpperCase() ?? String(entry.id).toUpperCase(),
-        runtimeRef: String(entry.id),
-        workspacePath: typeof entry.workspace === "string" ? entry.workspace : null,
-      })),
+      agents: patch.agents.list
+        .filter((entry) => blueprintRefs.has(String(entry.id)))
+        .map((entry) => ({
+          callsign: params.agentTemplates.find((tmpl) => buildRuntimeRef(tmpl.callsign) === entry.id)?.callsign.toUpperCase() ?? String(entry.id).toUpperCase(),
+          runtimeRef: String(entry.id),
+          workspacePath: typeof entry.workspace === "string" ? entry.workspace : null,
+        })),
     };
   } finally {
     client.close();
@@ -90,7 +96,7 @@ export function buildBlueprintRuntimeConfigPatch(params: {
     throw new Error("Primary runtime config does not expose agent workspace roots");
   }
 
-  const patchEntries = params.agentTemplates.map((tmpl) => {
+  const blueprintEntries = params.agentTemplates.map((tmpl) => {
     const runtimeRef = buildRuntimeRef(tmpl.callsign);
     const resolvedModel = resolveBlueprintAgentModelSelection(
       tmpl,
@@ -117,11 +123,11 @@ export function buildBlueprintRuntimeConfigPatch(params: {
   });
 
   const acp = readAcpConfig(params.config);
-  const blueprintAgentIds = patchEntries.map((entry) => String(entry.id));
+  const blueprintAgentIds = blueprintEntries.map((entry) => String(entry.id));
 
   return {
     agents: {
-      list: patchEntries,
+      list: mergeAgentEntries(existingAgents, blueprintEntries),
     },
     acp: {
       enabled: acp.enabled || blueprintAgentIds.length > 0,
@@ -129,6 +135,27 @@ export function buildBlueprintRuntimeConfigPatch(params: {
       allowedAgents: mergeUnique(acp.allowedAgents, blueprintAgentIds),
     },
   };
+}
+
+function mergeAgentEntries(
+  existingAgents: Array<Record<string, unknown>>,
+  blueprintEntries: Array<Record<string, unknown>>
+): Array<Record<string, unknown>> {
+  const merged = new Map<string, Record<string, unknown>>();
+
+  for (const entry of existingAgents) {
+    const id = readAgentId(entry);
+    if (!id) continue;
+    merged.set(id, entry);
+  }
+
+  for (const entry of blueprintEntries) {
+    const id = readAgentId(entry);
+    if (!id) continue;
+    merged.set(id, entry);
+  }
+
+  return Array.from(merged.values());
 }
 
 function syncBlueprintFiles(
@@ -170,6 +197,11 @@ function readAgentList(config: Record<string, unknown>): Array<Record<string, un
   const list = agentsConfig?.list;
   if (!Array.isArray(list)) return [];
   return list.filter(isPlainObject);
+}
+
+function readAgentId(entry: Record<string, unknown>): string | null {
+  const id = typeof entry.id === "string" ? entry.id.trim() : "";
+  return id || null;
 }
 
 function readAcpConfig(config: Record<string, unknown>): {

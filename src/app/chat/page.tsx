@@ -15,6 +15,7 @@ import { useSessionBrowserStore } from "@/lib/session-browser-store";
 import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
 import { useChatStore } from "@/lib/chat-store";
+import type { ChatStoreMessage } from "@/lib/chat-store";
 import { useWorkspace } from "@/components/company-context";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
@@ -122,23 +123,35 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     );
     if (!res.ok) return;
 
-    const { items, status } = await res.json() as {
-      status: "ok" | "empty" | "missing" | "error";
-      items: Array<{ role: string; text: string }>;
+    const data = await res.json() as {
+      status?: "ok" | "empty" | "missing" | "error";
+      items?: Array<{ role?: string; text?: string; content?: string }>;
+      preview?: {
+        items?: Array<{ role?: string; text?: string; content?: string }>;
+        messages?: Array<{ role?: string; text?: string; content?: string }>;
+      } | Array<{ role?: string; text?: string; content?: string }> | null;
     };
-    if (status !== "ok" || !items?.length) return;
+
+    const previewItems = Array.isArray(data.preview)
+      ? data.preview
+      : data.preview?.items ?? data.preview?.messages;
+    const items = data.items ?? previewItems ?? [];
+    if (data.status && data.status !== "ok") return;
+    if (!items.length) return;
 
     const baseTime = Date.now();
+    const messages = items.map((m, index): ChatStoreMessage => ({
+      id: `${sessionKey}-history-${index}`,
+      agentId: sessionKey.toLowerCase(),
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.text ?? m.content ?? "",
+      createdAt: new Date(baseTime + index).toISOString(),
+      metadata: null,
+    })).filter((m) => m.content);
+
     useChatStore.getState().loadSession(
-      sessionKey,
-      items.map((m, index) => ({
-        id: `${sessionKey}-history-${index}`,
-        agentId: sessionKey,
-        role: m.role as "user" | "assistant",
-        content: m.text,
-        createdAt: new Date(baseTime + index).toISOString(),
-        metadata: null,
-      }))
+      sessionKey.toLowerCase(),
+      messages
     );
   } catch {
     // Gateway unavailable
@@ -311,7 +324,7 @@ export default function ChatPage() {
         loadedAgentsRef.current.add(selectedSessionKey);
         loadSessionPreviewIntoStore(selectedSessionKey).then(() => {
           if (cancelled) return;
-          const updated = useChatStore.getState().messagesByAgent[selectedSessionKey] || [];
+          const updated = useChatStore.getState().messagesByAgent[selectedSessionKey.toLowerCase()] || [];
           if (updated.length > 0) {
             setMessages(updated.map((m) => ({
               id: m.id,

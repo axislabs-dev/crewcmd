@@ -3,12 +3,13 @@ import { create } from "zustand";
 /** Session row from the gateway API (GET /api/openclaw/sessions) */
 export interface GatewaySessionRow {
   key: string;
-  spawnedByKey: string | null;
+  spawnedByKey?: string | null;
+  spawnedBy?: string | null;
   kind: string;
   label: string | null;
   derivedTitle: string | null;
   lastMessagePreview: string | null;
-  updatedAt: number | null;
+  updatedAt: number | string | null;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -85,17 +86,28 @@ export const useSessionBrowserStore = create<SessionBrowserState>((set, get) => 
         agents: GatewayAgentRow[];
       };
 
-      const sessions: SessionBrowserEntry[] = (json.sessions ?? []).map((s) => ({
-        key: s.key,
-        agentId: s.key.split(":")[0],
-        spawnedByKey: s.spawnedByKey ?? null,
-        kind: s.kind,
-        title: s.derivedTitle ?? s.label ?? null,
-        lastMessagePreview: s.lastMessagePreview,
-        updatedAt: s.updatedAt ?? null,
-        totalTokens: s.totalTokens,
-        model: s.model,
-      }));
+      const sessions: SessionBrowserEntry[] = (json.sessions ?? []).map((s) => {
+        const parsedUpdatedAt =
+          typeof s.updatedAt === "number"
+            ? s.updatedAt
+            : s.updatedAt
+              ? Math.floor(Date.parse(s.updatedAt) / 1000)
+              : null;
+
+        return {
+          key: s.key,
+          agentId: s.key.split(":")[0],
+          spawnedByKey: s.spawnedByKey ?? s.spawnedBy ?? null,
+          kind: s.kind,
+          title: s.derivedTitle ?? s.label ?? null,
+          lastMessagePreview: s.lastMessagePreview,
+          updatedAt: parsedUpdatedAt !== null && Number.isFinite(parsedUpdatedAt)
+            ? parsedUpdatedAt
+            : null,
+          totalTokens: s.totalTokens,
+          model: s.model,
+        };
+      });
 
       set({
         sessions,
@@ -141,11 +153,11 @@ export const useSessionBrowserStore = create<SessionBrowserState>((set, get) => 
 
   getTree() {
     const { sessions } = get();
-    const spawnedKeys = new Set(sessions.map((s) => s.spawnedByKey));
+    const sessionKeys = new Set(sessions.map((s) => s.key));
 
     // Root sessions: no spawnedByKey, or parent not in the list
     const roots = sessions.filter(
-      (s) => !s.spawnedByKey || !spawnedKeys.has(s.spawnedByKey)
+      (s) => !s.spawnedByKey || !sessionKeys.has(s.spawnedByKey)
     );
 
     // Build a map of children for O(1) lookup

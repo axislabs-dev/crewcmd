@@ -6,6 +6,7 @@ import {
   buildAgentHierarchy,
   findDefaultHierarchyAgent,
 } from "@/lib/agent-hierarchy";
+import { useSessionBrowserStore } from "@/lib/session-browser-store";
 import { SessionListDropdown } from "./session-list-dropdown";
 
 interface AgentTreeNode {
@@ -211,11 +212,18 @@ export function AgentTreeSelector({
           ) : (
             <SessionListDropdown
               onSelectSession={(sessionKey) => {
-                // Also select the current agent so it looks right in the header
-                // The session key is passed separately for routing
-                if (selectedAgent) {
-                  onSelect(selectedAgent, sessionKey);
-                }
+                const session = useSessionBrowserStore
+                  .getState()
+                  .sessions.find((entry) => entry.key === sessionKey);
+                const sessionAgent = session
+                  ? agents.find(
+                      (agent) =>
+                        agent.callsign.toLowerCase() ===
+                        session.agentId.toLowerCase()
+                    )
+                  : null;
+                const nextAgent = sessionAgent ?? selectedAgent ?? agents[0];
+                if (nextAgent) onSelect(nextAgent, sessionKey);
                 setOpen(false);
               }}
               selectedAgentCallsign={selectedAgent?.callsign ?? null}

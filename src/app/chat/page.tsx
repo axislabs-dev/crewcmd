@@ -1197,12 +1197,12 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] lg:h-dvh flex-col">
+    <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
       {/* Header */}
-      <div className="shrink-0 relative z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 lg:px-6">
+      <div className="sticky top-0 z-30 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -1260,7 +1260,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages area */}
-      <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">

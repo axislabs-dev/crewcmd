@@ -7,7 +7,10 @@ import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
 import { buildBlueprintOperatingLayer } from "@/lib/operating-layer";
 import { resolveBlueprintAgentModelSelection } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
-import { provisionBlueprintAgentsToRuntime } from "@/lib/blueprint-runtime-provisioning";
+import {
+  provisionBlueprintAgentsToRuntime,
+  provisionBlueprintMainAgentToRuntime,
+} from "@/lib/blueprint-runtime-provisioning";
 import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 import { getAgentAccessContext, normalizeVisibilityForCreation } from "@/lib/agent-access";
 import {
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest) {
     });
     const runtimeContext = await loadPrimaryRuntimeContext(targetWorkspace);
     const runtimeCapabilities = runtimeContext.capabilities;
+    const mergeSingleAgentBlueprintIntoMain = Boolean(runtimeContext.runtime && agentTemplates.length === 1);
     const blueprintCallsigns = new Set(agentTemplates.map((agent) => agent.callsign.toUpperCase()));
     const runtimeMainAgent = runtimeContext.runtime
       ? await resolveRuntimeMainWorkspaceAgent({
@@ -106,15 +110,27 @@ export async function POST(request: NextRequest) {
     const effectiveVisibility = normalizeVisibilityForCreation({ ownerType: effectiveOwnerType });
     const storageCompanyId = runtimeContext.runtime?.companyId ?? targetWorkspace.companyId ?? null;
 
-    await assertBlueprintCallsignsAvailable(agentTemplates);
+    await assertBlueprintCallsignsAvailable(agentTemplates, {
+      ignoreAgentId: mergeSingleAgentBlueprintIntoMain ? runtimeMainAgent?.id ?? null : null,
+    });
 
     let provisionedAgentsByCallsign = new Map<string, { runtimeRef: string; workspacePath: string | null }>();
     if (runtimeContext.runtime) {
-      const provisioned = await provisionBlueprintAgentsToRuntime({
-        runtime: runtimeContext.runtime,
-        agentTemplates,
-        runtimeCapabilities,
-      });
+      const provisioned = mergeSingleAgentBlueprintIntoMain
+        ? {
+            agents: [
+              (await provisionBlueprintMainAgentToRuntime({
+                runtime: runtimeContext.runtime,
+                agentTemplate: agentTemplates[0],
+                runtimeCapabilities,
+              })).agent,
+            ],
+          }
+        : await provisionBlueprintAgentsToRuntime({
+            runtime: runtimeContext.runtime,
+            agentTemplates,
+            runtimeCapabilities,
+          });
       provisionedAgentsByCallsign = new Map(
         provisioned.agents.map((agent) => [
           agent.callsign.toUpperCase(),
@@ -157,40 +173,56 @@ export async function POST(request: NextRequest) {
           }
         : null;
 
+      const operatingLayer = buildBlueprintOperatingLayer({
+        callsign: tmpl.callsign.toUpperCase(),
+        rolePack: tmpl.rolePack,
+        modelProfile: resolvedModel.profile,
+        fallbackProfiles: resolvedModel.fallbackProfiles,
+        curatedSkills: tmpl.curatedSkillMetadata,
+        identityRaw: tmpl.identityContent,
+        soulRaw: tmpl.soulContent,
+        agentsRaw: tmpl.agentsContent,
+      });
+      const agentValues: typeof schema.agents.$inferInsert = {
+        callsign: tmpl.callsign.toUpperCase(),
+        name: tmpl.name,
+        title: tmpl.title,
+        emoji: tmpl.emoji,
+        color: tmpl.color,
+        role: tmpl.role,
+        adapterType: runtimeContext.runtime ? "openclaw_gateway" : tmpl.adapterType,
+        model: resolvedModel.primaryModel ?? tmpl.model ?? null,
+        adapterConfig: runtimeAdapterConfig ?? adapterConfig,
+        workspacePath: provisionedAgent?.workspacePath ?? null,
+        runtimeId: runtimeContext.runtime?.id ?? null,
+        runtimeRef: provisionedAgent?.runtimeRef ?? null,
+        runtimeConfig: { operatingLayer },
+        companyId: targetWorkspace.companyId,
+        ownerType: effectiveOwnerType,
+        ownerUserId: effectiveOwnerUserId,
+        ownerCompanyId: effectiveOwnerCompanyId,
+        visibility: effectiveVisibility,
+        reportsTo: null,
+        soulContent: tmpl.soulContent ?? tmpl.promptTemplate ?? null,
+      };
+
+      if (mergeSingleAgentBlueprintIntoMain && runtimeMainAgent) {
+        const [updated] = await withRetry(() =>
+          db!
+            .update(schema.agents)
+            .set(agentValues)
+            .where(eq(schema.agents.id, runtimeMainAgent.id))
+            .returning()
+        );
+        createdAgents[tmpl.callsign.toUpperCase()] = {
+          id: updated.id,
+          callsign: updated.callsign,
+        };
+        continue;
+      }
+
       const [created] = await withRetry(() =>
-        db!.insert(schema.agents).values({
-          callsign: tmpl.callsign.toUpperCase(),
-          name: tmpl.name,
-          title: tmpl.title,
-          emoji: tmpl.emoji,
-          color: tmpl.color,
-          role: tmpl.role,
-          adapterType: runtimeContext.runtime ? "openclaw_gateway" : tmpl.adapterType,
-          model: resolvedModel.primaryModel ?? tmpl.model ?? null,
-          adapterConfig: runtimeAdapterConfig ?? adapterConfig,
-          workspacePath: provisionedAgent?.workspacePath ?? null,
-          runtimeId: runtimeContext.runtime?.id ?? null,
-          runtimeRef: provisionedAgent?.runtimeRef ?? null,
-          runtimeConfig: {
-            operatingLayer: buildBlueprintOperatingLayer({
-              callsign: tmpl.callsign.toUpperCase(),
-              rolePack: tmpl.rolePack,
-              modelProfile: resolvedModel.profile,
-              fallbackProfiles: resolvedModel.fallbackProfiles,
-              curatedSkills: tmpl.curatedSkillMetadata,
-              identityRaw: tmpl.identityContent,
-              soulRaw: tmpl.soulContent,
-              agentsRaw: tmpl.agentsContent,
-            }),
-          },
-          companyId: targetWorkspace.companyId,
-          ownerType: effectiveOwnerType,
-          ownerUserId: effectiveOwnerUserId,
-          ownerCompanyId: effectiveOwnerCompanyId,
-          visibility: effectiveVisibility,
-          reportsTo: null, // Set in second pass
-          soulContent: tmpl.soulContent ?? tmpl.promptTemplate ?? null,
-        }).returning()
+        db!.insert(schema.agents).values(agentValues).returning()
       );
 
       createdAgents[tmpl.callsign.toUpperCase()] = { id: created.id, callsign: created.callsign };
@@ -443,17 +475,22 @@ async function resolveRuntimeMainWorkspaceAgent(params: {
 }
 
 async function assertBlueprintCallsignsAvailable(
-  agentTemplates: BlueprintAgentTemplate[]
+  agentTemplates: BlueprintAgentTemplate[],
+  opts?: { ignoreAgentId?: string | null }
 ): Promise<void> {
   const callsigns = agentTemplates.map((agent) => agent.callsign.toUpperCase());
   const existing = await withRetry(() =>
     db!
-      .select({ callsign: schema.agents.callsign })
+      .select({ id: schema.agents.id, callsign: schema.agents.callsign })
       .from(schema.agents)
       .where(inArray(schema.agents.callsign, callsigns))
   );
 
-  const taken = new Set(existing.map((row) => row.callsign.toUpperCase()));
+  const taken = new Set(
+    existing
+      .filter((row) => row.id !== opts?.ignoreAgentId)
+      .map((row) => row.callsign.toUpperCase())
+  );
   if (callsigns.some((callsign) => taken.has(callsign))) {
     throw new Error("One or more agent callsigns already exist. Rename agents before deploying.");
   }

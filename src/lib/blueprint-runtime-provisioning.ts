@@ -90,6 +90,58 @@ export async function provisionBlueprintAgentsToRuntime(params: {
   }
 }
 
+export async function provisionBlueprintMainAgentToRuntime(params: {
+  runtime: RuntimeRecord;
+  agentTemplate: BlueprintAgentTemplate;
+  runtimeCapabilities: RuntimeCapabilitySnapshot | null;
+}): Promise<{ agent: ProvisionedBlueprintAgent }> {
+  const deviceKeyPem =
+    typeof params.runtime.metadata?.devicePrivateKeyPem === "string"
+      ? params.runtime.metadata.devicePrivateKeyPem
+      : undefined;
+  const client = new GatewayClient(
+    params.runtime.gatewayUrl,
+    params.runtime.authToken || null,
+    resolveDeviceIdentity(deviceKeyPem),
+    15000
+  );
+
+  try {
+    await client.connect();
+    const snapshot = await client.configGet();
+    const patch = buildBlueprintMainRuntimeConfigPatch({
+      config: snapshot.config,
+      agentTemplate: params.agentTemplate,
+      runtimeCapabilities: params.runtimeCapabilities,
+    });
+
+    try {
+      await client.configPatch({
+        patch,
+        baseHash: snapshot.hash,
+        note: "CrewCmd merged a single-agent blueprint into the runtime main agent",
+        restartDelayMs: 5000,
+      });
+    } catch (err) {
+      if (!isGatewayRestartError(err)) throw err;
+      await reconnectAfterGatewayRestart(client);
+    }
+
+    await syncBlueprintFiles(client, "main", params.agentTemplate, []);
+    const mainEntry = patch.agents.list.find((entry) => readAgentId(entry) === "main");
+
+    return {
+      agent: {
+        callsign: params.agentTemplate.callsign.toUpperCase(),
+        runtimeRef: "main",
+        workspacePath: typeof mainEntry?.workspace === "string" ? mainEntry.workspace : null,
+      },
+    };
+  } finally {
+    client.close();
+  }
+}
+
 export function buildBlueprintRuntimeConfigPatch(params: {
   config: Record<string, unknown>;
   agentTemplates: BlueprintAgentTemplate[];
@@ -149,6 +201,52 @@ export function buildBlueprintRuntimeConfigPatch(params: {
       enabled: acp.enabled || blueprintAgentIds.length > 0,
       ...(acp.defaultAgent ? { defaultAgent: acp.defaultAgent } : {}),
       allowedAgents: mergeUnique(acp.allowedAgents, blueprintAgentIds),
+    },
+  };
+}
+
+export function buildBlueprintMainRuntimeConfigPatch(params: {
+  config: Record<string, unknown>;
+  agentTemplate: BlueprintAgentTemplate;
+  runtimeCapabilities: RuntimeCapabilitySnapshot | null;
+}): BlueprintRuntimeConfigPatch {
+  const existingAgents = readAgentList(params.config);
+  const mainEntry = existingAgents.find((entry) => readAgentId(entry) === "main") ?? { id: "main" };
+  const resolvedModel = resolveBlueprintAgentModelSelection(
+    params.agentTemplate,
+    params.runtimeCapabilities
+  );
+  const nextMainEntry = {
+    ...mainEntry,
+    id: "main",
+    name: params.agentTemplate.name || params.agentTemplate.callsign,
+    identity: {
+      ...(isPlainObject(mainEntry.identity) ? mainEntry.identity : {}),
+      name: params.agentTemplate.name,
+      emoji: params.agentTemplate.emoji,
+      theme: params.agentTemplate.title,
+    },
+    model: resolvedModel.primaryModel
+      ? {
+          primary: resolvedModel.primaryModel,
+          ...(resolvedModel.fallbackModels.length > 0
+            ? { fallbacks: resolvedModel.fallbackModels }
+            : {}),
+        }
+      : mainEntry.model,
+    skills: dedupeSkills(params.agentTemplate.skills ?? []),
+  };
+  const nextAgents = mergeAgentEntries(existingAgents, [nextMainEntry]);
+  const acp = readAcpConfig(params.config);
+
+  return {
+    agents: {
+      list: nextAgents,
+    },
+    acp: {
+      enabled: acp.enabled,
+      ...(acp.defaultAgent ? { defaultAgent: acp.defaultAgent } : {}),
+      allowedAgents: mergeUnique(acp.allowedAgents, ["main"]),
     },
   };
 }

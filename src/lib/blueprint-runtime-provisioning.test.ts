@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildBlueprintRuntimeConfigPatch } from "./blueprint-runtime-provisioning";
+import {
+  buildBlueprintMainRuntimeConfigPatch,
+  buildBlueprintRuntimeConfigPatch,
+} from "./blueprint-runtime-provisioning";
 import type { BlueprintAgentTemplate } from "@/db/schema";
 
 function agent(overrides: Partial<BlueprintAgentTemplate> = {}): BlueprintAgentTemplate {
@@ -30,6 +33,57 @@ function agent(overrides: Partial<BlueprintAgentTemplate> = {}): BlueprintAgentT
 }
 
 describe("buildBlueprintRuntimeConfigPatch", () => {
+  it("merges a single-agent blueprint into the reserved runtime main agent", () => {
+    const patch = buildBlueprintMainRuntimeConfigPatch({
+      config: {
+        agents: {
+          defaults: { workspace: "/workspace" },
+          list: [
+            {
+              id: "main",
+              name: "Neo",
+              agentDir: "/runtime/agents/main/agent",
+              skills: ["existing-skill"],
+              subagents: { allowAgents: ["*"] },
+            },
+          ],
+        },
+        acp: {
+          enabled: true,
+          defaultAgent: "openclaw",
+          allowedAgents: ["openclaw"],
+        },
+      },
+      agentTemplate: agent({
+        callsign: "Atlas",
+        name: "Atlas",
+        title: "Tech Lead",
+        emoji: "🧭",
+        skills: ["crewcmd-management"],
+      }),
+      runtimeCapabilities: null,
+    });
+
+    expect(patch.agents.list).toHaveLength(1);
+    expect(patch.agents.list[0]).toMatchObject({
+      id: "main",
+      name: "Atlas",
+      agentDir: "/runtime/agents/main/agent",
+      identity: {
+        name: "Atlas",
+        emoji: "🧭",
+        theme: "Tech Lead",
+      },
+      skills: ["crewcmd-management"],
+      subagents: { allowAgents: ["*"] },
+    });
+    expect(patch.acp).toEqual({
+      enabled: true,
+      defaultAgent: "openclaw",
+      allowedAgents: ["openclaw", "main"],
+    });
+  });
+
   it("adds provisioned blueprint agents to the OpenClaw agent list and ACP allowlist", () => {
     const patch = buildBlueprintRuntimeConfigPatch({
       config: {

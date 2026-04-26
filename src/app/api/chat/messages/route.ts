@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/require-auth";
 
 /**
  * GET /api/chat/messages?sessionId=xxx&limit=100
+ * GET /api/chat/messages?agentId=neo&companyId=xxx&limit=100
  *
  * Fetch messages for a chat session, oldest first.
  */
@@ -19,21 +20,41 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get("sessionId");
+  const agentId = searchParams.get("agentId");
+  const companyId = searchParams.get("companyId");
   const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
 
-  if (!sessionId) {
-    return Response.json({ error: "sessionId required" }, { status: 400 });
+  if (!sessionId && (!agentId || !companyId)) {
+    return Response.json({ error: "sessionId or (agentId + companyId) required" }, { status: 400 });
   }
 
   try {
+    let resolvedSessionId = sessionId;
+
+    if (!resolvedSessionId && agentId && companyId) {
+      const sessions = await withRetry(() =>
+        db!.select().from(chatSessions)
+          .where(and(eq(chatSessions.agentId, agentId.toLowerCase()), eq(chatSessions.companyId, companyId)))
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(1)
+      );
+
+      if (sessions.length === 0) {
+        return Response.json({ messages: [], sessionId: null });
+      }
+
+      resolvedSessionId = sessions[0].id;
+    }
+
     const messages = await withRetry(() =>
       db!.select().from(chatMessages)
-        .where(eq(chatMessages.sessionId, sessionId))
+        .where(eq(chatMessages.sessionId, resolvedSessionId!))
         .orderBy(asc(chatMessages.createdAt))
         .limit(limit)
     );
 
     return Response.json({
+      sessionId: resolvedSessionId,
       messages: messages.map((m) => ({
         id: m.id,
         role: m.role,
@@ -45,6 +66,80 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("[api/chat/messages] Error:", error);
     return Response.json({ error: "Failed to fetch messages" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/chat/messages
+ *
+ * Clear persisted CrewCmd messages for a session. Keeps the session row so a
+ * deliberate empty thread does not immediately fall back to gateway history.
+ * Body: { sessionId: string } OR { agentId: string, companyId: string }
+ */
+export async function DELETE(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
+  if (!db) {
+    return Response.json({ error: "Database not initialized" }, { status: 500 });
+  }
+
+  try {
+    const body = await request.json() as {
+      sessionId?: string;
+      agentId?: string;
+      companyId?: string;
+      gatewaySessionKey?: string;
+    };
+
+    let sessionId = body.sessionId;
+
+    if (!sessionId && body.agentId && body.companyId) {
+      const conditions = [
+        eq(chatSessions.agentId, body.agentId.toLowerCase()),
+        eq(chatSessions.companyId, body.companyId),
+      ];
+      if (body.gatewaySessionKey) {
+        conditions.push(eq(chatSessions.gatewaySessionKey, body.gatewaySessionKey));
+      }
+
+      const sessions = await withRetry(() =>
+        db!.select().from(chatSessions)
+          .where(and(...conditions))
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(1)
+      );
+
+      if (sessions.length === 0) {
+        return Response.json({ cleared: 0, sessionId: null });
+      }
+
+      sessionId = sessions[0].id;
+    }
+
+    if (!sessionId) {
+      return Response.json(
+        { error: "sessionId or (agentId + companyId) required" },
+        { status: 400 }
+      );
+    }
+
+    const deleted = await withRetry(() =>
+      db!.delete(chatMessages)
+        .where(eq(chatMessages.sessionId, sessionId!))
+        .returning({ id: chatMessages.id })
+    );
+
+    await withRetry(() =>
+      db!.update(chatSessions)
+        .set({ updatedAt: new Date() })
+        .where(eq(chatSessions.id, sessionId!))
+    );
+
+    return Response.json({ cleared: deleted.length, sessionId });
+  } catch (error) {
+    console.error("[api/chat/messages] Clear error:", error);
+    return Response.json({ error: "Failed to clear messages" }, { status: 500 });
   }
 }
 

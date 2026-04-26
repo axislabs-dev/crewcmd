@@ -37,7 +37,7 @@ The LLM provider determines the model list and API credentials.
 
 ### 2. Skills (what they can do)
 
-Skills are installable capabilities. Each skill defines:
+Skills are runtime-native capabilities synced from CrewCmd into the OpenClaw shared workspace. Each skill defines:
 
 ```typescript
 interface Skill {
@@ -73,7 +73,7 @@ interface Skill {
 | `file-system` | cli | Read/write local files |
 | `shell` | cli | Execute shell commands |
 
-**Custom skills** can be installed from a marketplace or created locally (like OpenClaw skills).
+**Custom skills** can be imported from external sources or created within CrewCmd, then synced to the OpenClaw shared-skill runtime workspace.
 
 ### 3. Execution Strategy (how they run)
 
@@ -84,7 +84,7 @@ Derived from the agent's skills and provider, not configured directly:
 - Agent has no CLI skill → runs via provider API directly
 - Agent has `openclaw-gateway` skill → runs via OpenClaw gateway
 
-The execution engine picks the right strategy based on installed skills.
+The execution engine picks the right strategy based on assigned skills.
 
 ## Schema Changes
 
@@ -166,10 +166,10 @@ Same as above plus:
 Fetches available models from the provider's API. Requires company-level API key for that provider.
 
 ### New: `GET /api/skills`
-Lists all available skills (built-in + installed).
+Lists all available skills (built-in + imported).
 
 ### New: `POST /api/agents/:id/skills`
-Install a skill on an agent.
+Assign a skill to an agent (triggers sync to OpenClaw shared workspace).
 
 ### Modified: `POST /api/agents`
 ```json
@@ -204,14 +204,15 @@ Not: "I'm configuring a claude_local adapter with a model override."
 
 ### Phase 2: Skills Abstraction
 - Create skills table and agent_skills join table
-- Build skills UI (install/remove on agent card)
+- Build skills UI (assign/remove on agent card)
 - Migrate adapter_type → provider + primary skill
 - Execution engine reads skills instead of adapter_type
+- Runtime-native sync: skills are synced from CrewCmd DB into the OpenClaw shared workspace on assignment
 
-### Phase 3: Skill Marketplace
-- Community-contributed skills
-- Skill discovery and install flow
-- Custom skill authoring (like OpenClaw skill-creator)
+### Phase 3: Skill Import & Discovery
+- Skill import flow from external sources
+- Skill discovery UI
+- Custom skill authoring within CrewCmd
 
 ## Open Questions
 

@@ -169,6 +169,91 @@ function sessionMatches(eventSession: string | null, allowedSessions: string[]) 
   });
 }
 
+function extractHistoryMessages(result: unknown) {
+  const record = asRecord(result);
+  const messages = Array.isArray(record?.messages)
+    ? record.messages
+    : Array.isArray(record?.items)
+      ? record.items
+      : Array.isArray(result)
+        ? result
+        : [];
+
+  return messages
+    .map((item) => {
+      const message = asRecord(item);
+      const role = firstString(message?.role, message?.type, message?.author);
+      const content = extractText(message?.content ?? message?.message ?? message);
+      return { role, content };
+    })
+    .filter((message) => message.content);
+}
+
+function gatewaySessionSortValue(session: Record<string, unknown>) {
+  const updatedAt = session.updatedAt ?? session.updated_at ?? session.lastActive ?? session.last_active;
+  if (typeof updatedAt === "number") return updatedAt;
+  if (typeof updatedAt === "string") {
+    const parsed = Date.parse(updatedAt);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+async function recoverAssistantTextFromGateway(params: {
+  client: {
+    chatHistory: (params: { sessionKey?: string; limit?: number }) => Promise<unknown>;
+    rpc: <T = unknown>(method: string, params: Record<string, unknown>) => Promise<T>;
+  };
+  allowedSessions: string[];
+  lastUserContent: string;
+}) {
+  const candidateKeys = new Set(params.allowedSessions.map((session) => session.toLowerCase()));
+
+  try {
+    const result = await params.client.rpc<Record<string, unknown>>("sessions.list", {});
+    const sessions = ((result.sessions as Array<Record<string, unknown>> | undefined) ?? [])
+      .filter((session) => {
+        const key = firstString(session.key, session.sessionKey, session.session_key);
+        const spawnedBy = firstString(session.spawnedBy, session.spawnedByKey, session.spawned_by_key);
+        return Boolean(key) && (
+          sessionMatches(key, params.allowedSessions) ||
+          sessionMatches(spawnedBy, params.allowedSessions)
+        );
+      })
+      .sort((a, b) => gatewaySessionSortValue(b) - gatewaySessionSortValue(a))
+      .slice(0, 8);
+
+    for (const session of sessions) {
+      const key = firstString(session.key, session.sessionKey, session.session_key);
+      if (key) candidateKeys.add(key.toLowerCase());
+    }
+  } catch (error) {
+    console.error("[api/chat] Failed to list sessions for recovery:", error);
+  }
+
+  for (const sessionKey of candidateKeys) {
+    try {
+      const result = await params.client.chatHistory({ sessionKey, limit: 25 });
+      const messages = extractHistoryMessages(result);
+      if (messages.length === 0) continue;
+
+      const lastMatchingUserIndex = messages.findLastIndex(
+        (message) => message.role === "user" && message.content.trim() === params.lastUserContent.trim()
+      );
+      const assistantAfterUser = lastMatchingUserIndex >= 0
+        ? messages.slice(lastMatchingUserIndex + 1).find((message) => message.role === "assistant")
+        : null;
+      const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+      const recovered = assistantAfterUser?.content ?? latestAssistant?.content;
+      if (recovered) return recovered;
+    } catch (error) {
+      console.error(`[api/chat] Failed to recover chat history for ${sessionKey}:`, error);
+    }
+  }
+
+  return "";
+}
+
 function buildDelegatedAgentMessage(params: {
   message: string;
   targetAgent: unknown;
@@ -345,6 +430,38 @@ export async function POST(request: NextRequest) {
       releaseClient(client);
     };
 
+    const recoverMissingAssistantText = async () => {
+      if (fullAssistantText) return;
+      const recovered = await recoverAssistantTextFromGateway({
+        client,
+        allowedSessions: allowedEventSessions,
+        lastUserContent: lastUserMessage.content,
+      });
+      if (!recovered) return;
+
+      fullAssistantText = recovered;
+      lastStreamedText = recovered;
+
+      if (streamController && !done) {
+        const chunk = JSON.stringify({
+          choices: [{ delta: { content: recovered } }],
+        });
+        streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      }
+    };
+
+    const finishStream = async (interrupted: boolean) => {
+      await recoverMissingAssistantText();
+      await persistAssistant(interrupted);
+      done = true;
+      try {
+        streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
+        streamController!.close();
+      } catch { /* already closed */ }
+      client.off("chat", chatHandler);
+      releaseHeldClient();
+    };
+
     /**
      * Persist the assistant message (called on final, error, abort, cancel, timeout).
      * Guarded to run at most once.
@@ -446,25 +563,9 @@ export async function POST(request: NextRequest) {
         if (finalText) fullAssistantText = finalText;
 
         // Persist the complete assistant response
-        persistAssistant(false).then(() => {
-          done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
-          client.off("chat", chatHandler);
-          releaseHeldClient();
-        });
+        finishStream(false);
       } else if (state === "aborted") {
-        persistAssistant(true).then(() => {
-          done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
-          client.off("chat", chatHandler);
-          releaseHeldClient();
-        });
+        finishStream(true);
       } else if (state === "error") {
         const errorMsg = (p.errorMessage as string) || "Chat error";
         const chunk = JSON.stringify({
@@ -473,15 +574,7 @@ export async function POST(request: NextRequest) {
         streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         fullAssistantText += `\n\nError: ${errorMsg}`;
 
-        persistAssistant(true).then(() => {
-          done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
-          client.off("chat", chatHandler);
-          releaseHeldClient();
-        });
+        finishStream(true);
       }
     };
 
@@ -511,15 +604,7 @@ export async function POST(request: NextRequest) {
     // Safety timeout - if no [DONE] in 5 minutes, close the stream
     setTimeout(() => {
       if (!done && streamController) {
-        persistAssistant(true).then(() => {
-          done = true;
-          try {
-            streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            streamController!.close();
-          } catch { /* already closed */ }
-          client.off("chat", chatHandler);
-          releaseHeldClient();
-        });
+        finishStream(true);
       }
     }, 300_000);
 

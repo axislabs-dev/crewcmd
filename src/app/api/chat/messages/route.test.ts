@@ -62,12 +62,30 @@ describe("GET /api/chat/messages", () => {
     expect(body.messages[0].content).toBe("hello");
   });
 
-  it("returns 400 without sessionId", async () => {
+  it("returns 400 without sessionId or agentId+companyId", async () => {
     const res = await GET(makeRequest("/api/chat/messages"));
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toBe("sessionId required");
+    expect(body.error).toBe("sessionId or (agentId + companyId) required");
+  });
+
+  it("returns messages for latest agent session", async () => {
+    const session = { id: "sess-neo", agentId: "neo", companyId: "co-1" };
+    mockSelect
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([session]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
+      });
+
+    const res = await GET(makeRequest("/api/chat/messages?agentId=Neo&companyId=co-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.sessionId).toBe("sess-neo");
+    expect(body.messages).toHaveLength(2);
   });
 
   it("returns 401 when not authenticated", async () => {

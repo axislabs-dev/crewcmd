@@ -73,6 +73,17 @@ function selectedSessionBelongsToAgent(
   return key === agent || key.startsWith(`${agent}:`);
 }
 
+function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
+  const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
+  if (runtimeRef === "main") return "main";
+  return agent?.callsign.toLowerCase() ?? "main";
+}
+
+function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
+  if (!a || !b) return false;
+  return a.id === b.id || a.callsign.toLowerCase() === b.callsign.toLowerCase();
+}
+
 /** Load message history from the gateway session into the Zustand store for an agent */
 async function loadThreadHistoryIntoStore(agentId: string) {
   try {
@@ -471,6 +482,14 @@ export default function ChatPage() {
   const parentAgent = useMemo(
     () => (selectedAgent ? findParentAgent(selectedAgent, agents) : null),
     [selectedAgent, agents]
+  );
+  const defaultAgent = useMemo(() => findDefaultAgent(agents), [agents]);
+  const delegatedViaAgent = useMemo(
+    () =>
+      selectedAgent && defaultAgent && !sameAgent(selectedAgent, defaultAgent)
+        ? defaultAgent
+        : null,
+    [selectedAgent, defaultAgent]
   );
 
   const handleAgentSelect = useCallback(
@@ -1052,9 +1071,20 @@ export default function ChatPage() {
           body: JSON.stringify({
             messages: chatMessages,
             agent: selectedAgent?.callsign,
+            gatewayAgent: delegatedViaAgent?.callsign ?? selectedAgent?.callsign,
+            targetAgent: delegatedViaAgent && selectedAgent
+              ? {
+                  callsign: selectedAgent.callsign,
+                  name: selectedAgent.name,
+                  title: selectedAgent.title,
+                  runtimeRef: selectedAgent.runtimeRef,
+                }
+              : undefined,
             companyId: company?.id,
             metadata,
-            sessionKey: selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+            sessionKey: delegatedViaAgent
+              ? gatewaySessionKeyForAgent(delegatedViaAgent)
+              : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
               ? selectedSessionKey ?? undefined
               : undefined,
           }),
@@ -1188,7 +1218,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1250,7 +1280,11 @@ export default function ChatPage() {
                   {selectedAgent.title || selectedAgent.name}
                 </span>
                 <span className="text-[10px] text-[var(--text-tertiary)]">
-                  {parentAgent ? (
+                  {delegatedViaAgent ? (
+                    <>
+                      Via: {delegatedViaAgent.emoji} {delegatedViaAgent.callsign}
+                    </>
+                  ) : parentAgent ? (
                     <>
                       Reports to: {parentAgent.emoji} {parentAgent.callsign}
                     </>
@@ -1297,6 +1331,10 @@ export default function ChatPage() {
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
                 {`Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
+                  delegatedViaAgent
+                    ? ` CrewCmd will route this through ${delegatedViaAgent.callsign}.`
+                    : ""
+                }${
                   parentAgent
                     ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
                     : ""

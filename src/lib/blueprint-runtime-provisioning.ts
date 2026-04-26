@@ -54,11 +54,17 @@ export async function provisionBlueprintAgentsToRuntime(params: {
       runtimeCapabilities: params.runtimeCapabilities,
     });
 
-    await client.configPatch({
-      patch,
-      baseHash: snapshot.hash,
-      note: "CrewCmd provisioned blueprint agents on the primary runtime",
-    });
+    try {
+      await client.configPatch({
+        patch,
+        baseHash: snapshot.hash,
+        note: "CrewCmd provisioned blueprint agents on the primary runtime",
+        restartDelayMs: 5000,
+      });
+    } catch (err) {
+      if (!isGatewayRestartError(err)) throw err;
+      await reconnectAfterGatewayRestart(client);
+    }
 
     for (const tmpl of params.agentTemplates) {
       const runtimeRef = buildRuntimeRef(tmpl.callsign);
@@ -158,11 +164,11 @@ function mergeAgentEntries(
   return Array.from(merged.values());
 }
 
-function syncBlueprintFiles(
+async function syncBlueprintFiles(
   client: GatewayClient,
   runtimeRef: string,
   tmpl: BlueprintAgentTemplate
-): Promise<unknown[]> {
+): Promise<void> {
   const files = [
     ["IDENTITY.md", tmpl.identityContent],
     ["SOUL.md", tmpl.soulContent],
@@ -173,9 +179,62 @@ function syncBlueprintFiles(
     ["BOOTSTRAP.md", tmpl.bootstrapContent],
   ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0);
 
-  return Promise.all(
-    files.map(([name, content]) => client.setAgentFile(runtimeRef, name, content))
-  );
+  for (const [name, content] of files) {
+    await setAgentFileWithRestartRetry(client, runtimeRef, name, content);
+  }
+}
+
+async function setAgentFileWithRestartRetry(
+  client: GatewayClient,
+  runtimeRef: string,
+  name: string,
+  content: string
+) {
+  try {
+    await ensureGatewayConnected(client);
+    await client.setAgentFile(runtimeRef, name, content);
+  } catch (err) {
+    if (!isGatewayRestartError(err) && !isGatewayDisconnectedError(err)) throw err;
+    await reconnectAfterGatewayRestart(client);
+    await client.setAgentFile(runtimeRef, name, content);
+  }
+}
+
+async function ensureGatewayConnected(client: GatewayClient) {
+  if (client.isConnected) return;
+  await reconnectAfterGatewayRestart(client);
+}
+
+async function reconnectAfterGatewayRestart(client: GatewayClient) {
+  client.close();
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await sleep(attempt === 0 ? 1500 : 1000);
+    try {
+      await client.connect();
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Failed to reconnect to gateway: ${String(lastError)}`);
+}
+
+function isGatewayRestartError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /Connection closed \(1012\):.*service restart/i.test(message);
+}
+
+function isGatewayDisconnectedError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /Not connected to gateway/i.test(message);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildRuntimeRef(callsign: string): string {

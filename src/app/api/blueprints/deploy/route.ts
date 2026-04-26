@@ -280,7 +280,11 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[api/blueprints/deploy] Error:", err);
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("unique") || msg.includes("duplicate")) {
+    if (
+      msg.includes("unique") ||
+      msg.includes("duplicate") ||
+      msg.toLowerCase().includes("callsigns already exist")
+    ) {
       return NextResponse.json(
         { error: "One or more agent callsigns already exist. Rename agents before deploying." },
         { status: 409 }

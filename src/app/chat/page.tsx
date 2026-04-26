@@ -63,6 +63,16 @@ const VOICE_SYSTEM_PROMPT = [
   "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
 
+function selectedSessionBelongsToAgent(
+  sessionKey: string | null,
+  callsign: string | null | undefined
+) {
+  if (!sessionKey || !callsign) return false;
+  const key = sessionKey.toLowerCase();
+  const agent = callsign.toLowerCase();
+  return key === agent || key.startsWith(`${agent}:`);
+}
+
 /** Load message history from the gateway session into the Zustand store for an agent */
 async function loadThreadHistoryIntoStore(agentId: string) {
   try {
@@ -478,6 +488,9 @@ export default function ChatPage() {
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
       selectSession(nextSessionKey);
+      if (typeof window !== "undefined" && !nextSessionKey) {
+        window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+      }
       setSelectedAgent(agent);
     },
     [selectedAgent, selectedSessionKey, selectSession]
@@ -1041,7 +1054,9 @@ export default function ChatPage() {
             agent: selectedAgent?.callsign,
             companyId: company?.id,
             metadata,
-            sessionKey: selectedSessionKey ?? undefined,
+            sessionKey: selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+              ? selectedSessionKey ?? undefined
+              : undefined,
           }),
           signal: controller.signal,
         });

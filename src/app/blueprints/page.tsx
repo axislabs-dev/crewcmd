@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { BlueprintTemplate, BlueprintAgentTemplate } from "@/db/schema";
 import { labelModelProfile, normalizeModelProfile } from "@/lib/model-profiles";
+import { useWorkspace } from "@/components/company-context";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -109,6 +110,7 @@ function BlueprintAgentCard({ agent }: { agent: BlueprintAgentTemplate }) {
 // ─── Page ───────────────────────────────────────────────────────────
 
 export default function BlueprintsPage() {
+  const { workspace } = useWorkspace();
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<Category>("all");
@@ -124,7 +126,7 @@ export default function BlueprintsPage() {
       setLoading(true);
       const params = new URLSearchParams();
       if (category !== "all") params.set("category", category);
-      const companyId = getCompanyId();
+      const companyId = workspace?.companyId ?? getCompanyId();
       if (companyId) params.set("company_id", companyId);
       const res = await fetch(`/api/blueprints?${params.toString()}`);
       if (res.ok) {
@@ -136,7 +138,7 @@ export default function BlueprintsPage() {
     } finally {
       setLoading(false);
     }
-  }, [category]);
+  }, [category, workspace?.companyId]);
 
   useEffect(() => {
     fetchBlueprints();
@@ -152,11 +154,10 @@ export default function BlueprintsPage() {
     }
   }, [selected]);
 
-  /** Deploy a blueprint to the active company */
+  /** Deploy a blueprint to the active workspace */
   const handleDeploy = async (blueprint: Blueprint) => {
-    const companyId = getCompanyId();
-    if (!companyId) {
-      setDeployError("No active company selected. Switch to a company first.");
+    if (!workspace?.id) {
+      setDeployError("No active workspace selected. Switch workspace and try again.");
       return;
     }
 
@@ -171,7 +172,8 @@ export default function BlueprintsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           blueprintId: blueprint.id,
-          companyId,
+          workspaceId: workspace.id,
+          ...(workspace.companyId ? { companyId: workspace.companyId } : {}),
           ...(hasCustomizations ? { customize: { agents: customAgents } } : {}),
         }),
       });
@@ -542,7 +544,7 @@ export default function BlueprintsPage() {
                       DEPLOYING...
                     </span>
                   ) : (
-                    "► DEPLOY TO COMPANY"
+                    "► DEPLOY TO WORKSPACE"
                   )}
                 </button>
               )}

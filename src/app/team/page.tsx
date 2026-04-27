@@ -768,7 +768,7 @@ function NewAgentDialogWrapper({
   return (
     <div>
       {parentCallsign && (
-        <div className="fixed top-4 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--accent)]/20 bg-[var(--bg-primary)] px-4 py-2 text-xs text-[var(--accent)] shadow-xl">
+        <div className="fixed top-[calc(var(--mobile-safe-top)+1rem)] left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--accent)]/20 bg-[var(--bg-primary)] px-4 py-2 text-xs text-[var(--accent)] shadow-xl lg:top-4">
           Adding report under <span className="font-mono font-bold">{parentCallsign.toUpperCase()}</span>
         </div>
       )}

@@ -757,7 +757,7 @@ export function VoiceAgent({
                 : state === "listening"
                   ? "SPEAK NATURALLY"
                   : state === "processing"
-                    ? "HOLD FOR A RESPONSE"
+                    ? "THINKING"
                   : ""}
             </span>
           )}

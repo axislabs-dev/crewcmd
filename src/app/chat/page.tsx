@@ -1307,14 +1307,14 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden lg:h-dvh flex-col">
+    <div className="flex h-[calc(100dvh_-_4rem_-_env(safe-area-inset-top))] overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
       {/* Header */}
-      <div className="sticky top-0 z-30 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 lg:px-6">
+      <div className="sticky top-0 z-40 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/95 px-3 py-2.5 shadow-[0_10px_28px_rgba(2,6,23,0.08)] backdrop-blur-xl sm:px-4 sm:py-3 lg:px-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div
               className={`h-2.5 w-2.5 rounded-full transition-opacity ${isPaused ? "opacity-30" : ""}`}
               style={{

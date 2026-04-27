@@ -409,7 +409,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const requestStartedAt = Date.now();
     const client = await getGatewayClient();
+    const gatewayAcquiredAt = Date.now();
     holdClient(client);
 
     // Set up SSE stream
@@ -423,6 +425,8 @@ export async function POST(request: NextRequest) {
     let assistantPersisted = false;
     let activeRunId: string | null = null;
     let released = false;
+    let gatewaySentAt = 0;
+    let firstDeltaAt = 0;
 
     const releaseHeldClient = () => {
       if (released) return;
@@ -542,6 +546,17 @@ export async function POST(request: NextRequest) {
       if (state === "delta") {
         const fullText = extractText(p.message || p);
         if (fullText && fullText.length > lastStreamedText.length) {
+          if (!firstDeltaAt) {
+            firstDeltaAt = Date.now();
+            console.info("[api/chat] first delta", {
+              agentId,
+              gatewayAgentId,
+              sessionKey,
+              gatewayAcquireMs: gatewayAcquiredAt - requestStartedAt,
+              chatSendMs: gatewaySentAt ? gatewaySentAt - gatewayAcquiredAt : null,
+              firstDeltaMs: firstDeltaAt - requestStartedAt,
+            });
+          }
           const newContent = fullText.slice(lastStreamedText.length);
           lastStreamedText = fullText;
           fullAssistantText = fullText;
@@ -590,6 +605,7 @@ export async function POST(request: NextRequest) {
         sessionKey,
       });
       activeRunId = asString(sendResult.runId);
+      gatewaySentAt = Date.now();
     } catch (err) {
       client.off("chat", chatHandler);
       releaseHeldClient();

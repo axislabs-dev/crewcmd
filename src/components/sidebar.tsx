@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { CompanySwitcher } from "@/components/company-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useTheme } from "@/components/theme-provider";
 import { useWorkspace } from "@/components/company-context";
 import { Avatar } from "@/components/avatar";
 
@@ -106,29 +107,6 @@ const navSections = [
       },
     ],
   },
-  {
-    label: "KNOWLEDGE",
-    items: [
-      {
-        href: "/documents",
-        label: "Workspace Knowledge",
-        icon: (
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-          </svg>
-        ),
-      },
-      {
-        href: "/docs",
-        label: "Workspace Files",
-        icon: (
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-          </svg>
-        ),
-      },
-    ],
-  },
 ];
 
 const settingsItem = {
@@ -191,8 +169,23 @@ function BrandName() {
 export function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const { data: session } = useSession();
   const { workspace } = useWorkspace();
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("crewcmd-sidebar-collapsed");
+    if (saved === "true") setCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.sidebarCollapsed = collapsed ? "true" : "false";
+    window.localStorage.setItem("crewcmd-sidebar-collapsed", collapsed ? "true" : "false");
+    return () => {
+      delete document.documentElement.dataset.sidebarCollapsed;
+    };
+  }, [collapsed]);
 
   if (pathname === "/" || pathname === "/access-denied") return null;
   if (pathname.startsWith("/invite/")) return null;
@@ -206,38 +199,44 @@ export function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  const NavLink = ({ item, onClick }: { item: { href: string; label: string; icon: React.ReactNode }; onClick?: () => void }) => {
+  const NavLink = ({ item, onClick, iconOnly = false }: { item: { href: string; label: string; icon: React.ReactNode }; onClick?: () => void; iconOnly?: boolean }) => {
     const active = isActive(item.href);
     return (
       <li>
         <Link
           href={item.href}
           onClick={onClick}
-          className={`group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] font-medium transition-all duration-200 ${
+          title={iconOnly ? item.label : undefined}
+          aria-label={item.label}
+          className={`group relative flex items-center rounded-xl py-2.5 text-[13px] font-medium transition-all duration-200 ${
+            iconOnly ? "justify-center px-2.5" : "gap-3 px-3.5"
+          } ${
             active
               ? "border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
               : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           }`}
         >
-          {active && <div className="absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
+          {active && !iconOnly && <div className="absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
           <span className={`transition-colors ${active ? "text-[var(--accent)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
             {item.icon}
           </span>
-          <span>{item.label.toUpperCase()}</span>
-          {active && <div className="ml-auto h-2 w-2 rounded-full bg-[var(--accent)]" />}
+          {!iconOnly && <span>{item.label.toUpperCase()}</span>}
+          {active && !iconOnly && <div className="ml-auto h-2 w-2 rounded-full bg-[var(--accent)]" />}
+          {active && iconOnly && <span className="absolute right-1.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
         </Link>
       </li>
     );
   };
 
-  const NavList = ({ onClick }: { onClick?: () => void }) => (
-    <div className="space-y-4">
+  const NavList = ({ onClick, iconOnly = false }: { onClick?: () => void; iconOnly?: boolean }) => (
+    <div className={iconOnly ? "space-y-3" : "space-y-4"}>
       {navSections.map((section, idx) => (
         <div key={idx}>
-          {section.label && <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">{section.label}</div>}
+          {section.label && !iconOnly && <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">{section.label}</div>}
+          {section.label && iconOnly && <div className="mx-auto mb-1.5 h-px w-8 bg-[var(--border-subtle)]" />}
           <ul className="space-y-0.5">
             {section.items.map((item) => (
-              <NavLink key={item.href} item={item} onClick={onClick} />
+              <NavLink key={item.href} item={item} onClick={onClick} iconOnly={iconOnly} />
             ))}
           </ul>
         </div>
@@ -245,15 +244,16 @@ export function Sidebar() {
       <div>
         <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
         <ul className="space-y-0.5">
-          <NavLink item={settingsItem} onClick={onClick} />
-          {workspace?.type === "company" ? <NavLink item={companySettingsItem} onClick={onClick} /> : null}
+          <NavLink item={settingsItem} onClick={onClick} iconOnly={iconOnly} />
+          {workspace?.type === "company" ? <NavLink item={companySettingsItem} onClick={onClick} iconOnly={iconOnly} /> : null}
         </ul>
       </div>
       {isSuperAdmin && (
         <div>
-          <div className="mx-3 mb-1.5 mt-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">Admin</div>
+          {!iconOnly && <div className="mx-3 mb-1.5 mt-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">Admin</div>}
+          {iconOnly && <div className="mx-auto mb-1.5 mt-3 h-px w-8 bg-[var(--border-subtle)]" />}
           <ul className="space-y-0.5">
-            <NavLink item={{ ...settingsItem, href: "/dashboard/settings", label: "Admin settings" }} onClick={onClick} />
+            <NavLink item={{ ...settingsItem, href: "/dashboard/settings", label: "Admin settings" }} onClick={onClick} iconOnly={iconOnly} />
           </ul>
         </div>
       )}
@@ -283,10 +283,51 @@ export function Sidebar() {
     </button>
   );
 
+  const CollapseButton = () => (
+    <button
+      type="button"
+      onClick={() => setCollapsed((value) => !value)}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+      title={collapsed ? "Expand navigation" : "Collapse navigation"}
+      aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+    >
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 5.25h15A1.5 1.5 0 0 1 21 6.75v10.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.25V6.75a1.5 1.5 0 0 1 1.5-1.5Zm4.5 0v13.5" />
+      </svg>
+    </button>
+  );
+
+  const CompactThemeButton = () => {
+    const nextTheme = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
+    return (
+      <button
+        type="button"
+        onClick={() => setTheme(nextTheme)}
+        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+        title={`Theme: ${theme}`}
+        aria-label={`Theme: ${theme}`}
+      >
+        {theme === "light" ? (
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+          </svg>
+        ) : theme === "dark" ? (
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+          </svg>
+        ) : (
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z" />
+          </svg>
+        )}
+      </button>
+    );
+  };
+
   return (
     <>
       <div className="fixed top-0 left-0 right-0 z-50 overflow-hidden border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--bg-primary)_12%)] shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:hidden">
-        <div className="relative flex items-center justify-between px-4 pb-3 pt-[max(0.875rem,env(safe-area-inset-top))]">
+        <div className="relative flex items-center justify-between px-4 pb-3 pt-[var(--mobile-safe-top)]">
           <div className="flex items-center gap-2.5">
             <BrandLogo size="sm" />
             <BrandName />
@@ -307,7 +348,7 @@ export function Sidebar() {
 
       {mobileOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col overflow-hidden border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] pt-[env(safe-area-inset-top)] shadow-[0_18px_44px_rgba(15,23,42,0.18)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col overflow-hidden border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] pt-[var(--mobile-safe-top)] shadow-[0_18px_44px_rgba(15,23,42,0.18)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="relative flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface-strong)_84%,var(--bg-primary)_16%)] px-5 py-4 backdrop-blur-xl">
           <div className="flex items-center gap-2.5">
             <BrandLogo size="sm" />
@@ -331,24 +372,44 @@ export function Sidebar() {
         </div>
       </div>
 
-      <aside className="fixed top-0 left-0 z-30 hidden h-screen w-[272px] flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 backdrop-blur-xl lg:flex">
-        <div className="flex items-center gap-3 rounded-2xl px-4 py-4">
-          <BrandLogo size="md" />
-          <div className="flex flex-col">
-            <BrandName />
-            <span className="text-[11px] tracking-normal text-[var(--text-tertiary)]">Operations command</span>
-          </div>
+      <aside className="sticky top-0 z-30 hidden h-screen min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
+        <div className={`flex items-center rounded-2xl py-3 ${collapsed ? "justify-center px-1" : "gap-3 px-3"}`}>
+          {collapsed ? (
+            <CollapseButton />
+          ) : (
+            <>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <BrandLogo size="md" />
+                <div className="flex min-w-0 flex-col">
+                  <BrandName />
+                  <span className="truncate text-[11px] tracking-normal text-[var(--text-tertiary)]">Operations command</span>
+                </div>
+              </div>
+              <CollapseButton />
+            </>
+          )}
         </div>
         <div className="mx-3 h-px bg-[var(--border-subtle)]" />
-        <CompanySwitcher />
-        <nav className="flex-1 px-2 py-4">
-          <NavList />
+        {!collapsed && <CompanySwitcher />}
+        <nav className="flex-1 overflow-y-auto px-2 py-4">
+          <NavList iconOnly={collapsed} />
         </nav>
-        <div className="mx-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-3">
-          <UserInfo />
-          <SignOutButton />
-          <ThemeToggle />
-          <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1"}</span>
+        <div className={`mx-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-3 ${collapsed ? "px-2" : "px-3"}`}>
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <Link href="/settings" title="Settings" aria-label="Settings" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]">
+                <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
+              </Link>
+              <CompactThemeButton />
+            </div>
+          ) : (
+            <>
+              <UserInfo />
+              <SignOutButton />
+              <ThemeToggle />
+              <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1"}</span>
+            </>
+          )}
         </div>
       </aside>
     </>

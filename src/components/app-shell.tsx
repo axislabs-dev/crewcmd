@@ -4,9 +4,9 @@ import { Sidebar } from "@/components/sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid-bg scanlines min-h-screen">
+    <div className="app-shell grid-bg scanlines min-h-screen">
       <Sidebar />
-      <main className="pt-[calc(4rem+env(safe-area-inset-top))] lg:pl-[272px] lg:pt-0">{children}</main>
+      <main className="app-main min-w-0 pt-[var(--mobile-app-bar-height)] lg:pt-0">{children}</main>
     </div>
   );
 }

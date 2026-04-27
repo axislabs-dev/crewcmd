@@ -45,24 +45,65 @@ Other platforms treat AI agents as tools you configure. CrewCmd treats them as t
 
 No database setup required. CrewCmd runs with embedded Postgres locally.
 
+For normal local development on the machine running CrewCmd:
+
 ```bash
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
 pnpm install
+pnpm dev
+# Open http://localhost:3000
+```
+
+### Local network HTTPS
+
+Use the self-signed HTTPS dev server only when you want to test from another device on your local network, such as a phone or tablet on the same Wi-Fi.
+
+```bash
 pnpm dev:https
 # Open https://localhost:3000
 ```
 
-That's it. No Docker or cloud database required for local development. HTTPS is required for voice features because microphone access needs a secure context.
+The generated certificate is intended for local and LAN testing. It is not needed for Tailscale.
 
-### Other deployment options
+### Tailscale testing
 
-**Docker Compose:**
+For Tailscale access, run the normal HTTP dev server and let Tailscale Serve provide the trusted HTTPS endpoint:
+
 ```bash
+pnpm dev
+tailscale serve http://localhost:3000
+```
+
+Then open CrewCmd from your device using the HTTPS URL shown by Tailscale, usually on your tailnet's `*.ts.net` address.
+
+### OpenClaw gateway setup
+
+When importing your own self-hosted OpenClaw agents, use the gateway import flow in onboarding:
+
+1. Start CrewCmd using one of the local, LAN, or Tailscale options above.
+2. Choose **Import existing OpenClaw crew** during onboarding.
+3. Enter your OpenClaw gateway URL. Use `localhost:18789` for same-machine testing, or the reachable host/IP/Tailscale name for a remote gateway.
+4. Enter the gateway auth token from `~/.openclaw/openclaw.json` under `gateway.auth.token`.
+5. If pairing is required, run `openclaw devices approve` on the OpenClaw gateway host, then retry the connection.
+
+### Docker Compose
+
+Docker Compose is intended for containerized self-hosting with a local Postgres container. This path is still less exercised than local dev, so treat it as preview until you have validated it in your environment.
+
+```bash
+cp .env.example .env
+# Edit .env and set at least AUTH_SECRET.
+# For Tailscale or another public URL, set NEXT_PUBLIC_APP_URL to that URL.
 docker compose up
 ```
 
-**External Postgres (Neon, Supabase, self-hosted):**
+Compose reads `.env` by default. Use `.env.local` for non-Docker local development, and `.env` for Docker Compose unless you pass a different env file explicitly.
+
+### External Postgres
+
+Use this for Neon, Supabase, or a self-hosted Postgres database:
+
 ```bash
 cp .env.example .env.local
 # Edit .env.local with your DATABASE_URL

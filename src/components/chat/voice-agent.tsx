@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useOrientationLock } from "@/hooks/use-orientation-lock";
 
-type AgentState = "listening" | "processing" | "speaking" | "idle";
+type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
 interface VoiceAgentProps {
   onTranscript: (text: string) => void;
@@ -14,6 +14,10 @@ interface VoiceAgentProps {
   accentColor?: string;
   autoActivate?: boolean;
   immersive?: boolean;
+  isMicMuted?: boolean;
+  isAgentMuted?: boolean;
+  onMicMutedChange?: (muted: boolean) => void;
+  onAgentMutedChange?: (muted: boolean) => void;
 }
 
 function hexToRgb(hex: string): string {
@@ -46,6 +50,10 @@ export function VoiceAgent({
   accentColor = "#63b7aa",
   autoActivate = false,
   immersive = false,
+  isMicMuted = false,
+  isAgentMuted = false,
+  onMicMutedChange,
+  onAgentMutedChange,
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -65,6 +73,7 @@ export function VoiceAgent({
   const silenceStartTimeRef = useRef<number>(0);
   const isRecordingRef = useRef(false);
   const recordingStartTimeRef = useRef<number>(0);
+  const discardRecordingRef = useRef(false);
 
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
@@ -132,6 +141,12 @@ export function VoiceAgent({
     };
 
     recorder.onstop = () => {
+      if (discardRecordingRef.current) {
+        discardRecordingRef.current = false;
+        chunksRef.current = [];
+        setState(isMicMuted ? "muted" : "listening");
+        return;
+      }
       const duration = Date.now() - recordingStartTimeRef.current;
       if (duration >= MIN_RECORDING_MS && chunksRef.current.length > 0) {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
@@ -143,7 +158,7 @@ export function VoiceAgent({
 
     mediaRecorderRef.current = recorder;
     recorder.start(100); // collect in 100ms chunks
-  }, [transcribe]);
+  }, [isMicMuted, transcribe]);
 
   // VAD loop using AnalyserNode
   const runVAD = useCallback(() => {
@@ -162,6 +177,14 @@ export function VoiceAgent({
         sum += dataArray[i] * dataArray[i];
       }
       const rms = Math.sqrt(sum / dataArray.length);
+
+      if (isMicMuted) {
+        setVolumeLevel(0);
+        speechStartTimeRef.current = 0;
+        silenceStartTimeRef.current = 0;
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
 
       // When TTS is playing, show a synthetic pulse on the VU meter
       // (mic RMS is near-zero during playback so bars would be dead)
@@ -211,7 +234,7 @@ export function VoiceAgent({
     };
 
     rafRef.current = requestAnimationFrame(tick);
-  }, [isPlayingAudio, onInterrupt, startRecording, stopRecording]);
+  }, [isMicMuted, isPlayingAudio, onInterrupt, startRecording, stopRecording]);
 
   // Screen Wake Lock — keeps screen on during agent mode (mobile)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -314,6 +337,22 @@ export function VoiceAgent({
   // Lock screen orientation while voice agent is active (prevents rotation issues)
   useOrientationLock(isActive);
 
+  useEffect(() => {
+    if (!isActive) return;
+    streamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !isMicMuted;
+    });
+    if (isMicMuted) {
+      if (isRecordingRef.current) {
+        discardRecordingRef.current = true;
+      }
+      stopRecording();
+      speechStartTimeRef.current = 0;
+      silenceStartTimeRef.current = 0;
+      setVolumeLevel(0);
+    }
+  }, [isActive, isMicMuted, stopRecording]);
+
   // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
   useEffect(() => {
     if (!isActive) return;
@@ -387,10 +426,12 @@ export function VoiceAgent({
       setState("speaking");
     } else if (isLoading) {
       setState("processing");
+    } else if (isMicMuted) {
+      setState("muted");
     } else if (!isRecordingRef.current) {
       setState("listening");
     }
-  }, [isActive, isPlayingAudio, isLoading]);
+  }, [isActive, isMicMuted, isPlayingAudio, isLoading]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -402,6 +443,7 @@ export function VoiceAgent({
     listening: "LISTENING",
     processing: "THINKING",
     speaking: "SPEAKING",
+    muted: "MUTED",
   };
 
   const listeningColor = "rgb(var(--voice-listening-rgb))";
@@ -412,7 +454,9 @@ export function VoiceAgent({
   const speakingRgb = "var(--voice-speaking-rgb)";
   const processingRgb = "var(--voice-processing-rgb)";
   const activeRgb =
-    state === "listening"
+    isMicMuted && !isPlayingAudio && !isLoading
+      ? "var(--text-muted-rgb, 128, 128, 128)"
+      : state === "listening"
       ? listeningRgb
       : state === "speaking"
         ? speakingRgb
@@ -420,7 +464,9 @@ export function VoiceAgent({
           ? processingRgb
           : accentRgb;
   const stateColor =
-    state === "listening"
+    isMicMuted && !isPlayingAudio && !isLoading
+      ? "var(--text-tertiary)"
+      : state === "listening"
       ? listeningColor
       : state === "processing"
         ? processingColor
@@ -442,9 +488,10 @@ export function VoiceAgent({
     ? 1.22 + motionLevel * (state === "speaking" ? 0.06 : 0.045)
     : 1 + motionLevel * 0.06;
   const listeningActive = isActive && state === "listening";
-  const speakingActive = isActive && state === "speaking";
+  const speakingActive = isActive && state === "speaking" && !isAgentMuted;
   const thinkingActive = isActive && state === "processing";
   const showCompactStatus = !immersive;
+  const displayState: AgentState = isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
 
   return (
     <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : "gap-5 py-3"}`}>
@@ -590,6 +637,20 @@ export function VoiceAgent({
                 d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"
               />
             </svg>
+          ) : state === "muted" ? (
+            <svg
+              className="h-10 w-10 text-[var(--text-tertiary)] sm:h-12 sm:w-12"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 9.75V4.5a3 3 0 0 0-5.68-1.35M9 9.75v3a3 3 0 0 0 5.12 2.12M18 10.5v2.25a6 6 0 0 1-9.65 4.76M6 10.5v2.25c0 .9.2 1.75.56 2.51M12 18.75v3.75m-3.75 0h7.5M3 3l18 18"
+              />
+            </svg>
           ) : state === "listening" ? (
             <>
               <svg
@@ -655,11 +716,43 @@ export function VoiceAgent({
               backgroundColor: state === "idle" ? "var(--bg-surface)" : `color-mix(in srgb, ${stateColor} 10%, transparent)`,
             }}
           >
-            {stateLabel[state]}
+            {stateLabel[displayState]}
           </span>
           {isActive && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onMicMutedChange?.(!isMicMuted)}
+                aria-pressed={isMicMuted}
+                title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
+                className={`rounded-full border px-3 py-1 text-[10px] font-medium tracking-[0.2em] transition ${
+                  isMicMuted
+                    ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
+                    : "border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                MIC
+              </button>
+              <button
+                type="button"
+                onClick={() => onAgentMutedChange?.(!isAgentMuted)}
+                aria-pressed={isAgentMuted}
+                title={isAgentMuted ? "Unmute agent audio" : "Mute agent audio"}
+                className={`rounded-full border px-3 py-1 text-[10px] font-medium tracking-[0.2em] transition ${
+                  isAgentMuted
+                    ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
+                    : "border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                AGENT
+              </button>
+            </div>
+          )}
+          {isActive && (
             <span className="text-center text-[11px] tracking-[0.16em] text-[var(--text-tertiary)]">
-              {state === "speaking"
+              {isMicMuted
+                ? "MIC MUTED"
+                : state === "speaking"
                 ? "SPEAK TO INTERRUPT"
                 : state === "listening"
                   ? "SPEAK NATURALLY"
@@ -670,30 +763,50 @@ export function VoiceAgent({
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-3 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-[var(--text-secondary)] backdrop-blur-xl">
-          <span className="flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-2 py-2 text-[10px] uppercase tracking-[0.22em] text-[var(--text-secondary)] backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => onMicMutedChange?.(!isMicMuted)}
+            aria-pressed={isMicMuted}
+            title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
+            className={`flex items-center gap-2 rounded-full px-3 py-1.5 transition ${
+              isMicMuted
+                ? "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
+                : "hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+            }`}
+          >
             <span
               className={`h-2.5 w-2.5 rounded-full transition-all ${listeningActive ? "animate-pulse" : ""}`}
               style={{
                 backgroundColor: listeningColor,
-                boxShadow: listeningActive ? `0 0 14px rgba(${listeningRgb}, 0.9)` : "none",
-                opacity: listeningActive ? 1 : 0.35,
+                boxShadow: listeningActive && !isMicMuted ? `0 0 14px rgba(${listeningRgb}, 0.9)` : "none",
+                opacity: isMicMuted ? 0.16 : listeningActive ? 1 : 0.35,
               }}
             />
             Mic
-          </span>
+          </button>
           <span className="h-4 w-px bg-[var(--border-subtle)]" />
-          <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onAgentMutedChange?.(!isAgentMuted)}
+            aria-pressed={isAgentMuted}
+            title={isAgentMuted ? "Unmute agent audio" : "Mute agent audio"}
+            className={`flex items-center gap-2 rounded-full px-3 py-1.5 transition ${
+              isAgentMuted
+                ? "bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
+                : "hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+            }`}
+          >
             <span
               className={`h-2.5 w-2.5 rounded-full transition-all ${speakingActive ? "animate-pulse" : ""}`}
               style={{
                 backgroundColor: speakingColor,
-                boxShadow: speakingActive ? `0 0 14px rgba(${speakingRgb},0.9)` : "none",
-                opacity: speakingActive ? 1 : thinkingActive ? 0.7 : 0.35,
+                boxShadow: speakingActive && !isAgentMuted ? `0 0 14px rgba(${speakingRgb},0.9)` : "none",
+                opacity: isAgentMuted ? 0.16 : speakingActive ? 1 : thinkingActive ? 0.7 : 0.35,
               }}
             />
             Agent
-          </span>
+          </button>
         </div>
       )}
 

@@ -266,6 +266,7 @@ export default function ChatPage() {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [speakResponses, setSpeakResponses] = useState(false);
+  const [agentMicMuted, setAgentMicMuted] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -1457,6 +1458,14 @@ export default function ChatPage() {
     }
   }, []);
 
+  const setAgentAudioMuted = useCallback(
+    (muted: boolean) => {
+      if (muted) stopAllAudio();
+      setSpeakResponses(!muted);
+    },
+    [stopAllAudio]
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1752,6 +1761,7 @@ export default function ChatPage() {
                     onClick={() => {
                       setVoiceMode("off");
                       setAgentOverlayMode("transcript");
+                      setAgentMicMuted(false);
                     }}
                     className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-2 text-[11px] font-medium tracking-[0.24em] text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                   >
@@ -1775,6 +1785,10 @@ export default function ChatPage() {
                     accentColor={agentColor}
                     autoActivate
                     immersive={agentOverlayMode === "immersive"}
+                    isMicMuted={agentMicMuted}
+                    isAgentMuted={!speakResponses}
+                    onMicMutedChange={setAgentMicMuted}
+                    onAgentMutedChange={setAgentAudioMuted}
                   />
                 </div>
               </div>
@@ -2009,6 +2023,7 @@ export default function ChatPage() {
                         audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
                         audioRef.current.play().catch(() => {});
                       }
+                      setAgentMicMuted(false);
                       setAgentOverlayMode("transcript"); setVoiceMode("agent"); setSpeakResponses(true);
                     }}
                     title="Enter agent mode (hands-free)"

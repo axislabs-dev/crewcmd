@@ -1307,7 +1307,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh_-_4rem_-_env(safe-area-inset-top))] overflow-hidden lg:h-dvh flex-col">
+    <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
@@ -1530,7 +1530,7 @@ export default function ChatPage() {
             }}
           />
           <div className={`relative flex h-full flex-col ${agentOverlayMode === "immersive" ? "justify-center" : ""}`}>
-            <div className="shrink-0 px-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-6">
+            <div className="shrink-0 px-4 pt-[max(var(--mobile-safe-top),1rem)] sm:px-6">
               <div className="mx-auto flex max-w-5xl items-start justify-between gap-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">

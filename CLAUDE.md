@@ -1,5 +1,9 @@
 # CLAUDE.md — CrewCmd
 
+## Agent Operating Policy
+
+Follow `AGENTS.md` first. It defines the branch-first workflow, atomic commit policy, risk escalation rules, verification requirement, and review pack format for this repository.
+
 ## What is CrewCmd?
 
 AI-native workspace where humans and AI agents work side by side. Same task board, same org chart, same inbox. A team of 3 operates like a team of 30.

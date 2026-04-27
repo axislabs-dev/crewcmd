@@ -267,6 +267,7 @@ export default function ChatPage() {
   const [streamingContent, setStreamingContent] = useState("");
   const [speakResponses, setSpeakResponses] = useState(false);
   const [agentMicMuted, setAgentMicMuted] = useState(false);
+  const [agentAudioMuted, setAgentAudioMuted] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -1266,7 +1267,8 @@ export default function ChatPage() {
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
       hasStartedResponseAudioRef.current = false;
-      voiceLatencyRef.current = speakResponses
+      const shouldSpeakResponses = voiceMode === "agent" ? !agentAudioMuted : speakResponses;
+      voiceLatencyRef.current = shouldSpeakResponses
         ? {
             requestId: crypto.randomUUID(),
             startedAt: performance.now(),
@@ -1275,7 +1277,7 @@ export default function ChatPage() {
       let fullContent = "";
 
       const chatMessages = [
-        ...(speakResponses
+        ...(shouldSpeakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -1372,7 +1374,7 @@ export default function ChatPage() {
                 setStreamingContent(fullContent);
 
                 // Sentence-level TTS: extract complete sentences and queue them
-                if (speakResponses) {
+                if (shouldSpeakResponses) {
                   unspokenBuffer += delta;
                   const extracted = extractSpeakableSegments(unspokenBuffer);
                   unspokenBuffer = extracted.remaining;
@@ -1389,7 +1391,7 @@ export default function ChatPage() {
         }
 
         // Queue any remaining unspoken text
-        if (speakResponses && unspokenBuffer.trim()) {
+        if (shouldSpeakResponses && unspokenBuffer.trim()) {
           queueSentenceForTTS(unspokenBuffer.trim());
         }
 
@@ -1447,7 +1449,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
+    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1458,10 +1460,10 @@ export default function ChatPage() {
     }
   }, []);
 
-  const setAgentAudioMuted = useCallback(
+  const handleAgentAudioMutedChange = useCallback(
     (muted: boolean) => {
       if (muted) stopAllAudio();
-      setSpeakResponses(!muted);
+      setAgentAudioMuted(muted);
     },
     [stopAllAudio]
   );
@@ -1762,6 +1764,7 @@ export default function ChatPage() {
                       setVoiceMode("off");
                       setAgentOverlayMode("transcript");
                       setAgentMicMuted(false);
+                      setAgentAudioMuted(false);
                     }}
                     className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-2 text-[11px] font-medium tracking-[0.24em] text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                   >
@@ -1786,9 +1789,9 @@ export default function ChatPage() {
                     autoActivate
                     immersive={agentOverlayMode === "immersive"}
                     isMicMuted={agentMicMuted}
-                    isAgentMuted={!speakResponses}
+                    isAgentMuted={agentAudioMuted}
                     onMicMutedChange={setAgentMicMuted}
-                    onAgentMutedChange={setAgentAudioMuted}
+                    onAgentMutedChange={handleAgentAudioMutedChange}
                   />
                 </div>
               </div>
@@ -2024,6 +2027,7 @@ export default function ChatPage() {
                         audioRef.current.play().catch(() => {});
                       }
                       setAgentMicMuted(false);
+                      setAgentAudioMuted(false);
                       setAgentOverlayMode("transcript"); setVoiceMode("agent"); setSpeakResponses(true);
                     }}
                     title="Enter agent mode (hands-free)"

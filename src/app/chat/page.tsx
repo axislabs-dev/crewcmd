@@ -920,15 +920,9 @@ export default function ChatPage() {
         hasStartedResponseAudioRef.current = true;
         // Browser TTS with queue continuation
         if ("speechSynthesis" in window) {
-          const utterance = new SpeechSynthesisUtterance(next);
-          utterance.rate = 1.15;
-          const voices = window.speechSynthesis.getVoices();
-          const preferred = voices.find(
-            (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
-          ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
-          if (preferred) utterance.voice = preferred;
-          utterance.onstart = () => markFirstAudioStarted("browser");
-          utterance.onend = () => {
+          let browserSpeechStarted = false;
+          let browserSpeechSettled = false;
+          const continueQueue = () => {
             isSpeakingQueueRef.current = false;
             if (ttsQueueRef.current.length > 0) {
               speakNextInQueue();
@@ -937,12 +931,46 @@ export default function ChatPage() {
               setIsPlayingAudio(false);
             }
           };
-          utterance.onerror = () => {
+          const fallbackToServerTTS = () => {
+            if (browserSpeechSettled || browserSpeechStarted || ttsModRef.current === "browser") return;
+            browserSpeechSettled = true;
+            window.speechSynthesis.cancel();
+            ttsQueueRef.current.unshift(next);
             isSpeakingQueueRef.current = false;
             activeAudioKindRef.current = null;
+            speakNextInQueue();
+          };
+          const utterance = new SpeechSynthesisUtterance(next);
+          utterance.rate = 1.15;
+          const voices = window.speechSynthesis.getVoices();
+          const preferred = voices.find(
+            (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
+          ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
+          if (preferred) utterance.voice = preferred;
+          utterance.onstart = () => {
+            browserSpeechStarted = true;
+            markFirstAudioStarted("browser");
+          };
+          utterance.onend = () => {
+            if (browserSpeechSettled) return;
+            browserSpeechSettled = true;
+            continueQueue();
+          };
+          utterance.onerror = () => {
+            if (browserSpeechSettled) return;
+            if (useBrowserForFastStart && ttsModRef.current !== "browser") {
+              fallbackToServerTTS();
+              return;
+            }
+            browserSpeechSettled = true;
+            activeAudioKindRef.current = null;
+            isSpeakingQueueRef.current = false;
             setIsPlayingAudio(false);
           };
           speechSynthesis.speak(utterance);
+          if (useBrowserForFastStart) {
+            window.setTimeout(fallbackToServerTTS, 450);
+          }
         }
         return;
       }
@@ -1047,7 +1075,7 @@ export default function ChatPage() {
   }
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options: { forceVoiceResponse?: boolean } = {}) => {
       const trimmed = text.trim();
       const hasFiles = pendingFiles.length > 0;
       if (!trimmed && !hasFiles) return;
@@ -1267,7 +1295,11 @@ export default function ChatPage() {
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
       hasStartedResponseAudioRef.current = false;
-      const shouldSpeakResponses = voiceMode === "agent" ? !agentAudioMuted : speakResponses;
+      const shouldSpeakResponses = options.forceVoiceResponse
+        ? !agentAudioMuted
+        : voiceMode === "agent"
+          ? !agentAudioMuted
+          : speakResponses;
       voiceLatencyRef.current = shouldSpeakResponses
         ? {
             requestId: crypto.randomUUID(),
@@ -1781,7 +1813,7 @@ export default function ChatPage() {
               <div className={`mx-auto rounded-[32px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-4 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
                 <div className="flex flex-col items-center gap-2">
                   <VoiceAgent
-                    onTranscript={sendMessage}
+                    onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
                     isPlayingAudio={isPlayingAudio}
                     onInterrupt={interruptAudio}
                     isLoading={isLoading}

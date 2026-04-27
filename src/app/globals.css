@@ -67,10 +67,10 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, var(--bg-ambient-left), transparent 28%), radial-gradient(circle at top right, var(--bg-ambient-right), transparent 24%), var(--bg-primary); color: var(--text-primary); }
-.app-main { transition: padding-left .2s ease; }
+.app-main { min-width: 0; }
 @media (min-width: 1024px) {
-  .app-main { padding-left: 272px; }
-  html[data-sidebar-collapsed="true"] .app-main { padding-left: 80px; }
+  .app-shell { display: grid; grid-template-columns: 272px minmax(0, 1fr); transition: grid-template-columns .2s ease; }
+  html[data-sidebar-collapsed="true"] .app-shell { grid-template-columns: 80px minmax(0, 1fr); }
 }
 ::selection { background: var(--accent-medium); color: var(--text-primary); }
 .glass-card { background: var(--bg-surface); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--border-subtle); border-radius: 20px; box-shadow: var(--theme-shadow); }

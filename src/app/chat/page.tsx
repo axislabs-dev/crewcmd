@@ -1741,9 +1741,8 @@ export default function ChatPage() {
                 }
               }}
               placeholder={isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
-              disabled={isLoading}
               rows={1}
-              className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base sm:text-[14px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none disabled:opacity-40"
+              className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base sm:text-[14px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none"
               style={{ maxHeight: "140px" }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;

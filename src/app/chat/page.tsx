@@ -53,6 +53,9 @@ type AgentOverlayMode = "transcript" | "immersive";
 
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
+const VOICE_ACK_DELAY_MS = 1800;
+const VOICE_CHECKIN_DELAY_MS = 30000;
+const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
 
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
@@ -63,6 +66,23 @@ const VOICE_SYSTEM_PROMPT = [
   "",
   "STYLE: Plain spoken English. Short. Direct. Spell out numbers. If details needed, say you will send them in text.",
 ].join("\n");
+
+function extractCompleteSentences(buffer: string) {
+  const sentences: string[] = [];
+  let remaining = buffer;
+  const sentenceBoundary = /^([\s\S]*?[.!?])(?:\s+|$)([\s\S]*)/;
+
+  while (true) {
+    const match = remaining.match(sentenceBoundary);
+    if (!match) break;
+    const sentence = match[1].trim();
+    if (sentence) sentences.push(sentence);
+    remaining = match[2];
+    if (!remaining.trim()) break;
+  }
+
+  return { sentences, remaining };
+}
 
 function selectedSessionBelongsToAgent(
   sessionKey: string | null,
@@ -233,8 +253,20 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const thinkingAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingStartRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeAudioKindRef = useRef<"filler" | "response" | null>(null);
+  const fillerAudioTokenRef = useRef(0);
+  const firstDeltaSeenRef = useRef(false);
+  const lastBusyReplyAtRef = useRef(0);
+  const voiceLatencyRef = useRef<{
+    requestId: string;
+    startedAt: number;
+    firstDeltaAt?: number;
+    firstSentenceQueuedAt?: number;
+    firstAudioStartedAt?: number;
+  } | null>(null);
 
   // Track in-flight streaming so we can persist on unmount (navigation away)
   const streamingContentRef = useRef("");
@@ -611,19 +643,27 @@ export default function ChatPage() {
   useEffect(() => {
     if (isLoading && voiceMode === "agent") {
       loadingStartRef.current = Date.now();
-      // Speak a random thinking ack
-      const ack = thinkingAcks[Math.floor(Math.random() * thinkingAcks.length)];
-      playTTS(ack);
+      fillerAudioTokenRef.current++;
 
-      // Check-in after 30s if still loading
-      thinkingTimerRef.current = setTimeout(() => {
-        if (isLoading) {
-          playTTS("Still working on this. Hang tight.");
+      thinkingAckTimerRef.current = setTimeout(() => {
+        if (!firstDeltaSeenRef.current && !isSpeakingQueueRef.current) {
+          const ack = thinkingAcks[Math.floor(Math.random() * thinkingAcks.length)];
+          playTTS(ack, { kind: "filler" });
         }
-      }, 30000);
+      }, VOICE_ACK_DELAY_MS);
+
+      thinkingTimerRef.current = setTimeout(() => {
+        if (!firstDeltaSeenRef.current && !isSpeakingQueueRef.current) {
+          playTTS("Still working on this.", { kind: "filler" });
+        }
+      }, VOICE_CHECKIN_DELAY_MS);
     }
 
     return () => {
+      if (thinkingAckTimerRef.current) {
+        clearTimeout(thinkingAckTimerRef.current);
+        thinkingAckTimerRef.current = null;
+      }
       if (thinkingTimerRef.current) {
         clearTimeout(thinkingTimerRef.current);
         thinkingTimerRef.current = null;
@@ -653,13 +693,44 @@ export default function ChatPage() {
     ttsQueueRef.current = [];
     isSpeakingQueueRef.current = false;
     prefetchedAudioRef.current = null;
+    activeAudioKindRef.current = null;
+    fillerAudioTokenRef.current++;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
   }, []);
 
-  const playBrowserTTS = useCallback((text: string) => {
+  const stopFillerAudio = useCallback(() => {
+    fillerAudioTokenRef.current++;
+    if (activeAudioKindRef.current !== "filler") return;
+    window.speechSynthesis?.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    activeAudioKindRef.current = null;
+    setIsPlayingAudio(false);
+  }, []);
+
+  const markFirstAudioStarted = useCallback((provider: "browser" | "server") => {
+    const metrics = voiceLatencyRef.current;
+    if (!metrics || metrics.firstAudioStartedAt) return;
+    metrics.firstAudioStartedAt = performance.now();
+    console.debug("[voice-latency]", {
+      requestId: metrics.requestId,
+      firstDeltaMs: metrics.firstDeltaAt
+        ? Math.round(metrics.firstDeltaAt - metrics.startedAt)
+        : null,
+      firstSentenceQueuedMs: metrics.firstSentenceQueuedAt
+        ? Math.round(metrics.firstSentenceQueuedAt - metrics.startedAt)
+        : null,
+      firstAudioStartedMs: Math.round(metrics.firstAudioStartedAt - metrics.startedAt),
+      provider,
+    });
+  }, []);
+
+  const playBrowserTTS = useCallback((text: string, kind: "filler" | "response" = "filler", token?: number) => {
     if (!("speechSynthesis" in window)) {
       setIsPlayingAudio(false);
       return;
@@ -668,6 +739,7 @@ export default function ChatPage() {
     // Cancel any in-progress speech
     window.speechSynthesis.cancel();
 
+    activeAudioKindRef.current = kind;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
@@ -679,19 +751,36 @@ export default function ChatPage() {
     ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
     if (preferred) utterance.voice = preferred;
 
-    utterance.onend = () => setIsPlayingAudio(false);
-    utterance.onerror = () => setIsPlayingAudio(false);
+    utterance.onstart = () => {
+      if (kind === "response") markFirstAudioStarted("browser");
+    };
+    utterance.onend = () => {
+      if (token && token !== fillerAudioTokenRef.current) return;
+      activeAudioKindRef.current = null;
+      setIsPlayingAudio(false);
+    };
+    utterance.onerror = () => {
+      if (token && token !== fillerAudioTokenRef.current) return;
+      activeAudioKindRef.current = null;
+      setIsPlayingAudio(false);
+    };
 
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [markFirstAudioStarted]);
 
-  const playTTS = useCallback(async (text: string) => {
+  const playTTS = useCallback(async (
+    text: string,
+    options: { kind?: "filler" | "response" } = {}
+  ) => {
+    const kind = options.kind ?? "filler";
+    const token = kind === "filler" ? fillerAudioTokenRef.current : undefined;
     try {
       setIsPlayingAudio(true);
+      activeAudioKindRef.current = kind;
 
       // If we already know server TTS is unavailable, go straight to browser
       if (ttsModRef.current === "browser") {
-        playBrowserTTS(text);
+        playBrowserTTS(text, kind, token);
         return;
       }
 
@@ -705,7 +794,7 @@ export default function ChatPage() {
         // Server has no TTS backend, switch to browser mode
         console.log("[TTS] Server unavailable, using browser speechSynthesis");
         ttsModRef.current = "browser";
-        playBrowserTTS(text);
+        playBrowserTTS(text, kind, token);
         return;
       }
 
@@ -717,25 +806,32 @@ export default function ChatPage() {
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
+      if (kind === "filler" && token !== fillerAudioTokenRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
 
       if (audioRef.current) {
         audioRef.current.src = url;
         audioRef.current.onended = () => {
           setIsPlayingAudio(false);
+          activeAudioKindRef.current = null;
           URL.revokeObjectURL(url);
         };
         audioRef.current.onerror = () => {
           setIsPlayingAudio(false);
+          activeAudioKindRef.current = null;
           URL.revokeObjectURL(url);
         };
         await audioRef.current.play();
+        if (kind === "response") markFirstAudioStarted("server");
       }
     } catch (error) {
       console.error("[TTS] Error:", error);
       // Network error — try browser fallback
-      playBrowserTTS(text);
+      playBrowserTTS(text, kind, token);
     }
-  }, [playBrowserTTS]);
+  }, [markFirstAudioStarted, playBrowserTTS]);
 
   // Pre-fetch next TTS audio while current sentence plays
   const prefetchedAudioRef = useRef<{ text: string; url: string } | null>(null);
@@ -764,7 +860,9 @@ export default function ChatPage() {
       isSpeakingQueueRef.current = false;
       return;
     }
+    stopFillerAudio();
     isSpeakingQueueRef.current = true;
+    activeAudioKindRef.current = "response";
     setIsPlayingAudio(true);
 
     // Kick off prefetch of the NEXT sentence while this one plays
@@ -779,16 +877,19 @@ export default function ChatPage() {
         if ("speechSynthesis" in window) {
           const utterance = new SpeechSynthesisUtterance(next);
           utterance.rate = 1.15;
+          utterance.onstart = () => markFirstAudioStarted("browser");
           utterance.onend = () => {
             isSpeakingQueueRef.current = false;
             if (ttsQueueRef.current.length > 0) {
               speakNextInQueue();
             } else {
+              activeAudioKindRef.current = null;
               setIsPlayingAudio(false);
             }
           };
           utterance.onerror = () => {
             isSpeakingQueueRef.current = false;
+            activeAudioKindRef.current = null;
             setIsPlayingAudio(false);
           };
           speechSynthesis.speak(utterance);
@@ -811,6 +912,7 @@ export default function ChatPage() {
 
         if (!response.ok) {
           isSpeakingQueueRef.current = false;
+          activeAudioKindRef.current = null;
           setIsPlayingAudio(false);
           return;
         }
@@ -828,32 +930,40 @@ export default function ChatPage() {
           if (ttsQueueRef.current.length > 0) {
             speakNextInQueue();
           } else {
+            activeAudioKindRef.current = null;
             setIsPlayingAudio(false);
           }
         };
         audioRef.current.onerror = () => {
           URL.revokeObjectURL(url);
           isSpeakingQueueRef.current = false;
+          activeAudioKindRef.current = null;
           setIsPlayingAudio(false);
         };
         await audioRef.current.play();
+        markFirstAudioStarted("server");
       } else {
         console.error("[TTS Queue] No audioRef.current available");
         isSpeakingQueueRef.current = false;
+        activeAudioKindRef.current = null;
         setIsPlayingAudio(false);
       }
     } catch (err) {
       console.error("[TTS Queue] Playback error:", err);
       isSpeakingQueueRef.current = false;
+      activeAudioKindRef.current = null;
       setIsPlayingAudio(false);
     }
-  }, []);
+  }, [markFirstAudioStarted, prefetchTTS, stopFillerAudio]);
 
   /** Queue a sentence for TTS and start speaking if idle */
   const queueSentenceForTTS = useCallback(
     (sentence: string) => {
       const cleaned = sentence.trim();
       if (!cleaned) return;
+      if (voiceLatencyRef.current && !voiceLatencyRef.current.firstSentenceQueuedAt) {
+        voiceLatencyRef.current.firstSentenceQueuedAt = performance.now();
+      }
       ttsQueueRef.current.push(cleaned);
       if (!isSpeakingQueueRef.current) {
         speakNextInQueue();
@@ -893,10 +1003,15 @@ export default function ChatPage() {
 
       // Agent mode: if loading and user speaks, give a reassurance instead of blocking
       if (isLoading && voiceMode === "agent") {
+        const now = Date.now();
+        if (now - lastBusyReplyAtRef.current < VOICE_BUSY_REPLY_COOLDOWN_MS) {
+          return;
+        }
+        lastBusyReplyAtRef.current = now;
         if (busyPatterns.test(trimmed)) {
-          playTTS("Yes, I heard you. Still working on my response.");
+          playTTS("Yes, I heard you. Still working on it.", { kind: "filler" });
         } else {
-          playTTS("I am still thinking about your last message. Give me a moment.");
+          playTTS("I am still thinking about the last message.", { kind: "filler" });
         }
         return;
       }
@@ -1098,6 +1213,14 @@ export default function ChatPage() {
       setStreamingContent("");
       streamingContentRef.current = "";
       streamingAgentRef.current = agentCallsign;
+      firstDeltaSeenRef.current = false;
+      lastBusyReplyAtRef.current = 0;
+      voiceLatencyRef.current = speakResponses
+        ? {
+            requestId: crypto.randomUUID(),
+            startedAt: performance.now(),
+          }
+        : null;
       let fullContent = "";
 
       const chatMessages = [
@@ -1183,6 +1306,16 @@ export default function ChatPage() {
 
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) {
+                if (!firstDeltaSeenRef.current) {
+                  firstDeltaSeenRef.current = true;
+                  if (thinkingAckTimerRef.current) {
+                    clearTimeout(thinkingAckTimerRef.current);
+                    thinkingAckTimerRef.current = null;
+                  }
+                  if (voiceLatencyRef.current && !voiceLatencyRef.current.firstDeltaAt) {
+                    voiceLatencyRef.current.firstDeltaAt = performance.now();
+                  }
+                }
                 fullContent += delta;
                 streamingContentRef.current = fullContent;
                 setStreamingContent(fullContent);
@@ -1190,11 +1323,9 @@ export default function ChatPage() {
                 // Sentence-level TTS: extract complete sentences and queue them
                 if (speakResponses) {
                   unspokenBuffer += delta;
-                  // Split on sentence boundaries (. ! ?) followed by space or end
-                  const sentenceMatch = unspokenBuffer.match(/^([\s\S]*?[.!?])\s+([\s\S]*)/);
-                  if (sentenceMatch) {
-                    const completeSentence = sentenceMatch[1];
-                    unspokenBuffer = sentenceMatch[2];
+                  const extracted = extractCompleteSentences(unspokenBuffer);
+                  unspokenBuffer = extracted.remaining;
+                  for (const completeSentence of extracted.sentences) {
                     queueSentenceForTTS(completeSentence);
                     spokenSentencesRef.current++;
                   }

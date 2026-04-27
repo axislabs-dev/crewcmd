@@ -53,9 +53,11 @@ type AgentOverlayMode = "transcript" | "immersive";
 
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
-const VOICE_ACK_DELAY_MS = 1800;
+const VOICE_ACK_DELAY_MS = 5000;
 const VOICE_CHECKIN_DELAY_MS = 30000;
 const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
+const VOICE_FAST_START_MIN_CHARS = 48;
+const VOICE_FAST_START_MAX_CHARS = 110;
 
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
@@ -82,6 +84,41 @@ function extractCompleteSentences(buffer: string) {
   }
 
   return { sentences, remaining };
+}
+
+function extractSpeakableSegments(buffer: string) {
+  const extracted = extractCompleteSentences(buffer);
+  if (extracted.sentences.length > 0 || extracted.remaining.length < VOICE_FAST_START_MIN_CHARS) {
+    return extracted;
+  }
+
+  const softBoundary = Math.max(
+    extracted.remaining.lastIndexOf(","),
+    extracted.remaining.lastIndexOf(";"),
+    extracted.remaining.lastIndexOf(":"),
+    extracted.remaining.lastIndexOf("\n")
+  );
+
+  if (softBoundary >= VOICE_FAST_START_MIN_CHARS) {
+    return {
+      sentences: [extracted.remaining.slice(0, softBoundary + 1).trim()],
+      remaining: extracted.remaining.slice(softBoundary + 1).trimStart(),
+    };
+  }
+
+  if (extracted.remaining.length < VOICE_FAST_START_MAX_CHARS) {
+    return extracted;
+  }
+
+  const hardBoundary = extracted.remaining.lastIndexOf(" ", VOICE_FAST_START_MAX_CHARS);
+  if (hardBoundary < VOICE_FAST_START_MIN_CHARS) {
+    return extracted;
+  }
+
+  return {
+    sentences: [extracted.remaining.slice(0, hardBoundary).trim()],
+    remaining: extracted.remaining.slice(hardBoundary + 1).trimStart(),
+  };
 }
 
 function selectedSessionBelongsToAgent(
@@ -260,6 +297,7 @@ export default function ChatPage() {
   const fillerAudioTokenRef = useRef(0);
   const firstDeltaSeenRef = useRef(false);
   const lastBusyReplyAtRef = useRef(0);
+  const hasStartedResponseAudioRef = useRef(false);
   const voiceLatencyRef = useRef<{
     requestId: string;
     startedAt: number;
@@ -872,11 +910,21 @@ export default function ChatPage() {
     }
 
     try {
-      if (ttsModRef.current === "browser") {
+      const useBrowserForFastStart =
+        !hasStartedResponseAudioRef.current &&
+        "speechSynthesis" in window;
+
+      if (ttsModRef.current === "browser" || useBrowserForFastStart) {
+        hasStartedResponseAudioRef.current = true;
         // Browser TTS with queue continuation
         if ("speechSynthesis" in window) {
           const utterance = new SpeechSynthesisUtterance(next);
           utterance.rate = 1.15;
+          const voices = window.speechSynthesis.getVoices();
+          const preferred = voices.find(
+            (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
+          ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
+          if (preferred) utterance.voice = preferred;
           utterance.onstart = () => markFirstAudioStarted("browser");
           utterance.onend = () => {
             isSpeakingQueueRef.current = false;
@@ -898,6 +946,7 @@ export default function ChatPage() {
       }
 
       // Check if we have a prefetched audio for this exact sentence
+      hasStartedResponseAudioRef.current = true;
       let url: string;
       if (prefetchedAudioRef.current?.text === next) {
         url = prefetchedAudioRef.current.url;
@@ -1215,6 +1264,7 @@ export default function ChatPage() {
       streamingAgentRef.current = agentCallsign;
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
+      hasStartedResponseAudioRef.current = false;
       voiceLatencyRef.current = speakResponses
         ? {
             requestId: crypto.randomUUID(),
@@ -1323,7 +1373,7 @@ export default function ChatPage() {
                 // Sentence-level TTS: extract complete sentences and queue them
                 if (speakResponses) {
                   unspokenBuffer += delta;
-                  const extracted = extractCompleteSentences(unspokenBuffer);
+                  const extracted = extractSpeakableSegments(unspokenBuffer);
                   unspokenBuffer = extracted.remaining;
                   for (const completeSentence of extracted.sentences) {
                     queueSentenceForTTS(completeSentence);

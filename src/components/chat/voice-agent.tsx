@@ -719,13 +719,13 @@ export function VoiceAgent({
             {stateLabel[displayState]}
           </span>
           {isActive && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => onMicMutedChange?.(!isMicMuted)}
                 aria-pressed={isMicMuted}
                 title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-                className={`rounded-full border px-3 py-1 text-[10px] font-medium tracking-[0.2em] transition ${
+                className={`min-h-11 min-w-24 rounded-full border px-5 py-3 text-[11px] font-medium tracking-[0.2em] transition sm:min-h-10 sm:min-w-20 sm:px-4 sm:py-2 ${
                   isMicMuted
                     ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
                     : "border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
@@ -738,7 +738,7 @@ export function VoiceAgent({
                 onClick={() => onAgentMutedChange?.(!isAgentMuted)}
                 aria-pressed={isAgentMuted}
                 title={isAgentMuted ? "Unmute agent audio" : "Mute agent audio"}
-                className={`rounded-full border px-3 py-1 text-[10px] font-medium tracking-[0.2em] transition ${
+                className={`min-h-11 min-w-24 rounded-full border px-5 py-3 text-[11px] font-medium tracking-[0.2em] transition sm:min-h-10 sm:min-w-20 sm:px-4 sm:py-2 ${
                   isAgentMuted
                     ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
                     : "border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"

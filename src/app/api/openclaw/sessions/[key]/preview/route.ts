@@ -5,6 +5,29 @@ import { ensureEventBridge } from "@/lib/init-event-bridge";
 
 export const dynamic = "force-dynamic";
 
+type GatewayPreviewItem = {
+  role?: string;
+  text?: string;
+  content?: string;
+};
+
+type GatewaySessionPreview = {
+  key?: string;
+  status?: "ok" | "empty" | "missing" | "error";
+  items?: GatewayPreviewItem[];
+  messages?: GatewayPreviewItem[];
+};
+
+function normalizePreviewItems(preview: GatewaySessionPreview | null) {
+  const items = preview?.items ?? preview?.messages ?? [];
+  return items
+    .map((item) => ({
+      role: item.role === "user" ? "user" : "assistant",
+      text: item.text ?? item.content ?? "",
+    }))
+    .filter((item) => item.text);
+}
+
 /**
  * GET /api/openclaw/sessions/[key]/preview
  *
@@ -35,15 +58,19 @@ export async function GET(
 
     const result = await client.rpc<Record<string, unknown>>(
       "sessions.preview",
-      { keys: [key] }
+      { keys: [key], limit: 50, maxChars: 4000 }
     );
 
-    const items = (result.items as Array< unknown>) || [];
-    const preview = items.length > 0 ? items[0] : null;
+    const previews = (result.previews as GatewaySessionPreview[] | undefined) ?? [];
+    const preview = previews[0] ?? null;
+    const status = preview?.status ?? "missing";
+    const items = status === "ok" ? normalizePreviewItems(preview) : [];
 
     return Response.json({
       key,
-      preview: preview || null,
+      status,
+      items,
+      preview,
     });
   } catch (error) {
     console.error("[api/openclaw/sessions/preview] Error:", error);

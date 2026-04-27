@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { extractAgentFromSessionKey } from "./openclaw-session-key";
 
 /** Session row from the gateway API (GET /api/openclaw/sessions) */
 export interface GatewaySessionRow {
@@ -96,7 +97,7 @@ export const useSessionBrowserStore = create<SessionBrowserState>((set, get) => 
 
         return {
           key: s.key,
-          agentId: s.key.split(":")[0],
+          agentId: extractAgentFromSessionKey(s.key),
           spawnedByKey: s.spawnedByKey ?? s.spawnedBy ?? null,
           kind: s.kind,
           title: s.derivedTitle ?? s.label ?? null,

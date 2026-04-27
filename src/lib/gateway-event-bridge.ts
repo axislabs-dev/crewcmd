@@ -1,6 +1,7 @@
 import { db, withRetry } from "@/db";
 import { gatewaySessions } from "@/db/schema";
 import { getGatewayClient, holdClient, releaseClient } from "./gateway-chat-pool";
+import { extractAgentFromSessionKey } from "./openclaw-session-key";
 
 let eventBridge: EventBridge | null = null;
 let fallbackRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -19,14 +20,10 @@ type EventBridgeStatus = {
   eventCount: number;
 };
 
-function extractAgentFromKey(key: string): string {
-  return key.split(":")[0] || key;
-}
-
 function mapSessionToValue(session: GatewaySessionRecord) {
   return {
     key: session.key as string,
-    agentId: extractAgentFromKey(session.key as string),
+    agentId: extractAgentFromSessionKey(session.key as string),
     spawnedByKey: (session.spawnedBy as string) || null,
     kind: (session.kind as string) || "session",
     label: (session.label as string) || null,

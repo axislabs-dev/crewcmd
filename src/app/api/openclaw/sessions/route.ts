@@ -4,12 +4,9 @@ import { getGatewayClient } from "@/lib/gateway-chat-pool";
 import { db } from "@/db";
 import { gatewaySessions } from "@/db/schema";
 import { ensureEventBridge } from "@/lib/init-event-bridge";
+import { extractAgentFromSessionKey } from "@/lib/openclaw-session-key";
 
 export const dynamic = "force-dynamic";
-
-function extractAgentFromKey(key: string): string {
-  return key.split(":")[0] || key;
-}
 
 /**
  * GET /api/openclaw/sessions?runtimeId=xxx
@@ -51,7 +48,7 @@ export async function GET(request: NextRequest) {
         .insert(gatewaySessions)
         .values({
           key: s.key as string,
-          agentId: extractAgentFromKey(s.key as string),
+          agentId: extractAgentFromSessionKey(s.key as string),
           spawnedByKey: (s.spawnedBy as string) || null,
           kind: s.kind as string,
           label: (s.label as string) || null,
@@ -66,7 +63,7 @@ export async function GET(request: NextRequest) {
         .onConflictDoUpdate({
           target: gatewaySessions.key,
           set: {
-            agentId: extractAgentFromKey(s.key as string),
+            agentId: extractAgentFromSessionKey(s.key as string),
             spawnedByKey: (s.spawnedBy as string) || null,
             kind: s.kind as string,
             label: (s.label as string) || null,

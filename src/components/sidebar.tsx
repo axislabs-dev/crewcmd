@@ -283,6 +283,20 @@ export function Sidebar() {
     </button>
   );
 
+  const CollapseButton = () => (
+    <button
+      type="button"
+      onClick={() => setCollapsed((value) => !value)}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+      title={collapsed ? "Expand navigation" : "Collapse navigation"}
+      aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+    >
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 5.25h15A1.5 1.5 0 0 1 21 6.75v10.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.25V6.75a1.5 1.5 0 0 1 1.5-1.5Zm4.5 0v13.5" />
+      </svg>
+    </button>
+  );
+
   const CompactThemeButton = () => {
     const nextTheme = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
     return (
@@ -358,25 +372,23 @@ export function Sidebar() {
         </div>
       </div>
 
-      <aside className={`fixed top-0 left-0 z-30 hidden h-screen flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl transition-[width] duration-200 lg:flex ${collapsed ? "w-20" : "w-[272px]"}`}>
-        <div className={`flex items-center rounded-2xl py-4 ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}>
-          <BrandLogo size="md" />
-          <div className={collapsed ? "hidden" : "flex flex-col"}>
-            <BrandName />
-            <span className="text-[11px] tracking-normal text-[var(--text-tertiary)]">Operations command</span>
-          </div>
+      <aside className="sticky top-0 z-30 hidden h-screen min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
+        <div className={`flex items-center rounded-2xl py-3 ${collapsed ? "justify-center px-1" : "gap-3 px-3"}`}>
+          {collapsed ? (
+            <CollapseButton />
+          ) : (
+            <>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <BrandLogo size="md" />
+                <div className="flex min-w-0 flex-col">
+                  <BrandName />
+                  <span className="truncate text-[11px] tracking-normal text-[var(--text-tertiary)]">Operations command</span>
+                </div>
+              </div>
+              <CollapseButton />
+            </>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-          title={collapsed ? "Expand navigation" : "Collapse navigation"}
-          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-        >
-          <svg className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-          </svg>
-        </button>
         <div className="mx-3 h-px bg-[var(--border-subtle)]" />
         {!collapsed && <CompanySwitcher />}
         <nav className="flex-1 overflow-y-auto px-2 py-4">

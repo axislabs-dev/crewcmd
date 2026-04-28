@@ -146,6 +146,8 @@ GET /api/audit-log       (full compliance trail)
 - Prefix task titles: `[Feature]`, `[Bug]`, `[Chore]`, `[Content]`, `[Data]`, `[QA]`
 - Use markdown checklists in descriptions for acceptance criteria
 - One logical change per task; create follow-on tasks for downstream work
+- Keep code tasks to small PR slices: target three files or fewer unless the change genuinely cannot be split
+- Split docs, tests, refactors, dependency updates, and feature work into separate tasks/PRs
 - Always include `createdBy` when creating tasks programmatically
 
 For full API reference including chat, runtimes, skills, blueprints, budgets, approvals, and more: read `references/api-full.md`.

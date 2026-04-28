@@ -6,11 +6,11 @@
   "license": "BSL-1.1",
   "repository": {
     "type": "git",
-    "url": "https://github.com/axislabs-dev/crewcmd.git"
+    "url": "https://github.com/rogerchappel/crewcmd.git"
   },
-  "homepage": "https://github.com/axislabs-dev/crewcmd",
+  "homepage": "https://github.com/rogerchappel/crewcmd",
   "bugs": {
-    "url": "https://github.com/axislabs-dev/crewcmd/issues"
+    "url": "https://github.com/rogerchappel/crewcmd/issues"
   },
   "author": "Axislabs (https://axislabs.dev)",
   "packageManager": "pnpm@9.15.0",

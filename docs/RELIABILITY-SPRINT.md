@@ -16,12 +16,19 @@ Make CrewCmd reliable enough to trust as the daily operating layer for human + a
    - Symptom: if an agent is executing a long task, follow-up user messages can appear to hang or fail.
    - Desired behavior: visible run state, queued follow-up, cancellation option, or clear “agent is still working” response.
 
+## Baseline Context
+
+Recent reliability work already added agent-mode diagnostics and inactivity timeout guards in PRs #229 and #230. Start from that baseline instead of treating the issue as unknown: validate whether the existing diagnostics catch the failure, then close any visibility or recovery gaps.
+
+The current inactivity timeout is 300 seconds. Any 10-15 minute sustained interaction test must either disable that timeout for the test run or explicitly configure it above the planned test duration.
+
 ## Sprint Scope
 
 ### 1. Reproduce and instrument
 
 - Create a repeatable 10-15 minute agent-mode test script.
-- Add lifecycle logging for chat request received, runtime dispatch, first token/event, completion, timeout, and error.
+- Adjust or disable the 300s inactivity timeout before running sustained tests.
+- Validate existing diagnostics first, then add lifecycle logging only where gaps remain: chat request received, runtime dispatch, first token/event, completion, timeout, and error.
 - Record session key, runtime id, agent id, request id, elapsed time, and terminal state.
 
 ### 2. Fix no-response failure mode

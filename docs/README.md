@@ -6,7 +6,7 @@ Everything you need to get started, self-host, and contribute.
 
 - [Installation](getting-started/installation.md) — Quick start, Docker, and external Postgres
 - [Configuration](getting-started/configuration.md) — Environment variables and settings
-- [Authentication](getting-started/authentication.md) — GitHub OAuth, local auth, API tokens
+- [Authentication](getting-started/authentication.md) — Local auth and API tokens
 
 ## Core Concepts
 

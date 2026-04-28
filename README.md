@@ -149,10 +149,12 @@ CrewCmd is source-available under the [BSL 1.1](./LICENSE). Contributions welcom
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
 pnpm install
-pnpm dev:https
+pnpm dev
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for the project plan and architecture notes.
+Open [http://localhost:3000](http://localhost:3000), create the first account, and run `pnpm typecheck && pnpm test` before opening a PR. Use `pnpm dev:https` only when you need HTTPS-only browser features such as microphone access.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contributor workflow and [docs/README.md](./docs/README.md) for the documentation index.
 
 ## License
 

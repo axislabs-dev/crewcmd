@@ -43,12 +43,21 @@ export interface InboxMessageContext {
   metadata?: Record<string, unknown>;
 }
 
+export interface InboxAgentSummary {
+  id: string;
+  callsign: string;
+  name: string;
+  emoji: string;
+  color: string;
+}
+
 /** Full inbox message record */
 export interface InboxMessage {
   id: string;
   workspaceId?: string;
   companyId: string | null;
   fromAgentId: string;
+  fromAgent?: InboxAgentSummary | null;
   toUserId: string | null;
   toAgentId: string | null;
   type: InboxMessageType;

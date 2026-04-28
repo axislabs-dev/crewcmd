@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type {
+  InboxAgentSummary,
   InboxMessage,
   InboxMessageType,
   InboxPriority,
@@ -19,6 +20,7 @@ import type {
 } from "@/db/schema-inbox";
 import { timeAgo } from "@/lib/utils";
 import { useCompany } from "@/components/company-context";
+import { parsePlainTextLinks } from "@/lib/linkify-text";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -80,13 +82,47 @@ function PriorityBadge({ priority }: { priority: InboxPriority }) {
   );
 }
 
-function AgentTag({ callsign }: { callsign: string }) {
-  const meta = AGENT_META[callsign] || { emoji: "\u{1F916}", name: callsign, color: "#888" };
+function isLikelyUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function AgentTag({ callsign, agent }: { callsign: string; agent?: InboxAgentSummary | null }) {
+  const fallbackKey = callsign.toUpperCase();
+  const meta = agent ?? AGENT_META[fallbackKey] ?? {
+    emoji: "\u{1F916}",
+    name: isLikelyUuid(callsign) ? "Unknown agent" : callsign,
+    color: "#888",
+  };
+  const label = agent?.callsign ?? (isLikelyUuid(callsign) ? "Unknown agent" : callsign);
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--text-primary)]">
+    <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-xs text-[var(--text-primary)]" title={agent?.name ?? callsign}>
       <span>{meta.emoji}</span>
-      <span style={{ color: meta.color }}>{callsign}</span>
+      <span className="truncate" style={{ color: meta.color }}>{label}</span>
     </span>
+  );
+}
+
+function LinkifiedText({ text }: { text: string }) {
+  return (
+    <>
+      {parsePlainTextLinks(text).map((part, index) => {
+        if (part.kind === "url") {
+          return (
+            <a
+              key={`${part.value}-${index}`}
+              href={part.value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#00f0ff] underline decoration-[#00f0ff]/40 underline-offset-2 transition-colors hover:text-[#7df7ff] hover:decoration-[#7df7ff]"
+            >
+              {part.value}
+            </a>
+          );
+        }
+
+        return <span key={`${part.value}-${index}`}>{part.value}</span>;
+      })}
+    </>
   );
 }
 
@@ -454,7 +490,7 @@ export default function InboxPage() {
                     {/* Row 1: agent + type + time */}
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <AgentTag callsign={msg.fromAgentId} />
+                        <AgentTag callsign={msg.fromAgentId} agent={msg.fromAgent} />
                         <TypeBadge type={msg.type} />
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -504,7 +540,7 @@ export default function InboxPage() {
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <AgentTag callsign={selected.fromAgentId} />
+                      <AgentTag callsign={selected.fromAgentId} agent={selected.fromAgent} />
                       <TypeBadge type={selected.type} />
                       <PriorityBadge priority={selected.priority} />
                       <span className="hidden font-mono text-[11px] text-[var(--text-tertiary)] md:ml-auto md:inline">
@@ -519,7 +555,7 @@ export default function InboxPage() {
                   {/* Body */}
                   <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
                     <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-[var(--text-primary)]">
-                      {selected.body}
+                      <LinkifiedText text={selected.body} />
                     </div>
                   </div>
 

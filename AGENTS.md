@@ -53,6 +53,12 @@ Before editing, report:
 
 Use Conventional Commits. One commit equals one reviewable intent.
 
+Keep code work small by default:
+
+- Target three files or fewer per PR unless the change genuinely cannot be split.
+- Split docs, tests, refactors, dependency updates, and feature work into separate PRs.
+- If a change grows past the reviewable slice, stop and create follow-on tasks instead of widening scope.
+
 Do not mix implementation and unrelated docs, tests for one feature with implementation of another, dependency bumps with behaviour changes, formatting-only changes with logic changes, or generated files with unrelated hand-written code.
 
 ## PR Policy

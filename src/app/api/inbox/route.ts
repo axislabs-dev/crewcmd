@@ -68,26 +68,39 @@ export async function GET(request: NextRequest) {
     const result = await withRetry(() =>
       db!.execute(sql.raw(
         `SELECT
-          id,
-          workspace_id AS "workspaceId",
-          company_id AS "companyId",
-          from_agent_id AS "fromAgentId",
-          to_user_id AS "toUserId",
-          to_agent_id AS "toAgentId",
-          type,
-          priority,
-          title,
-          body,
-          context,
-          actions,
-          status,
-          actioned_by AS "actionedBy",
-          actioned_at AS "actionedAt",
-          action_result AS "actionResult",
-          snooze_until AS "snoozeUntil",
-          created_at AS "createdAt",
-          updated_at AS "updatedAt"
+          inbox_messages.id,
+          inbox_messages.workspace_id AS "workspaceId",
+          inbox_messages.company_id AS "companyId",
+          inbox_messages.from_agent_id AS "fromAgentId",
+          CASE
+            WHEN a.id IS NOT NULL THEN json_build_object(
+              'id', a.id,
+              'callsign', a.callsign,
+              'name', a.name,
+              'emoji', a.emoji,
+              'color', a.color
+            )
+            ELSE NULL
+          END AS "fromAgent",
+          inbox_messages.to_user_id AS "toUserId",
+          inbox_messages.to_agent_id AS "toAgentId",
+          inbox_messages.type,
+          inbox_messages.priority,
+          inbox_messages.title,
+          inbox_messages.body,
+          inbox_messages.context,
+          inbox_messages.actions,
+          inbox_messages.status,
+          inbox_messages.actioned_by AS "actionedBy",
+          inbox_messages.actioned_at AS "actionedAt",
+          inbox_messages.action_result AS "actionResult",
+          inbox_messages.snooze_until AS "snoozeUntil",
+          inbox_messages.created_at AS "createdAt",
+          inbox_messages.updated_at AS "updatedAt"
         FROM inbox_messages
+        LEFT JOIN agents a
+          ON a.id::text = inbox_messages.from_agent_id
+          OR lower(a.callsign) = lower(inbox_messages.from_agent_id)
         ${where}
         ORDER BY created_at DESC`
       ))
@@ -201,21 +214,34 @@ export async function POST(request: NextRequest) {
     const result = await withRetry(() =>
       db!.execute(sql.raw(`
         SELECT
-          id,
-          workspace_id AS "workspaceId",
-          company_id AS "companyId",
-          from_agent_id AS "fromAgentId",
-          to_user_id AS "toUserId",
-          to_agent_id AS "toAgentId",
-          type, priority, title, body, context, actions, status,
-          actioned_by AS "actionedBy",
-          actioned_at AS "actionedAt",
-          action_result AS "actionResult",
-          snooze_until AS "snoozeUntil",
-          created_at AS "createdAt",
-          updated_at AS "updatedAt"
+          inbox_messages.id,
+          inbox_messages.workspace_id AS "workspaceId",
+          inbox_messages.company_id AS "companyId",
+          inbox_messages.from_agent_id AS "fromAgentId",
+          CASE
+            WHEN a.id IS NOT NULL THEN json_build_object(
+              'id', a.id,
+              'callsign', a.callsign,
+              'name', a.name,
+              'emoji', a.emoji,
+              'color', a.color
+            )
+            ELSE NULL
+          END AS "fromAgent",
+          inbox_messages.to_user_id AS "toUserId",
+          inbox_messages.to_agent_id AS "toAgentId",
+          inbox_messages.type, inbox_messages.priority, inbox_messages.title, inbox_messages.body, inbox_messages.context, inbox_messages.actions, inbox_messages.status,
+          inbox_messages.actioned_by AS "actionedBy",
+          inbox_messages.actioned_at AS "actionedAt",
+          inbox_messages.action_result AS "actionResult",
+          inbox_messages.snooze_until AS "snoozeUntil",
+          inbox_messages.created_at AS "createdAt",
+          inbox_messages.updated_at AS "updatedAt"
         FROM inbox_messages
-        WHERE id = '${messageId}'
+        LEFT JOIN agents a
+          ON a.id::text = inbox_messages.from_agent_id
+          OR lower(a.callsign) = lower(inbox_messages.from_agent_id)
+        WHERE inbox_messages.id = '${messageId}'
       `))
     );
 

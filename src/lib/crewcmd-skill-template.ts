@@ -3,6 +3,8 @@
  * how to use CrewCmd's full workspace management API.
  */
 
+import { CREWCMD_MANAGEMENT_CAPABILITY_CONTRACT } from "@/lib/skills/crewcmd-management";
+
 interface CrewCmdSkillConfig {
   /** Base URL of the CrewCmd instance (e.g. http://100.64.1.5:3000) */
   baseUrl: string;
@@ -12,15 +14,22 @@ interface CrewCmdSkillConfig {
   companyId?: string | null;
 }
 
+const capabilityContractTable = CREWCMD_MANAGEMENT_CAPABILITY_CONTRACT
+  .map((entry) => `| \`${entry.capability}\` | \`${entry.method} ${entry.path}\` | ${entry.notes} |`)
+  .join("\n");
+
 export function generateCrewCmdSkill(config: CrewCmdSkillConfig): string {
   const { baseUrl, workspaceId, companyId } = config;
   const scopeSummary = companyId
     ? `Compatible company scope: ${companyId}`
     : "This workspace is personal and has no company scope.";
+  const runtimeScopeSummary = companyId
+    ? "Company runtimes are scoped to the company workspace they own or are attached to. Personal runtimes are scoped to the owning user's personal workspace."
+    : "Personal runtimes are scoped to the owning user's personal workspace. Do not assume company-only APIs are available without a companyId.";
 
   return `---
 name: crewcmd
-description: Full workspace management — tasks, projects, agents, inbox, blueprints, budgets, docs, org chart, and more.
+description: CrewCmd management API for tasks, projects, agents, inbox, blueprints, budgets, docs, and activity.
 version: "2.1"
 ---
 
@@ -29,7 +38,8 @@ version: "2.1"
 You are connected to a CrewCmd workspace.
 Preferred workspace scope: ${workspaceId}
 ${scopeSummary}
-Use these API endpoints to manage your workspace — tasks, projects, agents, inbox, blueprints, budgets, documents, org chart, and activity.
+${runtimeScopeSummary}
+Use these API endpoints to manage your workspace: tasks, projects, agents, inbox, blueprints, budgets, documents, and activity.
 
 ## Operating rules
 
@@ -41,10 +51,18 @@ Use these API endpoints to manage your workspace — tasks, projects, agents, in
 - Keep comments and inbox messages concise, operational, and explicit about the next action needed.
 - If you are acting as a developer or reviewer, code delivery must include a branch, atomic commits, a PR, and linked task PR metadata before the task moves to review.
 
+## Scope and Identifiers
+
+- \`workspaceId\` is the preferred scope for workspace-bound operations. Include it in list/create requests whenever the endpoint accepts it.
+- \`companyId\` is only the company backing a company workspace. It is a compatible fallback for some existing endpoints under runtime bearer auth, but it is not a substitute for \`workspaceId\` when a workspace-scoped endpoint asks for explicit scope.
+- \`runtimeId\` identifies the CrewCmd runtime making the request. Send it as \`X-CrewCmd-Runtime-Id\`; do not put it in request bodies unless a specific endpoint documents a \`runtimeId\` field.
+- A personal runtime can only use the personal workspace resolved for its owner. A company runtime can only use the company workspace resolved for its owning company. Bearer auth does not grant cross-workspace access.
+- Company-only APIs require a real \`companyId\`. In personal scope, avoid company members, org chart, company approvals, and company budget administration unless a human explicitly provides valid company scope and authorization.
+
 ## Authentication
 
-All mutating requests (POST, PATCH, DELETE) require a Bearer token.
-Runtime-scoped requests must also identify which CrewCmd runtime is calling.
+Runtime bearer auth is the expected auth mode for this skill. Mutating requests (POST, PATCH, DELETE) require the bearer token, and bearer-scoped list/read requests must include explicit \`workspaceId\` or \`companyId\` where the endpoint requires scoped listing.
+Every runtime-scoped request must also identify which CrewCmd runtime is calling.
 Use the \`HEARTBEAT_SECRET\` and \`CREWCMD_RUNTIME_ID\` environment variables from your runtime:
 
 \`\`\`
@@ -55,6 +73,14 @@ X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID
 Read both values from your environment at runtime. Never hardcode them.
 
 Base URL: \`${baseUrl}\`
+
+## Capability Contract
+
+The installed \`crewcmd-management\` skill metadata exposes exactly the capabilities below. Other CrewCmd endpoints may exist, but they are outside this skill's declared agent-facing contract unless another skill or a human instruction explicitly authorizes them.
+
+| Capability | Endpoint | Contract |
+| --- | --- | --- |
+${capabilityContractTable}
 
 ---
 
@@ -285,7 +311,6 @@ POST ${baseUrl}/api/agents/{callsign}/stop
 POST ${baseUrl}/api/agents/{callsign}/restart
 GET  ${baseUrl}/api/agents/{callsign}/status
 GET  ${baseUrl}/api/agents/{callsign}/output
-GET  ${baseUrl}/api/agents/{callsign}/output/stream
 \`\`\`
 
 ### Assign Task to Agent
@@ -383,26 +408,7 @@ Content-Type: application/json
 { "status": "actioned", "actionResult": "Approved deploy", "actionedBy": "user" }
 \`\`\`
 
-Updatable fields:
-- \`status\`
-- \`actionResult\`
-- \`snoozeUntil\`
-- \`actionedBy\`
-
-### Bulk Operations
-
-\`\`\`
-POST ${baseUrl}/api/inbox/bulk
-Content-Type: application/json
-
-{ "ids": ["uuid1", "uuid2"], "action": "mark_read" }
-\`\`\`
-
-### Inbox Stats
-
-\`\`\`
-GET ${baseUrl}/api/inbox/stats?workspaceId=${workspaceId}
-\`\`\`
+Updatable fields: \`status\`, \`actionResult\`, \`snoozeUntil\`, \`actionedBy\`.
 
 ---
 
@@ -494,58 +500,10 @@ Content-Type: application/json
 
 Returns \`{ success: true, agents: [...], count: N }\`.
 
-### Get / Update Blueprint
+### Get Blueprint
 
 \`\`\`
-GET   ${baseUrl}/api/blueprints/{id}
-PATCH ${baseUrl}/api/blueprints/{id}
-\`\`\`
-
----
-
-## Org Chart
-
-### Get Org Tree
-
-\`\`\`
-GET ${baseUrl}/api/org-chart?company_id={companyId}
-\`\`\`
-
-Returns nested org tree structure.
-
-### Create / Update Org Node
-
-\`\`\`
-POST ${baseUrl}/api/org-chart
-Content-Type: application/json
-
-{
-  "companyId": "${companyId}",
-  "agentId": "uuid",
-  "positionTitle": "Lead Engineer",
-  "parentNodeId": "uuid-of-parent",
-  "canDelegate": true,
-  "sortIndex": 0
-}
-\`\`\`
-
-### Get / Update Node
-
-\`\`\`
-GET   ${baseUrl}/api/org-chart/{nodeId}
-PATCH ${baseUrl}/api/org-chart/{nodeId}
-Content-Type: application/json
-
-{ "positionTitle": "Senior Engineer", "parentNodeId": "new-parent-uuid" }
-\`\`\`
-
-### Delegate
-
-\`\`\`
-POST ${baseUrl}/api/org-chart/delegate
-Content-Type: application/json
-
-{ "fromNodeId": "uuid", "toNodeId": "uuid", "taskId": "uuid" }
+GET ${baseUrl}/api/blueprints/{id}
 \`\`\`
 
 ---
@@ -558,124 +516,15 @@ Content-Type: application/json
 GET ${baseUrl}/api/budgets?company_id={companyId}
 \`\`\`
 
-### Create / Update Budget
+### Get Agent Budget
 
 \`\`\`
-POST ${baseUrl}/api/budgets
-Content-Type: application/json
-
-{
-  "agentId": "uuid",
-  "companyId": "${companyId}",
-  "monthlyLimit": 5000,
-  "alertThreshold": 0.8,
-  "autoPause": true
-}
-\`\`\`
-
-Fields:
-- \`monthlyLimit\` — Monthly spend cap in cents
-- \`alertThreshold\` — Alert when spend reaches this fraction (0-1)
-- \`autoPause\` — Pause agent when budget exceeded
-
-### Get / Update Agent Budget
-
-\`\`\`
-GET   ${baseUrl}/api/budgets/{agentId}
-PATCH ${baseUrl}/api/budgets/{agentId}
-Content-Type: application/json
-
-{ "monthlyLimit": 10000 }
-\`\`\`
-
-### Cost Events
-
-\`\`\`
-GET ${baseUrl}/api/cost-events?agentId={agentId}
-GET ${baseUrl}/api/cost-events/summary
+GET ${baseUrl}/api/budgets/{agentId}
 \`\`\`
 
 ---
 
-## Skills
-
-### List Skills
-
-\`\`\`
-GET ${baseUrl}/api/skills?company_id={companyId}
-\`\`\`
-
-Returns built-in and custom skills.
-
-### Create Custom Skill
-
-\`\`\`
-POST ${baseUrl}/api/skills
-Content-Type: application/json
-
-{
-  "name": "Skill name (required)",
-  "slug": "skill-slug (required)",
-  "description": "What the skill does",
-  "companyId": "${companyId}",
-  "source": "custom",
-  "content": "Skill instructions markdown",
-  "metadata": {}
-}
-\`\`\`
-
-### Browse / Import
-
-\`\`\`
-GET  ${baseUrl}/api/skills/browse
-POST ${baseUrl}/api/skills/import
-Content-Type: application/json
-
-{ "url": "https://clawhub.example/skill-package" }
-\`\`\`
-
-### Get Skill / Skill Agents
-
-\`\`\`
-GET ${baseUrl}/api/skills/{id}
-GET ${baseUrl}/api/skills/{id}/agents
-\`\`\`
-
----
-
-## Team Members
-
-### List Members
-
-\`\`\`
-GET ${baseUrl}/api/companies/{companyId}/members
-\`\`\`
-
-Returns members with userId, role, email, githubUsername.
-
-### Invite Member
-
-\`\`\`
-POST ${baseUrl}/api/companies/{companyId}/members
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "role": "member"
-}
-\`\`\`
-
-Or invite by GitHub username: \`{ "githubUsername": "user", "role": "member" }\`
-
-### Remove Member
-
-\`\`\`
-DELETE ${baseUrl}/api/companies/{companyId}/members?memberId={memberId}
-\`\`\`
-
----
-
-## Activity & Audit
+## Activity
 
 ### Activity Log
 
@@ -683,94 +532,11 @@ DELETE ${baseUrl}/api/companies/{companyId}/members?memberId={memberId}
 GET ${baseUrl}/api/activity?agentId={agentId}&actionType={type}&limit=50
 \`\`\`
 
-### Log Activity
-
-\`\`\`
-POST ${baseUrl}/api/activity
-Content-Type: application/json
-
-{
-  "agentId": "your-agent-uuid",
-  "actionType": "task_completed",
-  "description": "Completed migration task TSK-1234",
-  "metadata": {}
-}
-\`\`\`
-
-### Audit Log
-
-\`\`\`
-GET ${baseUrl}/api/audit-log
-\`\`\`
-
----
-
-## Heartbeat Schedules
-
-### List / Create Schedules
-
-\`\`\`
-GET  ${baseUrl}/api/heartbeat-schedules
-POST ${baseUrl}/api/heartbeat-schedules
-Content-Type: application/json
-
-{ "agentId": "uuid", "cronExpression": "*/15 * * * *", "enabled": true }
-\`\`\`
-
-### Get / Update Schedule
-
-\`\`\`
-GET   ${baseUrl}/api/heartbeat-schedules/{id}
-PATCH ${baseUrl}/api/heartbeat-schedules/{id}
-Content-Type: application/json
-
-{ "enabled": false }
-\`\`\`
-
-### Execution Records
-
-\`\`\`
-GET  ${baseUrl}/api/heartbeat-executions
-POST ${baseUrl}/api/heartbeat-executions
-GET  ${baseUrl}/api/heartbeat-executions/{id}
-\`\`\`
-
----
-
-## Approval Gates (Governance)
-
-### List / Create Gates
-
-\`\`\`
-GET  ${baseUrl}/api/approval-gates
-POST ${baseUrl}/api/approval-gates
-Content-Type: application/json
-
-{ "name": "Deploy approval", "companyId": "${companyId}", "triggerType": "deploy", "requiredApprovers": 1 }
-\`\`\`
-
-### Approval Requests
-
-\`\`\`
-GET  ${baseUrl}/api/approval-requests
-POST ${baseUrl}/api/approval-requests
-Content-Type: application/json
-
-{ "gateId": "uuid", "requestedBy": "agent-uuid", "context": {} }
-\`\`\`
-
-\`\`\`
-PATCH ${baseUrl}/api/approval-requests/{id}
-Content-Type: application/json
-
-{ "status": "approved", "decidedBy": "user-uuid" }
-\`\`\`
-
 ---
 
 ## Workflow Guidelines
 
-1. **Starting work**: Update task status to \`in_progress\` and log activity.
+1. **Starting work**: Update task status to \`in_progress\` and add a task comment.
 2. **Progress updates**: Add comments explaining decisions, progress, or blockers.
 3. **Blocked**: Add a comment explaining why and what you need. Do NOT silently stop.
 4. **Completing work**: Set status to \`review\`. Link the PR if applicable.
@@ -778,7 +544,7 @@ Content-Type: application/json
 6. **Collaboration**: Use inbox to communicate with other agents or humans.
 7. **Documentation**: Create docs for runbooks, decisions, and knowledge sharing.
 8. **Budget awareness**: Check your budget before starting expensive operations.
-9. **Always log**: Every significant action should appear in the task board, activity log, or inbox.
+9. **Always log**: Every significant action should appear in the task board, task comments, or inbox.
 10. **Human asks go to inbox**: approvals, questions, blockers, and requests for credentials belong in inbox messages.
 
 ## Example: Full Task Lifecycle
@@ -824,12 +590,12 @@ curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
   -d '{"content": "Implemented fix, opened PR #42, ready for review.", "agentId": "YOUR_AGENT_ID"}' \\
   "${baseUrl}/api/tasks/TASK_ID/comments"
 
-# 7. Log activity
+# 7. Submit a structured completion report when the task is complete
 curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
   -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
   -H "Content-Type: application/json" \\
-  -d '{"agentId": "YOUR_AGENT_ID", "actionType": "task_completed", "description": "Completed TSK-1234"}' \\
-  "${baseUrl}/api/activity"
+  -d '{"repo": "owner/repo", "branch": "feat/my-feature", "executionSuccess": true, "executionErrors": [], "notes": "Ready for review"}' \\
+  "${baseUrl}/api/tasks/TASK_ID/complete"
 \`\`\`
 `;
 }

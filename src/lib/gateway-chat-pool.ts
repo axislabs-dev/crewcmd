@@ -28,24 +28,63 @@ const LOCAL_OPENCLAW_CONFIG_PATH = join(homedir(), ".openclaw", "openclaw.json")
  * Mark a client as "in use" so the pool won't recycle it mid-request.
  * Call release() when done.
  */
-const activeClients = new Set<GatewayClient>();
+const activeClientHolds = new Map<GatewayClient, number>();
+
+function activeClientCount() {
+  return activeClientHolds.size;
+}
+
+function totalActiveHolds() {
+  let total = 0;
+  for (const count of activeClientHolds.values()) total += count;
+  return total;
+}
 
 export function holdClient(client: GatewayClient) {
-  activeClients.add(client);
+  activeClientHolds.set(client, (activeClientHolds.get(client) ?? 0) + 1);
   publishAgentModeDiagnostic({
     scope: "gateway-pool",
     event: "client.hold",
-    detail: { activeClients: activeClients.size, poolSize: pool.size },
+    detail: {
+      activeClients: activeClientCount(),
+      activeHolds: totalActiveHolds(),
+      poolSize: pool.size,
+    },
   });
 }
 
 export function releaseClient(client: GatewayClient) {
-  activeClients.delete(client);
+  const holds = activeClientHolds.get(client) ?? 0;
+  if (holds <= 1) {
+    activeClientHolds.delete(client);
+  } else {
+    activeClientHolds.set(client, holds - 1);
+  }
   publishAgentModeDiagnostic({
     scope: "gateway-pool",
     event: "client.release",
-    detail: { activeClients: activeClients.size, poolSize: pool.size },
+    detail: {
+      activeClients: activeClientCount(),
+      activeHolds: totalActiveHolds(),
+      poolSize: pool.size,
+    },
   });
+}
+
+export function getGatewayPoolDiagnostics() {
+  return {
+    poolSize: pool.size,
+    activeClients: activeClientCount(),
+    activeHolds: totalActiveHolds(),
+  };
+}
+
+export function resetGatewayPoolForTests() {
+  for (const entry of pool.values()) {
+    entry.client.close();
+  }
+  pool.clear();
+  activeClientHolds.clear();
 }
 
 function toHttpUrl(wsUrl: string): string {
@@ -224,7 +263,8 @@ export async function getGatewayClient(): Promise<GatewayClient> {
         runtimeId: runtime.id,
         ageMs: Date.now() - existing.connectedAt,
         poolSize: pool.size,
-        activeClients: activeClients.size,
+        activeClients: activeClientCount(),
+        activeHolds: totalActiveHolds(),
       },
     });
     return existing.client;
@@ -232,7 +272,7 @@ export async function getGatewayClient(): Promise<GatewayClient> {
 
   // Close stale connection — but only if no active request is using it
   if (existing) {
-    if (activeClients.has(existing.client)) {
+    if (activeClientHolds.has(existing.client)) {
       // Client is mid-request, return it anyway (don't recycle under its feet)
       publishAgentModeDiagnostic({
         scope: "gateway-pool",
@@ -240,7 +280,8 @@ export async function getGatewayClient(): Promise<GatewayClient> {
         detail: {
           runtimeId: runtime.id,
           ageMs: Date.now() - existing.connectedAt,
-          activeClients: activeClients.size,
+          activeClients: activeClientCount(),
+          activeHolds: totalActiveHolds(),
         },
       });
       return existing.client;

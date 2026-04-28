@@ -28,7 +28,7 @@ CrewCMD supports BYO runtimes: a user can connect personal runtimes while also w
 | `src/lib/runtime-cron-sync.ts#listCronJobsFromRuntime` | Runtime from active workspace helper | Must route by selected workspace runtime | Used by automation listing/runs/schedule patching. Needs explicit runtime follow-up if UI supports choosing a runtime. |
 | `src/app/api/automations/runs/route.ts` | Runtime returned by `listCronJobsFromRuntime()` | Must route by selected workspace runtime | Job IDs are runtime-local; should include runtime id for precision. |
 | `src/app/api/schedules/[id]/route.ts` | Runtime returned by `listCronJobsFromRuntime()` | Must route by selected workspace runtime | Patching a schedule by id without runtime id is ambiguous when multiple runtimes expose the same job id. |
-| `src/app/api/runtimes/route.ts` | Lists readable runtimes; creates runtime from selected workspace | Valid onboarding/default fallback | Creation sets `isPrimary` only within same owner/storage query. Personal runtimes still require an anchor company for skill storage. |
+| `src/app/api/runtimes/route.ts` | Lists readable runtimes; creates runtime from selected workspace | Valid onboarding/default fallback; unsafe primary selection for BYO personal runtimes | Creation scopes `isPrimary` detection by `companyId + ownerType` when `ownership.companyId` exists, but does not include `ownerUserId`. For two employees with personal runtimes anchored to the same company, one employee's personal runtime can prevent the other employee's first personal runtime from becoming primary. |
 | `src/app/api/runtimes/[id]/route.ts` | Path `id` | Must route by explicit `runtimeId` | Runtime read/delete are explicit and ownership-checked. Replacement primary is scoped to same owner tuple. |
 | `src/app/api/runtimes/probe/route.ts` | Provided URL/token or local config | Valid onboarding/default fallback | Discovery path; not tied to existing runtime ownership until create/import. |
 | `src/lib/openclaw-config-parser.ts` | Local OpenClaw config file, derives `gatewayUrl` | Valid onboarding/default fallback | Same-machine discovery only; not used for routing an existing CrewCMD runtime. |
@@ -61,17 +61,19 @@ CrewCMD supports BYO runtimes: a user can connect personal runtimes while also w
 2. Chat routing uses `targetAgent.runtimeRef` only as text inside a delegation prompt. It does not resolve the selected agent's `runtimeId`.
 3. Gateway session storage is not runtime-scoped. A session key like `main` can collide across personal and company runtimes.
 4. Event bridge is a singleton. It cannot represent multiple personal/team runtimes safely.
-5. Automations use active workspace primary/fallback runtime. This is safer than global primary, but runtime-local job IDs still need explicit runtime id when users can operate multiple runtimes in one workspace.
-6. Blueprint deployment uses selected workspace primary runtime. This is acceptable as a default, but should become explicit when deploying to non-primary workspace runtimes.
+5. Runtime creation primary detection for BYO personal runtimes is scoped by storage company and owner type, not by `ownerUserId`; another employee's personal runtime can suppress this user's first primary runtime.
+6. Automations use active workspace primary/fallback runtime. This is safer than global primary, but runtime-local job IDs still need explicit runtime id when users can operate multiple runtimes in one workspace.
+7. Blueprint deployment uses selected workspace primary runtime. This is acceptable as a default, but should become explicit when deploying to non-primary workspace runtimes.
 
 ## Recommended PR Sequence
 
-1. Add a runtime-scoped gateway pool API, for example `getGatewayClientForRuntime(runtimeId)` and optionally `getGatewayClientForAgent(agentId)`, while keeping current `getGatewayClient()` only for temporary/default callers.
-2. Route `/api/chat`, `/api/chat/history`, `/api/openclaw/sessions`, and `/api/openclaw/sessions/[key]/preview` by selected agent or explicit `runtimeId`; reject ambiguous requests.
-3. Add `runtimeId` to gateway session persistence and event bridge state. Run one event bridge per runtime or make refresh explicit per runtime.
-4. Update automation read/run/patch routes to accept explicit `runtimeId`; keep active workspace primary as a visible default fallback.
-5. Update blueprint deployment UI/API to accept an explicit target runtime and keep workspace primary as a default.
-6. Add access tests for runtime-scoped chat/session APIs, covering personal runtime, company runtime, and cross-scope denial.
+1. Fix runtime creation primary detection so personal runtime primary selection is scoped by `ownerType + ownerUserId`, and company runtime primary selection is scoped by `ownerType + ownerCompanyId`.
+2. Add a runtime-scoped gateway pool API, for example `getGatewayClientForRuntime(runtimeId)` and optionally `getGatewayClientForAgent(agentId)`, while keeping current `getGatewayClient()` only for temporary/default callers.
+3. Route `/api/chat`, `/api/chat/history`, `/api/openclaw/sessions`, and `/api/openclaw/sessions/[key]/preview` by selected agent or explicit `runtimeId`; reject ambiguous requests.
+4. Add `runtimeId` to gateway session persistence and event bridge state. Run one event bridge per runtime or make refresh explicit per runtime.
+5. Update automation read/run/patch routes to accept explicit `runtimeId`; keep active workspace primary as a visible default fallback.
+6. Update blueprint deployment UI/API to accept an explicit target runtime and keep workspace primary as a default.
+7. Add access tests for runtime-scoped chat/session APIs, covering personal runtime, company runtime, and cross-scope denial.
 
 ## No-Change Areas In This Audit PR
 

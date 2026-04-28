@@ -13,6 +13,7 @@ import crypto from "node:crypto";
 import WebSocket from "ws";
 import { deriveRuntimeCapabilitySnapshot } from "./runtime-capabilities";
 import type { RuntimeCapabilitySnapshot } from "./runtime-capabilities";
+import { publishAgentModeDiagnostic } from "./agent-mode-diagnostics";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -299,6 +300,11 @@ export class GatewayClient {
    * Connect to the gateway with device auth challenge-response.
    */
   async connect(): Promise<{ version: string }> {
+    publishAgentModeDiagnostic({
+      scope: "gateway-client",
+      event: "connect.start",
+      detail: { url: this.gatewayUrl, timeoutMs: this.timeoutMs },
+    });
     const challengePromise = new Promise<string>((resolve, reject) => {
       this.challengeResolve = resolve;
       this.challengeReject = reject;
@@ -308,6 +314,11 @@ export class GatewayClient {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
+        publishAgentModeDiagnostic({
+          scope: "gateway-client",
+          event: "connect.timeout",
+          detail: { url: this.gatewayUrl, timeoutMs: this.timeoutMs },
+        });
         this.close();
         reject(new Error("Connection timeout"));
       }, this.timeoutMs);
@@ -326,6 +337,11 @@ export class GatewayClient {
 
       this.ws.on("error", (err) => {
         clearTimeout(timer);
+        publishAgentModeDiagnostic({
+          scope: "gateway-client",
+          event: "websocket.error",
+          detail: { message: err.message, pending: this.pending.size },
+        });
         this.challengeReject?.(err);
         reject(new Error(`WebSocket error: ${err.message}`));
       });
@@ -333,6 +349,16 @@ export class GatewayClient {
       this.ws.on("close", (code, reason) => {
         this.connected = false;
         const err = new Error(`Connection closed (${code}): ${reason?.toString() || ""}`);
+        publishAgentModeDiagnostic({
+          scope: "gateway-client",
+          event: "websocket.close",
+          detail: {
+            code,
+            reason: reason?.toString() || "",
+            pending: this.pending.size,
+            listeners: [...this.eventListeners.values()].reduce((total, listeners) => total + listeners.size, 0),
+          },
+        });
         this.challengeReject?.(err);
         for (const [, p] of this.pending) {
           if (p.timer) clearTimeout(p.timer);
@@ -369,6 +395,11 @@ export class GatewayClient {
                 const helloOk = value as Record<string, unknown>;
                 const server = helloOk?.server as { version?: string } | undefined;
                 this.serverVersion = server?.version || "unknown";
+                publishAgentModeDiagnostic({
+                  scope: "gateway-client",
+                  event: "connect.complete",
+                  detail: { version: this.serverVersion },
+                });
                 resolve({ version: this.serverVersion });
               },
               reject: (err) => {
@@ -423,20 +454,47 @@ export class GatewayClient {
     }
 
     const reqId = `gc-${++this.requestId}`;
+    const startedAt = Date.now();
+    publishAgentModeDiagnostic({
+      scope: "gateway-client",
+      event: "rpc.start",
+      detail: { method, reqId, pending: this.pending.size + 1 },
+    });
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(reqId);
+        publishAgentModeDiagnostic({
+          scope: "gateway-client",
+          event: "rpc.timeout",
+          detail: { method, reqId, elapsedMs: Date.now() - startedAt, pending: this.pending.size },
+        });
         reject(new Error(`RPC timeout: ${method}`));
       }, this.timeoutMs);
 
       this.pending.set(reqId, {
         resolve: (value) => {
           clearTimeout(timer);
+          publishAgentModeDiagnostic({
+            scope: "gateway-client",
+            event: "rpc.complete",
+            detail: { method, reqId, elapsedMs: Date.now() - startedAt, pending: this.pending.size },
+          });
           resolve(value as T);
         },
         reject: (err) => {
           clearTimeout(timer);
+          publishAgentModeDiagnostic({
+            scope: "gateway-client",
+            event: "rpc.error",
+            detail: {
+              method,
+              reqId,
+              elapsedMs: Date.now() - startedAt,
+              pending: this.pending.size,
+              message: err instanceof Error ? err.message : String(err),
+            },
+          });
           reject(err);
         },
         timer,
@@ -611,9 +669,26 @@ export class GatewayClient {
   }
 
   close(): void {
+    publishAgentModeDiagnostic({
+      scope: "gateway-client",
+      event: "close",
+      detail: {
+        connected: this.connected,
+        pending: this.pending.size,
+        listeners: [...this.eventListeners.values()].reduce((total, listeners) => total + listeners.size, 0),
+      },
+    });
     if (this.ws) {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
+    }
+    if (this.pending.size > 0) {
+      const err = new Error("Gateway client closed");
+      for (const [, p] of this.pending) {
+        if (p.timer) clearTimeout(p.timer);
+        p.reject(err);
+      }
+      this.pending.clear();
     }
     this.connected = false;
     this.eventListeners.clear();

@@ -17,6 +17,10 @@ import { parseTaskReferences } from "@/lib/parse-task-references";
 import { useChatStore } from "@/lib/chat-store";
 import type { ChatStoreMessage } from "@/lib/chat-store";
 import { useWorkspace } from "@/components/company-context";
+import {
+  createAgentModeSessionId,
+  publishAgentModeDiagnostic,
+} from "@/lib/agent-mode-diagnostics";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -291,6 +295,8 @@ export default function ChatPage() {
   const agentScrollContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
+  const ttsSessionRef = useRef<string>(createAgentModeSessionId("tts"));
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingStartRef = useRef<number>(0);
@@ -316,6 +322,40 @@ export default function ChatPage() {
   const ttsQueueRef = useRef<string[]>([]);
   const isSpeakingQueueRef = useRef(false);
   const spokenSentencesRef = useRef<number>(0);
+  const prefetchedAudioRef = useRef<{ text: string; url: string } | null>(null);
+
+  const revokeAudioObjectUrl = useCallback((url: string | null, reason: string) => {
+    if (!url) return;
+    URL.revokeObjectURL(url);
+    if (audioObjectUrlRef.current === url) {
+      audioObjectUrlRef.current = null;
+    }
+    publishAgentModeDiagnostic({
+      scope: "chat-tts",
+      event: "object-url.revoke",
+      sessionId: ttsSessionRef.current,
+      detail: { reason },
+    });
+  }, []);
+
+  const revokePrefetchedAudio = useCallback((reason: string) => {
+    if (!prefetchedAudioRef.current) return;
+    revokeAudioObjectUrl(prefetchedAudioRef.current.url, reason);
+    prefetchedAudioRef.current = null;
+  }, [revokeAudioObjectUrl]);
+
+  const assignAudioObjectUrl = useCallback((url: string, reason: string) => {
+    if (audioObjectUrlRef.current && audioObjectUrlRef.current !== url) {
+      revokeAudioObjectUrl(audioObjectUrlRef.current, "replace-active-audio");
+    }
+    audioObjectUrlRef.current = url;
+    publishAgentModeDiagnostic({
+      scope: "chat-tts",
+      event: "object-url.assign",
+      sessionId: ttsSessionRef.current,
+      detail: { reason },
+    });
+  }, [revokeAudioObjectUrl]);
 
   // Derive session key: if a gateway session is selected, use it;
   // otherwise fall back to agent callsign
@@ -732,14 +772,15 @@ export default function ChatPage() {
     window.speechSynthesis?.cancel();
     ttsQueueRef.current = [];
     isSpeakingQueueRef.current = false;
-    prefetchedAudioRef.current = null;
     activeAudioKindRef.current = null;
     fillerAudioTokenRef.current++;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-  }, []);
+    revokeAudioObjectUrl(audioObjectUrlRef.current, "stop-all-audio");
+    revokePrefetchedAudio("stop-all-audio");
+  }, [revokeAudioObjectUrl, revokePrefetchedAudio]);
 
   const stopFillerAudio = useCallback(() => {
     fillerAudioTokenRef.current++;
@@ -749,9 +790,14 @@ export default function ChatPage() {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
+    revokeAudioObjectUrl(audioObjectUrlRef.current, "stop-filler-audio");
     activeAudioKindRef.current = null;
     setIsPlayingAudio(false);
-  }, []);
+  }, [revokeAudioObjectUrl]);
+
+  useEffect(() => {
+    return () => stopAllAudio();
+  }, [stopAllAudio]);
 
   const markFirstAudioStarted = useCallback((provider: "browser" | "server") => {
     const metrics = voiceLatencyRef.current;
@@ -846,35 +892,42 @@ export default function ChatPage() {
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
+      publishAgentModeDiagnostic({
+        scope: "chat-tts",
+        event: "object-url.create",
+        sessionId: ttsSessionRef.current,
+        detail: { kind, bytes: blob.size, source: "playTTS" },
+      });
       if (kind === "filler" && token !== fillerAudioTokenRef.current) {
-        URL.revokeObjectURL(url);
+        revokeAudioObjectUrl(url, "stale-filler-token");
         return;
       }
 
       if (audioRef.current) {
+        assignAudioObjectUrl(url, `play-${kind}`);
         audioRef.current.src = url;
         audioRef.current.onended = () => {
           setIsPlayingAudio(false);
           activeAudioKindRef.current = null;
-          URL.revokeObjectURL(url);
+          revokeAudioObjectUrl(url, "play-ended");
         };
         audioRef.current.onerror = () => {
           setIsPlayingAudio(false);
           activeAudioKindRef.current = null;
-          URL.revokeObjectURL(url);
+          revokeAudioObjectUrl(url, "play-error");
         };
         await audioRef.current.play();
         if (kind === "response") markFirstAudioStarted("server");
+      } else {
+        revokeAudioObjectUrl(url, "missing-audio-element");
       }
     } catch (error) {
       console.error("[TTS] Error:", error);
+      revokeAudioObjectUrl(audioObjectUrlRef.current, "play-exception");
       // Network error — try browser fallback
       playBrowserTTS(text, kind, token);
     }
-  }, [markFirstAudioStarted, playBrowserTTS]);
-
-  // Pre-fetch next TTS audio while current sentence plays
-  const prefetchedAudioRef = useRef<{ text: string; url: string } | null>(null);
+  }, [assignAudioObjectUrl, markFirstAudioStarted, playBrowserTTS, revokeAudioObjectUrl]);
 
   const prefetchTTS = useCallback(async (text: string) => {
     try {
@@ -886,11 +939,18 @@ export default function ChatPage() {
       if (!response.ok) return;
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
+      publishAgentModeDiagnostic({
+        scope: "chat-tts",
+        event: "object-url.create",
+        sessionId: ttsSessionRef.current,
+        detail: { bytes: blob.size, source: "prefetchTTS" },
+      });
+      revokePrefetchedAudio("replace-prefetch");
       prefetchedAudioRef.current = { text, url };
     } catch {
       // Prefetch is best-effort
     }
-  }, []);
+  }, [revokePrefetchedAudio]);
 
   // Sentence-level TTS: speak each sentence as it completes during streaming
   const speakNextInQueue = useCallback(async () => {
@@ -998,13 +1058,20 @@ export default function ChatPage() {
 
         const blob = await response.blob();
         url = URL.createObjectURL(blob);
+        publishAgentModeDiagnostic({
+          scope: "chat-tts",
+          event: "object-url.create",
+          sessionId: ttsSessionRef.current,
+          detail: { bytes: blob.size, source: "queue" },
+        });
       }
 
       if (audioRef.current) {
+        assignAudioObjectUrl(url, "queue-play");
         audioRef.current.src = url;
         audioRef.current.playbackRate = 1.15;
         audioRef.current.onended = () => {
-          URL.revokeObjectURL(url);
+          revokeAudioObjectUrl(url, "queue-ended");
           isSpeakingQueueRef.current = false;
           if (ttsQueueRef.current.length > 0) {
             speakNextInQueue();
@@ -1014,7 +1081,7 @@ export default function ChatPage() {
           }
         };
         audioRef.current.onerror = () => {
-          URL.revokeObjectURL(url);
+          revokeAudioObjectUrl(url, "queue-error");
           isSpeakingQueueRef.current = false;
           activeAudioKindRef.current = null;
           setIsPlayingAudio(false);
@@ -1023,17 +1090,19 @@ export default function ChatPage() {
         markFirstAudioStarted("server");
       } else {
         console.error("[TTS Queue] No audioRef.current available");
+        revokeAudioObjectUrl(url, "missing-audio-element");
         isSpeakingQueueRef.current = false;
         activeAudioKindRef.current = null;
         setIsPlayingAudio(false);
       }
     } catch (err) {
       console.error("[TTS Queue] Playback error:", err);
+      revokeAudioObjectUrl(audioObjectUrlRef.current, "queue-exception");
       isSpeakingQueueRef.current = false;
       activeAudioKindRef.current = null;
       setIsPlayingAudio(false);
     }
-  }, [markFirstAudioStarted, prefetchTTS, stopFillerAudio]);
+  }, [assignAudioObjectUrl, markFirstAudioStarted, prefetchTTS, revokeAudioObjectUrl, stopFillerAudio]);
 
   /** Queue a sentence for TTS and start speaking if idle */
   const queueSentenceForTTS = useCallback(

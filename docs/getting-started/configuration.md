@@ -1,30 +1,34 @@
 # Configuration
 
-CrewCmd uses environment variables for configuration. Copy `.env.example` to `.env.local` and edit as needed.
+CrewCmd uses environment variables for configuration. Copy `.env.example` to `.env.local` for local `pnpm dev`, or to `.env` for Docker Compose.
 
 ## Environment Variables
 
-### Required
+### Local Development
+
+No environment variables are required for the default local path. If `DATABASE_URL` is unset, CrewCmd uses embedded PGlite. In development, `AUTH_SECRET` has a local-only fallback.
+
+### Required for Exposed Deployments
 
 | Variable | Description | Default |
 |---|---|---|
-| `NEXTAUTH_SECRET` | Session encryption key | Auto-generated in dev |
-| `NEXTAUTH_URL` | Your deployment URL | `https://localhost:3000` |
+| `AUTH_SECRET` | Auth.js session encryption key | Local-only fallback in dev |
+| `NEXT_PUBLIC_APP_URL` | Public URL for callbacks and generated links | `http://localhost:3000` |
 
 ### Database
 
 | Variable | Description | Default |
 |---|---|---|
 | `DATABASE_URL` | Postgres connection string | Uses embedded PGlite if not set |
-| `DB_MODE` | `pglite` or `postgres` | Auto-detected from DATABASE_URL |
+| `POSTGRES_PASSWORD` | Docker Compose Postgres password | `crewcmd` |
 
-### Authentication
+### Authentication and API Access
 
 | Variable | Description | Default |
 |---|---|---|
-| `GITHUB_ID` | GitHub OAuth app client ID | — |
-| `GITHUB_SECRET` | GitHub OAuth app client secret | — |
 | `HEARTBEAT_SECRET` | API token for agent/cron access | — |
+
+`AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` are present in `.env.example` as reserved GitHub OAuth settings, but the default auth provider currently uses email/password credentials only.
 
 ### AI Providers
 
@@ -34,7 +38,10 @@ Provider API keys are configured in the CrewCmd UI under Settings > Provider Key
 
 | Variable | Description | Default |
 |---|---|---|
-| `PORT` | Server port | `3000` |
+| `APP_PORT` | Docker Compose app port | `3000` |
+| `POSTGRES_PORT` | Docker Compose Postgres host port | `5432` |
+| `OPENCLAW_GATEWAY_URL` | Optional OpenClaw gateway URL | — |
+| `BLOB_READ_WRITE_TOKEN` | Optional Vercel Blob token for uploaded assets | — |
 | `NODE_ENV` | `development` or `production` | `development` |
 
 ## PGlite (Embedded Postgres)

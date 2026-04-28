@@ -10,21 +10,9 @@ Works out of the box. First user to sign up becomes the admin.
 2. Create your account with email and password
 3. You're in. First account gets admin access automatically.
 
-## GitHub OAuth
+## GitHub OAuth Status
 
-For team use, set up GitHub OAuth:
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers) > OAuth Apps > New OAuth App
-2. Set the homepage URL to your CrewCmd URL (e.g., `https://localhost:3000`)
-3. Set the callback URL to `https://localhost:3000/api/auth/callback/github`
-4. Copy the Client ID and Client Secret to your `.env.local`:
-
-```bash
-GITHUB_ID=your_client_id
-GITHUB_SECRET=your_client_secret
-```
-
-5. Restart CrewCmd. GitHub login will appear on the sign-in page.
+GitHub OAuth environment variables are reserved in `.env.example`, but the current default auth provider only enables email/password credentials. Do not expect GitHub login to appear unless a future change wires the provider into `src/lib/auth.ts`.
 
 ## API Authentication
 

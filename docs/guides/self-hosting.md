@@ -15,10 +15,12 @@ Uses embedded PGlite. No external services needed.
 ### 2. Docker Compose (Recommended for Production)
 
 ```bash
+cp .env.example .env
+# Edit .env and set AUTH_SECRET before exposing this service.
 docker compose up -d
 ```
 
-Includes Postgres, CrewCmd, and reverse proxy. Edit `docker-compose.yml` to configure.
+Includes Postgres and CrewCmd. Put it behind your own reverse proxy or platform TLS layer for public access.
 
 ### 3. VPS / Cloud VM
 
@@ -41,7 +43,6 @@ CrewCmd is a Next.js app. Deploy to:
 HTTPS is required for:
 
 - Voice features (microphone access)
-- GitHub OAuth callbacks
 - Secure cookie handling
 
 For local development, `pnpm dev:https` generates a self-signed certificate.

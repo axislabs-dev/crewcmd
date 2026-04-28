@@ -17,24 +17,25 @@ No database setup required. CrewCmd uses embedded PGlite for local development.
 
 1. **Fork the repo** and create a feature branch from `main`
 2. **Make your changes** with atomic commits (one logical change per commit)
-3. **Run `pnpm build`** to verify the project compiles
-4. **Run `pnpm typecheck`** to verify TypeScript types
-5. **Open a pull request** against `main`
-6. **Wait for CI** — PRs must pass the `check` job (typecheck + build) and get one approving review before merge
+3. **Run `pnpm typecheck`** to verify TypeScript types
+4. **Run `pnpm test`** to run the Vitest suite
+5. **Run `pnpm build`** to verify the project compiles
+6. **Open a pull request** against `main`
+7. **Wait for CI** — PRs must pass the `check` job (typecheck + test + build) and get one approving review before merge
 
 ### Pre-commit Hooks
 
 Hooks install automatically when you run `pnpm install` (via Husky). No manual setup.
 
 - **Pre-commit:** Runs `tsc --noEmit` on staged `.ts/.tsx` files. Type errors block the commit.
-- **Pre-push:** Runs full typecheck + `pnpm build`. Build failures block the push.
+- **Pre-push:** Runs full typecheck + `pnpm build`. Type or build failures block the push.
 
 If you need to bypass hooks in an emergency: `git commit --no-verify` (but CI will still catch issues).
 
 ### Branch Protection
 
 `main` is protected:
-- CI must pass (typecheck + build)
+- CI must pass (typecheck + test + build)
 - 1 approving review required
 - Linear history enforced (squash or rebase, no merge commits)
 - No force pushes
@@ -66,7 +67,7 @@ chore: update dependencies
 
 - Keep PRs focused. One feature or fix per PR.
 - Include a clear description of what changed and why.
-- If your PR adds a new feature, update CLAUDE.md and README.md as needed.
+- If your PR adds or changes contributor-facing behavior, update README.md or docs as needed.
 - If your PR changes the database schema, include a migration (`pnpm db:generate`).
 - Screenshots or screen recordings for UI changes are appreciated.
 

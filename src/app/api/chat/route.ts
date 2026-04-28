@@ -454,16 +454,42 @@ export async function POST(request: NextRequest) {
     let released = false;
     let gatewaySentAt = 0;
     let firstDeltaAt = 0;
-    let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
+    let inactivityTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const clearSafetyTimeout = () => {
-      if (!safetyTimeout) return;
-      clearTimeout(safetyTimeout);
-      safetyTimeout = null;
+    const clearInactivityTimeout = () => {
+      if (!inactivityTimeout) return;
+      clearTimeout(inactivityTimeout);
+      inactivityTimeout = null;
       publishAgentModeDiagnostic({
         scope: "api-chat",
-        event: "safety-timeout.clear",
+        event: "inactivity-timeout.clear",
         sessionId: diagnosticSessionId,
+      });
+    };
+
+    const armInactivityTimeout = (reason: string) => {
+      clearInactivityTimeout();
+      inactivityTimeout = setTimeout(() => {
+        if (!done && streamController) {
+          publishAgentModeDiagnostic({
+            scope: "api-chat",
+            event: "inactivity-timeout.fire",
+            sessionId: diagnosticSessionId,
+            detail: {
+              activeRunId,
+              hasAssistantText: Boolean(fullAssistantText),
+              elapsedMs: Date.now() - requestStartedAt,
+              reason,
+            },
+          });
+          finishStream(true);
+        }
+      }, 300_000);
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "inactivity-timeout.arm",
+        sessionId: diagnosticSessionId,
+        detail: { timeoutMs: 300_000, reason },
       });
     };
 
@@ -511,7 +537,7 @@ export async function POST(request: NextRequest) {
           elapsedMs: Date.now() - requestStartedAt,
         },
       });
-      clearSafetyTimeout();
+      clearInactivityTimeout();
       await recoverMissingAssistantText();
       await persistAssistant(interrupted);
       done = true;
@@ -584,7 +610,7 @@ export async function POST(request: NextRequest) {
           sessionId: diagnosticSessionId,
           detail: { elapsedMs: Date.now() - requestStartedAt },
         });
-        clearSafetyTimeout();
+        clearInactivityTimeout();
         client.chatAbort({ sessionKey }).catch((err) => {
           console.error("[api/chat] chat.abort failed:", err);
         });
@@ -612,6 +638,7 @@ export async function POST(request: NextRequest) {
       if (!matchesSession) return;
 
       const state = p.state as string;
+      armInactivityTimeout(`gateway-${state || "event"}`);
       publishAgentModeDiagnostic({
         scope: "api-chat",
         event: "gateway.chat-event",
@@ -714,28 +741,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Safety timeout - if no [DONE] in 5 minutes, close the stream
-    safetyTimeout = setTimeout(() => {
-      if (!done && streamController) {
-        publishAgentModeDiagnostic({
-          scope: "api-chat",
-          event: "safety-timeout.fire",
-          sessionId: diagnosticSessionId,
-          detail: {
-            activeRunId,
-            hasAssistantText: Boolean(fullAssistantText),
-            elapsedMs: Date.now() - requestStartedAt,
-          },
-        });
-        finishStream(true);
-      }
-    }, 300_000);
-    publishAgentModeDiagnostic({
-      scope: "api-chat",
-      event: "safety-timeout.arm",
-      sessionId: diagnosticSessionId,
-      detail: { timeoutMs: 300_000 },
-    });
+    // Close only idle streams; active long-running turns reset this on gateway events.
+    armInactivityTimeout("chat-send");
 
     return new Response(stream, {
       headers: {

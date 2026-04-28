@@ -12,6 +12,7 @@ import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
 import { db, withRetry } from "@/db";
 import { companyRuntimes } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { publishAgentModeDiagnostic } from "./agent-mode-diagnostics";
 
 interface PoolEntry {
   client: GatewayClient;
@@ -31,10 +32,20 @@ const activeClients = new Set<GatewayClient>();
 
 export function holdClient(client: GatewayClient) {
   activeClients.add(client);
+  publishAgentModeDiagnostic({
+    scope: "gateway-pool",
+    event: "client.hold",
+    detail: { activeClients: activeClients.size, poolSize: pool.size },
+  });
 }
 
 export function releaseClient(client: GatewayClient) {
   activeClients.delete(client);
+  publishAgentModeDiagnostic({
+    scope: "gateway-pool",
+    event: "client.release",
+    detail: { activeClients: activeClients.size, poolSize: pool.size },
+  });
 }
 
 function toHttpUrl(wsUrl: string): string {
@@ -206,6 +217,16 @@ export async function getGatewayClient(): Promise<GatewayClient> {
 
   // Reuse if connected and less than 5 min old
   if (existing && existing.client.isConnected && (Date.now() - existing.connectedAt < MAX_CONNECTION_AGE_MS)) {
+    publishAgentModeDiagnostic({
+      scope: "gateway-pool",
+      event: "client.reuse",
+      detail: {
+        runtimeId: runtime.id,
+        ageMs: Date.now() - existing.connectedAt,
+        poolSize: pool.size,
+        activeClients: activeClients.size,
+      },
+    });
     return existing.client;
   }
 
@@ -213,8 +234,26 @@ export async function getGatewayClient(): Promise<GatewayClient> {
   if (existing) {
     if (activeClients.has(existing.client)) {
       // Client is mid-request, return it anyway (don't recycle under its feet)
+      publishAgentModeDiagnostic({
+        scope: "gateway-pool",
+        event: "client.recycle.defer-active",
+        detail: {
+          runtimeId: runtime.id,
+          ageMs: Date.now() - existing.connectedAt,
+          activeClients: activeClients.size,
+        },
+      });
       return existing.client;
     }
+    publishAgentModeDiagnostic({
+      scope: "gateway-pool",
+      event: "client.recycle.close-stale",
+      detail: {
+        runtimeId: runtime.id,
+        ageMs: Date.now() - existing.connectedAt,
+        poolSize: pool.size,
+      },
+    });
     existing.client.close();
     pool.delete(key);
   }
@@ -231,6 +270,15 @@ export async function getGatewayClient(): Promise<GatewayClient> {
 
   console.log("[gateway-pool] Connected successfully via:", connectedUrl);
   pool.set(key, { client, connectedAt: Date.now() });
+  publishAgentModeDiagnostic({
+    scope: "gateway-pool",
+    event: "client.connect",
+    detail: {
+      runtimeId: runtime.id,
+      connectedUrl,
+      poolSize: pool.size,
+    },
+  });
 
   return client;
 }

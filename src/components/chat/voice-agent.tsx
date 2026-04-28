@@ -3,6 +3,10 @@
 import type { CSSProperties } from "react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useOrientationLock } from "@/hooks/use-orientation-lock";
+import {
+  createAgentModeSessionId,
+  publishAgentModeDiagnostic,
+} from "@/lib/agent-mode-diagnostics";
 
 type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
@@ -29,10 +33,6 @@ function hexToRgb(hex: string): string {
   const b = value & 255;
   return `${r}, ${g}, ${b}`;
 }
-
-const LISTENING_COLOR = "#fbbf24";
-const SPEAKING_COLOR = "#60a5fa";
-const PROCESSING_COLOR = "#fbbf24";
 
 // VAD configuration
 const SILENCE_THRESHOLD = 0.015; // RMS threshold for "silence"
@@ -67,6 +67,9 @@ export function VoiceAgent({
   const chunksRef = useRef<Blob[]>([]);
   const rafRef = useRef<number>(0);
   const hasAutoActivatedRef = useRef(false);
+  const diagnosticSessionRef = useRef<string | null>(null);
+  const vadStartedAtRef = useRef<number>(0);
+  const vadFrameCountRef = useRef(0);
 
   // VAD timing refs
   const speechStartTimeRef = useRef<number>(0);
@@ -78,6 +81,12 @@ export function VoiceAgent({
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
       setState("processing");
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "stt.fetch.start",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: { bytes: audioBlob.size, type: audioBlob.type },
+      });
       try {
         const formData = new FormData();
         formData.append("audio", audioBlob, "audio.webm");
@@ -88,6 +97,12 @@ export function VoiceAgent({
         });
 
         if (!response.ok) {
+          publishAgentModeDiagnostic({
+            scope: "voice-agent",
+            event: "stt.fetch.error",
+            sessionId: diagnosticSessionRef.current ?? undefined,
+            detail: { status: response.status },
+          });
           setError(response.status === 503
             ? "Speech server unavailable. Deactivate and retry."
             : "Transcription failed. Try speaking again.");
@@ -96,13 +111,25 @@ export function VoiceAgent({
         }
 
         const { text } = await response.json();
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "stt.fetch.complete",
+          sessionId: diagnosticSessionRef.current ?? undefined,
+          detail: { hasText: Boolean(text && text.trim()) },
+        });
         if (text && text.trim()) {
           setError(null);
           onTranscript(text.trim());
         } else {
           setState("listening");
         }
-      } catch {
+      } catch (error) {
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "stt.fetch.exception",
+          sessionId: diagnosticSessionRef.current ?? undefined,
+          detail: { message: error instanceof Error ? error.message : String(error) },
+        });
         setError("Speech server unreachable. Check your connection.");
         setState("listening");
       }
@@ -118,6 +145,11 @@ export function VoiceAgent({
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state === "recording"
     ) {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "media-recorder.stop",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+      });
       mediaRecorderRef.current.stop();
     }
   }, []);
@@ -157,6 +189,12 @@ export function VoiceAgent({
     };
 
     mediaRecorderRef.current = recorder;
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "media-recorder.start",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: { mimeType: recorder.mimeType },
+    });
     recorder.start(100); // collect in 100ms chunks
   }, [isMicMuted, transcribe]);
 
@@ -166,9 +204,31 @@ export function VoiceAgent({
     if (!analyser) return;
 
     const dataArray = new Float32Array(analyser.fftSize);
+    vadStartedAtRef.current = Date.now();
+    vadFrameCountRef.current = 0;
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "vad.raf.start",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: { fftSize: analyser.fftSize },
+    });
 
     const tick = () => {
       if (!analyserRef.current) return;
+      vadFrameCountRef.current++;
+      if (vadFrameCountRef.current % 1800 === 0) {
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "vad.raf.heartbeat",
+          sessionId: diagnosticSessionRef.current ?? undefined,
+          detail: {
+            frames: vadFrameCountRef.current,
+            activeMs: Date.now() - vadStartedAtRef.current,
+            mediaRecorderState: mediaRecorderRef.current?.state ?? null,
+            audioContextState: audioContextRef.current?.state ?? null,
+          },
+        });
+      }
       analyser.getFloatTimeDomainData(dataArray);
 
       // Calculate RMS volume
@@ -243,25 +303,65 @@ export function VoiceAgent({
     try {
       if ("wakeLock" in navigator) {
         wakeLockRef.current = await navigator.wakeLock.request("screen");
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "wake-lock.acquire",
+          sessionId: diagnosticSessionRef.current ?? undefined,
+        });
         wakeLockRef.current.addEventListener("release", () => {
+          publishAgentModeDiagnostic({
+            scope: "voice-agent",
+            event: "wake-lock.release-event",
+            sessionId: diagnosticSessionRef.current ?? undefined,
+          });
           wakeLockRef.current = null;
         });
       }
-    } catch {
+    } catch (error) {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "wake-lock.error",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: { message: error instanceof Error ? error.message : String(error) },
+      });
       // Wake lock can fail if battery is low or OS denies it — non-critical
     }
   }, []);
 
   const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "wake-lock.release",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+      });
+    }
     wakeLockRef.current?.release();
     wakeLockRef.current = null;
   }, []);
 
   const activate = useCallback(async () => {
     setError(null);
+    const sessionId = createAgentModeSessionId("voice-agent");
+    diagnosticSessionRef.current = sessionId;
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "activate.start",
+      sessionId,
+      detail: {
+        isMicMuted,
+        isAgentMuted,
+        isPlayingAudio,
+      },
+    });
 
     // mediaDevices requires a secure context (HTTPS or localhost)
     if (!navigator.mediaDevices) {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.unsupported",
+        sessionId,
+      });
       setError("Voice requires HTTPS. Access via localhost or run: pnpm dev:https");
       return;
     }
@@ -275,9 +375,21 @@ export function VoiceAgent({
         },
       });
       streamRef.current = stream;
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "media-stream.acquire",
+        sessionId,
+        detail: { tracks: stream.getTracks().map((track) => `${track.kind}:${track.readyState}`) },
+      });
 
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "audio-context.create",
+        sessionId,
+        detail: { state: audioContext.state, sampleRate: audioContext.sampleRate },
+      });
 
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
@@ -291,17 +403,46 @@ export function VoiceAgent({
 
       setIsActive(true);
       setState("listening");
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.complete",
+        sessionId,
+      });
     } catch (err) {
       console.error("[VoiceAgent] Mic error:", err);
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.error",
+        sessionId,
+        detail: { message: err instanceof Error ? err.message : String(err) },
+      });
       setError("Microphone access denied. Please allow mic access and retry.");
     }
-  }, [requestWakeLock]);
+  }, [isAgentMuted, isMicMuted, isPlayingAudio, requestWakeLock]);
 
   const deactivate = useCallback(() => {
+    const sessionId = diagnosticSessionRef.current ?? undefined;
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "deactivate.start",
+      sessionId,
+      detail: {
+        hasStream: Boolean(streamRef.current),
+        audioContextState: audioContextRef.current?.state ?? null,
+        mediaRecorderState: mediaRecorderRef.current?.state ?? null,
+        rafActive: Boolean(rafRef.current),
+        vadFrames: vadFrameCountRef.current,
+      },
+    });
     // Stop VAD loop
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "vad.raf.cancel",
+        sessionId,
+      });
     }
 
     // Stop recording
@@ -316,12 +457,29 @@ export function VoiceAgent({
     // Release mic
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "media-stream.release",
+        sessionId,
+      });
       streamRef.current = null;
     }
 
     // Close audio context
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      audioContextRef.current.close().catch((error) => {
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "audio-context.close.error",
+          sessionId,
+          detail: { message: error instanceof Error ? error.message : String(error) },
+        });
+      });
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "audio-context.close",
+        sessionId,
+      });
       audioContextRef.current = null;
     }
     analyserRef.current = null;
@@ -332,6 +490,12 @@ export function VoiceAgent({
     setIsActive(false);
     setState("idle");
     setVolumeLevel(0);
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "deactivate.complete",
+      sessionId,
+    });
+    diagnosticSessionRef.current = null;
   }, [releaseWakeLock]);
 
   // Lock screen orientation while voice agent is active (prevents rotation issues)
@@ -357,12 +521,30 @@ export function VoiceAgent({
   useEffect(() => {
     if (!isActive) return;
     const handleVisibility = () => {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "visibility.change",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: { visibilityState: document.visibilityState, hasWakeLock: Boolean(wakeLockRef.current) },
+      });
       if (document.visibilityState === "visible" && !wakeLockRef.current) {
         requestWakeLock();
       }
     };
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "visibility.listener.add",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+    });
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "visibility.listener.remove",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+      });
+    };
   }, [isActive, requestWakeLock]);
 
   // Survive orientation changes: resume suspended AudioContext, re-acquire wake lock,
@@ -371,6 +553,16 @@ export function VoiceAgent({
     if (!isActive) return;
 
     const handleOrientationChange = async () => {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "orientation-or-resize",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: {
+          audioContextState: audioContextRef.current?.state ?? null,
+          hasWakeLock: Boolean(wakeLockRef.current),
+          rafActive: Boolean(rafRef.current),
+        },
+      });
       // AudioContext may be suspended by the browser during orientation animation
       if (audioContextRef.current?.state === "suspended") {
         try {
@@ -393,10 +585,20 @@ export function VoiceAgent({
 
     window.addEventListener("orientationchange", handleOrientationChange);
     window.addEventListener("resize", handleOrientationChange);
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "orientation.listeners.add",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+    });
 
     return () => {
       window.removeEventListener("orientationchange", handleOrientationChange);
       window.removeEventListener("resize", handleOrientationChange);
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "orientation.listeners.remove",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+      });
     };
   }, [isActive, requestWakeLock, runVAD]);
 
@@ -409,6 +611,11 @@ export function VoiceAgent({
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "vad.raf.cancel",
+          sessionId: diagnosticSessionRef.current ?? undefined,
+        });
       }
     };
   }, [isActive, runVAD]);

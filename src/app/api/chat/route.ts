@@ -6,6 +6,10 @@ import { chatMessages, chatSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { publishChatEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
+import {
+  createAgentModeSessionId,
+  publishAgentModeDiagnostic,
+} from "@/lib/agent-mode-diagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -414,8 +418,27 @@ export async function POST(request: NextRequest) {
     }
 
     const requestStartedAt = Date.now();
+    const diagnosticSessionId = createAgentModeSessionId("chat-route");
+    publishAgentModeDiagnostic({
+      scope: "api-chat",
+      event: "request.start",
+      sessionId: diagnosticSessionId,
+      detail: {
+        agentId,
+        gatewayAgentId,
+        sessionKey,
+        messageCount: messages.length,
+        hasCompanyId: Boolean(companyId),
+      },
+    });
     const client = await getGatewayClient();
     const gatewayAcquiredAt = Date.now();
+    publishAgentModeDiagnostic({
+      scope: "api-chat",
+      event: "gateway-client.acquire",
+      sessionId: diagnosticSessionId,
+      detail: { acquireMs: gatewayAcquiredAt - requestStartedAt },
+    });
     holdClient(client);
 
     // Set up SSE stream
@@ -431,11 +454,28 @@ export async function POST(request: NextRequest) {
     let released = false;
     let gatewaySentAt = 0;
     let firstDeltaAt = 0;
+    let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const clearSafetyTimeout = () => {
+      if (!safetyTimeout) return;
+      clearTimeout(safetyTimeout);
+      safetyTimeout = null;
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "safety-timeout.clear",
+        sessionId: diagnosticSessionId,
+      });
+    };
 
     const releaseHeldClient = () => {
       if (released) return;
       released = true;
       releaseClient(client);
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "gateway-client.release",
+        sessionId: diagnosticSessionId,
+      });
     };
 
     const recoverMissingAssistantText = async () => {
@@ -460,6 +500,18 @@ export async function POST(request: NextRequest) {
     };
 
     const finishStream = async (interrupted: boolean) => {
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "stream.finish.start",
+        sessionId: diagnosticSessionId,
+        detail: {
+          interrupted,
+          activeRunId,
+          hasAssistantText: Boolean(fullAssistantText),
+          elapsedMs: Date.now() - requestStartedAt,
+        },
+      });
+      clearSafetyTimeout();
       await recoverMissingAssistantText();
       await persistAssistant(interrupted);
       done = true;
@@ -469,6 +521,12 @@ export async function POST(request: NextRequest) {
       } catch { /* already closed */ }
       client.off("chat", chatHandler);
       releaseHeldClient();
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "stream.finish.complete",
+        sessionId: diagnosticSessionId,
+        detail: { interrupted },
+      });
     };
 
     /**
@@ -520,6 +578,13 @@ export async function POST(request: NextRequest) {
       },
       cancel() {
         // Client disconnected — persist whatever was streamed so far
+        publishAgentModeDiagnostic({
+          scope: "api-chat",
+          event: "stream.cancel",
+          sessionId: diagnosticSessionId,
+          detail: { elapsedMs: Date.now() - requestStartedAt },
+        });
+        clearSafetyTimeout();
         client.chatAbort({ sessionKey }).catch((err) => {
           console.error("[api/chat] chat.abort failed:", err);
         });
@@ -547,6 +612,18 @@ export async function POST(request: NextRequest) {
       if (!matchesSession) return;
 
       const state = p.state as string;
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "gateway.chat-event",
+        sessionId: diagnosticSessionId,
+        detail: {
+          state,
+          eventSession,
+          matchesSession,
+          matchesRun,
+          activeRunId,
+        },
+      });
 
       if (state === "delta") {
         const fullText = extractText(p.message || p);
@@ -611,10 +688,25 @@ export async function POST(request: NextRequest) {
       });
       activeRunId = asString(sendResult.runId);
       gatewaySentAt = Date.now();
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "gateway.chat-send.complete",
+        sessionId: diagnosticSessionId,
+        detail: {
+          activeRunId,
+          elapsedMs: gatewaySentAt - requestStartedAt,
+        },
+      });
     } catch (err) {
       client.off("chat", chatHandler);
       releaseHeldClient();
       const msg = err instanceof Error ? err.message : String(err);
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "gateway.chat-send.error",
+        sessionId: diagnosticSessionId,
+        detail: { message: msg, elapsedMs: Date.now() - requestStartedAt },
+      });
       console.error("[api/chat] chat.send failed:", msg);
       return Response.json(
         { error: `Gateway error: ${msg}` },
@@ -623,11 +715,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Safety timeout - if no [DONE] in 5 minutes, close the stream
-    setTimeout(() => {
+    safetyTimeout = setTimeout(() => {
       if (!done && streamController) {
+        publishAgentModeDiagnostic({
+          scope: "api-chat",
+          event: "safety-timeout.fire",
+          sessionId: diagnosticSessionId,
+          detail: {
+            activeRunId,
+            hasAssistantText: Boolean(fullAssistantText),
+            elapsedMs: Date.now() - requestStartedAt,
+          },
+        });
         finishStream(true);
       }
     }, 300_000);
+    publishAgentModeDiagnostic({
+      scope: "api-chat",
+      event: "safety-timeout.arm",
+      sessionId: diagnosticSessionId,
+      detail: { timeoutMs: 300_000 },
+    });
 
     return new Response(stream, {
       headers: {

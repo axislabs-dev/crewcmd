@@ -13,7 +13,8 @@ Key implementation details (if non-obvious).
 ## Checklist
 
 - [ ] `pnpm typecheck` passes
+- [ ] `pnpm test` passes
 - [ ] `pnpm build` passes
-- [ ] Updated CLAUDE.md / README if needed
+- [ ] Updated README/docs if needed
 - [ ] Migration included (if schema changed)
 - [ ] Screenshots attached (if UI changed)

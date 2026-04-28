@@ -8,18 +8,20 @@ No database setup required. CrewCmd runs with embedded Postgres locally via PGli
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
 pnpm install
-pnpm dev:https
+pnpm dev
 ```
 
-Open [https://localhost:3000](https://localhost:3000). That's it.
+Open [http://localhost:3000](http://localhost:3000). That's it.
 
-HTTPS is required for voice features (microphone access needs a secure context).
+Use `pnpm dev:https` only when you need HTTPS-only browser features such as microphone access, or when testing from another device on your local network.
 
 ## Docker Compose
 
 ```bash
 git clone https://github.com/axislabs-dev/crewcmd.git
 cd crewcmd
+cp .env.example .env
+# Edit .env and set AUTH_SECRET before exposing this service.
 docker compose up
 ```
 
@@ -40,9 +42,8 @@ pnpm dev
 | Requirement | Version | Notes |
 |---|---|---|
 | Node.js | 22+ | Required |
-| pnpm | Latest | Required |
+| pnpm | 9.15.0+ | Required; see `packageManager` in `package.json` |
 | Docker | Latest | Optional, for containerized deployment |
-| GitHub OAuth app | — | Optional, for team auth |
 
 ## What's Next
 

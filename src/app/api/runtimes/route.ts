@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { companyRuntimes } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { getAgentAccessContext, runtimeOwnershipValues, buildRuntimeReadWhere, canManageCompanyOwnedAgent } from "@/lib/agent-access";
 import { getRequestOrigin } from "@/lib/runtime-callback-url";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
@@ -97,13 +97,7 @@ export async function POST(request: Request) {
     const existing = await withRetry(() => db!
       .select({ id: companyRuntimes.id })
       .from(companyRuntimes)
-      .where(
-        ownership.companyId
-          ? and(eq(companyRuntimes.companyId, ownership.companyId), eq(companyRuntimes.ownerType, ownership.ownerType))
-          : access.userId
-            ? and(eq(companyRuntimes.ownerType, ownership.ownerType), eq(companyRuntimes.ownerUserId, access.userId))
-            : eq(companyRuntimes.ownerType, ownership.ownerType)
-      ));
+      .where(buildRuntimePrimaryScopeWhere(ownership)));
 
     const isPrimary = existing.length === 0;
 
@@ -136,6 +130,30 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function buildRuntimePrimaryScopeWhere(ownership: ReturnType<typeof runtimeOwnershipValues>) {
+  if (ownership.ownerType === "user") {
+    if (!ownership.ownerUserId) {
+      throw new Error("Personal runtimes require an authenticated user");
+    }
+
+    return and(
+      eq(companyRuntimes.ownerType, "user"),
+      eq(companyRuntimes.ownerUserId, ownership.ownerUserId)
+    );
+  }
+
+  return and(
+    eq(companyRuntimes.ownerType, "company"),
+    or(
+      eq(companyRuntimes.ownerCompanyId, ownership.ownerCompanyId),
+      and(
+        isNull(companyRuntimes.ownerCompanyId),
+        eq(companyRuntimes.companyId, ownership.companyId)
+      )
+    )
+  );
 }
 
 function readCapabilitySnapshot(metadata: unknown): Record<string, unknown> | null {

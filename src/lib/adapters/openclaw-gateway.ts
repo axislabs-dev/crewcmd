@@ -4,6 +4,19 @@ import type { AdapterConfig, AdapterExecutor, SpawnResult, TaskResult } from "./
  * OpenClaw Gateway adapter.
  * POSTs to the gateway's chat completions endpoint and parses the response.
  */
+const DEFAULT_SYSTEM_PROMPT = [
+  "You are running as a CrewCmd worker through the OpenClaw Gateway.",
+  "Always produce a final text response after tool use.",
+  "If the task succeeds, summarize the concrete result or artifact.",
+  "If the task is blocked, state the exact blocker and next action.",
+  "Never end silently.",
+].join(" ");
+
+const NO_RESPONSE_SENTINELS = [
+  "agent couldn't generate a response",
+  "agent could not generate a response",
+];
+
 export class OpenClawGatewayAdapter implements AdapterExecutor {
   readonly name = "OpenClaw Gateway";
 
@@ -33,7 +46,10 @@ export class OpenClawGatewayAdapter implements AdapterExecutor {
           ...(config.headers ?? {}),
         },
         body: JSON.stringify({
-          messages: [{ role: "user", content: prompt }],
+          messages: [
+            { role: "system", content: DEFAULT_SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
           model: config.model ?? undefined,
           stream: false,
         }),
@@ -49,6 +65,19 @@ export class OpenClawGatewayAdapter implements AdapterExecutor {
 
       const data = await response.json();
       const output = data.choices?.[0]?.message?.content ?? JSON.stringify(data);
+      const normalizedOutput = String(output).toLowerCase();
+
+      if (NO_RESPONSE_SENTINELS.some((sentinel) => normalizedOutput.includes(sentinel))) {
+        return {
+          output: [
+            "OpenClaw Gateway returned no final agent response.",
+            "Some tool actions may have already executed, so verify state before retrying.",
+            output,
+          ].join("\n"),
+          exitCode: 1,
+        };
+      }
+
       return { output, exitCode: 0 };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

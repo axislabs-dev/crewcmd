@@ -5,6 +5,7 @@ import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { publishChatEvent } from "@/lib/chat-pubsub";
+import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
 
 export const dynamic = "force-dynamic";
 
@@ -205,7 +206,8 @@ async function recoverAssistantTextFromGateway(params: {
     rpc: <T = unknown>(method: string, params: Record<string, unknown>) => Promise<T>;
   };
   allowedSessions: string[];
-  lastUserContent: string;
+  currentUserContents: string[];
+  previousAssistantContents: string[];
 }) {
   const candidateKeys = new Set(params.allowedSessions.map((session) => session.toLowerCase()));
 
@@ -237,14 +239,11 @@ async function recoverAssistantTextFromGateway(params: {
       const messages = extractHistoryMessages(result);
       if (messages.length === 0) continue;
 
-      const lastMatchingUserIndex = messages.findLastIndex(
-        (message) => message.role === "user" && message.content.trim() === params.lastUserContent.trim()
-      );
-      const assistantAfterUser = lastMatchingUserIndex >= 0
-        ? messages.slice(lastMatchingUserIndex + 1).find((message) => message.role === "assistant")
-        : null;
-      const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-      const recovered = assistantAfterUser?.content ?? latestAssistant?.content;
+      const recovered = selectRecoveredAssistantText({
+        messages,
+        currentUserContents: params.currentUserContents,
+        previousAssistantContents: params.previousAssistantContents,
+      });
       if (recovered) return recovered;
     } catch (error) {
       console.error(`[api/chat] Failed to recover chat history for ${sessionKey}:`, error);
@@ -381,6 +380,11 @@ export async function POST(request: NextRequest) {
       message: lastUserMessage.content,
       targetAgent,
     });
+    const previousAssistantContents = messages
+      .slice(0, messages.lastIndexOf(lastUserMessage))
+      .filter((message: { role?: string }) => message.role === "assistant")
+      .map((message: { content?: unknown }) => asString(message.content))
+      .filter((content: string | null): content is string => Boolean(content));
 
     // Resolve company ID from body or cookie
     const companyId = bodyCompanyId ||
@@ -439,7 +443,8 @@ export async function POST(request: NextRequest) {
       const recovered = await recoverAssistantTextFromGateway({
         client,
         allowedSessions: allowedEventSessions,
-        lastUserContent: lastUserMessage.content,
+        currentUserContents: [lastUserMessage.content, outboundMessage],
+        previousAssistantContents,
       });
       if (!recovered) return;
 

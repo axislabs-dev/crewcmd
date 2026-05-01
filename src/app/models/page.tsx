@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { resolveModelDefault, type ModelDefaultSource } from "@/lib/model-default-resolution";
 
 interface RuntimeRecord {
   id: string;
@@ -35,6 +36,13 @@ interface ModelProfile {
 
 const cardClassName = "rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]";
 
+const sourceLabels: Record<ModelDefaultSource, string> = {
+  agent_override: "Agent override",
+  company_default: "Company default",
+  runtime_default: "Runtime default",
+  unresolved: "Unresolved",
+};
+
 export default function ModelsPage() {
   const [runtimes, setRuntimes] = useState<RuntimeRecord[]>([]);
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string | null>(null);
@@ -44,6 +52,11 @@ export default function ModelsPage() {
   const [profiles, setProfiles] = useState<ModelProfile[]>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [resolutionInputs, setResolutionInputs] = useState({
+    agentOverride: "",
+    companyDefault: "",
+    runtimeDefault: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +190,23 @@ export default function ModelsPage() {
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [selectedModelsState?.models]);
 
+  const resolutionPreview = useMemo(() => resolveModelDefault(resolutionInputs), [resolutionInputs]);
+
+  const modelOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return (selectedModelsState?.models ?? [])
+      .map((model) => model.id)
+      .filter((modelId) => {
+        if (seen.has(modelId)) return false;
+        seen.add(modelId);
+        return true;
+      });
+  }, [selectedModelsState?.models]);
+
+  function updateResolutionInput(field: keyof typeof resolutionInputs, value: string) {
+    setResolutionInputs((current) => ({ ...current, [field]: value }));
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] px-4 py-6 text-[var(--text-primary)] sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-5">
@@ -300,6 +330,52 @@ export default function ModelsPage() {
                   ))}
                 </div>
               )}
+            </section>
+
+            <section className={`${cardClassName} p-4`}>
+              <div className="flex flex-col gap-3 border-b border-[var(--border-subtle)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-medium">Default Resolution Preview</h2>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    Test the planned precedence without saving profile or assignment changes.
+                  </p>
+                </div>
+                <div className="rounded border border-[var(--border-subtle)] px-3 py-2 text-right">
+                  <div className="text-[10px] uppercase text-[var(--text-tertiary)]">
+                    {sourceLabels[resolutionPreview.source]}
+                  </div>
+                  <div className="mt-1 max-w-[220px] truncate text-sm font-medium">
+                    {resolutionPreview.model ?? "No model selected"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {(
+                  [
+                    ["agentOverride", "Agent override"],
+                    ["companyDefault", "Company default"],
+                    ["runtimeDefault", "Runtime default"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <label key={field} className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+                    <span>{label}</span>
+                    <input
+                      list="runtime-model-options"
+                      value={resolutionInputs[field]}
+                      onChange={(event) => updateResolutionInput(field, event.target.value)}
+                      placeholder="model/provider-id"
+                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <datalist id="runtime-model-options">
+                {modelOptions.map((modelId) => (
+                  <option key={modelId} value={modelId} />
+                ))}
+              </datalist>
             </section>
           </main>
         </div>

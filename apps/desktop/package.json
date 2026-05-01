@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "CrewCmd desktop shell.",
-  "author": "Axislabs (https://axislabs.dev)",
+  "homepage": "https://github.com/rogerchappel/crewcmd",
+  "author": {
+    "name": "Axislabs",
+    "email": "support@axislabs.dev",
+    "url": "https://axislabs.dev"
+  },
   "main": "src/main.cjs",
   "type": "commonjs",
   "scripts": {
@@ -39,6 +44,7 @@
     },
     "linux": {
       "category": "Development",
+      "maintainer": "Axislabs <support@axislabs.dev>",
       "target": [
         "AppImage",
         "deb",

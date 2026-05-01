@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mockRequireAuth = vi.fn().mockResolvedValue(null);
@@ -92,6 +92,10 @@ describe("POST /api/chat", () => {
       chatHistory: vi.fn(),
       rpc: vi.fn(),
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns an SSE response before gateway chatSend resolves", async () => {
@@ -190,6 +194,129 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("\"type\":\"gateway_send_started\"");
     expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"hi\"}}]");
     expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\" there\"}}]");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
+  it("keeps long-running chat streams alive with heartbeat progress", async () => {
+    vi.useFakeTimers();
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "keep working" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+
+    let initial = "";
+    for (let i = 0; i < 3; i++) {
+      const { value } = await reader.read();
+      initial += decoder.decode(value);
+    }
+    expect(initial).toContain("\"event\":\"run_started\"");
+    expect(initial).toContain("\"event\":\"gateway_send_started\"");
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    const heartbeat = decoder.decode((await reader.read()).value);
+
+    expect(heartbeat).toContain("event: chat_progress");
+    expect(heartbeat).toContain("\"event\":\"heartbeat\"");
+
+    await reader.cancel();
+  });
+
+  it("finishes as aborted when the gateway reports an aborted turn", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "chat") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-abort" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "stop if cancelled" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const first = new TextDecoder().decode((await reader.read()).value);
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      state: "delta",
+      sessionKey: "main",
+      runId: "run-abort",
+      message: { content: "partial answer" },
+    });
+    chatHandlers[0]({
+      state: "aborted",
+      sessionKey: "main",
+      runId: "run-abort",
+    });
+
+    const streamed = first + await readUntilDone(reader);
+
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"partial answer\"}}]");
+    expect(streamed).toContain("\"event\":\"run_aborted\"");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
+  it("ignores stale chat events from a previously selected session or agent", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "chat") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-active" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "active agent only" }],
+      agent: "neo",
+      gatewayAgent: "neo",
+      sessionKey: "neo:active-session",
+    }));
+    const reader = response.body!.getReader();
+    const first = new TextDecoder().decode((await reader.read()).value);
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    const chatHandler = chatHandlers[0];
+    chatHandler({
+      state: "delta",
+      sessionKey: "cipher:previous-session",
+      runId: "run-stale",
+      message: { content: "stale output" },
+    });
+    chatHandler({
+      state: "delta",
+      sessionKey: "neo:active-session",
+      runId: "run-active",
+      message: { content: "fresh output" },
+    });
+    chatHandler({
+      state: "final",
+      sessionKey: "neo:active-session",
+      runId: "run-active",
+      message: { content: "fresh output done" },
+    });
+
+    const streamed = first + await readUntilDone(reader);
+
+    expect(streamed).not.toContain("stale output");
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"fresh output\"}}]");
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\" done\"}}]");
     expect(streamed).toContain("data: [DONE]");
   });
 });

@@ -22,9 +22,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
+  const selectedModel = agent.effectiveModel ?? agent.model;
   const adapterConfig: AdapterConfig = {
     ...(agent.adapterConfig as AdapterConfig),
-    model: agent.model ?? undefined,
+    model: selectedModel ?? undefined,
     workspacePath: agent.workspacePath ?? undefined,
   };
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     callsign: agent.callsign,
     adapterType: agent.adapterType,
     adapterConfig,
-    model: agent.model ?? undefined,
+    model: selectedModel ?? undefined,
     workspacePath: agent.workspacePath ?? undefined,
   };
 

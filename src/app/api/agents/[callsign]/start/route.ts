@@ -44,9 +44,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  const selectedModel = agent.effectiveModel ?? agent.model;
   const adapterConfig: AdapterConfig = {
     ...(agent.adapterConfig as AdapterConfig),
-    model: agent.model ?? undefined,
+    model: selectedModel ?? undefined,
     workspacePath: agent.workspacePath ?? undefined,
   };
 
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     callsign: agent.callsign,
     adapterType: effectiveAdapterType,
     adapterConfig,
-    model: agent.model ?? undefined,
+    model: selectedModel ?? undefined,
     workspacePath: agent.workspacePath ?? undefined,
   };
 

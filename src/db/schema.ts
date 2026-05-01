@@ -671,6 +671,40 @@ export const companyRuntimes = pgTable("company_runtimes", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Model Profiles ─────────────────────────────────────────────────
+
+export const modelProfiles = pgTable("model_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerType: ownershipTypeEnum("owner_type").notNull(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "cascade" }),
+  ownerCompanyId: uuid("owner_company_id").references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  profileKey: text("profile_key"),
+  providerPreferences: jsonb("provider_preferences").$type<string[]>().default([]),
+  primaryModel: text("primary_model"),
+  fallbackModels: jsonb("fallback_models").$type<string[]>().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userModelProfileSlugUnique: unique().on(table.ownerType, table.ownerUserId, table.slug),
+  companyModelProfileSlugUnique: unique().on(table.ownerType, table.ownerCompanyId, table.slug),
+}));
+
+export const companyModelDefaults = pgTable("company_model_defaults", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  modelProfileId: uuid("model_profile_id").references(() => modelProfiles.id, { onDelete: "cascade" }),
+  model: text("model"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  companyModelDefaultUnique: unique().on(table.companyId),
+}));
+
 // ─── Company Provider Keys ──────────────────────────────────────────
 
 export const companyProviderKeys = pgTable("company_provider_keys", {

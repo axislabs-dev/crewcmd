@@ -175,6 +175,51 @@ async function applySchema() {
     }
   }
 
+  // Model management tables
+  const modelManagementTables = [
+    `CREATE TABLE IF NOT EXISTS model_profiles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_type TEXT NOT NULL,
+      owner_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      owner_company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      profile_key TEXT,
+      provider_preferences JSONB DEFAULT '[]'::jsonb,
+      primary_model TEXT,
+      fallback_models JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT model_profiles_owner_scope_check CHECK (
+        (owner_type = 'user' AND owner_user_id IS NOT NULL AND owner_company_id IS NULL)
+        OR (owner_type = 'company' AND owner_company_id IS NOT NULL AND owner_user_id IS NULL)
+      )
+    )`,
+    `CREATE TABLE IF NOT EXISTS company_model_defaults (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      model_profile_id UUID REFERENCES model_profiles(id) ON DELETE CASCADE,
+      model TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT company_model_defaults_choice_check CHECK (
+        (model_profile_id IS NOT NULL AND model IS NULL)
+        OR (model_profile_id IS NULL AND model IS NOT NULL)
+      )
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS model_profiles_user_slug_idx ON model_profiles (owner_type, owner_user_id, slug) WHERE owner_type = 'user'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS model_profiles_company_slug_idx ON model_profiles (owner_type, owner_company_id, slug) WHERE owner_type = 'company'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS company_model_defaults_company_idx ON company_model_defaults (company_id)`,
+  ];
+  for (const stmt of modelManagementTables) {
+    try {
+      await queuedClient.exec(stmt);
+    } catch {
+      // Safe to ignore — table or index may already exist
+    }
+  }
+
   // Team Blueprints table
   const blueprintTables = [
     `CREATE TABLE IF NOT EXISTS team_blueprints (

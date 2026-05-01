@@ -32,10 +32,9 @@ CrewCmd's differentiated position:
 
 ## Phase Map
 
-Status as of 2026-05-01: Wave 1 foundation PRs have merged, and Wave 2
-contract and diagnostics work is beginning. The roadmap sequence remains the
-same, but active coordination should now start from Wave 2 in the orchestration
-plan.
+Status as of 2026-05-01: Wave 1 foundation PRs and Wave 2 contract and
+diagnostics PRs have merged. The roadmap sequence remains the same, but active
+coordination should now start from Wave 3 in the orchestration plan.
 
 | Phase | Focus | Outcome |
 | --- | --- | --- |
@@ -51,10 +50,13 @@ agent, and PR sequencing with a five-workstream concurrency cap.
 ## Recommended Order
 
 1. Treat the merged Wave 1 foundation as complete for coordination purposes.
-2. Begin Wave 2 contract and diagnostics work from the orchestration plan.
-3. Add gateway health, diagnostics, config validation, and harness checks.
-4. Add model discovery and assignment on top of stable runtime plumbing.
-5. Build the desktop shell after chat and runtime behavior are reliable.
+2. Treat the merged Wave 2 contract and diagnostics work as complete for
+   coordination purposes.
+3. Begin Wave 3 chat transparency work from the orchestration plan.
+4. Add runtime routing, event bridge, and gateway harness checks after the chat
+   transparency stack is underway.
+5. Add model assignment on top of stable runtime plumbing.
+6. Build the desktop shell after chat and runtime behavior are reliable.
 
 ## Definition of Done
 

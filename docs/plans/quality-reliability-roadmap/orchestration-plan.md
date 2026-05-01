@@ -38,10 +38,11 @@ maintainer explicitly asks for a combined PR.
 Status as of 2026-05-01:
 
 - Wave 1 PRs have merged.
-- Wave 2 is the active starting point for newly available workstream slots.
-- Keep Wave 2 changes independently reviewable; do not combine diagnostics,
-  chat event contracts, config validation, model discovery, or eslint alignment
-  in one PR.
+- Wave 2 PRs have merged.
+- Wave 3 is the active starting point for newly available workstream slots.
+- Keep Wave 3 changes independently reviewable; do not combine active history
+  polling, active run state, execution progress UI, or chat hardening smoke
+  coverage in one PR.
 
 ## Wave 1: Merged
 
@@ -64,9 +65,9 @@ These five foundation workstreams have completed and merged.
 - Wave 1 is closed for orchestration; follow-up work should be tracked in the
   dependent Wave 2+ branches.
 
-## Wave 2: Contract and Diagnostics - Starting
+## Wave 2: Contract and Diagnostics - Merged
 
-Start these as the next active workstreams.
+These contract and diagnostics workstreams have completed and merged.
 
 | Branch | PR Title | Depends On | Intent | Risk |
 | --- | --- | --- | --- | --- |
@@ -83,9 +84,10 @@ Start these as the next active workstreams.
 - If `eslint-config-next` requires dependency lockfile churn, keep it separate
   from `ci-lint-hygiene`.
 
-## Wave 3: Chat Transparency Stack
+## Wave 3: Chat Transparency Stack - Starting
 
-These workstreams are stacked around the structured event contract.
+Start these as the next active workstreams. They are stacked around the
+structured event contract.
 
 | Branch | PR Title | Depends On | Intent | Risk |
 | --- | --- | --- | --- | --- |
@@ -205,4 +207,5 @@ Wave 1 started with:
 
 That wave provided one critical user fix, one runtime foundation, two quality
 foundations, and one desktop unblocker without overloading a single area of the
-codebase. New work should now start from Wave 2.
+codebase. Wave 2 then completed the contract and diagnostics layer. New work
+should now start from Wave 3.

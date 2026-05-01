@@ -3,14 +3,51 @@
   "version": "0.1.0",
   "private": true,
   "description": "CrewCmd desktop shell.",
+  "author": "Axislabs (https://axislabs.dev)",
   "main": "src/main.cjs",
   "type": "commonjs",
   "scripts": {
     "dev": "electron src/main.cjs",
     "start": "electron src/main.cjs",
-    "check": "node --check src/main.cjs && node --check src/preload.cjs"
+    "check": "node --check src/main.cjs && node --check src/preload.cjs",
+    "dist:dir": "electron-builder --dir --publish never",
+    "dist": "electron-builder --publish never"
+  },
+  "build": {
+    "appId": "dev.axislabs.crewcmd",
+    "productName": "CrewCmd",
+    "artifactName": "CrewCmd-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ]
+    }
   },
   "devDependencies": {
-    "electron": "41.4.0"
+    "electron": "41.4.0",
+    "electron-builder": "26.0.12"
   }
 }

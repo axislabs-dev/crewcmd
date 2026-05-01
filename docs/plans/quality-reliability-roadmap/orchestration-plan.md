@@ -33,9 +33,19 @@ maintainer explicitly asks for a combined PR.
 5. Confirm that Phase 2 chat transparency should not include runtime routing
    changes; runtime routing belongs in Phase 3.
 
-## Wave 1: Start Immediately
+## Current Coordination Status
 
-These five workstreams can run at the same time.
+Status as of 2026-05-01:
+
+- Wave 1 PRs have merged.
+- Wave 2 is the active starting point for newly available workstream slots.
+- Keep Wave 2 changes independently reviewable; do not combine diagnostics,
+  chat event contracts, config validation, model discovery, or eslint alignment
+  in one PR.
+
+## Wave 1: Merged
+
+These five foundation workstreams have completed and merged.
 
 | Slot | Branch | PR Title | Intent | Risk |
 | --- | --- | --- | --- | --- |
@@ -51,12 +61,12 @@ These five workstreams can run at the same time.
 - `gateway-runtime-scoped-pool` is the base for safe multi-runtime routing.
 - `desktop-architecture-adr` should stay docs-only and should not add desktop
   dependencies.
-- If one slot finishes early, fill it from Wave 2 only if its dependencies are
-  satisfied.
+- Wave 1 is closed for orchestration; follow-up work should be tracked in the
+  dependent Wave 2+ branches.
 
-## Wave 2: Contract and Diagnostics
+## Wave 2: Contract and Diagnostics - Starting
 
-Start these as slots free up from Wave 1.
+Start these as the next active workstreams.
 
 | Branch | PR Title | Depends On | Intent | Risk |
 | --- | --- | --- | --- | --- |
@@ -185,7 +195,7 @@ Add the smallest relevant verification:
 
 ## First Five Recommended Workstreams
 
-Start with:
+Wave 1 started with:
 
 1. `codex/chat-immediate-sse`
 2. `codex/gateway-runtime-scoped-pool`
@@ -193,6 +203,6 @@ Start with:
 4. `codex/api-response-primitives`
 5. `codex/desktop-architecture-adr`
 
-This gives one critical user fix, one runtime foundation, two quality
+That wave provided one critical user fix, one runtime foundation, two quality
 foundations, and one desktop unblocker without overloading a single area of the
-codebase.
+codebase. New work should now start from Wave 2.

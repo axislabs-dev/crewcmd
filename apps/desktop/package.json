@@ -1,0 +1,16 @@
+{
+  "name": "@crewcmd/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CrewCmd desktop shell.",
+  "main": "src/main.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "electron src/main.cjs",
+    "start": "electron src/main.cjs",
+    "check": "node --check src/main.cjs && node --check src/preload.cjs"
+  },
+  "devDependencies": {
+    "electron": "41.4.0"
+  }
+}

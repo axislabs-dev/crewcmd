@@ -7,6 +7,10 @@ import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
 import {
+  ExecutionProgressPanel,
+  type ExecutionProgressEvent,
+} from "@/components/chat/execution-progress-panel";
+import {
   AgentTreeSelector,
   findDefaultAgent,
   findParentAgent,
@@ -265,6 +269,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [executionProgress, setExecutionProgress] = useState<ExecutionProgressEvent | null>(null);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -662,6 +667,7 @@ export default function ChatPage() {
       }
       setIsLoading(false);
       setStreamingContent("");
+      setExecutionProgress(null);
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
@@ -1254,6 +1260,11 @@ export default function ChatPage() {
         wasAtBottomRef.current = true;
         setInput("");
         setIsLoading(true);
+        setExecutionProgress({
+          event: "run_started",
+          at: new Date().toISOString(),
+          elapsedMs: 0,
+        });
 
         try {
           const res = await fetch("/api/tasks", {
@@ -1299,6 +1310,11 @@ export default function ChatPage() {
             }).catch(() => {});
           }
         } catch {
+          setExecutionProgress({
+            event: "run_error",
+            at: new Date().toISOString(),
+            error: "Failed to create task.",
+          });
           setMessages((prev) => [
             ...prev,
             {
@@ -1310,6 +1326,14 @@ export default function ChatPage() {
           ]);
         }
         setIsLoading(false);
+        setExecutionProgress((current) =>
+          current?.event === "run_error"
+            ? current
+            : {
+                event: "run_completed",
+                at: new Date().toISOString(),
+              }
+        );
         return;
       }
 
@@ -1358,6 +1382,11 @@ export default function ChatPage() {
       // User message persisted server-side in /api/chat route
       setInput("");
       setIsLoading(true);
+      setExecutionProgress({
+        event: "run_started",
+        at: new Date().toISOString(),
+        elapsedMs: 0,
+      });
       setStreamingContent("");
       streamingContentRef.current = "";
       streamingAgentRef.current = agentCallsign;
@@ -1445,6 +1474,11 @@ export default function ChatPage() {
             try {
               const parsed = JSON.parse(data);
 
+              if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
+                setExecutionProgress(parsed);
+                continue;
+              }
+
               // Handle meta events (message IDs from server-side persistence)
               if (parsed.type === "meta" && parsed.role === "user") {
                 // Replace optimistic user message with server-confirmed one
@@ -1512,6 +1546,14 @@ export default function ChatPage() {
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
         setStreamingContent("");
+        setExecutionProgress((current) =>
+          current?.event === "run_error" || current?.event === "run_aborted"
+            ? current
+            : {
+                event: "run_completed",
+                at: new Date().toISOString(),
+              }
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           // User cancelled with Escape — keep any partial content as the message
@@ -1530,8 +1572,17 @@ export default function ChatPage() {
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
           setStreamingContent("");
+          setExecutionProgress({
+            event: "run_aborted",
+            at: new Date().toISOString(),
+          });
         } else {
           console.error("[Chat] Error:", error);
+          setExecutionProgress({
+            event: "run_error",
+            at: new Date().toISOString(),
+            error: error instanceof Error ? error.message : "Connection error.",
+          });
           setMessages((prev) => [
             ...prev,
             {
@@ -1578,6 +1629,7 @@ export default function ChatPage() {
 
   const clearChat = async () => {
     setMessages([]);
+    setExecutionProgress(null);
     storeClearAgent(activeSessionKey);
     loadedAgentsRef.current.add(activeSessionKey);
     loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
@@ -1714,6 +1766,16 @@ export default function ChatPage() {
             );
           })}
 
+          {/* Execution progress */}
+          {(isLoading || executionProgress) && (
+            <ExecutionProgressPanel
+              progress={executionProgress}
+              isLoading={isLoading}
+              hasStreamingContent={Boolean(streamingContent)}
+              agentColor={agentColor}
+            />
+          )}
+
           {/* Streaming message */}
           {streamingContent && (
             <div>
@@ -1735,7 +1797,7 @@ export default function ChatPage() {
           )}
 
           {/* Loading indicator */}
-          {isLoading && !streamingContent && (
+          {isLoading && !streamingContent && !executionProgress && (
             <div className="flex gap-3 animate-fade-in">
               <div
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-mono"

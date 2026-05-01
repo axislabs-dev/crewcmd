@@ -20,6 +20,7 @@ import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
 import { useChatStore } from "@/lib/chat-store";
 import type { ChatStoreMessage } from "@/lib/chat-store";
+import { useActiveChatRunStore } from "@/lib/chat-active-run-store";
 import { useWorkspace } from "@/components/company-context";
 import {
   createAgentModeSessionId,
@@ -1414,6 +1415,14 @@ export default function ChatPage() {
         { role: "user" as const, content: messageContent },
       ];
 
+      const requestSessionKey = delegatedViaAgent
+        ? gatewaySessionKeyForAgent(delegatedViaAgent)
+        : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+        : gatewaySessionKeyForAgent(selectedAgent);
+
+      useActiveChatRunStore.getState().beginRun({ sessionKey: requestSessionKey });
+
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
@@ -1435,11 +1444,7 @@ export default function ChatPage() {
               : undefined,
             companyId: company?.id,
             metadata,
-            sessionKey: delegatedViaAgent
-              ? gatewaySessionKeyForAgent(delegatedViaAgent)
-              : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-              ? selectedSessionKey ?? undefined
-              : undefined,
+            sessionKey: requestSessionKey,
           }),
           signal: controller.signal,
         });
@@ -1476,6 +1481,15 @@ export default function ChatPage() {
 
               if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
                 setExecutionProgress(parsed);
+                useActiveChatRunStore.getState().applyProgressEvent(parsed);
+                continue;
+              }
+
+              if (parsed.type === "gateway_send_ack") {
+                useActiveChatRunStore.getState().acknowledgeRun({
+                  sessionKey: parsed.sessionKey,
+                  runId: parsed.runId,
+                });
                 continue;
               }
 
@@ -1554,8 +1568,18 @@ export default function ChatPage() {
                 at: new Date().toISOString(),
               }
         );
+        useActiveChatRunStore.getState().applyProgressEvent({
+          type: "chat_progress",
+          event: "run_completed",
+          sessionKey: requestSessionKey,
+        });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
+          useActiveChatRunStore.getState().applyProgressEvent({
+            type: "chat_progress",
+            event: "run_aborted",
+            sessionKey: requestSessionKey,
+          });
           // User cancelled with Escape — keep any partial content as the message
           if (fullContent) {
             const cancelledContent = fullContent + "\n\n_(cancelled)_";
@@ -1577,6 +1601,11 @@ export default function ChatPage() {
             at: new Date().toISOString(),
           });
         } else {
+          useActiveChatRunStore.getState().applyProgressEvent({
+            type: "chat_progress",
+            event: "run_error",
+            sessionKey: requestSessionKey,
+          });
           console.error("[Chat] Error:", error);
           setExecutionProgress({
             event: "run_error",

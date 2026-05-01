@@ -101,6 +101,20 @@ describe("/api/service-secrets", () => {
     expect(body.value).toBeUndefined();
   });
 
+  it("returns a standard error when required fields are missing", async () => {
+    const res = await POST(makeRequest("/api/service-secrets", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: "ws_1", name: "x" }),
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body).toEqual({
+      code: "invalid_secret_request",
+      message: "workspaceId or companyId, name, and value are required",
+    });
+  });
+
   it("returns 401 when not authenticated", async () => {
     mockRequireAuth.mockResolvedValue(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 

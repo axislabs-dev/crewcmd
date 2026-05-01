@@ -1,0 +1,160 @@
+name: Desktop Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Desktop release version, for example 0.3.11"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as a prerelease"
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac
+            runner: macos-latest
+            arch: arm64
+            args: --mac dmg zip --arm64
+          - platform: mac
+            runner: macos-15-intel
+            arch: x64
+            args: --mac dmg zip --x64
+          - platform: win
+            runner: windows-latest
+            arch: x64
+            args: --win nsis --x64
+          - platform: win
+            runner: windows-11-arm
+            arch: arm64
+            args: --win nsis --arm64
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            args: --linux AppImage deb rpm --x64
+          - platform: linux
+            runner: ubuntu-24.04-arm
+            arch: arm64
+            args: --linux AppImage deb --arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Check desktop entrypoints
+        working-directory: apps/desktop
+        run: pnpm check
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#desktop-v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp desktop package version
+        working-directory: apps/desktop
+        shell: bash
+        run: pnpm pkg set version="${{ steps.version.outputs.version }}"
+
+      - name: Package desktop app
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: pnpm run dist -- ${{ matrix.args }}
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: crewcmd-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.rpm
+            apps/desktop/dist/latest*.yml
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: desktop-artifacts
+          merge-multiple: true
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            prerelease="${{ inputs.prerelease }}"
+          else
+            version="${GITHUB_REF_NAME#desktop-v}"
+            prerelease="false"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=desktop-v$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: CrewCmd Desktop v${{ steps.version.outputs.version }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          generate_release_notes: true
+          body: |
+            ## CrewCmd Desktop v${{ steps.version.outputs.version }}
+
+            Desktop shell for CrewCmd. This first packaging pipeline publishes unsigned installers that connect to an existing CrewCmd server.
+
+            ### Downloads
+            - macOS Apple Silicon: `CrewCmd-*-mac-arm64.dmg`
+            - macOS Intel: `CrewCmd-*-mac-x64.dmg`
+            - Windows x64: `CrewCmd-*-win-x64.exe`
+            - Windows ARM64: `CrewCmd-*-win-arm64.exe`
+            - Linux x64: `CrewCmd-*-linux-x64.AppImage`, `.deb`, or `.rpm`
+            - Linux ARM64: `CrewCmd-*-linux-arm64.AppImage` or `.deb`
+
+            ### Installation Notes
+            - macOS: unsigned builds may require approving the app in System Settings.
+            - Windows: SmartScreen may require "More info" then "Run anyway".
+            - Linux AppImage: run `chmod +x CrewCmd-*.AppImage` before launching.
+          files: desktop-artifacts/*

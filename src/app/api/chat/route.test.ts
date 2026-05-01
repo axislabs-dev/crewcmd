@@ -35,8 +35,9 @@ vi.mock("@/lib/chat-pubsub", () => ({
   publishChatEvent: vi.fn(),
 }));
 
+const mockSelectRecoveredAssistantText = vi.fn<(params: unknown) => string>(() => "");
 vi.mock("@/lib/chat-recovery", () => ({
-  selectRecoveredAssistantText: vi.fn(() => ""),
+  selectRecoveredAssistantText: (params: unknown) => mockSelectRecoveredAssistantText(params),
 }));
 
 vi.mock("@/lib/agent-mode-diagnostics", () => ({
@@ -84,6 +85,7 @@ describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
+    mockSelectRecoveredAssistantText.mockReturnValue("");
     mockGetGatewayClient.mockResolvedValue({
       on: vi.fn(),
       off: vi.fn(),
@@ -318,5 +320,112 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"fresh output\"}}]");
     expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\" done\"}}]");
     expect(streamed).toContain("data: [DONE]");
+  });
+
+  it("polls active chat history and streams sparse assistant progress", async () => {
+    vi.useFakeTimers();
+    try {
+      mockSelectRecoveredAssistantText.mockReturnValue("from history");
+      const chatHandlers: Array<(payload: unknown) => void> = [];
+      const chatHistory = vi.fn().mockResolvedValue({
+        messages: [
+          { role: "user", content: "hello" },
+          { role: "assistant", content: "from history" },
+        ],
+      });
+      mockGetGatewayClient.mockResolvedValueOnce({
+        on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+          if (event === "chat") chatHandlers.push(handler);
+        }),
+        off: vi.fn(),
+        chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+        chatAbort: vi.fn(() => Promise.resolve()),
+        chatHistory,
+        rpc: vi.fn().mockResolvedValue({ sessions: [] }),
+      });
+
+      const response = await POST(makeRequest({
+        messages: [{ role: "user", content: "hello" }],
+        agent: "main",
+      }));
+      const reader = response.body!.getReader();
+
+      const first = new TextDecoder().decode((await reader.read()).value);
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.waitFor(() => {
+        expect(chatHistory).toHaveBeenCalledWith({ sessionKey: "main", limit: 25 });
+        expect(chatHandlers).toHaveLength(1);
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      chatHandlers[0]({
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { content: "" },
+      });
+      const streamed = first + await readUntilDone(reader);
+
+      expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"from history\"}}]");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops active history polling after a terminal chat event", async () => {
+    vi.useFakeTimers();
+    try {
+      mockSelectRecoveredAssistantText.mockReturnValue("from history");
+      const chatHandlers: Array<(payload: unknown) => void> = [];
+      const chatHistory = vi.fn().mockResolvedValue({
+        messages: [
+          { role: "user", content: "hello" },
+          { role: "assistant", content: "from history" },
+        ],
+      });
+      mockGetGatewayClient.mockResolvedValueOnce({
+        on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+          if (event === "chat") chatHandlers.push(handler);
+        }),
+        off: vi.fn(),
+        chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+        chatAbort: vi.fn(() => Promise.resolve()),
+        chatHistory,
+        rpc: vi.fn().mockResolvedValue({ sessions: [] }),
+      });
+
+      const response = await POST(makeRequest({
+        messages: [{ role: "user", content: "hello" }],
+        agent: "main",
+      }));
+      const reader = response.body!.getReader();
+
+      await reader.read();
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.waitFor(() => {
+        expect(chatHistory).toHaveBeenCalledTimes(1);
+        expect(chatHandlers).toHaveLength(1);
+      });
+
+      chatHandlers[0]({
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { content: "from history complete" },
+      });
+      await readUntilDone(reader);
+      await vi.advanceTimersByTimeAsync(1_500);
+
+      expect(chatHistory).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

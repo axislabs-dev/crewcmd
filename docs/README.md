@@ -26,7 +26,7 @@ Everything you need to get started, self-host, and contribute.
 ## Reference
 
 - [API Reference](API.md) — Full REST API documentation
-- [Architecture](architecture/) — System design and technical specs, including the [desktop shell ADR](architecture/desktop-shell.md)
+- [Architecture](architecture/) — System design and technical specs, including the [desktop shell ADR](architecture/desktop-shell.md) and [desktop native capability contracts](architecture/desktop-native-contracts.md)
 - [Specifications](specs/) — Feature specs and RFCs
 - [Plans](plans/) — Roadmaps and implementation plans
 

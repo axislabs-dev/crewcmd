@@ -113,6 +113,10 @@ function firstString(...values: unknown[]) {
   return null;
 }
 
+function isChatHistoryRpcTimeout(error: unknown) {
+  return error instanceof Error && error.message === "RPC timeout: chat.history";
+}
+
 function extractText(value: unknown, seen = new WeakSet<object>()): string {
   if (typeof value === "string") return value;
   if (!value) return "";
@@ -273,7 +277,15 @@ async function recoverAssistantTextFromGateway(params: {
       });
       if (recovered) return recovered;
     } catch (error) {
-      console.error(`[api/chat] Failed to recover chat history for ${sessionKey}:`, error);
+      if (isChatHistoryRpcTimeout(error)) {
+        publishAgentModeDiagnostic({
+          scope: "api-chat",
+          event: "history-recovery.timeout",
+          detail: { sessionKey },
+        });
+      } else {
+        console.error(`[api/chat] Failed to recover chat history for ${sessionKey}:`, error);
+      }
     }
   }
 
@@ -299,7 +311,15 @@ async function selectAssistantTextFromHistory(params: {
       previousAssistantContents: params.previousAssistantContents,
     });
   } catch (error) {
-    console.error(`[api/chat] Failed to poll chat history for ${params.sessionKey}:`, error);
+    if (isChatHistoryRpcTimeout(error)) {
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "history-poll.timeout",
+        detail: { sessionKey: params.sessionKey },
+      });
+    } else {
+      console.error(`[api/chat] Failed to poll chat history for ${params.sessionKey}:`, error);
+    }
     return "";
   }
 }

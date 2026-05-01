@@ -24,6 +24,15 @@ interface RuntimeModelsState {
   models: RuntimeModel[];
 }
 
+interface ModelProfile {
+  id: string;
+  label: string;
+  providerPreferences: string[];
+  supported: boolean;
+  recommendedModel: string | null;
+  fallbackModels: string[];
+}
+
 const cardClassName = "rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]";
 
 export default function ModelsPage() {
@@ -32,6 +41,8 @@ export default function ModelsPage() {
   const [loadingRuntimes, setLoadingRuntimes] = useState(true);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [runtimeModels, setRuntimeModels] = useState<Record<string, RuntimeModelsState>>({});
+  const [profiles, setProfiles] = useState<ModelProfile[]>([]);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -112,6 +123,34 @@ export default function ModelsPage() {
       cancelled = true;
     };
   }, [runtimeModels, selectedRuntimeId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfiles() {
+      setProfilesError(null);
+
+      try {
+        const response = await fetch("/api/models/profiles", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load model profiles");
+
+        if (!cancelled) {
+          setProfiles(Array.isArray(data.profiles) ? data.profiles : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setProfilesError(error instanceof Error ? error.message : "Failed to load model profiles");
+        }
+      }
+    }
+
+    void loadProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectedRuntime = runtimes.find((runtime) => runtime.id === selectedRuntimeId) ?? null;
   const selectedModelsState = selectedRuntimeId ? runtimeModels[selectedRuntimeId] : null;
@@ -264,6 +303,51 @@ export default function ModelsPage() {
             </section>
           </main>
         </div>
+
+        <section className={`${cardClassName} overflow-hidden`}>
+          <div className="border-b border-[var(--border-subtle)] px-4 py-3">
+            <h2 className="text-sm font-medium">Built-in Profiles</h2>
+          </div>
+
+          {profilesError ? (
+            <div className="px-4 py-5 text-sm text-red-300">{profilesError}</div>
+          ) : profiles.length === 0 ? (
+            <div className="px-4 py-5 text-sm text-[var(--text-secondary)]">No profiles available.</div>
+          ) : (
+            <div className="grid gap-px bg-[var(--border-subtle)] sm:grid-cols-2 xl:grid-cols-3">
+              {profiles.map((profile) => (
+                <div key={profile.id} className="bg-[var(--bg-surface)] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">{profile.label}</div>
+                      <div className="mt-1 text-xs text-[var(--text-tertiary)]">{profile.id}</div>
+                    </div>
+                    <span
+                      className={`rounded border px-1.5 py-0.5 text-[10px] uppercase ${
+                        profile.supported
+                          ? "border-emerald-500/30 text-emerald-300"
+                          : "border-[var(--border-subtle)] text-[var(--text-tertiary)]"
+                      }`}
+                    >
+                      {profile.supported ? "Supported" : "Unmatched"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 text-xs text-[var(--text-secondary)]">
+                    Preference: {profile.providerPreferences.join(" -> ")}
+                  </div>
+
+                  {profile.recommendedModel ? (
+                    <div className="mt-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] px-3 py-2 text-xs">
+                      <div className="text-[var(--text-tertiary)]">Recommended</div>
+                      <div className="mt-1 truncate text-[var(--text-primary)]">{profile.recommendedModel}</div>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

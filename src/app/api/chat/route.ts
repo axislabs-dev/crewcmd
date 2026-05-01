@@ -13,6 +13,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const ACTIVE_HISTORY_POLL_INTERVAL_MS = 1_500;
+const ACTIVE_HISTORY_POLL_MAX_ATTEMPTS = 80;
+
 type ChatProgressEventName =
   | "run_started"
   | "gateway_send_started"
@@ -277,6 +280,30 @@ async function recoverAssistantTextFromGateway(params: {
   return "";
 }
 
+async function selectAssistantTextFromHistory(params: {
+  client: {
+    chatHistory: (params: { sessionKey?: string; limit?: number }) => Promise<unknown>;
+  };
+  sessionKey: string;
+  currentUserContents: string[];
+  previousAssistantContents: string[];
+}) {
+  try {
+    const result = await params.client.chatHistory({ sessionKey: params.sessionKey, limit: 25 });
+    const messages = extractHistoryMessages(result);
+    if (messages.length === 0) return "";
+
+    return selectRecoveredAssistantText({
+      messages,
+      currentUserContents: params.currentUserContents,
+      previousAssistantContents: params.previousAssistantContents,
+    });
+  } catch (error) {
+    console.error(`[api/chat] Failed to poll chat history for ${params.sessionKey}:`, error);
+    return "";
+  }
+}
+
 function buildDelegatedAgentMessage(params: {
   message: string;
   targetAgent: unknown;
@@ -400,10 +427,14 @@ export async function POST(request: NextRequest) {
       gatewayAgentId,
       targetAgentCallsign,
     ].filter((value): value is string => Boolean(value));
+    const activeHistorySessionKeys = Array.from(
+      new Map(allowedEventSessions.map((value) => [value.toLowerCase(), value])).values()
+    );
     const outboundMessage = buildDelegatedAgentMessage({
       message: lastUserMessage.content,
       targetAgent,
     });
+    const currentUserContents = [lastUserMessage.content, outboundMessage];
     const previousAssistantContents = messages
       .slice(0, messages.lastIndexOf(lastUserMessage))
       .filter((message: { role?: string }) => message.role === "assistant")
@@ -469,6 +500,10 @@ export async function POST(request: NextRequest) {
     let firstDeltaAt = 0;
     let inactivityTimeout: ReturnType<typeof setTimeout> | null = null;
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+    let historyPollTimeout: ReturnType<typeof setTimeout> | null = null;
+    let historyPollAttempts = 0;
+    let historyPollInFlight = false;
+    let historySnapshotStreamed = false;
 
     const enqueueData = (payload: unknown) => {
       if (!streamController || done) return;
@@ -520,6 +555,31 @@ export async function POST(request: NextRequest) {
       heartbeatInterval = null;
     };
 
+    const stopHistoryPolling = () => {
+      if (!historyPollTimeout) return;
+      clearTimeout(historyPollTimeout);
+      historyPollTimeout = null;
+    };
+
+    const streamAssistantSnapshot = (assistantText: string) => {
+      if (!assistantText || !streamController || done) return false;
+
+      if (lastStreamedText && !assistantText.startsWith(lastStreamedText)) {
+        return false;
+      }
+
+      const newContent = assistantText.slice(lastStreamedText.length);
+      fullAssistantText = assistantText;
+      if (!newContent) return false;
+
+      lastStreamedText = assistantText;
+      const chunk = JSON.stringify({
+        choices: [{ delta: { content: newContent } }],
+      });
+      streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      return true;
+    };
+
     const startHeartbeat = () => {
       clearHeartbeat();
       heartbeatInterval = setInterval(() => {
@@ -553,6 +613,56 @@ export async function POST(request: NextRequest) {
       });
     };
 
+    const pollActiveHistory = async () => {
+      if (done || cancelled || !client || historyPollInFlight) return;
+      if (historyPollAttempts >= ACTIVE_HISTORY_POLL_MAX_ATTEMPTS) return;
+
+      historyPollAttempts += 1;
+      historyPollInFlight = true;
+      try {
+        for (const historySessionKey of activeHistorySessionKeys) {
+          if (done || cancelled || !client) break;
+          const assistantText = await selectAssistantTextFromHistory({
+            client,
+            sessionKey: historySessionKey,
+            currentUserContents,
+            previousAssistantContents,
+          });
+          if (assistantText && streamAssistantSnapshot(assistantText)) {
+            historySnapshotStreamed = true;
+            armInactivityTimeout("chat-history");
+            publishAgentModeDiagnostic({
+              scope: "api-chat",
+              event: "history-poll.delta",
+              sessionId: diagnosticSessionId,
+              detail: {
+                historySessionKey,
+                activeRunId,
+                elapsedMs: Date.now() - requestStartedAt,
+              },
+            });
+          }
+        }
+      } finally {
+        historyPollInFlight = false;
+        if (!done && !cancelled && historyPollAttempts < ACTIVE_HISTORY_POLL_MAX_ATTEMPTS) {
+          historyPollTimeout = setTimeout(() => {
+            historyPollTimeout = null;
+            void pollActiveHistory();
+          }, ACTIVE_HISTORY_POLL_INTERVAL_MS);
+        }
+      }
+    };
+
+    const startHistoryPolling = () => {
+      stopHistoryPolling();
+      if (done || cancelled || !client) return;
+      historyPollTimeout = setTimeout(() => {
+        historyPollTimeout = null;
+        void pollActiveHistory();
+      }, 0);
+    };
+
     const releaseHeldClient = () => {
       if (released || !client) return;
       released = true;
@@ -565,24 +675,16 @@ export async function POST(request: NextRequest) {
     };
 
     const recoverMissingAssistantText = async () => {
-      if (fullAssistantText || !client) return;
+      if ((!historySnapshotStreamed && fullAssistantText) || !client) return;
       const recovered = await recoverAssistantTextFromGateway({
         client,
         allowedSessions: allowedEventSessions,
-        currentUserContents: [lastUserMessage.content, outboundMessage],
+        currentUserContents,
         previousAssistantContents,
       });
       if (!recovered) return;
 
-      fullAssistantText = recovered;
-      lastStreamedText = recovered;
-
-      if (streamController && !done) {
-        const chunk = JSON.stringify({
-          choices: [{ delta: { content: recovered } }],
-        });
-        streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-      }
+      streamAssistantSnapshot(recovered);
     };
 
     const finishStream = async (
@@ -602,6 +704,7 @@ export async function POST(request: NextRequest) {
         },
       });
       clearInactivityTimeout();
+      stopHistoryPolling();
       await recoverMissingAssistantText();
       await persistAssistant(interrupted);
       if (progressEvent) {
@@ -687,6 +790,7 @@ export async function POST(request: NextRequest) {
           detail: { elapsedMs: Date.now() - requestStartedAt },
         });
         clearInactivityTimeout();
+        stopHistoryPolling();
         enqueueProgress("run_aborted", activeRunId ? { runId: activeRunId } : {});
         if (client) {
           client.chatAbort({ sessionKey }).catch((err) => {
@@ -734,7 +838,7 @@ export async function POST(request: NextRequest) {
 
       if (state === "delta") {
         const fullText = extractText(p.message || p);
-        if (fullText && fullText.length > lastStreamedText.length) {
+        if (fullText && streamAssistantSnapshot(fullText)) {
           if (!firstDeltaAt) {
             firstDeltaAt = Date.now();
             console.info("[api/chat] first delta", {
@@ -746,25 +850,12 @@ export async function POST(request: NextRequest) {
               firstDeltaMs: firstDeltaAt - requestStartedAt,
             });
           }
-          const newContent = fullText.slice(lastStreamedText.length);
-          lastStreamedText = fullText;
-          fullAssistantText = fullText;
-
-          const chunk = JSON.stringify({
-            choices: [{ delta: { content: newContent } }],
-          });
-          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         }
       } else if (state === "final") {
         const finalText = extractText(p.message || p);
-        if (finalText && finalText.length > lastStreamedText.length) {
-          const remaining = finalText.slice(lastStreamedText.length);
-          const chunk = JSON.stringify({
-            choices: [{ delta: { content: remaining } }],
-          });
-          streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+        if (finalText && !streamAssistantSnapshot(finalText)) {
+          fullAssistantText = finalText;
         }
-        if (finalText) fullAssistantText = finalText;
 
         // Persist the complete assistant response
         finishStream(false);
@@ -834,6 +925,7 @@ export async function POST(request: NextRequest) {
           sessionKey,
           elapsedMs: gatewaySentAt - requestStartedAt,
         });
+        startHistoryPolling();
       } catch (err) {
         if (client) client.off("chat", chatHandler);
         releaseHeldClient();

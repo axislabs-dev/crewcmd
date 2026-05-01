@@ -20,6 +20,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --fix",
+    "lint:check": "eslint .",
     "typecheck": "tsc --noEmit",
     "mobile:validate-branding": "node scripts/mobile/validate-mobile-branding.mjs",
     "mobile:bootstrap-url": "node scripts/mobile/build-bootstrap-url.mjs",

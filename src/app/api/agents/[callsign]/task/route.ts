@@ -58,10 +58,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   // Ensure agent is started in the runtime
   let proc = runtime.getStatus(agent.id);
+  const selectedModel = agent.effectiveModel ?? agent.model;
   if (!proc || proc.status !== "running") {
     const adapterConfig: AdapterConfig = {
       ...(agent.adapterConfig as AdapterConfig),
-      model: agent.model ?? undefined,
+      model: selectedModel ?? undefined,
       workspacePath: agent.workspacePath ?? undefined,
     };
     const config: AgentConfig = {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       callsign: agent.callsign,
       adapterType: effectiveAdapterType,
       adapterConfig,
-      model: agent.model ?? undefined,
+      model: selectedModel ?? undefined,
       workspacePath: agent.workspacePath ?? undefined,
     };
     runtime.storeAdapterConfig(agent.id, adapterConfig);

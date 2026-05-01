@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
 import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "@/lib/openclaw-workspace-resolver";
+import { deriveSkillSyncDrift } from "@/lib/skill-sync-drift";
 
 interface SyncMeta {
   source?: string;
@@ -71,6 +72,11 @@ export async function GET() {
             syncedAt: meta.syncedAt ?? null,
             checksum: meta.checksum ?? null,
             previousChecksum: meta.previousChecksum ?? null,
+            ...deriveSkillSyncDrift({
+              status: "synced",
+              checksum: meta.checksum ?? null,
+              previousChecksum: meta.previousChecksum ?? null,
+            }),
             error: null,
           };
         } catch (error) {
@@ -89,6 +95,7 @@ export async function GET() {
         syncedAt: null,
         checksum: null,
         previousChecksum: null,
+        ...deriveSkillSyncDrift({ status: "missing" }),
         error: lastError instanceof Error ? lastError.message : String(lastError),
       };
     })
@@ -97,6 +104,9 @@ export async function GET() {
   const total = items.length;
   const synced = items.filter((item) => item.status === "synced").length;
   const failed = total - synced;
+  const needsReview = items.filter((item) => item.requiresReview).length;
+  const changed = items.filter((item) => item.driftStatus === "changed").length;
+  const unknown = items.filter((item) => item.driftStatus === "unknown").length;
 
   const lastSyncedAt = items
     .map((item) => item.syncedAt)
@@ -131,6 +141,9 @@ export async function GET() {
       totalAssignments: total,
       synced,
       failed,
+      needsReview,
+      changed,
+      unknown,
       successRate: total === 0 ? 1 : synced / total,
       lastSyncedAt,
     },

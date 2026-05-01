@@ -74,6 +74,15 @@ export interface GatewayRuntimeDiagnostic {
     holds: number;
   };
   lastConnection: GatewayConnectionDiagnostic | null;
+  readiness: GatewayRuntimeReadiness;
+}
+
+export interface GatewayRuntimeReadiness {
+  hasGatewayUrl: boolean;
+  hasAuthToken: boolean;
+  deviceIdentity: "stored" | "ephemeral";
+  connectionState: "pool_connected" | "last_connected" | "last_failed" | "not_attempted";
+  blockers: string[];
 }
 
 function activeClientCount() {
@@ -167,6 +176,8 @@ export function getGatewayDiagnosticsForRuntimes(
     runtimes: runtimes.map((runtime) => {
       const entry = pool.get(runtime.id);
       const holds = entry ? (activeClientHolds.get(entry.client) ?? 0) : 0;
+      const lastConnection = lastConnectionByRuntime.get(runtime.id) ?? null;
+      const poolConnected = Boolean(entry?.client.isConnected);
 
       return {
         id: runtime.id,
@@ -183,9 +194,41 @@ export function getGatewayDiagnosticsForRuntimes(
           held: holds > 0,
           holds,
         },
-        lastConnection: lastConnectionByRuntime.get(runtime.id) ?? null,
+        lastConnection,
+        readiness: deriveGatewayReadiness({
+          gatewayUrl: runtime.gatewayUrl,
+          authToken: runtime.authToken,
+          metadata: runtime.metadata,
+          poolConnected,
+          lastConnection,
+        }),
       };
     }),
+  };
+}
+
+export function deriveGatewayReadiness(params: {
+  gatewayUrl?: string | null;
+  authToken?: string | null;
+  metadata?: unknown;
+  poolConnected: boolean;
+  lastConnection: GatewayConnectionDiagnostic | null;
+}): GatewayRuntimeReadiness {
+  const hasGatewayUrl = Boolean(params.gatewayUrl);
+  const hasAuthToken = Boolean(params.authToken);
+  const blockers: string[] = [];
+
+  if (!hasGatewayUrl) blockers.push("missing_gateway_url");
+  if (!hasAuthToken) blockers.push("missing_auth_token");
+  if (params.lastConnection?.classification === "pairing_required") blockers.push("pairing_required");
+  if (params.lastConnection?.status === "failed") blockers.push("last_connection_failed");
+
+  return {
+    hasGatewayUrl,
+    hasAuthToken,
+    deviceIdentity: hasStoredDeviceIdentity(params.metadata) ? "stored" : "ephemeral",
+    connectionState: getConnectionState(params.poolConnected, params.lastConnection),
+    blockers,
   };
 }
 
@@ -237,6 +280,22 @@ function redactGatewayMetadata(metadata: unknown): Record<string, unknown> | nul
   }
 
   return redacted;
+}
+
+function hasStoredDeviceIdentity(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const privateKey = (metadata as Record<string, unknown>).devicePrivateKeyPem;
+  return typeof privateKey === "string" && privateKey.trim().length > 0;
+}
+
+function getConnectionState(
+  poolConnected: boolean,
+  lastConnection: GatewayConnectionDiagnostic | null
+): GatewayRuntimeReadiness["connectionState"] {
+  if (poolConnected) return "pool_connected";
+  if (lastConnection?.status === "connected") return "last_connected";
+  if (lastConnection?.status === "failed") return "last_failed";
+  return "not_attempted";
 }
 
 function isSensitiveMetadataKey(key: string) {

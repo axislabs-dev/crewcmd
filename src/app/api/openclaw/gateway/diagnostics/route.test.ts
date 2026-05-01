@@ -45,7 +45,7 @@ vi.mock("@/lib/agent-access", () => ({
   buildRuntimeReadWhere: () => ({}),
 }));
 
-import { classifyGatewayFailure, resetGatewayPoolForTests } from "@/lib/gateway-chat-pool";
+import { classifyGatewayFailure, deriveGatewayReadiness, resetGatewayPoolForTests } from "@/lib/gateway-chat-pool";
 import { GET } from "./route";
 
 describe("GET /api/openclaw/gateway/diagnostics", () => {
@@ -102,6 +102,13 @@ describe("GET /api/openclaw/gateway/diagnostics", () => {
         holds: 0,
       },
       lastConnection: null,
+      readiness: {
+        hasGatewayUrl: true,
+        hasAuthToken: true,
+        deviceIdentity: "stored",
+        connectionState: "not_attempted",
+        blockers: [],
+      },
     });
     expect(JSON.stringify(body)).not.toContain("gateway-token");
     expect(JSON.stringify(body)).not.toContain("private-key");
@@ -121,5 +128,41 @@ describe("GET /api/openclaw/gateway/diagnostics", () => {
     expect(classifyGatewayFailure(new Error("Unauthorized gateway token"))).toBe("authentication");
     expect(classifyGatewayFailure(new Error("connect ETIMEDOUT"))).toBe("timeout");
     expect(classifyGatewayFailure(new Error("connect ECONNREFUSED 127.0.0.1"))).toBe("network");
+  });
+
+  it("reports additive readiness blockers without probing the gateway", () => {
+    expect(deriveGatewayReadiness({
+      gatewayUrl: null,
+      authToken: null,
+      metadata: {},
+      poolConnected: false,
+      lastConnection: null,
+    })).toMatchObject({
+      hasGatewayUrl: false,
+      hasAuthToken: false,
+      deviceIdentity: "ephemeral",
+      connectionState: "not_attempted",
+      blockers: ["missing_gateway_url", "missing_auth_token"],
+    });
+
+    expect(deriveGatewayReadiness({
+      gatewayUrl: "ws://localhost:18789",
+      authToken: "token",
+      metadata: { devicePrivateKeyPem: "private-key" },
+      poolConnected: false,
+      lastConnection: {
+        status: "failed",
+        at: "2026-05-01T00:00:00.000Z",
+        url: "ws://localhost:18789",
+        error: "pairing_required",
+        classification: "pairing_required",
+      },
+    })).toMatchObject({
+      hasGatewayUrl: true,
+      hasAuthToken: true,
+      deviceIdentity: "stored",
+      connectionState: "last_failed",
+      blockers: ["pairing_required", "last_connection_failed"],
+    });
   });
 });

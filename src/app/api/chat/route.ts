@@ -13,6 +13,26 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type ChatProgressEventName =
+  | "run_started"
+  | "gateway_send_started"
+  | "heartbeat"
+  | "run_completed"
+  | "run_error"
+  | "run_aborted";
+
+type ChatProgressEvent = {
+  type: "chat_progress";
+  event: ChatProgressEventName;
+  at: string;
+  elapsedMs: number;
+  agentId: string;
+  gatewayAgentId: string;
+  sessionKey: string;
+  runId?: string;
+  error?: string;
+};
+
 /**
  * Find-or-create a chat session for an agent+company pair.
  * Returns the session ID.
@@ -448,11 +468,36 @@ export async function POST(request: NextRequest) {
     let gatewaySentAt = 0;
     let firstDeltaAt = 0;
     let inactivityTimeout: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
     const enqueueData = (payload: unknown) => {
       if (!streamController || done) return;
       try {
         streamController.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      } catch {
+        // Stream may already be closed by the client.
+      }
+    };
+
+    const enqueueProgress = (
+      event: ChatProgressEventName,
+      details: Partial<Pick<ChatProgressEvent, "runId" | "error">> = {},
+    ) => {
+      if (!streamController || done) return;
+      const payload: ChatProgressEvent = {
+        type: "chat_progress",
+        event,
+        at: new Date().toISOString(),
+        elapsedMs: Date.now() - requestStartedAt,
+        agentId,
+        gatewayAgentId,
+        sessionKey,
+        ...(details.runId ? { runId: details.runId } : {}),
+        ...(details.error ? { error: details.error } : {}),
+      };
+
+      try {
+        streamController.enqueue(encoder.encode(`event: chat_progress\ndata: ${JSON.stringify(payload)}\n\n`));
       } catch {
         // Stream may already be closed by the client.
       }
@@ -467,6 +512,19 @@ export async function POST(request: NextRequest) {
         event: "inactivity-timeout.clear",
         sessionId: diagnosticSessionId,
       });
+    };
+
+    const clearHeartbeat = () => {
+      if (!heartbeatInterval) return;
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    };
+
+    const startHeartbeat = () => {
+      clearHeartbeat();
+      heartbeatInterval = setInterval(() => {
+        enqueueProgress("heartbeat", activeRunId ? { runId: activeRunId } : {});
+      }, 30_000);
     };
 
     const armInactivityTimeout = (reason: string) => {
@@ -527,7 +585,10 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    const finishStream = async (interrupted: boolean) => {
+    const finishStream = async (
+      interrupted: boolean,
+      progressEvent: "run_completed" | "run_aborted" | null = interrupted ? "run_aborted" : "run_completed",
+    ) => {
       if (done) return;
       publishAgentModeDiagnostic({
         scope: "api-chat",
@@ -543,12 +604,16 @@ export async function POST(request: NextRequest) {
       clearInactivityTimeout();
       await recoverMissingAssistantText();
       await persistAssistant(interrupted);
+      if (progressEvent) {
+        enqueueProgress(progressEvent, activeRunId ? { runId: activeRunId } : {});
+      }
       done = true;
       try {
         streamController?.enqueue(encoder.encode("data: [DONE]\n\n"));
         streamController?.close();
       } catch { /* already closed */ }
       if (client) client.off("chat", chatHandler);
+      clearHeartbeat();
       releaseHeldClient();
       publishAgentModeDiagnostic({
         scope: "api-chat",
@@ -593,11 +658,14 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       start(controller) {
         streamController = controller;
+        enqueueProgress("run_started");
+        startHeartbeat();
 
         // Send user message meta event with DB ID
         if (userMessageId) {
           enqueueData({ type: "meta", messageId: userMessageId, role: "user" });
         }
+        enqueueProgress("gateway_send_started");
         enqueueData({
           type: "gateway_send_started",
           agentId,
@@ -619,6 +687,7 @@ export async function POST(request: NextRequest) {
           detail: { elapsedMs: Date.now() - requestStartedAt },
         });
         clearInactivityTimeout();
+        enqueueProgress("run_aborted", activeRunId ? { runId: activeRunId } : {});
         if (client) {
           client.chatAbort({ sessionKey }).catch((err) => {
             console.error("[api/chat] chat.abort failed:", err);
@@ -626,6 +695,7 @@ export async function POST(request: NextRequest) {
         }
         void persistAssistant(true);
         for (const fn of cleanupFns) fn();
+        clearHeartbeat();
         releaseHeldClient();
       },
     });
@@ -702,13 +772,17 @@ export async function POST(request: NextRequest) {
         finishStream(true);
       } else if (state === "error") {
         const errorMsg = (p.errorMessage as string) || "Chat error";
+        enqueueProgress("run_error", {
+          ...(activeRunId ? { runId: activeRunId } : {}),
+          error: errorMsg,
+        });
         const chunk = JSON.stringify({
           choices: [{ delta: { content: `\n\nError: ${errorMsg}` } }],
         });
         streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         fullAssistantText += `\n\nError: ${errorMsg}`;
 
-        finishStream(true);
+        finishStream(true, null);
       }
     };
 
@@ -773,10 +847,11 @@ export async function POST(request: NextRequest) {
         console.error("[api/chat] chat.send failed:", msg);
         if (!cancelled && !done) {
           fullAssistantText += `\n\nError: Gateway error: ${msg}`;
+          enqueueProgress("run_error", { error: msg });
           enqueueData({
             choices: [{ delta: { content: `\n\nError: Gateway error: ${msg}` } }],
           });
-          await finishStream(true);
+          await finishStream(true, null);
         }
       }
     };

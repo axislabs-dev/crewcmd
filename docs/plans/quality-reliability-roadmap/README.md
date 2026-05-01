@@ -32,6 +32,11 @@ CrewCmd's differentiated position:
 
 ## Phase Map
 
+Status as of 2026-05-01: Wave 1 foundation PRs have merged, and Wave 2
+contract and diagnostics work is beginning. The roadmap sequence remains the
+same, but active coordination should now start from Wave 2 in the orchestration
+plan.
+
 | Phase | Focus | Outcome |
 | --- | --- | --- |
 | [Phase 1](phase-1-quality-baseline.md) | Code quality baseline | Safer CI, smaller modules, consistent errors |
@@ -45,8 +50,8 @@ agent, and PR sequencing with a five-workstream concurrency cap.
 
 ## Recommended Order
 
-1. Add quality gates and document high-risk boundaries.
-2. Fix chat streaming so progress can surface immediately.
+1. Treat the merged Wave 1 foundation as complete for coordination purposes.
+2. Begin Wave 2 contract and diagnostics work from the orchestration plan.
 3. Add gateway health, diagnostics, config validation, and harness checks.
 4. Add model discovery and assignment on top of stable runtime plumbing.
 5. Build the desktop shell after chat and runtime behavior are reliable.

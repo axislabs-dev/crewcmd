@@ -9,6 +9,7 @@ import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
 import { assessAgentModelSelection } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 import { syncAgentModelToRuntime } from "@/lib/runtime-agent-model-sync";
+import { resolveAgent } from "@/lib/resolve-agent";
 
 export const dynamic = "force-dynamic";
 interface RouteParams { params: Promise<{ callsign: string }>; }
@@ -41,6 +42,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     if (!readable) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    const resolvedAgent = await resolveAgent(agent.callsign);
     const heartbeats = await withRetry(() => db!.select().from(schema.agentHeartbeats)).catch(() => []);
     const hb = heartbeats.find((h) => (h.callsign ?? "").toLowerCase() === callsign.toLowerCase());
     const runtimeCapabilities = await loadRuntimeCapabilities(agent.runtimeId ?? null);
@@ -82,6 +84,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       visibility: agent.visibility,
       role: agent.role ?? "engineer",
       model: agent.model ?? null,
+      effectiveModel: resolvedAgent?.effectiveModel ?? agent.model ?? null,
+      modelDefaultSource: resolvedAgent?.modelDefaultSource ?? (agent.model ? "agent_override" : "unresolved"),
       workspacePath: agent.workspacePath ?? null,
       canvasPosition: agent.canvasPosition ?? null,
       tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
@@ -153,14 +157,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const [updated] = await withRetry(() => db!.update(schema.agents).set(updates).where(eq(schema.agents.id, agent.id)).returning());
 
     if (typeof updates.model === "string" && updated?.runtimeId && updated.runtimeRef) {
-      const nextRuntimeConfig =
-        updated.runtimeConfig && typeof updated.runtimeConfig === "object" && !Array.isArray(updated.runtimeConfig)
-          ? (updated.runtimeConfig as Record<string, unknown>)
-          : {};
-      const operatingLayer =
-        nextRuntimeConfig.operatingLayer && typeof nextRuntimeConfig.operatingLayer === "object" && !Array.isArray(nextRuntimeConfig.operatingLayer)
-          ? (nextRuntimeConfig.operatingLayer as Record<string, unknown>)
-          : {};
       const fallbackModels = Array.isArray((body.modelAssessment?.fallbackModels ?? null))
         ? body.modelAssessment.fallbackModels.filter((value: unknown): value is string => typeof value === "string")
         : [];

@@ -4,6 +4,7 @@ import { companyRuntimes } from "@/db/schema";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getAgentAccessContext, runtimeOwnershipValues, buildRuntimeReadWhere, canManageCompanyOwnedAgent } from "@/lib/agent-access";
 import { getRequestOrigin } from "@/lib/runtime-callback-url";
+import { deriveRuntimeTrustSummary } from "@/lib/runtime-trust";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function GET() {
         lastPing: companyRuntimes.lastPing,
         metadata: companyRuntimes.metadata,
         createdAt: companyRuntimes.createdAt,
+        updatedAt: companyRuntimes.updatedAt,
         ownerType: companyRuntimes.ownerType,
         ownerUserId: companyRuntimes.ownerUserId,
         ownerCompanyId: companyRuntimes.ownerCompanyId,
@@ -38,6 +40,7 @@ export async function GET() {
       runtimes.map((runtime) => ({
         ...runtime,
         capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
+        trustSummary: deriveRuntimeTrustSummary(runtime),
       }))
     );
   } catch (err) {
@@ -125,6 +128,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...runtime,
       capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
+      trustSummary: deriveRuntimeTrustSummary(runtime),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

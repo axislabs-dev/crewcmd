@@ -33,9 +33,9 @@ CrewCmd's differentiated position:
 ## Phase Map
 
 Status as of 2026-05-01: Wave 1 foundation PRs, Wave 2 contract and
-diagnostics PRs, and Wave 3 chat transparency PRs have merged. The roadmap
-sequence remains the same, but active coordination should now start from Wave 4
-in the orchestration plan.
+diagnostics PRs, Wave 3 chat transparency PRs, and Wave 4 gateway harness work
+have merged. The roadmap sequence remains the same, but active coordination
+should now start from Wave 5 in the orchestration plan.
 
 | Phase | Focus | Outcome |
 | --- | --- | --- |
@@ -55,9 +55,11 @@ agent, and PR sequencing with a five-workstream concurrency cap.
    coordination purposes.
 3. Treat the merged Wave 3 chat transparency stack as complete for coordination
    purposes.
-4. Add runtime routing, event bridge, and gateway harness checks, with explicit
-   approval for runtime routing and schema changes before implementation.
-5. Add model assignment on top of stable runtime plumbing.
+4. Treat the merged Wave 4 gateway harness work as complete for coordination
+   purposes; runtime routing and runtime-scoped persistence remain explicitly
+   approval-gated follow-ups.
+5. Add model discovery UI and model assignment planning on top of stable runtime
+   plumbing.
 6. Build the desktop shell after chat and runtime behavior are reliable.
 
 ## Definition of Done

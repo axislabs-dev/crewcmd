@@ -431,30 +431,32 @@ export async function POST(request: NextRequest) {
         hasCompanyId: Boolean(companyId),
       },
     });
-    const client = await getGatewayClient();
-    const gatewayAcquiredAt = Date.now();
-    publishAgentModeDiagnostic({
-      scope: "api-chat",
-      event: "gateway-client.acquire",
-      sessionId: diagnosticSessionId,
-      detail: { acquireMs: gatewayAcquiredAt - requestStartedAt },
-    });
-    holdClient(client);
-
     // Set up SSE stream
     const encoder = new TextEncoder();
     let streamController: ReadableStreamDefaultController | null = null;
     const cleanupFns: Array<() => void> = [];
+    let client: Awaited<ReturnType<typeof getGatewayClient>> | null = null;
 
     let done = false;
+    let cancelled = false;
     let lastStreamedText = "";
     let fullAssistantText = "";
     let assistantPersisted = false;
     let activeRunId: string | null = null;
     let released = false;
+    let gatewayAcquiredAt = 0;
     let gatewaySentAt = 0;
     let firstDeltaAt = 0;
     let inactivityTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const enqueueData = (payload: unknown) => {
+      if (!streamController || done) return;
+      try {
+        streamController.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      } catch {
+        // Stream may already be closed by the client.
+      }
+    };
 
     const clearInactivityTimeout = () => {
       if (!inactivityTimeout) return;
@@ -494,7 +496,7 @@ export async function POST(request: NextRequest) {
     };
 
     const releaseHeldClient = () => {
-      if (released) return;
+      if (released || !client) return;
       released = true;
       releaseClient(client);
       publishAgentModeDiagnostic({
@@ -505,7 +507,7 @@ export async function POST(request: NextRequest) {
     };
 
     const recoverMissingAssistantText = async () => {
-      if (fullAssistantText) return;
+      if (fullAssistantText || !client) return;
       const recovered = await recoverAssistantTextFromGateway({
         client,
         allowedSessions: allowedEventSessions,
@@ -526,6 +528,7 @@ export async function POST(request: NextRequest) {
     };
 
     const finishStream = async (interrupted: boolean) => {
+      if (done) return;
       publishAgentModeDiagnostic({
         scope: "api-chat",
         event: "stream.finish.start",
@@ -542,10 +545,10 @@ export async function POST(request: NextRequest) {
       await persistAssistant(interrupted);
       done = true;
       try {
-        streamController!.enqueue(encoder.encode("data: [DONE]\n\n"));
-        streamController!.close();
+        streamController?.enqueue(encoder.encode("data: [DONE]\n\n"));
+        streamController?.close();
       } catch { /* already closed */ }
-      client.off("chat", chatHandler);
+      if (client) client.off("chat", chatHandler);
       releaseHeldClient();
       publishAgentModeDiagnostic({
         scope: "api-chat",
@@ -580,12 +583,7 @@ export async function POST(request: NextRequest) {
         );
         // Send assistant message ID to client as a meta event
         if (streamController && !done) {
-          const meta = JSON.stringify({ type: "meta", messageId: msg.id, role: "assistant" });
-          try {
-            streamController.enqueue(encoder.encode(`data: ${meta}\n\n`));
-          } catch {
-            // Stream may already be closed
-          }
+          enqueueData({ type: "meta", messageId: msg.id, role: "assistant" });
         }
       } catch (err) {
         console.error("[api/chat] Failed to persist assistant message:", err);
@@ -598,11 +596,21 @@ export async function POST(request: NextRequest) {
 
         // Send user message meta event with DB ID
         if (userMessageId) {
-          const meta = JSON.stringify({ type: "meta", messageId: userMessageId, role: "user" });
-          controller.enqueue(encoder.encode(`data: ${meta}\n\n`));
+          enqueueData({ type: "meta", messageId: userMessageId, role: "user" });
         }
+        enqueueData({
+          type: "gateway_send_started",
+          agentId,
+          gatewayAgentId,
+          sessionKey,
+          elapsedMs: Date.now() - requestStartedAt,
+        });
+        queueMicrotask(() => {
+          void startGatewayTurn();
+        });
       },
       cancel() {
+        cancelled = true;
         // Client disconnected — persist whatever was streamed so far
         publishAgentModeDiagnostic({
           scope: "api-chat",
@@ -611,10 +619,12 @@ export async function POST(request: NextRequest) {
           detail: { elapsedMs: Date.now() - requestStartedAt },
         });
         clearInactivityTimeout();
-        client.chatAbort({ sessionKey }).catch((err) => {
-          console.error("[api/chat] chat.abort failed:", err);
-        });
-        persistAssistant(true);
+        if (client) {
+          client.chatAbort({ sessionKey }).catch((err) => {
+            console.error("[api/chat] chat.abort failed:", err);
+          });
+        }
+        void persistAssistant(true);
         for (const fn of cleanupFns) fn();
         releaseHeldClient();
       },
@@ -702,47 +712,74 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    client.on("chat", chatHandler);
-    cleanupFns.push(() => {
-      client.off("chat", chatHandler);
-    });
+    const startGatewayTurn = async () => {
+      if (cancelled || done) return;
+      try {
+        client = await getGatewayClient();
+        if (cancelled || done) {
+          releaseHeldClient();
+          return;
+        }
+        gatewayAcquiredAt = Date.now();
+        publishAgentModeDiagnostic({
+          scope: "api-chat",
+          event: "gateway-client.acquire",
+          sessionId: diagnosticSessionId,
+          detail: { acquireMs: gatewayAcquiredAt - requestStartedAt },
+        });
+        holdClient(client);
 
-    // Send the user's message to the gateway
-    try {
-      const sendResult = await client.chatSend({
-        message: outboundMessage,
-        sessionKey,
-      });
-      activeRunId = asString(sendResult.runId);
-      gatewaySentAt = Date.now();
-      publishAgentModeDiagnostic({
-        scope: "api-chat",
-        event: "gateway.chat-send.complete",
-        sessionId: diagnosticSessionId,
-        detail: {
-          activeRunId,
+        client.on("chat", chatHandler);
+        cleanupFns.push(() => {
+          client?.off("chat", chatHandler);
+        });
+
+        // Close only idle streams; active long-running turns reset this on gateway events.
+        armInactivityTimeout("chat-send");
+
+        // Send the user's message to the gateway.
+        const sendResult = await client.chatSend({
+          message: outboundMessage,
+          sessionKey,
+        });
+        if (cancelled || done) return;
+        activeRunId = asString(sendResult.runId);
+        gatewaySentAt = Date.now();
+        publishAgentModeDiagnostic({
+          scope: "api-chat",
+          event: "gateway.chat-send.complete",
+          sessionId: diagnosticSessionId,
+          detail: {
+            activeRunId,
+            elapsedMs: gatewaySentAt - requestStartedAt,
+          },
+        });
+        enqueueData({
+          type: "gateway_send_ack",
+          runId: activeRunId,
+          sessionKey,
           elapsedMs: gatewaySentAt - requestStartedAt,
-        },
-      });
-    } catch (err) {
-      client.off("chat", chatHandler);
-      releaseHeldClient();
-      const msg = err instanceof Error ? err.message : String(err);
-      publishAgentModeDiagnostic({
-        scope: "api-chat",
-        event: "gateway.chat-send.error",
-        sessionId: diagnosticSessionId,
-        detail: { message: msg, elapsedMs: Date.now() - requestStartedAt },
-      });
-      console.error("[api/chat] chat.send failed:", msg);
-      return Response.json(
-        { error: `Gateway error: ${msg}` },
-        { status: 502 }
-      );
-    }
-
-    // Close only idle streams; active long-running turns reset this on gateway events.
-    armInactivityTimeout("chat-send");
+        });
+      } catch (err) {
+        if (client) client.off("chat", chatHandler);
+        releaseHeldClient();
+        const msg = err instanceof Error ? err.message : String(err);
+        publishAgentModeDiagnostic({
+          scope: "api-chat",
+          event: "gateway.chat-send.error",
+          sessionId: diagnosticSessionId,
+          detail: { message: msg, elapsedMs: Date.now() - requestStartedAt },
+        });
+        console.error("[api/chat] chat.send failed:", msg);
+        if (!cancelled && !done) {
+          fullAssistantText += `\n\nError: Gateway error: ${msg}`;
+          enqueueData({
+            choices: [{ delta: { content: `\n\nError: Gateway error: ${msg}` } }],
+          });
+          await finishStream(true);
+        }
+      }
+    };
 
     return new Response(stream, {
       headers: {

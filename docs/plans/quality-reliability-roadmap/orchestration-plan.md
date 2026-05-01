@@ -39,10 +39,10 @@ Status as of 2026-05-01:
 
 - Wave 1 PRs have merged.
 - Wave 2 PRs have merged.
-- Wave 3 is the active starting point for newly available workstream slots.
-- Keep Wave 3 changes independently reviewable; do not combine active history
-  polling, active run state, execution progress UI, or chat hardening smoke
-  coverage in one PR.
+- Wave 3 PRs have merged.
+- Wave 4 is the active starting point for newly available workstream slots.
+- Runtime routing behavior and runtime-scoped persistence remain high-risk; get
+  explicit approval before implementing those changes.
 
 ## Wave 1: Merged
 
@@ -84,10 +84,9 @@ These contract and diagnostics workstreams have completed and merged.
 - If `eslint-config-next` requires dependency lockfile churn, keep it separate
   from `ci-lint-hygiene`.
 
-## Wave 3: Chat Transparency Stack - Starting
+## Wave 3: Chat Transparency Stack - Merged
 
-Start these as the next active workstreams. They are stacked around the
-structured event contract.
+These chat transparency workstreams have completed and merged.
 
 | Branch | PR Title | Depends On | Intent | Risk |
 | --- | --- | --- | --- | --- |
@@ -101,10 +100,13 @@ structured event contract.
 - Do not mix UI work into the immediate SSE PR.
 - Do not mix runtime-scoped gateway routing into Phase 2 chat PRs.
 - Preserve OpenAI-compatible text delta frames until the UI migration is done.
+- Wave 3 is closed for orchestration; follow-up chat work should be tracked as
+  targeted hardening or Wave 4+ integration work.
 
-## Wave 4: Runtime Routing and Event Bridge
+## Wave 4: Runtime Routing and Event Bridge - Starting
 
-These workstreams depend on the runtime-scoped gateway pool.
+Start these as the next active workstreams. They depend on the runtime-scoped
+gateway pool and the Wave 2 diagnostics/config primitives.
 
 | Branch | PR Title | Depends On | Intent | Risk |
 | --- | --- | --- | --- | --- |

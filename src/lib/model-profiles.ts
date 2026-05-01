@@ -27,6 +27,15 @@ export interface AgentModelAssessment {
   status: "matched" | "acceptable" | "needs_review" | "unresolved";
 }
 
+export interface ModelProfileCatalogEntry {
+  id: CrewCmdModelProfile;
+  label: string;
+  providerPreferences: string[];
+  supported: boolean;
+  recommendedModel: string | null;
+  fallbackModels: string[];
+}
+
 const MODEL_PROFILE_LABELS: Record<CrewCmdModelProfile, string> = {
   orchestrator_reasoning: "Orchestrator Reasoning",
   developer_primary: "Developer Primary",
@@ -47,6 +56,24 @@ const MODEL_PROFILE_PROVIDER_PREFERENCES: Record<CrewCmdModelProfile, string[]> 
 
 export function labelModelProfile(profile: CrewCmdModelProfile): string {
   return MODEL_PROFILE_LABELS[profile];
+}
+
+export function listModelProfileCatalog(
+  runtimeCapabilities?: RuntimeCapabilitySnapshot | null
+): ModelProfileCatalogEntry[] {
+  return (Object.keys(MODEL_PROFILE_LABELS) as CrewCmdModelProfile[]).map((profile) => {
+    const primaryModel = runtimeCapabilities ? resolvePrimaryModel(profile, runtimeCapabilities) : null;
+    return {
+      id: profile,
+      label: labelModelProfile(profile),
+      providerPreferences: [...MODEL_PROFILE_PROVIDER_PREFERENCES[profile]],
+      supported: Boolean(primaryModel),
+      recommendedModel: primaryModel,
+      fallbackModels: runtimeCapabilities
+        ? resolveFallbackModels(profile, [], runtimeCapabilities, primaryModel)
+        : [],
+    };
+  });
 }
 
 export function defaultModelProfileForRolePack(rolePack: CrewCmdRolePack): CrewCmdModelProfile {

@@ -19,6 +19,13 @@ interface PoolEntry {
   connectedAt: number;
 }
 
+interface GatewayRuntimeConnection {
+  id: string;
+  gatewayUrl: string | null;
+  authToken?: string | null;
+  metadata?: unknown;
+}
+
 const pool = new Map<string, PoolEntry>();
 
 const MAX_CONNECTION_AGE_MS = 300_000; // 5 minutes
@@ -230,17 +237,7 @@ async function connectWithFallback(params: {
   throw lastError instanceof Error ? lastError : new Error("Failed to connect to gateway");
 }
 
-export async function getGatewayClient(): Promise<GatewayClient> {
-  if (!db) {
-    throw new Error("Database not initialized");
-  }
-
-  const runtime = await withRetry(() =>
-    db!.query.companyRuntimes.findFirst({
-      where: eq(companyRuntimes.isPrimary, true),
-    })
-  );
-
+async function getClientForRuntime(runtime: GatewayRuntimeConnection | null | undefined) {
   if (!runtime) {
     throw new Error("No runtime configured");
   }
@@ -322,4 +319,40 @@ export async function getGatewayClient(): Promise<GatewayClient> {
   });
 
   return client;
+}
+
+export async function getGatewayClientForRuntime(runtimeId: string): Promise<GatewayClient> {
+  if (!db) {
+    throw new Error("Database not initialized");
+  }
+
+  if (!runtimeId) {
+    throw new Error("Runtime id is required");
+  }
+
+  const runtime = await withRetry(() =>
+    db!.query.companyRuntimes.findFirst({
+      where: eq(companyRuntimes.id, runtimeId),
+    })
+  );
+
+  if (!runtime) {
+    throw new Error(`Runtime not found: ${runtimeId}`);
+  }
+
+  return getClientForRuntime(runtime);
+}
+
+export async function getGatewayClient(): Promise<GatewayClient> {
+  if (!db) {
+    throw new Error("Database not initialized");
+  }
+
+  const runtime = await withRetry(() =>
+    db!.query.companyRuntimes.findFirst({
+      where: eq(companyRuntimes.isPrimary, true),
+    })
+  );
+
+  return getClientForRuntime(runtime);
 }

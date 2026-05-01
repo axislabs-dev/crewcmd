@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import { apiError } from "@/lib/api-response";
 import { toSecretMetadata } from "@/lib/service-secrets";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
@@ -17,7 +18,11 @@ export async function GET(request: NextRequest) {
   });
 
   if (!workspace) {
-    return NextResponse.json({ error: "workspaceId or companyId is required" }, { status: 400 });
+    return apiError({
+      status: 400,
+      code: "workspace_required",
+      message: "workspaceId or companyId is required",
+    });
   }
 
   if (!db) {
@@ -50,7 +55,11 @@ export async function POST(request: NextRequest) {
   if (authError) return authError;
 
   if (!db) {
-    return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    return apiError({
+      status: 503,
+      code: "database_unavailable",
+      message: "Database not available",
+    });
   }
 
   try {
@@ -63,16 +72,28 @@ export async function POST(request: NextRequest) {
     });
 
     if (!workspace || !name || value === undefined) {
-      return NextResponse.json({ error: "workspaceId or companyId, name, and value are required" }, { status: 400 });
+      return apiError({
+        status: 400,
+        code: "invalid_secret_request",
+        message: "workspaceId or companyId, name, and value are required",
+      });
     }
 
     if (typeof value !== "string" || value.length === 0) {
-      return NextResponse.json({ error: "value must be a non-empty string" }, { status: 400 });
+      return apiError({
+        status: 400,
+        code: "invalid_secret_value",
+        message: "value must be a non-empty string",
+      });
     }
 
     const normalizedName = String(name).trim();
     if (!normalizedName) {
-      return NextResponse.json({ error: "name is required" }, { status: 400 });
+      return apiError({
+        status: 400,
+        code: "invalid_secret_name",
+        message: "name is required",
+      });
     }
 
     const [existing] = await withRetry(() =>
@@ -123,6 +144,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(toSecretMetadata(created), { status: 201 });
   } catch (err) {
     console.error("[api/service-secrets] POST Error:", err);
-    return NextResponse.json({ error: "Failed to save secret" }, { status: 500 });
+    return apiError({
+      status: 500,
+      code: "secret_save_failed",
+      message: "Failed to save secret",
+    });
   }
 }

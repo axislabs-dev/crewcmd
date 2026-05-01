@@ -40,6 +40,9 @@ CrewCmd's differentiated position:
 | [Phase 4](phase-4-model-management.md) | Model/provider management | Team-aware model selection and validation |
 | [Phase 5](phase-5-desktop-app.md) | Desktop app release path | Releasable desktop shell around CrewCmd |
 
+See the [Concurrent Orchestration Plan](orchestration-plan.md) for branch,
+agent, and PR sequencing with a five-workstream concurrency cap.
+
 ## Recommended Order
 
 1. Add quality gates and document high-risk boundaries.

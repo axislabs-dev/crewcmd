@@ -57,9 +57,27 @@ function makeRequest(body: Record<string, unknown>) {
 async function readFirstChunk(response: Response) {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("No response body");
-  const { value } = await reader.read();
+  const decoder = new TextDecoder();
+  let output = "";
+  for (let i = 0; i < 3; i++) {
+    const { value } = await reader.read();
+    output += decoder.decode(value);
+  }
   await reader.cancel();
-  return new TextDecoder().decode(value);
+  return output;
+}
+
+async function readUntilDone(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  const decoder = new TextDecoder();
+  let output = "";
+
+  for (let i = 0; i < 10 && !output.includes("data: [DONE]"); i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    output += decoder.decode(value);
+  }
+
+  return output;
 }
 
 describe("POST /api/chat", () => {
@@ -86,6 +104,8 @@ describe("POST /api/chat", () => {
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
 
     const firstChunk = await readFirstChunk(response);
+    expect(firstChunk).toContain("event: chat_progress");
+    expect(firstChunk).toContain("\"event\":\"run_started\"");
     expect(firstChunk).toContain("gateway_send_started");
     expect(firstChunk).toContain("sessionKey");
   });
@@ -120,5 +140,56 @@ describe("POST /api/chat", () => {
 
     await reader.cancel();
     expect(chatAbort).toHaveBeenCalledWith({ sessionKey: "main" });
+  });
+
+  it("streams structured progress events alongside OpenAI-compatible text deltas", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    const chatSend = vi.fn().mockResolvedValue({ runId: "run-1" });
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "chat") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend,
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const first = new TextDecoder().decode((await reader.read()).value);
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    const chatHandler = chatHandlers[0];
+    chatHandler({
+      state: "delta",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "hi" },
+    });
+    chatHandler({
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "hi there" },
+    });
+
+    const streamed = first + await readUntilDone(reader);
+
+    expect(streamed).toContain("event: chat_progress");
+    expect(streamed).toContain("\"event\":\"run_started\"");
+    expect(streamed).toContain("\"event\":\"gateway_send_started\"");
+    expect(streamed).toContain("\"event\":\"run_completed\"");
+    expect(streamed).toContain("\"type\":\"gateway_send_started\"");
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"hi\"}}]");
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\" there\"}}]");
+    expect(streamed).toContain("data: [DONE]");
   });
 });

@@ -1,7 +1,9 @@
-const path = require("node:path");
-const { app, BrowserWindow, Notification, ipcMain, shell } = require("electron");
-
 const DEFAULT_SERVER_URL = "http://localhost:3000";
+let app = null;
+let BrowserWindow = null;
+let Notification = null;
+let ipcMain = null;
+let shell = null;
 let currentServerUrl = null;
 let mainWindow = null;
 
@@ -149,7 +151,7 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: `${__dirname}/preload.cjs`,
       sandbox: true,
     },
   });
@@ -169,7 +171,14 @@ async function createWindow() {
   await mainWindow.loadURL(serverUrl);
 }
 
-app.whenReady().then(() => {
+async function bootstrap() {
+  ({ app, BrowserWindow, Notification, ipcMain, shell } = await import("electron"));
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+
+  await app.whenReady();
   registerBridgeHandlers();
 
   createWindow().catch((error) => {
@@ -185,8 +194,9 @@ app.whenReady().then(() => {
       });
     }
   });
-});
+}
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+bootstrap().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });

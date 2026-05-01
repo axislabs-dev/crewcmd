@@ -28,6 +28,7 @@ Everything you need to get started, self-host, and contribute.
 - [API Reference](API.md) — Full REST API documentation
 - [Architecture](architecture/) — System design and technical specs
 - [Specifications](specs/) — Feature specs and RFCs
+- [Plans](plans/) — Roadmaps and implementation plans
 
 ## Contributing
 

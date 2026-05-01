@@ -1,6 +1,8 @@
-const { app, BrowserWindow, shell } = require("electron");
+const path = require("node:path");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 
 const DEFAULT_SERVER_URL = "http://localhost:3000";
+let currentServerUrl = null;
 
 function resolveServerUrl() {
   const rawUrl = process.env.CREWCMD_DESKTOP_SERVER_URL || DEFAULT_SERVER_URL;
@@ -32,8 +34,49 @@ function isSameOrigin(targetUrl, serverOrigin) {
   }
 }
 
+function bridgeOk(data) {
+  return { ok: true, data };
+}
+
+function bridgeFailure(code, message, retryable = false) {
+  return { ok: false, code, message, retryable };
+}
+
+function isSupportedExternalUrl(targetUrl) {
+  try {
+    const url = new URL(targetUrl);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function registerBridgeHandlers() {
+  ipcMain.handle("desktop.app.getInfo", () =>
+    bridgeOk({
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      releaseChannel: process.env.CREWCMD_DESKTOP_RELEASE_CHANNEL || "development",
+      shellMode: "server-url",
+    })
+  );
+
+  ipcMain.handle("desktop.server.getUrl", () => bridgeOk({ url: currentServerUrl || resolveServerUrl() }));
+
+  ipcMain.handle("desktop.shell.openExternal", async (_event, url) => {
+    if (!isSupportedExternalUrl(url)) {
+      return bridgeFailure("invalid_input", "Unsupported external URL", false);
+    }
+
+    await shell.openExternal(url);
+    return bridgeOk({ opened: true });
+  });
+}
+
 async function createWindow() {
   const serverUrl = resolveServerUrl();
+  currentServerUrl = serverUrl;
   const serverOrigin = new URL(serverUrl).origin;
 
   const mainWindow = new BrowserWindow({
@@ -45,6 +88,7 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, "preload.cjs"),
       sandbox: true,
     },
   });
@@ -65,6 +109,8 @@ async function createWindow() {
 }
 
 app.whenReady().then(() => {
+  registerBridgeHandlers();
+
   createWindow().catch((error) => {
     console.error(error);
     app.quit();

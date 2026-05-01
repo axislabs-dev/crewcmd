@@ -1,8 +1,9 @@
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Notification, ipcMain, shell } = require("electron");
 
 const DEFAULT_SERVER_URL = "http://localhost:3000";
 let currentServerUrl = null;
+let mainWindow = null;
 
 function resolveServerUrl() {
   const rawUrl = process.env.CREWCMD_DESKTOP_SERVER_URL || DEFAULT_SERVER_URL;
@@ -51,6 +52,37 @@ function isSupportedExternalUrl(targetUrl) {
   }
 }
 
+function normalizeNotificationPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const title = typeof payload.title === "string" ? payload.title.trim() : "";
+  const body = typeof payload.body === "string" ? payload.body.trim() : "";
+  const route = typeof payload.route === "string" ? payload.route.trim() : "";
+  const severity = typeof payload.severity === "string" ? payload.severity.trim() : "info";
+
+  if (!title || !body) return null;
+  if (route && !route.startsWith("/")) return null;
+
+  return {
+    id: typeof payload.id === "string" ? payload.id : undefined,
+    title,
+    body,
+    route: route || "/",
+    severity,
+  };
+}
+
+function navigateToCrewCmdRoute(route) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const serverUrl = currentServerUrl || resolveServerUrl();
+  const nextUrl = new URL(route, serverUrl);
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.loadURL(nextUrl.toString()).catch(() => undefined);
+}
+
 function registerBridgeHandlers() {
   ipcMain.handle("desktop.app.getInfo", () =>
     bridgeOk({
@@ -72,6 +104,35 @@ function registerBridgeHandlers() {
     await shell.openExternal(url);
     return bridgeOk({ opened: true });
   });
+
+  ipcMain.handle("desktop.notifications.getPermission", () =>
+    bridgeOk({ permission: Notification.isSupported() ? "granted" : "unsupported" })
+  );
+
+  ipcMain.handle("desktop.notifications.requestPermission", () =>
+    bridgeOk({ permission: Notification.isSupported() ? "granted" : "unsupported" })
+  );
+
+  ipcMain.handle("desktop.notifications.show", (_event, payload) => {
+    if (!Notification.isSupported()) {
+      return bridgeFailure("unsupported_platform", "Desktop notifications are not supported", false);
+    }
+
+    const notificationPayload = normalizeNotificationPayload(payload);
+    if (!notificationPayload) {
+      return bridgeFailure("invalid_input", "Notification title, body, and route are required", false);
+    }
+
+    const notification = new Notification({
+      title: notificationPayload.title,
+      body: notificationPayload.body,
+      urgency: notificationPayload.severity === "critical" ? "critical" : "normal",
+    });
+    notification.on("click", () => navigateToCrewCmdRoute(notificationPayload.route));
+    notification.show();
+
+    return bridgeOk({ id: notificationPayload.id ?? null, shown: true });
+  });
 }
 
 async function createWindow() {
@@ -79,7 +140,7 @@ async function createWindow() {
   currentServerUrl = serverUrl;
   const serverOrigin = new URL(serverUrl).origin;
 
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,

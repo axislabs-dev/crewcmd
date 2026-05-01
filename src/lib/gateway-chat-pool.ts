@@ -24,9 +24,14 @@ interface GatewayRuntimeConnection {
   gatewayUrl: string | null;
   authToken?: string | null;
   metadata?: unknown;
+  isPrimary?: boolean;
+  status?: string | null;
+  lastPing?: Date | string | null;
+  updatedAt?: Date | string | null;
 }
 
 const pool = new Map<string, PoolEntry>();
+const lastConnectionByRuntime = new Map<string, GatewayConnectionDiagnostic>();
 
 const MAX_CONNECTION_AGE_MS = 300_000; // 5 minutes
 const LOCAL_OPENCLAW_CONFIG_PATH = join(homedir(), ".openclaw", "openclaw.json");
@@ -36,6 +41,40 @@ const LOCAL_OPENCLAW_CONFIG_PATH = join(homedir(), ".openclaw", "openclaw.json")
  * Call release() when done.
  */
 const activeClientHolds = new Map<GatewayClient, number>();
+
+export type GatewayFailureClassification =
+  | "configuration"
+  | "authentication"
+  | "pairing_required"
+  | "timeout"
+  | "network"
+  | "unknown";
+
+export interface GatewayConnectionDiagnostic {
+  status: "connected" | "failed";
+  at: string;
+  url: string | null;
+  error: string | null;
+  classification: GatewayFailureClassification | null;
+}
+
+export interface GatewayRuntimeDiagnostic {
+  id: string;
+  gatewayUrl: string | null;
+  hasAuthToken: boolean;
+  isPrimary: boolean;
+  status: string | null;
+  lastPing: string | null;
+  updatedAt: string | null;
+  metadata: Record<string, unknown> | null;
+  pool: {
+    connected: boolean;
+    ageMs: number | null;
+    held: boolean;
+    holds: number;
+  };
+  lastConnection: GatewayConnectionDiagnostic | null;
+}
 
 function activeClientCount() {
   return activeClientHolds.size;
@@ -86,12 +125,148 @@ export function getGatewayPoolDiagnostics() {
   };
 }
 
+export function classifyGatewayFailure(error: unknown): GatewayFailureClassification {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const text = message.toLowerCase();
+
+  if (
+    text.includes("no runtime configured") ||
+    text.includes("no gateway url") ||
+    text.includes("runtime not found")
+  ) {
+    return "configuration";
+  }
+  if (text.includes("pairing_required") || text.includes("pairing required")) {
+    return "pairing_required";
+  }
+  if (text.includes("unauthorized") || text.includes("forbidden") || text.includes("auth") || text.includes("token")) {
+    return "authentication";
+  }
+  if (text.includes("timeout") || text.includes("timed out") || text.includes("etimedout")) {
+    return "timeout";
+  }
+  if (
+    text.includes("econnrefused") ||
+    text.includes("econnreset") ||
+    text.includes("enotfound") ||
+    text.includes("network") ||
+    text.includes("socket") ||
+    text.includes("failed to connect")
+  ) {
+    return "network";
+  }
+
+  return "unknown";
+}
+
+export function getGatewayDiagnosticsForRuntimes(
+  runtimes: GatewayRuntimeConnection[],
+): { pool: ReturnType<typeof getGatewayPoolDiagnostics>; runtimes: GatewayRuntimeDiagnostic[] } {
+  return {
+    pool: getGatewayPoolDiagnostics(),
+    runtimes: runtimes.map((runtime) => {
+      const entry = pool.get(runtime.id);
+      const holds = entry ? (activeClientHolds.get(entry.client) ?? 0) : 0;
+
+      return {
+        id: runtime.id,
+        gatewayUrl: redactGatewayUrl(runtime.gatewayUrl),
+        hasAuthToken: Boolean(runtime.authToken),
+        isPrimary: Boolean(runtime.isPrimary),
+        status: runtime.status ?? null,
+        lastPing: toIsoString(runtime.lastPing),
+        updatedAt: toIsoString(runtime.updatedAt),
+        metadata: redactGatewayMetadata(runtime.metadata),
+        pool: {
+          connected: Boolean(entry?.client.isConnected),
+          ageMs: entry ? Date.now() - entry.connectedAt : null,
+          held: holds > 0,
+          holds,
+        },
+        lastConnection: lastConnectionByRuntime.get(runtime.id) ?? null,
+      };
+    }),
+  };
+}
+
 export function resetGatewayPoolForTests() {
   for (const entry of pool.values()) {
     entry.client.close();
   }
   pool.clear();
   activeClientHolds.clear();
+  lastConnectionByRuntime.clear();
+}
+
+function toIsoString(value: Date | string | null | undefined) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? null : date.toISOString();
+}
+
+function redactGatewayUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.split("?")[0]?.split("#")[0] ?? value;
+  }
+}
+
+function redactGatewayMetadata(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata as Record<string, unknown>)) {
+    if (isSensitiveMetadataKey(key)) {
+      redacted[key] = "[redacted]";
+    } else if (value instanceof Date) {
+      redacted[key] = value.toISOString();
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      redacted[key] = redactGatewayMetadata(value);
+    } else {
+      redacted[key] = value;
+    }
+  }
+
+  return redacted;
+}
+
+function isSensitiveMetadataKey(key: string) {
+  return /token|secret|password|credential|private|pem|key/i.test(key);
+}
+
+function rememberConnectionStatus(
+  runtimeId: string,
+  status: GatewayConnectionDiagnostic["status"],
+  url: string | null,
+  error: unknown = null,
+) {
+  const errorMessage = error instanceof Error ? error.message : error ? String(error) : null;
+
+  lastConnectionByRuntime.set(runtimeId, {
+    status,
+    at: new Date().toISOString(),
+    url: redactGatewayUrl(url),
+    error: redactDiagnosticMessage(errorMessage),
+    classification: error ? classifyGatewayFailure(error) : null,
+  });
+}
+
+function redactDiagnosticMessage(message: string | null) {
+  if (!message) return null;
+
+  return message
+    .replace(/wss?:\/\/[^\s,)]+/gi, (value) => redactGatewayUrl(value) ?? "[redacted-url]")
+    .replace(/https?:\/\/[^\s,)]+/gi, (value) => redactGatewayUrl(value) ?? "[redacted-url]")
+    .replace(/(token|secret|password|credential|privateKey|apiKey)=([^&\s]+)/gi, "$1=[redacted]");
 }
 
 function toHttpUrl(wsUrl: string): string {
@@ -215,6 +390,7 @@ async function connectWithFallback(params: {
         console.warn("[gateway-pool] Retrying runtime via fallback URL:", url);
       }
       await client.connect();
+      rememberConnectionStatus(params.runtimeId, "connected", url);
       if (url !== params.storedGatewayUrl) {
         await repairRuntimeUrl({
           runtimeId: params.runtimeId,
@@ -225,6 +401,7 @@ async function connectWithFallback(params: {
       return { client, connectedUrl: url };
     } catch (err) {
       lastError = err;
+      rememberConnectionStatus(params.runtimeId, "failed", url, err);
       client.close();
       console.error(
         "[gateway-pool] Connection failed:",

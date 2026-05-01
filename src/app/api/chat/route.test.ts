@@ -40,9 +40,10 @@ vi.mock("@/lib/chat-recovery", () => ({
   selectRecoveredAssistantText: (params: unknown) => mockSelectRecoveredAssistantText(params),
 }));
 
+const mockPublishAgentModeDiagnostic = vi.fn();
 vi.mock("@/lib/agent-mode-diagnostics", () => ({
   createAgentModeSessionId: vi.fn(() => "diag-chat-route"),
-  publishAgentModeDiagnostic: vi.fn(),
+  publishAgentModeDiagnostic: (...args: unknown[]) => mockPublishAgentModeDiagnostic(...args),
 }));
 
 import { POST } from "./route";
@@ -372,6 +373,63 @@ describe("POST /api/chat", () => {
 
       expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"from history\"}}]");
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not log optional chat history RPC timeouts as API errors", async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const chatHandlers: Array<(payload: unknown) => void> = [];
+      const chatHistory = vi.fn().mockRejectedValue(new Error("RPC timeout: chat.history"));
+      mockGetGatewayClient.mockResolvedValueOnce({
+        on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+          if (event === "chat") chatHandlers.push(handler);
+        }),
+        off: vi.fn(),
+        chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+        chatAbort: vi.fn(() => Promise.resolve()),
+        chatHistory,
+        rpc: vi.fn().mockResolvedValue({ sessions: [] }),
+      });
+
+      const response = await POST(makeRequest({
+        messages: [{ role: "user", content: "hello" }],
+        agent: "main",
+      }));
+      const reader = response.body!.getReader();
+
+      await reader.read();
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.waitFor(() => {
+        expect(chatHistory).toHaveBeenCalledWith({ sessionKey: "main", limit: 25 });
+        expect(chatHandlers).toHaveLength(1);
+      });
+
+      chatHandlers[0]({
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { content: "" },
+      });
+      await readUntilDone(reader);
+
+      expect(consoleError).not.toHaveBeenCalledWith(
+        expect.stringContaining("Failed to poll chat history"),
+        expect.any(Error),
+      );
+      expect(mockPublishAgentModeDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "history-poll.timeout",
+          detail: { sessionKey: "main" },
+        }),
+      );
+    } finally {
+      consoleError.mockRestore();
       vi.useRealTimers();
     }
   });

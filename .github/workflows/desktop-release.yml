@@ -19,6 +19,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   package:
     name: Package ${{ matrix.platform }} ${{ matrix.arch }}
@@ -50,15 +53,15 @@ jobs:
           - platform: linux
             runner: ubuntu-24.04-arm
             arch: arm64
-            args: --linux AppImage deb --arm64
+            args: --linux AppImage --arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -113,7 +116,7 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: desktop-artifacts
           merge-multiple: true
@@ -151,7 +154,7 @@ jobs:
             - Windows x64: `CrewCmd-*-win-x64.exe`
             - Windows ARM64: `CrewCmd-*-win-arm64.exe`
             - Linux x64: `CrewCmd-*-linux-x64.AppImage`, `.deb`, or `.rpm`
-            - Linux ARM64: `CrewCmd-*-linux-arm64.AppImage` or `.deb`
+            - Linux ARM64: `CrewCmd-*-linux-arm64.AppImage`
 
             ### Installation Notes
             - macOS: unsigned builds may require approving the app in System Settings.

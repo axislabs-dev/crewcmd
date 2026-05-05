@@ -214,6 +214,12 @@ describe("POST /api/chat", () => {
       message: { content: "hi" },
     });
     chatHandler({
+      stream: "status",
+      sessionKey: "main",
+      runId: "run-1",
+      data: { label: "Shelling", phase: "start", detail: "searching files" },
+    });
+    chatHandler({
       state: "final",
       sessionKey: "main",
       runId: "run-1",
@@ -225,6 +231,8 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("event: chat_progress");
     expect(streamed).toContain("\"event\":\"run_started\"");
     expect(streamed).toContain("\"event\":\"gateway_send_started\"");
+    expect(streamed).toContain("\"event\":\"tool_updated\"");
+    expect(streamed).toContain("\"name\":\"Shelling\"");
     expect(streamed).toContain("\"event\":\"run_completed\"");
     expect(streamed).toContain("\"type\":\"gateway_send_started\"");
     expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"hi\"}}]");

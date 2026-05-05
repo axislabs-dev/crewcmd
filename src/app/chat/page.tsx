@@ -1461,84 +1461,98 @@ export default function ChatPage() {
         fullContent = "";
         // Track unspoken buffer for sentence-level TTS
         let unspokenBuffer = "";
+        let sseBuffer = "";
         spokenSentencesRef.current = 0;
         ttsQueueRef.current = [];
         isSpeakingQueueRef.current = false;
+
+        const handleSseData = (data: string) => {
+          if (data === "[DONE]") return;
+
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
+              setExecutionProgress(parsed);
+              useActiveChatRunStore.getState().applyProgressEvent(parsed);
+              return;
+            }
+
+            if (parsed.type === "gateway_send_ack") {
+              useActiveChatRunStore.getState().acknowledgeRun({
+                sessionKey: parsed.sessionKey,
+                runId: parsed.runId,
+              });
+              return;
+            }
+
+            // Handle meta events (message IDs from server-side persistence)
+            if (parsed.type === "meta" && parsed.role === "user") {
+              // Replace optimistic user message with server-confirmed one
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id.startsWith("optimistic-") && m.role === "user"
+                    ? { ...m, id: parsed.messageId }
+                    : m
+                )
+              );
+              return;
+            }
+
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              if (!firstDeltaSeenRef.current) {
+                firstDeltaSeenRef.current = true;
+                if (thinkingAckTimerRef.current) {
+                  clearTimeout(thinkingAckTimerRef.current);
+                  thinkingAckTimerRef.current = null;
+                }
+                if (voiceLatencyRef.current && !voiceLatencyRef.current.firstDeltaAt) {
+                  voiceLatencyRef.current.firstDeltaAt = performance.now();
+                }
+              }
+              fullContent += delta;
+              streamingContentRef.current = fullContent;
+              setStreamingContent(fullContent);
+
+              // Sentence-level TTS: extract complete sentences and queue them
+              if (shouldSpeakResponses) {
+                unspokenBuffer += delta;
+                const extracted = extractSpeakableSegments(unspokenBuffer);
+                unspokenBuffer = extracted.remaining;
+                for (const completeSentence of extracted.sentences) {
+                  queueSentenceForTTS(completeSentence);
+                  spokenSentencesRef.current++;
+                }
+              }
+            }
+          } catch {
+            // Skip malformed JSON frames.
+          }
+        };
+
+        const handleSseFrame = (frame: string) => {
+          const dataLines = frame
+            .split("\n")
+            .filter((line) => line.startsWith("data: "))
+            .map((line) => line.slice(6));
+          if (dataLines.length === 0) return;
+          handleSseData(dataLines.join("\n"));
+        };
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          sseBuffer += decoder.decode(value, { stream: true });
+          const frames = sseBuffer.split("\n\n");
+          sseBuffer = frames.pop() ?? "";
 
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
-
-            try {
-              const parsed = JSON.parse(data);
-
-              if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
-                setExecutionProgress(parsed);
-                useActiveChatRunStore.getState().applyProgressEvent(parsed);
-                continue;
-              }
-
-              if (parsed.type === "gateway_send_ack") {
-                useActiveChatRunStore.getState().acknowledgeRun({
-                  sessionKey: parsed.sessionKey,
-                  runId: parsed.runId,
-                });
-                continue;
-              }
-
-              // Handle meta events (message IDs from server-side persistence)
-              if (parsed.type === "meta" && parsed.role === "user") {
-                // Replace optimistic user message with server-confirmed one
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id.startsWith("optimistic-") && m.role === "user"
-                      ? { ...m, id: parsed.messageId }
-                      : m
-                  )
-                );
-                continue;
-              }
-
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) {
-                if (!firstDeltaSeenRef.current) {
-                  firstDeltaSeenRef.current = true;
-                  if (thinkingAckTimerRef.current) {
-                    clearTimeout(thinkingAckTimerRef.current);
-                    thinkingAckTimerRef.current = null;
-                  }
-                  if (voiceLatencyRef.current && !voiceLatencyRef.current.firstDeltaAt) {
-                    voiceLatencyRef.current.firstDeltaAt = performance.now();
-                  }
-                }
-                fullContent += delta;
-                streamingContentRef.current = fullContent;
-                setStreamingContent(fullContent);
-
-                // Sentence-level TTS: extract complete sentences and queue them
-                if (shouldSpeakResponses) {
-                  unspokenBuffer += delta;
-                  const extracted = extractSpeakableSegments(unspokenBuffer);
-                  unspokenBuffer = extracted.remaining;
-                  for (const completeSentence of extracted.sentences) {
-                    queueSentenceForTTS(completeSentence);
-                    spokenSentencesRef.current++;
-                  }
-                }
-              }
-            } catch {
-              // Skip malformed JSON chunks
-            }
+          for (const frame of frames) {
+            handleSseFrame(frame);
           }
         }
+        if (sseBuffer.trim()) handleSseFrame(sseBuffer);
 
         // Queue any remaining unspoken text
         if (shouldSpeakResponses && unspokenBuffer.trim()) {

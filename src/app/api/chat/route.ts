@@ -218,8 +218,13 @@ function stringifyShort(value: unknown, maxLength = 160) {
 }
 
 function extractToolProgress(payload: Record<string, unknown>) {
-  if (payload.stream !== "tool") return null;
-  const data = asRecord(payload.data) ?? payload;
+  const stream = firstString(payload.stream, payload.event);
+  const data = asRecord(payload.data) ?? asRecord(payload.payload) ?? payload;
+  const isToolEvent = stream === "tool" ||
+    stream === "tool_call" ||
+    stream === "agent.tool" ||
+    Boolean(firstString(data.toolCallId, data.tool_call_id, data.toolName, data.tool_name));
+  if (!isToolEvent) return null;
   const toolCallId = firstString(data.toolCallId, data.tool_call_id, payload.toolCallId, payload.tool_call_id);
   const name = firstString(data.name, data.toolName, data.tool_name, payload.toolName, payload.tool_name) ?? "tool";
   const phase = firstString(data.phase, data.status, data.state) ?? "update";
@@ -240,6 +245,47 @@ function extractToolProgress(payload: Record<string, unknown>) {
       ...(toolCallId ? { id: toolCallId } : {}),
       name,
       status: phase,
+      ...(detail ? { detail } : {}),
+    },
+  };
+}
+
+function extractActivityProgress(payload: Record<string, unknown>) {
+  const data = asRecord(payload.data) ?? asRecord(payload.payload) ?? payload;
+  const label = firstString(
+    data.label,
+    data.title,
+    data.summary,
+    data.message,
+    data.statusText,
+    data.status_text,
+    data.command,
+    data.name,
+    payload.label,
+    payload.title,
+    payload.message,
+  );
+  if (!label) return null;
+
+  const stream = firstString(payload.stream, payload.event);
+  const phase = firstString(data.phase, data.status, data.state, payload.state);
+  const kind = firstString(data.kind, data.type, stream) ?? "activity";
+  const detail = stringifyShort(
+    data.detail ??
+    data.description ??
+    data.args ??
+    data.arguments ??
+    data.input ??
+    data.output ??
+    data.result,
+    220
+  );
+
+  return {
+    event: "tool_updated" as ChatProgressEventName,
+    activeTool: {
+      name: label,
+      status: phase ?? kind,
       ...(detail ? { detail } : {}),
     },
   };
@@ -903,6 +949,7 @@ export async function POST(request: NextRequest) {
 
       const state = p.state as string;
       const toolProgress = extractToolProgress(p);
+      const activityProgress = toolProgress ? null : extractActivityProgress(p);
       armInactivityTimeout(`gateway-${state || toolProgress?.event || "event"}`);
       publishAgentModeDiagnostic({
         scope: "api-chat",
@@ -921,6 +968,11 @@ export async function POST(request: NextRequest) {
         enqueueProgress(toolProgress.event, {
           ...(activeRunId ? { runId: activeRunId } : {}),
           activeTool: toolProgress.activeTool,
+        });
+      } else if (activityProgress) {
+        enqueueProgress(activityProgress.event, {
+          ...(activeRunId ? { runId: activeRunId } : {}),
+          activeTool: activityProgress.activeTool,
         });
       }
 

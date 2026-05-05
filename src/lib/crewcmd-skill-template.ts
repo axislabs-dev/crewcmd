@@ -344,11 +344,32 @@ DELETE ${baseUrl}/api/agents/{callsign}/skills/{skillId}
 
 ### Heartbeat
 
+\`\`\`bash
+curl -X POST -H "Authorization: Bearer $HEARTBEAT_SECRET" \\
+  -H "X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID" \\
+  -H "Content-Type: application/json" \\
+  -d '{"agents":[{"agent_id":"YOUR_AGENT_ID","callsign":"YOUR_CALLSIGN","status":"active","last_active":"'"\$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}]}' \\
+  "${baseUrl}/api/agents/heartbeat"
 \`\`\`
-POST ${baseUrl}/api/agents/heartbeat
+
+Payload shape:
+
+\`\`\`json
 Content-Type: application/json
 
-{ "agentId": "uuid", "status": "active", "metadata": {} }
+{
+  "agents": [
+    {
+      "agent_id": "uuid",
+      "callsign": "neo",
+      "status": "active",
+      "current_task": "optional short status",
+      "last_active": "2026-05-06T00:00:00Z",
+      "session_count": 1,
+      "raw_data": {}
+    }
+  ]
+}
 \`\`\`
 
 ---

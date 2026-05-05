@@ -7,6 +7,12 @@ export type ExecutionProgressEvent = {
   elapsedMs?: number;
   runId?: string;
   error?: string;
+  activeTool?: {
+    id?: string;
+    name?: string;
+    status?: string | null;
+    detail?: string;
+  };
 };
 
 type ExecutionPhase = "run-started" | "thinking" | "tool" | "waiting" | "completed" | "error";
@@ -39,8 +45,8 @@ function phaseFromProgress(
 
   const event = progress.event.toLowerCase();
   if (event.includes("error") || event.includes("abort")) return "error";
-  if (event.includes("completed") || event.includes("complete")) return "completed";
   if (event.includes("tool")) return "tool";
+  if (event.includes("completed") || event.includes("complete")) return "completed";
   if (event.includes("waiting") || event.includes("heartbeat")) return "waiting";
   if (event.includes("thinking") || event.includes("gateway_send")) return "thinking";
   if (event.includes("started") || event.includes("start")) return "run-started";
@@ -55,6 +61,19 @@ function formatElapsed(ms: number | undefined) {
   return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
 }
 
+function labelFromProgress(progress: ExecutionProgressEvent | null, phase: ExecutionPhase) {
+  const toolName = progress?.activeTool?.name;
+  const toolStatus = progress?.activeTool?.status;
+
+  if (phase === "tool" && toolName) {
+    if (toolStatus === "result" || progress?.event === "tool_completed") return `Completed ${toolName}`;
+    if (toolStatus === "start" || progress?.event === "tool_started") return `Calling ${toolName}`;
+    return `Using ${toolName}`;
+  }
+
+  return PHASES.find((item) => item.phase === phase)?.label ?? "Working";
+}
+
 export function ExecutionProgressPanel({
   progress,
   isLoading,
@@ -67,6 +86,7 @@ export function ExecutionProgressPanel({
   const elapsed = formatElapsed(progress?.elapsedMs);
   const activeIndex = PHASES.findIndex((item) => item.phase === phase);
   const isTerminal = phase === "completed" || phase === "error";
+  const label = labelFromProgress(progress, phase);
 
   return (
     <div
@@ -79,7 +99,7 @@ export function ExecutionProgressPanel({
           style={{ backgroundColor: phase === "error" ? "rgb(248 113 113)" : agentColor }}
         />
         <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
-          {PHASES[activeIndex]?.label}
+          {label}
         </span>
         {elapsed && (
           <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
@@ -108,6 +128,11 @@ export function ExecutionProgressPanel({
           );
         })}
       </div>
+      {progress?.activeTool?.detail && phase === "tool" && (
+        <div className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">
+          {progress.activeTool.detail}
+        </div>
+      )}
       {phase === "error" && progress?.error && (
         <div className="mt-1 truncate text-[11px] text-red-300">{progress.error}</div>
       )}

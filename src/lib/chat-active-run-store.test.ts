@@ -49,17 +49,17 @@ describe("chat-active-run-store", () => {
 
     const accepted = useActiveChatRunStore.getState().applyProgressEvent({
       type: "chat_progress",
-      event: "heartbeat",
+      event: "tool_started",
       at: "2026-05-01T00:00:02.000Z",
       sessionKey: "main",
       runId: "run-1",
-      activeTool: { name: "sessions_send", status: "running" },
+      activeTool: { name: "sessions_send", status: "start", detail: "{\"message\":\"checking status\"}" },
       activeSubagent: "writer",
     });
 
     expect(accepted).toBe(true);
     expect(useActiveChatRunStore.getState()).toMatchObject({
-      activeTool: { name: "sessions_send", status: "running" },
+      activeTool: { name: "sessions_send", status: "start", detail: "{\"message\":\"checking status\"}" },
       activeSubagent: { name: "writer", status: null },
       terminalStatus: "running",
     });

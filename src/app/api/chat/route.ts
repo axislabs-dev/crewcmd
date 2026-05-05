@@ -20,6 +20,9 @@ type ChatProgressEventName =
   | "run_started"
   | "gateway_send_started"
   | "heartbeat"
+  | "tool_started"
+  | "tool_updated"
+  | "tool_completed"
   | "run_completed"
   | "run_error"
   | "run_aborted";
@@ -34,6 +37,12 @@ type ChatProgressEvent = {
   sessionKey: string;
   runId?: string;
   error?: string;
+  activeTool?: {
+    id?: string;
+    name: string;
+    status?: string;
+    detail?: string;
+  };
 };
 
 /**
@@ -186,6 +195,53 @@ function extractEventRunIds(payload: Record<string, unknown>) {
     payload.parentRunId,
     payload.parent_run_id,
   ].map(asString).filter((value): value is string => Boolean(value));
+}
+
+function stringifyShort(value: unknown, maxLength = 160) {
+  if (value === undefined || value === null) return null;
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else if (typeof value === "number" || typeof value === "boolean") {
+    text = String(value);
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+  }
+  text = text.replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function extractToolProgress(payload: Record<string, unknown>) {
+  if (payload.stream !== "tool") return null;
+  const data = asRecord(payload.data) ?? payload;
+  const toolCallId = firstString(data.toolCallId, data.tool_call_id, payload.toolCallId, payload.tool_call_id);
+  const name = firstString(data.name, data.toolName, data.tool_name, payload.toolName, payload.tool_name) ?? "tool";
+  const phase = firstString(data.phase, data.status, data.state) ?? "update";
+
+  const event: ChatProgressEventName = phase === "start"
+    ? "tool_started"
+    : phase === "result" || phase === "end" || phase === "complete" || phase === "completed"
+      ? "tool_completed"
+      : "tool_updated";
+
+  const detail = phase === "start"
+    ? stringifyShort(data.args ?? data.arguments ?? data.input)
+    : stringifyShort(data.partialResult ?? data.partial_result ?? data.result ?? data.output);
+
+  return {
+    event,
+    activeTool: {
+      ...(toolCallId ? { id: toolCallId } : {}),
+      name,
+      status: phase,
+      ...(detail ? { detail } : {}),
+    },
+  };
 }
 
 function sessionMatches(eventSession: string | null, allowedSessions: string[]) {
@@ -536,7 +592,7 @@ export async function POST(request: NextRequest) {
 
     const enqueueProgress = (
       event: ChatProgressEventName,
-      details: Partial<Pick<ChatProgressEvent, "runId" | "error">> = {},
+      details: Partial<Pick<ChatProgressEvent, "runId" | "error" | "activeTool">> = {},
     ) => {
       if (!streamController || done) return;
       const payload: ChatProgressEvent = {
@@ -549,6 +605,7 @@ export async function POST(request: NextRequest) {
         sessionKey,
         ...(details.runId ? { runId: details.runId } : {}),
         ...(details.error ? { error: details.error } : {}),
+        ...(details.activeTool ? { activeTool: details.activeTool } : {}),
       };
 
       try {
@@ -842,7 +899,8 @@ export async function POST(request: NextRequest) {
       if (!matchesSession) return;
 
       const state = p.state as string;
-      armInactivityTimeout(`gateway-${state || "event"}`);
+      const toolProgress = extractToolProgress(p);
+      armInactivityTimeout(`gateway-${state || toolProgress?.event || "event"}`);
       publishAgentModeDiagnostic({
         scope: "api-chat",
         event: "gateway.chat-event",
@@ -855,6 +913,13 @@ export async function POST(request: NextRequest) {
           activeRunId,
         },
       });
+
+      if (toolProgress) {
+        enqueueProgress(toolProgress.event, {
+          ...(activeRunId ? { runId: activeRunId } : {}),
+          activeTool: toolProgress.activeTool,
+        });
+      }
 
       if (state === "delta") {
         const fullText = extractText(p.message || p);

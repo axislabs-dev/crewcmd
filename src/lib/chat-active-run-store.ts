@@ -14,6 +14,7 @@ export type ChatRunTerminalStatus =
 export interface ChatRunActivity {
   name: string;
   status?: string | null;
+  detail?: string | null;
 }
 
 export interface ChatProgressPayload {
@@ -90,6 +91,7 @@ function readActivity(value: unknown): ChatRunActivity | null {
   return {
     name,
     status: readString(record.status) ?? readString(record.state),
+    detail: readString(record.detail) ?? readString(record.summary),
   };
 }
 
@@ -100,6 +102,9 @@ function terminalStatusForEvent(event: string | undefined): ChatRunTerminalStatu
     case "gateway_send_started":
       return "sending";
     case "heartbeat":
+    case "tool_started":
+    case "tool_updated":
+    case "tool_completed":
       return "running";
     case "run_completed":
       return "completed";

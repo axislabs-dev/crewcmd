@@ -149,6 +149,38 @@ describe("POST /api/chat", () => {
     expect(chatAbort).toHaveBeenCalledWith({ sessionKey: "main" });
   });
 
+  it("passes low thinking only for scoped agent mode sends", async () => {
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    const chatAbort = vi.fn(() => Promise.resolve());
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn(),
+      off: vi.fn(),
+      chatSend,
+      chatAbort,
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      agentMode: true,
+    }));
+    const reader = response.body!.getReader();
+
+    await reader.read();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(chatSend).toHaveBeenCalledWith({
+      message: "hello",
+      sessionKey: "main",
+      thinking: "low",
+    });
+
+    await reader.cancel();
+  });
+
   it("streams structured progress events alongside OpenAI-compatible text deltas", async () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     const chatSend = vi.fn().mockResolvedValue({ runId: "run-1" });

@@ -644,12 +644,14 @@ export class GatewayClient {
   async chatSend(params: {
     message: string;
     sessionKey?: string;
+    thinking?: string;
     idempotencyKey?: string;
   }): Promise<{ runId: string; status: string }> {
     return this.rpc("chat.send", {
       message: params.message,
       sessionKey: params.sessionKey || "main",
       deliver: false,
+      ...(params.thinking ? { thinking: params.thinking } : {}),
       idempotencyKey: params.idempotencyKey || crypto.randomUUID(),
     });
   }

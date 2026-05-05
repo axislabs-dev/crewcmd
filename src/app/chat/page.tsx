@@ -1445,6 +1445,7 @@ export default function ChatPage() {
             companyId: company?.id,
             metadata,
             sessionKey: requestSessionKey,
+            agentMode: voiceMode === "agent",
           }),
           signal: controller.signal,
         });

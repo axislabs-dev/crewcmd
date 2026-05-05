@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 const ACTIVE_HISTORY_POLL_INTERVAL_MS = 1_500;
 const ACTIVE_HISTORY_POLL_MAX_ATTEMPTS = 80;
+const AGENT_MODE_THINKING_LEVEL = "low";
 
 type ChatProgressEventName =
   | "run_started"
@@ -418,6 +419,7 @@ export async function POST(request: NextRequest) {
       targetAgent,
       companyId: bodyCompanyId,
       sessionKey: bodySessionKey,
+      agentMode: bodyAgentMode,
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -454,6 +456,7 @@ export async function POST(request: NextRequest) {
       message: lastUserMessage.content,
       targetAgent,
     });
+    const scopedThinkingLevel = bodyAgentMode === true ? AGENT_MODE_THINKING_LEVEL : undefined;
     const currentUserContents = [lastUserMessage.content, outboundMessage];
     const previousAssistantContents = messages
       .slice(0, messages.lastIndexOf(lastUserMessage))
@@ -926,6 +929,7 @@ export async function POST(request: NextRequest) {
         const sendResult = await client.chatSend({
           message: outboundMessage,
           sessionKey,
+          ...(scopedThinkingLevel ? { thinking: scopedThinkingLevel } : {}),
         });
         if (cancelled || done) return;
         activeRunId = asString(sendResult.runId);
@@ -937,6 +941,7 @@ export async function POST(request: NextRequest) {
           detail: {
             activeRunId,
             elapsedMs: gatewaySentAt - requestStartedAt,
+            thinking: scopedThinkingLevel ?? null,
           },
         });
         enqueueData({

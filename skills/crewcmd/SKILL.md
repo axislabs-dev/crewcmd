@@ -124,8 +124,10 @@ When assigning work to an agent:
 ```
 GET  /api/heartbeat-schedules
 POST /api/heartbeat-schedules  { "agentId": "neo", "intervalMinutes": 30 }
-POST /api/agents/heartbeat     (trigger manual heartbeat)
+POST /api/agents/heartbeat     { "agents": [{ "agent_id": "neo", "callsign": "neo", "status": "active" }] }
 ```
+
+Heartbeat posts are mutations. Send `Authorization: Bearer <HEARTBEAT_SECRET>` and, when available, `X-CrewCmd-Runtime-Id: <CREWCMD_RUNTIME_ID>`.
 
 ## Activity & Audit
 

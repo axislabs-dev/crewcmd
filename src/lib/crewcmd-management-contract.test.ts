@@ -54,6 +54,8 @@ describe("crewcmd-management skill contract", () => {
       expect(skill).toContain("Authorization: Bearer $HEARTBEAT_SECRET");
       expect(skill).toContain("X-CrewCmd-Runtime-Id: $CREWCMD_RUNTIME_ID");
       expect(skill).toContain("Bearer auth does not grant cross-workspace access");
+      expect(skill).toContain("\"agents\"");
+      expect(skill).toContain("\"agent_id\"");
     }
 
     expect(companySkill).toContain("Company runtimes are scoped to the company workspace");

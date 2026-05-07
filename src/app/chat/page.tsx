@@ -2005,8 +2005,8 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className={`px-4 pb-4 sm:px-6 ${agentOverlayMode === "immersive" ? "flex-1 flex items-center" : "shrink-0"}`}>
-              <div className={`mx-auto rounded-[32px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-4 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
+            <div className={`px-4 pb-3 sm:px-6 ${agentOverlayMode === "immersive" ? "flex-1 flex items-center" : "shrink-0"}`}>
+              <div className={`mx-auto rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
                 <div className="flex flex-col items-center gap-2">
                   <VoiceAgent
                     onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}

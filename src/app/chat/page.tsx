@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
@@ -57,16 +58,26 @@ interface Message {
   metadata?: { attachments?: Attachment[] } | null;
 }
 
+function hasRenderableMessageContent(message: Pick<Message, "content" | "metadata">) {
+  return Boolean(message.content.trim() || message.metadata?.attachments?.length);
+}
+
+function executionStorageKey(sessionKey: string) {
+  return `${CHAT_EXECUTION_STORAGE_PREFIX}${sessionKey.toLowerCase()}`;
+}
+
 type VoiceMode = "off" | "agent";
 type AgentOverlayMode = "transcript" | "immersive";
 
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
+const CHAT_EXECUTION_STORAGE_PREFIX = "crewcmd.chat.execution.";
 const VOICE_ACK_DELAY_MS = 5000;
 const VOICE_CHECKIN_DELAY_MS = 30000;
 const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
 const VOICE_FAST_START_MIN_CHARS = 48;
 const VOICE_FAST_START_MAX_CHARS = 110;
+const POCKET_SLIDE_COMPLETE = 0.86;
 
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
@@ -221,7 +232,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     const res = await fetch(
       `/api/openclaw/sessions/${encodeURIComponent(sessionKey)}/preview`
     );
-    if (!res.ok) return;
+    if (!res.ok) return false;
 
     const data = await res.json() as {
       status?: "ok" | "empty" | "missing" | "error";
@@ -236,8 +247,8 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
       ? data.preview
       : data.preview?.items ?? data.preview?.messages;
     const items = data.items ?? previewItems ?? [];
-    if (data.status && data.status !== "ok") return;
-    if (!items.length) return;
+    if (data.status && data.status !== "ok") return false;
+    if (!items.length) return false;
 
     const baseTime = Date.now();
     const messages = items.map((m, index): ChatStoreMessage => ({
@@ -253,8 +264,10 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
       sessionKey.toLowerCase(),
       messages
     );
+    return messages.length > 0;
   } catch {
     // Gateway unavailable
+    return false;
   }
 }
 
@@ -271,6 +284,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgressEvent | null>(null);
+  const [executionEvents, setExecutionEvents] = useState<ExecutionProgressEvent[]>([]);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -278,6 +292,9 @@ export default function ChatPage() {
   const [speakResponses, setSpeakResponses] = useState(false);
   const [agentMicMuted, setAgentMicMuted] = useState(false);
   const [agentAudioMuted, setAgentAudioMuted] = useState(false);
+  const [agentPocketLocked, setAgentPocketLocked] = useState(false);
+  const [pocketSlideProgress, setPocketSlideProgress] = useState(0);
+  const [isPocketSliding, setIsPocketSliding] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -312,6 +329,8 @@ export default function ChatPage() {
   const firstDeltaSeenRef = useRef(false);
   const lastBusyReplyAtRef = useRef(0);
   const hasStartedResponseAudioRef = useRef(false);
+  const pageHiddenDuringRequestRef = useRef(false);
+  const pocketSliderTrackRef = useRef<HTMLDivElement>(null);
   const voiceLatencyRef = useRef<{
     requestId: string;
     startedAt: number;
@@ -350,6 +369,59 @@ export default function ChatPage() {
     prefetchedAudioRef.current = null;
   }, [revokeAudioObjectUrl]);
 
+  const resetPocketSlide = useCallback(() => {
+    setIsPocketSliding(false);
+    setPocketSlideProgress(0);
+  }, []);
+
+  const updatePocketSlideFromPointer = useCallback((clientX: number) => {
+    const track = pocketSliderTrackRef.current;
+    if (!track) return 0;
+
+    const rect = track.getBoundingClientRect();
+    const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    setPocketSlideProgress(progress);
+    return progress;
+  }, []);
+
+  const completePocketUnlock = useCallback(() => {
+    setAgentPocketLocked(false);
+    resetPocketSlide();
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate(12);
+    }
+  }, [resetPocketSlide]);
+
+  const handlePocketSliderPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    setIsPocketSliding(true);
+    updatePocketSlideFromPointer(event.clientX);
+  }, [updatePocketSlideFromPointer]);
+
+  const handlePocketSliderPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isPocketSliding) return;
+    event.preventDefault();
+    event.stopPropagation();
+    updatePocketSlideFromPointer(event.clientX);
+  }, [isPocketSliding, updatePocketSlideFromPointer]);
+
+  const handlePocketSliderPointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isPocketSliding) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const progress = updatePocketSlideFromPointer(event.clientX);
+    if (progress >= POCKET_SLIDE_COMPLETE) {
+      completePocketUnlock();
+      return;
+    }
+    resetPocketSlide();
+  }, [completePocketUnlock, isPocketSliding, resetPocketSlide, updatePocketSlideFromPointer]);
+
   const assignAudioObjectUrl = useCallback((url: string, reason: string) => {
     if (audioObjectUrlRef.current && audioObjectUrlRef.current !== url) {
       revokeAudioObjectUrl(audioObjectUrlRef.current, "replace-active-audio");
@@ -363,15 +435,89 @@ export default function ChatPage() {
     });
   }, [revokeAudioObjectUrl]);
 
+  useEffect(() => {
+    if (voiceMode !== "agent") {
+      resetPocketSlide();
+      setAgentPocketLocked(false);
+      return;
+    }
+
+    const lockForResume = () => {
+      resetPocketSlide();
+      setAgentPocketLocked(true);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        lockForResume();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", lockForResume);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", lockForResume);
+    };
+  }, [voiceMode, resetPocketSlide]);
+
   // Derive session key: if a gateway session is selected, use it;
   // otherwise fall back to agent callsign
   const activeSessionKey = useMemo(
     () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
     [selectedSessionKey, selectedAgent]
   );
+  const persistExecutionSnapshot = useCallback((
+    progress: ExecutionProgressEvent | null,
+    events: ExecutionProgressEvent[]
+  ) => {
+    if (typeof window === "undefined") return;
 
-  // No unmount persistence needed — server-side /api/chat route persists
-  // partial content on client disconnect via the cancel handler.
+    try {
+      const key = executionStorageKey(activeSessionKey);
+      if (!progress && events.length === 0) {
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+      window.sessionStorage.setItem(
+        key,
+        JSON.stringify({
+          progress,
+          events: events.slice(-40),
+        })
+      );
+    } catch {
+      // Session storage is a best-effort UI cache.
+    }
+  }, [activeSessionKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.sessionStorage.getItem(executionStorageKey(activeSessionKey));
+      if (!raw) {
+        setExecutionProgress(null);
+        setExecutionEvents([]);
+        return;
+      }
+      const snapshot = JSON.parse(raw) as {
+        progress?: ExecutionProgressEvent | null;
+        events?: ExecutionProgressEvent[];
+      };
+      setExecutionProgress(snapshot.progress ?? null);
+      setExecutionEvents(Array.isArray(snapshot.events) ? snapshot.events : []);
+    } catch {
+      setExecutionProgress(null);
+      setExecutionEvents([]);
+    }
+  }, [activeSessionKey]);
+
+  useEffect(() => {
+    persistExecutionSnapshot(executionProgress, executionEvents);
+  }, [executionProgress, executionEvents, persistExecutionSnapshot]);
+
+  // Server-side /api/chat persists partial content on client disconnect.
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -509,6 +655,21 @@ export default function ChatPage() {
 
     return () => { cancelled = true; };
   }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id]);
+
+  const refreshSessionPreview = useCallback(async (sessionKey: string) => {
+    const loaded = await loadSessionPreviewIntoStore(sessionKey);
+    if (!loaded) return false;
+
+    const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
+    setMessages(updated.map((m) => ({
+      id: m.id,
+      role: m.role as "user" | "assistant",
+      content: m.content,
+      createdAt: m.createdAt,
+      metadata: m.metadata,
+    })));
+    return true;
+  }, []);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
@@ -656,6 +817,94 @@ export default function ChatPage() {
         : null,
     [selectedAgent, defaultAgent]
   );
+  const visibleMessages = useMemo(
+    () => messages.filter(hasRenderableMessageContent),
+    [messages]
+  );
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    const isMobileViewport = () =>
+      window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 900;
+    const markInterrupted = () => {
+      if (isLoading || abortControllerRef.current) {
+        pageHiddenDuringRequestRef.current = true;
+      }
+    };
+    const markMobileViewportInterrupted = () => {
+      if (isMobileViewport()) markInterrupted();
+    };
+    const handleVisibility = () => {
+      if (document.hidden) markInterrupted();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", markInterrupted);
+    window.addEventListener("orientationchange", markMobileViewportInterrupted);
+    window.addEventListener("resize", markMobileViewportInterrupted);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", markInterrupted);
+      window.removeEventListener("orientationchange", markMobileViewportInterrupted);
+      window.removeEventListener("resize", markMobileViewportInterrupted);
+    };
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    const shouldRecover = () =>
+      !isLoading && (
+        pageHiddenDuringRequestRef.current ||
+        executionProgress?.event === "connection_interrupted" ||
+        executionProgress?.event === "connection_recovering"
+      );
+
+    const recover = () => {
+      if (document.hidden || !shouldRecover()) return;
+      const recoverProgress = {
+        event: "connection_recovering",
+        at: new Date().toISOString(),
+        error: "Rehydrating CrewCMD from persisted session history.",
+      };
+      setExecutionProgress(recoverProgress);
+      setExecutionEvents((events) => [...events, recoverProgress]);
+      useActiveChatRunStore.getState().applyProgressEvent({
+        type: "chat_progress",
+        event: "connection_recovering",
+        at: recoverProgress.at,
+        sessionKey: activeSessionKey,
+      });
+      void refreshSessionPreview(activeSessionKey).then((loaded) => {
+        if (!loaded) return;
+        pageHiddenDuringRequestRef.current = false;
+        setStreamingContent("");
+        streamingContentRef.current = "";
+        const completedProgress = {
+          event: "run_completed",
+          at: new Date().toISOString(),
+        };
+        setExecutionProgress(completedProgress);
+        setExecutionEvents((events) => [...events, completedProgress]);
+        useActiveChatRunStore.getState().applyProgressEvent({
+          type: "chat_progress",
+          event: "run_completed",
+          at: completedProgress.at,
+          sessionKey: activeSessionKey,
+        });
+      });
+    };
+
+    document.addEventListener("visibilitychange", recover);
+    window.addEventListener("pageshow", recover);
+    window.addEventListener("focus", recover);
+    return () => {
+      document.removeEventListener("visibilitychange", recover);
+      window.removeEventListener("pageshow", recover);
+      window.removeEventListener("focus", recover);
+    };
+  }, [activeSessionKey, executionProgress?.event, isLoading, refreshSessionPreview]);
 
   const handleAgentSelect = useCallback(
     (agent: Agent, sessionKey?: string | null) => {
@@ -669,6 +918,7 @@ export default function ChatPage() {
       setIsLoading(false);
       setStreamingContent("");
       setExecutionProgress(null);
+      setExecutionEvents([]);
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
@@ -1261,11 +1511,13 @@ export default function ChatPage() {
         wasAtBottomRef.current = true;
         setInput("");
         setIsLoading(true);
-        setExecutionProgress({
+        const startedProgress = {
           event: "run_started",
           at: new Date().toISOString(),
           elapsedMs: 0,
-        });
+        };
+        setExecutionProgress(startedProgress);
+        setExecutionEvents([startedProgress]);
 
         try {
           const res = await fetch("/api/tasks", {
@@ -1311,11 +1563,13 @@ export default function ChatPage() {
             }).catch(() => {});
           }
         } catch {
-          setExecutionProgress({
+          const errorProgress = {
             event: "run_error",
             at: new Date().toISOString(),
             error: "Failed to create task.",
-          });
+          };
+          setExecutionProgress(errorProgress);
+          setExecutionEvents((events) => [...events, errorProgress]);
           setMessages((prev) => [
             ...prev,
             {
@@ -1383,14 +1637,17 @@ export default function ChatPage() {
       // User message persisted server-side in /api/chat route
       setInput("");
       setIsLoading(true);
-      setExecutionProgress({
+      const startedProgress = {
         event: "run_started",
         at: new Date().toISOString(),
         elapsedMs: 0,
-      });
+      };
+      setExecutionProgress(startedProgress);
+      setExecutionEvents([startedProgress]);
       setStreamingContent("");
       streamingContentRef.current = "";
       streamingAgentRef.current = agentCallsign;
+      pageHiddenDuringRequestRef.current = false;
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
       hasStartedResponseAudioRef.current = false;
@@ -1411,7 +1668,7 @@ export default function ChatPage() {
         ...(shouldSpeakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...visibleMessages.map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: messageContent },
       ];
 
@@ -1474,6 +1731,11 @@ export default function ChatPage() {
 
             if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
               setExecutionProgress(parsed);
+              setExecutionEvents((events) => {
+                const nextEvents = [...events, parsed];
+                persistExecutionSnapshot(parsed, nextEvents);
+                return nextEvents;
+              });
               useActiveChatRunStore.getState().applyProgressEvent(parsed);
               return;
             }
@@ -1559,30 +1821,35 @@ export default function ChatPage() {
           queueSentenceForTTS(unspokenBuffer.trim());
         }
 
-        // Parse task references and inject inline card markers
-        const enrichedContent = fullContent
-          ? injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent))
-          : "No response received.";
-
-        const assistantMsg: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: enrichedContent,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        if (fullContent.trim()) {
+          // Parse task references and inject inline card markers
+          const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
+          const assistantMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: enrichedContent,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+        }
         // Assistant message persisted server-side in /api/chat route
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
         setStreamingContent("");
+        const completedProgress = {
+          event: "run_completed",
+          at: new Date().toISOString(),
+        };
         setExecutionProgress((current) =>
           current?.event === "run_error" || current?.event === "run_aborted"
             ? current
-            : {
-                event: "run_completed",
-                at: new Date().toISOString(),
-              }
+            : completedProgress
         );
+        setExecutionEvents((events) => {
+          const last = events.at(-1);
+          if (last?.event === "run_error" || last?.event === "run_aborted") return events;
+          return [...events, completedProgress];
+        });
         useActiveChatRunStore.getState().applyProgressEvent({
           type: "chat_progress",
           event: "run_completed",
@@ -1611,31 +1878,59 @@ export default function ChatPage() {
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
           setStreamingContent("");
-          setExecutionProgress({
+          const abortedProgress = {
             event: "run_aborted",
             at: new Date().toISOString(),
-          });
+          };
+          setExecutionProgress(abortedProgress);
+          setExecutionEvents((events) => [...events, abortedProgress]);
         } else {
+          const wasBackgrounded = pageHiddenDuringRequestRef.current ||
+            (typeof document !== "undefined" && document.hidden);
+          console.error("[Chat] Error:", error);
+          const errorProgress = {
+            event: wasBackgrounded ? "connection_interrupted" : "run_error",
+            at: new Date().toISOString(),
+            error: wasBackgrounded
+              ? "Connection interrupted while CrewCMD was in the background."
+              : error instanceof Error ? error.message : "Connection error.",
+          };
           useActiveChatRunStore.getState().applyProgressEvent({
             type: "chat_progress",
-            event: "run_error",
+            event: errorProgress.event,
             sessionKey: requestSessionKey,
           });
-          console.error("[Chat] Error:", error);
-          setExecutionProgress({
-            event: "run_error",
-            at: new Date().toISOString(),
-            error: error instanceof Error ? error.message : "Connection error.",
-          });
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content:
-                "Connection error. Make sure the OpenClaw Gateway is reachable.",
-            },
-          ]);
+          setExecutionProgress(errorProgress);
+          setExecutionEvents((events) => [...events, errorProgress]);
+          if (!wasBackgrounded && fullContent.trim()) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: `${fullContent}\n\n_(connection interrupted)_`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+          }
+          if (wasBackgrounded) {
+            void refreshSessionPreview(requestSessionKey).then((loaded) => {
+              if (!loaded) return;
+              pageHiddenDuringRequestRef.current = false;
+              const completedProgress = {
+                event: "run_completed",
+                at: new Date().toISOString(),
+              };
+              setExecutionProgress(completedProgress);
+              setExecutionEvents((events) => [...events, completedProgress]);
+              useActiveChatRunStore.getState().applyProgressEvent({
+                type: "chat_progress",
+                event: "run_completed",
+                at: completedProgress.at,
+                sessionKey: requestSessionKey,
+              });
+            });
+          }
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
           setStreamingContent("");
@@ -1645,7 +1940,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
+    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1674,6 +1969,7 @@ export default function ChatPage() {
   const clearChat = async () => {
     setMessages([]);
     setExecutionProgress(null);
+    setExecutionEvents([]);
     storeClearAgent(activeSessionKey);
     loadedAgentsRef.current.add(activeSessionKey);
     loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
@@ -1765,7 +2061,7 @@ export default function ChatPage() {
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
-          {messages.length === 0 && !streamingContent && (
+          {visibleMessages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
                 className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border"
@@ -1798,8 +2094,8 @@ export default function ChatPage() {
             </div>
           )}
 
-          {messages.map((msg, i) => {
-            const prevDate = i > 0 ? getDateKey(messages[i - 1].createdAt) : null;
+          {visibleMessages.map((msg, i) => {
+            const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
             return (
@@ -1814,6 +2110,7 @@ export default function ChatPage() {
           {(isLoading || executionProgress) && (
             <ExecutionProgressPanel
               progress={executionProgress}
+              events={executionEvents}
               isLoading={isLoading}
               hasStreamingContent={Boolean(streamingContent)}
               agentColor={agentColor}
@@ -1949,6 +2246,19 @@ export default function ChatPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
+                    onClick={() => {
+                      setSpeakResponses(true);
+                      setAgentPocketLocked(true);
+                    }}
+                    title="Pocket lock"
+                    aria-label="Pocket lock"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
+                    </svg>
+                  </button>
+                  <button
                     onClick={() =>
                       setAgentOverlayMode((mode) => (mode === "transcript" ? "immersive" : "transcript"))
                     }
@@ -1972,6 +2282,7 @@ export default function ChatPage() {
                       setAgentOverlayMode("transcript");
                       setAgentMicMuted(false);
                       setAgentAudioMuted(false);
+                      setAgentPocketLocked(false);
                     }}
                     className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-2 text-[11px] font-medium tracking-[0.24em] text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                   >
@@ -1984,8 +2295,8 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className={`px-4 pb-4 sm:px-6 ${agentOverlayMode === "immersive" ? "flex-1 flex items-center" : "shrink-0"}`}>
-              <div className={`mx-auto rounded-[32px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-4 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
+            <div className={`px-4 pb-3 sm:px-6 ${agentOverlayMode === "immersive" ? "flex-1 flex items-center" : "shrink-0"}`}>
+              <div className={`mx-auto rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
                 <div className="flex flex-col items-center gap-2">
                   <VoiceAgent
                     onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
@@ -2007,8 +2318,8 @@ export default function ChatPage() {
             {agentOverlayMode === "transcript" ? (
               <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:px-6">
                 <div className="mx-auto max-w-4xl space-y-4 pb-8">
-                  {messages.map((msg, i) => {
-                    const prevDate = i > 0 ? getDateKey(messages[i - 1].createdAt) : null;
+                  {visibleMessages.map((msg, i) => {
+                    const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
                     const currDate = getDateKey(msg.createdAt);
                     const showSeparator = currDate && currDate !== prevDate;
                     return (
@@ -2044,6 +2355,77 @@ export default function ChatPage() {
                 )}
               </div>
             ) : null}
+
+            {agentPocketLocked && (
+              <div
+                className="absolute inset-0 z-[70] flex select-none touch-none flex-col items-center justify-center bg-[var(--bg-primary)]/94 px-6 text-center backdrop-blur-xl [-webkit-touch-callout:none] [-webkit-user-select:none]"
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerMove={(event) => event.stopPropagation()}
+                onPointerUp={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onContextMenu={(event) => event.preventDefault()}
+                onTouchMove={(event) => event.preventDefault()}
+              >
+                <div
+                  className="mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-[var(--theme-shadow-lg)]"
+                  style={{ color: agentColor, boxShadow: `0 0 34px ${agentColor}26` }}
+                  aria-hidden="true"
+                >
+                  <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
+                  </svg>
+                </div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--text-tertiary)]">
+                  Pocket lock
+                </div>
+                <div className="mt-2 max-w-sm text-sm text-[var(--text-secondary)]">
+                  Agent mode stays live. Slide deliberately to unlock.
+                </div>
+
+                <div
+                  ref={pocketSliderTrackRef}
+                  role="slider"
+                  aria-label="Slide to unlock pocket lock"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(pocketSlideProgress * 100)}
+                  tabIndex={0}
+                  onPointerDown={handlePocketSliderPointerDown}
+                  onPointerMove={handlePocketSliderPointerMove}
+                  onPointerUp={handlePocketSliderPointerEnd}
+                  onPointerCancel={resetPocketSlide}
+                  onLostPointerCapture={resetPocketSlide}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      completePocketUnlock();
+                    }
+                  }}
+                  className="relative mt-8 h-16 w-full max-w-[320px] overflow-hidden rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 p-1.5 text-left shadow-[var(--theme-shadow)] outline-none transition focus-visible:border-[var(--accent-medium)]"
+                  style={{ touchAction: "none" }}
+                >
+                  <div
+                    className="absolute inset-y-1.5 left-1.5 rounded-full transition-[width] duration-100 ease-out"
+                    style={{
+                      width: `calc(${Math.max(0.18, pocketSlideProgress) * 100}% - 0.75rem)`,
+                      background: `linear-gradient(90deg, ${agentColor}33, ${agentColor}66)`,
+                    }}
+                  />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+                    {pocketSlideProgress >= POCKET_SLIDE_COMPLETE ? "Release to unlock" : "Slide to unlock"}
+                  </div>
+                  <div
+                    className="absolute top-1.5 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-[var(--theme-shadow-lg)] transition-transform duration-75 ease-out"
+                    style={{ left: `calc(${pocketSlideProgress * 100}% - ${pocketSlideProgress * 3.25}rem + 0.375rem)`, color: agentColor }}
+                    aria-hidden="true"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

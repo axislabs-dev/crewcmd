@@ -163,7 +163,7 @@ describe("POST /api/chat", () => {
     });
 
     await reader.cancel();
-    expect(chatAbort).toHaveBeenCalledWith({ sessionKey: "main" });
+    expect(chatAbort).not.toHaveBeenCalled();
   });
 
   it("passes low thinking only for scoped agent mode sends", async () => {
@@ -301,6 +301,283 @@ describe("POST /api/chat", () => {
     expect(next).toContain("AGENTS.md");
 
     await reader.cancel();
+  });
+
+  it("streams compaction checkpoints as progress events", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend,
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "context.compacted",
+      sessionKey: "main",
+      data: {
+        checkpointId: "ctx-1",
+        title: "Compacted history",
+        summary: "Earlier turns were preserved in a checkpoint.",
+      },
+    });
+
+    const next = await readUntilContains(reader, "\"event\":\"history_compacted\"");
+
+    expect(next).toContain("\"event\":\"history_compacted\"");
+    expect(next).toContain("\"title\":\"Compacted history\"");
+    expect(next).toContain("\"id\":\"ctx-1\"");
+    expect(next).toContain("Earlier turns were preserved");
+
+    await reader.cancel();
+  });
+
+  it("does not finish the chat stream for non-chat agent tool finals", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const first = await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "agent",
+      runId: "run-1",
+      stream: "tool",
+      state: "final",
+      sessionKey: "main",
+      data: {
+        name: "exec",
+        status: "completed",
+        output: "build passed",
+      },
+    });
+
+    const toolFrame = await readUntilContains(reader, "\"event\":\"tool_completed\"");
+    expect(first).toContain("\"event\":\"gateway_send_started\"");
+    expect(toolFrame).toContain("\"event\":\"tool_completed\"");
+    expect(toolFrame).toContain("\"name\":\"exec\"");
+    expect(toolFrame).not.toContain("data: [DONE]");
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "actual answer" },
+    });
+
+    const streamed = await readUntilDone(reader);
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"actual answer\"}}]");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
+  it("keeps waiting when a chat final has no assistant text after tool activity", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn().mockResolvedValue({ messages: [] }),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const first = await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "agent",
+      runId: "run-1",
+      stream: "tool",
+      sessionKey: "main",
+      data: {
+        phase: "start",
+        name: "exec",
+        args: { command: "pnpm test" },
+      },
+    });
+
+    const toolFrame = await readUntilContains(reader, "\"event\":\"tool_started\"");
+    expect(first).toContain("\"event\":\"gateway_send_started\"");
+    expect(toolFrame).toContain("\"event\":\"tool_started\"");
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "" },
+    });
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "actual answer" },
+    });
+
+    const streamed = await readUntilDone(reader);
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"actual answer\"}}]");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
+  it("finishes after deferred tool completion when history later has assistant text", async () => {
+    vi.useFakeTimers();
+    try {
+      const chatHandlers: Array<(payload: unknown) => void> = [];
+      const chatHistory = vi.fn().mockResolvedValue({
+        messages: [
+          { role: "user", content: "inspect files" },
+          { role: "assistant", content: "late answer" },
+        ],
+      });
+      mockSelectRecoveredAssistantText.mockReturnValue("late answer");
+      mockGetGatewayClient.mockResolvedValueOnce({
+        on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+          if (event === "*") chatHandlers.push(handler);
+        }),
+        off: vi.fn(),
+        chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+        chatAbort: vi.fn(() => Promise.resolve()),
+        chatHistory,
+        rpc: vi.fn().mockResolvedValue({ sessions: [] }),
+      });
+
+      const response = await POST(makeRequest({
+        messages: [{ role: "user", content: "inspect files" }],
+        agent: "main",
+      }));
+      const reader = response.body!.getReader();
+      await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+      await vi.waitFor(() => {
+        expect(chatHandlers).toHaveLength(1);
+      });
+
+      chatHandlers[0]({
+        event: "agent",
+        runId: "run-1",
+        stream: "tool",
+        sessionKey: "main",
+        data: {
+          phase: "start",
+          name: "exec",
+          args: { command: "pnpm test" },
+        },
+      });
+      await readUntilContains(reader, "\"event\":\"tool_started\"");
+
+      chatHandlers[0]({
+        event: "chat",
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { content: "" },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      const streamed = await readUntilDone(reader);
+
+      expect(chatHistory).toHaveBeenCalledWith({ sessionKey: "main", limit: 25 });
+      expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"late answer\"}}]");
+      expect(streamed).toContain("\"event\":\"run_completed\"");
+      expect(streamed).toContain("data: [DONE]");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not finish or stream tool-result chat finals as assistant answers", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn().mockResolvedValue({ messages: [] }),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: {
+        role: "tool_result",
+        content: "raw tool output that should not become the assistant answer",
+      },
+    });
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { role: "assistant", content: "human-facing answer" },
+    });
+
+    const streamed = await readUntilDone(reader);
+    expect(streamed).not.toContain("raw tool output");
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"human-facing answer\"}}]");
+    expect(streamed).toContain("data: [DONE]");
   });
 
   it("keeps long-running chat streams alive with heartbeat progress", async () => {

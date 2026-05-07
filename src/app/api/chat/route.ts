@@ -24,6 +24,7 @@ type ChatProgressEventName =
   | "tool_started"
   | "tool_updated"
   | "tool_completed"
+  | "history_compacted"
   | "run_completed"
   | "run_error"
   | "run_aborted";
@@ -43,6 +44,15 @@ type ChatProgressEvent = {
     name: string;
     status?: string;
     detail?: string;
+    detailKind?: "input" | "output" | "status";
+    detailTruncated?: boolean;
+  };
+  checkpoint?: {
+    id?: string;
+    title: string;
+    summary?: string;
+    detail?: string;
+    detailTruncated?: boolean;
   };
 };
 
@@ -174,6 +184,43 @@ function extractText(value: unknown, seen = new WeakSet<object>()): string {
   return "";
 }
 
+function isToolOnlyMessage(value: unknown): boolean {
+  const message = asRecord(value);
+  if (!message) return false;
+
+  const role = firstString(message.role)?.toLowerCase() ?? "";
+  if (["tool", "tool_result", "toolresult"].includes(role)) return true;
+
+  const toolCalls = message.tool_calls ?? message.toolCalls;
+  const hasOpenAiToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return hasOpenAiToolCalls && !firstString(content);
+  }
+
+  let hasToolContent = hasOpenAiToolCalls;
+  let hasTextContent = false;
+  let hasNonToolContent = false;
+  for (const block of content) {
+    const record = asRecord(block);
+    if (!record) continue;
+    const type = firstString(record.type)?.toLowerCase() ?? "";
+    if (["tool_use", "tool_result", "toolcall", "toolresult"].includes(type)) {
+      hasToolContent = true;
+      continue;
+    }
+    if (type === "text" && firstString(record.text)) {
+      hasTextContent = true;
+      continue;
+    }
+    if (type && type !== "thinking") {
+      hasNonToolContent = true;
+    }
+  }
+
+  return hasToolContent && !hasTextContent && !hasNonToolContent;
+}
+
 function extractEventSession(payload: Record<string, unknown>) {
   const session = asRecord(payload.session);
   return firstString(
@@ -198,8 +245,9 @@ function extractEventRunIds(payload: Record<string, unknown>) {
   ].map(asString).filter((value): value is string => Boolean(value));
 }
 
-function stringifyShort(value: unknown, maxLength = 160) {
+function stringifyToolDetail(value: unknown, maxLength = 8_000) {
   if (value === undefined || value === null) return null;
+
   let text: string;
   if (typeof value === "string") {
     text = value;
@@ -207,14 +255,19 @@ function stringifyShort(value: unknown, maxLength = 160) {
     text = String(value);
   } else {
     try {
-      text = JSON.stringify(value);
+      text = JSON.stringify(value, null, 2);
     } catch {
       text = String(value);
     }
   }
-  text = text.replace(/\s+/g, " ").trim();
+
+  text = text.trim();
   if (!text) return null;
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+
+  return {
+    detail: text.length > maxLength ? text.slice(0, maxLength) : text,
+    detailTruncated: text.length > maxLength,
+  };
 }
 
 function extractToolProgress(payload: Record<string, unknown>) {
@@ -240,9 +293,11 @@ function extractToolProgress(payload: Record<string, unknown>) {
       ? "tool_completed"
       : "tool_updated";
 
-  const detail = event === "tool_started"
-    ? stringifyShort(data.args ?? data.arguments ?? data.input)
-    : stringifyShort(data.partialResult ?? data.partial_result ?? data.result ?? data.output);
+  const detailKind: "input" | "output" = event === "tool_started" ? "input" : "output";
+  const detailValue = event === "tool_started"
+    ? data.args ?? data.arguments ?? data.input
+    : data.partialResult ?? data.partial_result ?? data.result ?? data.output;
+  const detail = stringifyToolDetail(detailValue);
 
   return {
     event,
@@ -250,7 +305,54 @@ function extractToolProgress(payload: Record<string, unknown>) {
       ...(toolCallId ? { id: toolCallId } : {}),
       name,
       status: phase,
-      ...(detail ? { detail } : {}),
+      detailKind,
+      ...(detail ? detail : {}),
+    },
+  };
+}
+
+function extractCompactionProgress(payload: Record<string, unknown>) {
+  const data = asRecord(payload.data) ?? asRecord(payload.payload) ?? payload;
+  const eventText = [
+    payload.event,
+    payload.stream,
+    payload.type,
+    payload.kind,
+    payload.state,
+    data.event,
+    data.type,
+    data.kind,
+    data.phase,
+    data.title,
+    data.label,
+    data.message,
+  ].map((value) => firstString(value)?.toLowerCase()).filter(Boolean).join(" ");
+
+  const isCompaction = eventText.includes("compact") ||
+    eventText.includes("checkpoint") ||
+    eventText.includes("context_summary") ||
+    eventText.includes("context summary");
+  if (!isCompaction) return null;
+
+  const detail = stringifyToolDetail(
+    data.detail ??
+    data.description ??
+    data.summary ??
+    data.message ??
+    data.checkpoint ??
+    data.context
+  );
+  const title = firstString(data.title, data.label) ?? "Compacted history";
+  const summary = firstString(data.summary, data.message, data.description);
+  const id = firstString(data.id, data.checkpointId, data.checkpoint_id, payload.id);
+
+  return {
+    event: "history_compacted" as ChatProgressEventName,
+    checkpoint: {
+      ...(id ? { id } : {}),
+      title,
+      ...(summary ? { summary } : {}),
+      ...(detail ? detail : {}),
     },
   };
 }
@@ -275,25 +377,35 @@ function extractActivityProgress(payload: Record<string, unknown>) {
   const stream = firstString(payload.stream, payload.event);
   const phase = firstString(data.phase, data.status, data.state, payload.state);
   const kind = firstString(data.kind, data.type, stream) ?? "activity";
-  const detail = stringifyShort(
+  const detail = stringifyToolDetail(
     data.detail ??
     data.description ??
     data.args ??
     data.arguments ??
     data.input ??
     data.output ??
-    data.result,
-    220
+    data.result
   );
+  const detailKind: "output" | "status" = phase && ["result", "end", "ended", "complete", "completed", "success", "succeeded"].includes(phase.toLowerCase())
+    ? "output"
+    : "status";
 
   return {
     event: "tool_updated" as ChatProgressEventName,
     activeTool: {
       name: label,
       status: phase ?? kind,
-      ...(detail ? { detail } : {}),
+      detailKind,
+      ...(detail ? detail : {}),
     },
   };
+}
+
+function isChatLifecycleEvent(payload: Record<string, unknown>) {
+  const eventName = firstString(payload.event);
+  if (!eventName) return true;
+
+  return eventName.toLowerCase() === "chat";
 }
 
 function sessionMatches(eventSession: string | null, allowedSessions: string[]) {
@@ -634,6 +746,8 @@ export async function POST(request: NextRequest) {
     let historyPollAttempts = 0;
     let historyPollInFlight = false;
     let historySnapshotStreamed = false;
+    let hasToolActivity = false;
+    let deferredToolCompletion = false;
 
     const enqueueData = (payload: unknown) => {
       if (!streamController || done) return;
@@ -646,7 +760,7 @@ export async function POST(request: NextRequest) {
 
     const enqueueProgress = (
       event: ChatProgressEventName,
-      details: Partial<Pick<ChatProgressEvent, "runId" | "error" | "activeTool">> = {},
+      details: Partial<Pick<ChatProgressEvent, "runId" | "error" | "activeTool" | "checkpoint">> = {},
     ) => {
       if (!streamController || done) return;
       const payload: ChatProgressEvent = {
@@ -660,6 +774,7 @@ export async function POST(request: NextRequest) {
         ...(details.runId ? { runId: details.runId } : {}),
         ...(details.error ? { error: details.error } : {}),
         ...(details.activeTool ? { activeTool: details.activeTool } : {}),
+        ...(details.checkpoint ? { checkpoint: details.checkpoint } : {}),
       };
 
       try {
@@ -772,6 +887,10 @@ export async function POST(request: NextRequest) {
                 elapsedMs: Date.now() - requestStartedAt,
               },
             });
+            if (deferredToolCompletion) {
+              await finishStream(false);
+              break;
+            }
           }
         }
       } finally {
@@ -818,6 +937,23 @@ export async function POST(request: NextRequest) {
       streamAssistantSnapshot(recovered);
     };
 
+    const deferToolCompletionUntilAssistantText = (reason: string) => {
+      deferredToolCompletion = true;
+      hasToolActivity = true;
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "stream.finish.defer-tool-assistant",
+        sessionId: diagnosticSessionId,
+        detail: {
+          activeRunId,
+          elapsedMs: Date.now() - requestStartedAt,
+          reason,
+        },
+      });
+      startHistoryPolling();
+      armInactivityTimeout(reason);
+    };
+
     const finishStream = async (
       interrupted: boolean,
       progressEvent: "run_completed" | "run_aborted" | null = interrupted ? "run_aborted" : "run_completed",
@@ -834,9 +970,13 @@ export async function POST(request: NextRequest) {
           elapsedMs: Date.now() - requestStartedAt,
         },
       });
+      await recoverMissingAssistantText();
+      if (!interrupted && progressEvent === "run_completed" && hasToolActivity && !fullAssistantText) {
+        deferToolCompletionUntilAssistantText("tool-completion-without-assistant");
+        return;
+      }
       clearInactivityTimeout();
       stopHistoryPolling();
-      await recoverMissingAssistantText();
       await persistAssistant(interrupted);
       if (progressEvent) {
         enqueueProgress(progressEvent, activeRunId ? { runId: activeRunId } : {});
@@ -913,7 +1053,11 @@ export async function POST(request: NextRequest) {
       },
       cancel() {
         cancelled = true;
-        // Client disconnected — persist whatever was streamed so far
+        // Client disconnected — persist whatever was streamed so far, but do not
+        // abort the gateway turn. Mobile/Capacitor webviews can suspend or tear
+        // down the fetch while the device is locked/backgrounded; the OpenClaw
+        // session should keep running so the UI can rehydrate from history on
+        // resume, matching Slack's server-side continuity.
         publishAgentModeDiagnostic({
           scope: "api-chat",
           event: "stream.cancel",
@@ -922,12 +1066,6 @@ export async function POST(request: NextRequest) {
         });
         clearInactivityTimeout();
         stopHistoryPolling();
-        enqueueProgress("run_aborted", activeRunId ? { runId: activeRunId } : {});
-        if (client) {
-          client.chatAbort({ sessionKey }).catch((err) => {
-            console.error("[api/chat] chat.abort failed:", err);
-          });
-        }
         void persistAssistant(true);
         for (const fn of cleanupFns) fn();
         clearHeartbeat();
@@ -953,9 +1091,11 @@ export async function POST(request: NextRequest) {
       if (!matchesSession) return;
 
       const state = p.state as string;
-      const toolProgress = extractToolProgress(p);
-      const activityProgress = toolProgress ? null : extractActivityProgress(p);
-      armInactivityTimeout(`gateway-${state || toolProgress?.event || "event"}`);
+      const isChatLifecycle = isChatLifecycleEvent(p);
+      const compactionProgress = extractCompactionProgress(p);
+      const toolProgress = compactionProgress ? null : extractToolProgress(p);
+      const activityProgress = compactionProgress || toolProgress ? null : extractActivityProgress(p);
+      armInactivityTimeout(`gateway-${state || compactionProgress?.event || toolProgress?.event || "event"}`);
       publishAgentModeDiagnostic({
         scope: "api-chat",
         event: "gateway.chat-event",
@@ -966,19 +1106,31 @@ export async function POST(request: NextRequest) {
           matchesSession,
           matchesRun,
           activeRunId,
+          isChatLifecycle,
         },
       });
 
-      if (toolProgress) {
+      if (compactionProgress) {
+        enqueueProgress(compactionProgress.event, {
+          ...(activeRunId ? { runId: activeRunId } : {}),
+          checkpoint: compactionProgress.checkpoint,
+        });
+      } else if (toolProgress) {
+        hasToolActivity = true;
         enqueueProgress(toolProgress.event, {
           ...(activeRunId ? { runId: activeRunId } : {}),
           activeTool: toolProgress.activeTool,
         });
       } else if (activityProgress) {
+        hasToolActivity = true;
         enqueueProgress(activityProgress.event, {
           ...(activeRunId ? { runId: activeRunId } : {}),
           activeTool: activityProgress.activeTool,
         });
+      }
+
+      if (!isChatLifecycle) {
+        return;
       }
 
       if (state === "delta") {
@@ -997,9 +1149,26 @@ export async function POST(request: NextRequest) {
           }
         }
       } else if (state === "final") {
-        const finalText = extractText(p.message || p);
+        const finalMessage = p.message || p;
+        const toolOnlyFinal = isToolOnlyMessage(finalMessage);
+        const finalText = toolOnlyFinal ? "" : extractText(finalMessage);
         if (finalText && !streamAssistantSnapshot(finalText)) {
           fullAssistantText = finalText;
+        }
+        if (toolOnlyFinal || (!finalText && hasToolActivity && !fullAssistantText)) {
+          publishAgentModeDiagnostic({
+            scope: "api-chat",
+            event: toolOnlyFinal ? "chat-final.tool-only" : "chat-final.empty-after-tool",
+            sessionId: diagnosticSessionId,
+            detail: {
+              activeRunId,
+              elapsedMs: Date.now() - requestStartedAt,
+            },
+          });
+          deferToolCompletionUntilAssistantText(
+            toolOnlyFinal ? "tool-only-chat-final" : "empty-chat-final-after-tool"
+          );
+          return;
         }
 
         // Persist the complete assistant response

@@ -79,6 +79,100 @@ const VOICE_FAST_START_MIN_CHARS = 48;
 const VOICE_FAST_START_MAX_CHARS = 110;
 const POCKET_SLIDE_COMPLETE = 0.86;
 
+type CapacitorPushToken = { value: string };
+type CapacitorNotificationAction = { notification?: { data?: Record<string, unknown> } };
+type CapacitorPluginHandle = { remove: () => Promise<void> };
+type CapacitorPushPlugin = {
+  addListener: (
+    eventName: "registration" | "registrationError" | "pushNotificationActionPerformed",
+    listener: (payload: never) => void
+  ) => Promise<CapacitorPluginHandle>;
+  checkPermissions: () => Promise<{ receive: "granted" | "denied" | "prompt" | "prompt-with-rationale" }>;
+  requestPermissions: () => Promise<{ receive: "granted" | "denied" | "prompt" | "prompt-with-rationale" }>;
+  register: () => Promise<void>;
+};
+type NativeCapacitor = {
+  getPlatform?: () => string;
+  isNativePlatform?: () => boolean;
+  Plugins?: { PushNotifications?: CapacitorPushPlugin };
+};
+
+let mobilePushRegistrationStarted = false;
+
+function getNativeCapacitor() {
+  if (typeof window === "undefined") return null;
+  return (window as Window & { Capacitor?: NativeCapacitor }).Capacitor ?? null;
+}
+
+function getMobileDeviceId() {
+  const key = "crewcmd.mobile.device-id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  window.localStorage.setItem(key, next);
+  return next;
+}
+
+async function registerMobilePushDevice(companyId: string) {
+  const capacitor = getNativeCapacitor();
+  if (!capacitor?.isNativePlatform?.()) return;
+  const push = capacitor.Plugins?.PushNotifications;
+  if (!push || mobilePushRegistrationStarted) return;
+  mobilePushRegistrationStarted = true;
+
+  const platform = capacitor.getPlatform?.() ?? "web";
+  if (platform !== "ios" && platform !== "android") return;
+  const provider = platform === "ios" ? "apns" : "fcm";
+
+  await push.addListener("registration", ((token: CapacitorPushToken) => {
+    fetch("/api/mobile/push-devices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId,
+        platform,
+        provider,
+        token: token.value,
+        deviceId: getMobileDeviceId(),
+        appId: "crewcmd-mobile",
+      }),
+    }).catch((error) => console.error("[chat] Mobile push registration upload failed:", error));
+  }) as (payload: never) => void);
+
+  await push.addListener("registrationError", ((error: unknown) => {
+    console.error("[chat] Mobile push registration failed:", error);
+  }) as (payload: never) => void);
+
+  await push.addListener("pushNotificationActionPerformed", ((action: CapacitorNotificationAction) => {
+    const url = action.notification?.data?.url;
+    if (typeof url === "string" && url.startsWith("/")) {
+      window.location.assign(url);
+    }
+  }) as (payload: never) => void);
+
+  let permission = await push.checkPermissions();
+  if (permission.receive === "prompt" || permission.receive === "prompt-with-rationale") {
+    permission = await push.requestPermissions();
+  }
+  if (permission.receive === "granted") {
+    await push.register();
+  }
+}
+
+function updateChatRunVisibility(runId: string | null, visibility: "visible" | "hidden" | "disconnected") {
+  if (!runId) return;
+  const body = JSON.stringify({ visibility });
+  const url = `/api/chat/runs/${encodeURIComponent(runId)}/visibility`;
+  fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: visibility !== "visible",
+  }).catch(() => {
+    // Best effort only; missed visibility pings should not affect chat.
+  });
+}
+
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
   "",
@@ -324,6 +418,7 @@ export default function ChatPage() {
   const thinkingAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingStartRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeChatRunIdRef = useRef<string | null>(null);
   const activeAudioKindRef = useRef<"filler" | "response" | null>(null);
   const fillerAudioTokenRef = useRef(0);
   const firstDeltaSeenRef = useRef(false);
@@ -823,6 +918,13 @@ export default function ChatPage() {
   );
 
   useEffect(() => {
+    if (!company?.id) return;
+    registerMobilePushDevice(company.id).catch((error) => {
+      console.error("[chat] Mobile push setup failed:", error);
+    });
+  }, [company?.id]);
+
+  useEffect(() => {
     if (typeof document === "undefined" || typeof window === "undefined") return;
 
     const isMobileViewport = () =>
@@ -836,16 +938,25 @@ export default function ChatPage() {
       if (isMobileViewport()) markInterrupted();
     };
     const handleVisibility = () => {
-      if (document.hidden) markInterrupted();
+      if (document.hidden) {
+        markInterrupted();
+        updateChatRunVisibility(activeChatRunIdRef.current, "hidden");
+      } else {
+        updateChatRunVisibility(activeChatRunIdRef.current, "visible");
+      }
+    };
+    const handlePageHide = () => {
+      markInterrupted();
+      updateChatRunVisibility(activeChatRunIdRef.current, "disconnected");
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("pagehide", markInterrupted);
+    window.addEventListener("pagehide", handlePageHide);
     window.addEventListener("orientationchange", markMobileViewportInterrupted);
     window.addEventListener("resize", markMobileViewportInterrupted);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("pagehide", markInterrupted);
+      window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("orientationchange", markMobileViewportInterrupted);
       window.removeEventListener("resize", markMobileViewportInterrupted);
     };
@@ -1682,6 +1793,7 @@ export default function ChatPage() {
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
+      activeChatRunIdRef.current = null;
 
       try {
         const response = await fetch("/api/chat", {
@@ -1703,6 +1815,8 @@ export default function ChatPage() {
             metadata,
             sessionKey: requestSessionKey,
             agentMode: voiceMode === "agent",
+            clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
+            notifyOnCompletion: true,
           }),
           signal: controller.signal,
         });
@@ -1749,6 +1863,12 @@ export default function ChatPage() {
             }
 
             // Handle meta events (message IDs from server-side persistence)
+            if (parsed.type === "meta" && typeof parsed.chatRunId === "string") {
+              activeChatRunIdRef.current = parsed.chatRunId;
+              updateChatRunVisibility(parsed.chatRunId, document.hidden ? "hidden" : "visible");
+              return;
+            }
+
             if (parsed.type === "meta" && parsed.role === "user") {
               // Replace optimistic user message with server-confirmed one
               setMessages((prev) =>
@@ -1938,6 +2058,7 @@ export default function ChatPage() {
       }
 
       abortControllerRef.current = null;
+      activeChatRunIdRef.current = null;
       setIsLoading(false);
     },
     [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview]

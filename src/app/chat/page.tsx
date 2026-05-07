@@ -230,7 +230,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     const res = await fetch(
       `/api/openclaw/sessions/${encodeURIComponent(sessionKey)}/preview`
     );
-    if (!res.ok) return;
+    if (!res.ok) return false;
 
     const data = await res.json() as {
       status?: "ok" | "empty" | "missing" | "error";
@@ -245,8 +245,8 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
       ? data.preview
       : data.preview?.items ?? data.preview?.messages;
     const items = data.items ?? previewItems ?? [];
-    if (data.status && data.status !== "ok") return;
-    if (!items.length) return;
+    if (data.status && data.status !== "ok") return false;
+    if (!items.length) return false;
 
     const baseTime = Date.now();
     const messages = items.map((m, index): ChatStoreMessage => ({
@@ -262,8 +262,10 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
       sessionKey.toLowerCase(),
       messages
     );
+    return messages.length > 0;
   } catch {
     // Gateway unavailable
+    return false;
   }
 }
 
@@ -618,6 +620,21 @@ export default function ChatPage() {
     return () => { cancelled = true; };
   }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id]);
 
+  const refreshSessionPreview = useCallback(async (sessionKey: string) => {
+    const loaded = await loadSessionPreviewIntoStore(sessionKey);
+    if (!loaded) return false;
+
+    const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
+    setMessages(updated.map((m) => ({
+      id: m.id,
+      role: m.role as "user" | "assistant",
+      content: m.content,
+      createdAt: m.createdAt,
+      metadata: m.metadata,
+    })));
+    return true;
+  }, []);
+
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
     const unsub = useChatStore.subscribe((state) => {
@@ -797,6 +814,61 @@ export default function ChatPage() {
       window.removeEventListener("resize", markMobileViewportInterrupted);
     };
   }, [isLoading]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    const shouldRecover = () =>
+      !isLoading && (
+        pageHiddenDuringRequestRef.current ||
+        executionProgress?.event === "connection_interrupted" ||
+        executionProgress?.event === "connection_recovering"
+      );
+
+    const recover = () => {
+      if (document.hidden || !shouldRecover()) return;
+      const recoverProgress = {
+        event: "connection_recovering",
+        at: new Date().toISOString(),
+        error: "Rehydrating CrewCMD from persisted session history.",
+      };
+      setExecutionProgress(recoverProgress);
+      setExecutionEvents((events) => [...events, recoverProgress]);
+      useActiveChatRunStore.getState().applyProgressEvent({
+        type: "chat_progress",
+        event: "connection_recovering",
+        at: recoverProgress.at,
+        sessionKey: activeSessionKey,
+      });
+      void refreshSessionPreview(activeSessionKey).then((loaded) => {
+        if (!loaded) return;
+        pageHiddenDuringRequestRef.current = false;
+        setStreamingContent("");
+        streamingContentRef.current = "";
+        const completedProgress = {
+          event: "run_completed",
+          at: new Date().toISOString(),
+        };
+        setExecutionProgress(completedProgress);
+        setExecutionEvents((events) => [...events, completedProgress]);
+        useActiveChatRunStore.getState().applyProgressEvent({
+          type: "chat_progress",
+          event: "run_completed",
+          at: completedProgress.at,
+          sessionKey: activeSessionKey,
+        });
+      });
+    };
+
+    document.addEventListener("visibilitychange", recover);
+    window.addEventListener("pageshow", recover);
+    window.addEventListener("focus", recover);
+    return () => {
+      document.removeEventListener("visibilitychange", recover);
+      window.removeEventListener("pageshow", recover);
+      window.removeEventListener("focus", recover);
+    };
+  }, [activeSessionKey, executionProgress?.event, isLoading, refreshSessionPreview]);
 
   const handleAgentSelect = useCallback(
     (agent: Agent, sessionKey?: string | null) => {
@@ -1779,22 +1851,22 @@ export default function ChatPage() {
         } else {
           const wasBackgrounded = pageHiddenDuringRequestRef.current ||
             (typeof document !== "undefined" && document.hidden);
-          useActiveChatRunStore.getState().applyProgressEvent({
-            type: "chat_progress",
-            event: wasBackgrounded ? "run_aborted" : "run_error",
-            sessionKey: requestSessionKey,
-          });
           console.error("[Chat] Error:", error);
           const errorProgress = {
-            event: wasBackgrounded ? "run_aborted" : "run_error",
+            event: wasBackgrounded ? "connection_interrupted" : "run_error",
             at: new Date().toISOString(),
             error: wasBackgrounded
               ? "Connection interrupted while CrewCMD was in the background."
               : error instanceof Error ? error.message : "Connection error.",
           };
+          useActiveChatRunStore.getState().applyProgressEvent({
+            type: "chat_progress",
+            event: errorProgress.event,
+            sessionKey: requestSessionKey,
+          });
           setExecutionProgress(errorProgress);
           setExecutionEvents((events) => [...events, errorProgress]);
-          if (fullContent.trim()) {
+          if (!wasBackgrounded && fullContent.trim()) {
             setMessages((prev) => [
               ...prev,
               {
@@ -1805,6 +1877,24 @@ export default function ChatPage() {
               },
             ]);
           }
+          if (wasBackgrounded) {
+            void refreshSessionPreview(requestSessionKey).then((loaded) => {
+              if (!loaded) return;
+              pageHiddenDuringRequestRef.current = false;
+              const completedProgress = {
+                event: "run_completed",
+                at: new Date().toISOString(),
+              };
+              setExecutionProgress(completedProgress);
+              setExecutionEvents((events) => [...events, completedProgress]);
+              useActiveChatRunStore.getState().applyProgressEvent({
+                type: "chat_progress",
+                event: "run_completed",
+                at: completedProgress.at,
+                sessionKey: requestSessionKey,
+              });
+            });
+          }
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
           setStreamingContent("");
@@ -1814,7 +1904,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot]
+    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview]
   );
 
   const interruptAudio = useCallback(() => {

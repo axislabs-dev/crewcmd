@@ -163,7 +163,7 @@ describe("POST /api/chat", () => {
     });
 
     await reader.cancel();
-    expect(chatAbort).toHaveBeenCalledWith({ sessionKey: "main" });
+    expect(chatAbort).not.toHaveBeenCalled();
   });
 
   it("passes low thinking only for scoped agent mode sends", async () => {

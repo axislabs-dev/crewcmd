@@ -1053,7 +1053,11 @@ export async function POST(request: NextRequest) {
       },
       cancel() {
         cancelled = true;
-        // Client disconnected — persist whatever was streamed so far
+        // Client disconnected — persist whatever was streamed so far, but do not
+        // abort the gateway turn. Mobile/Capacitor webviews can suspend or tear
+        // down the fetch while the device is locked/backgrounded; the OpenClaw
+        // session should keep running so the UI can rehydrate from history on
+        // resume, matching Slack's server-side continuity.
         publishAgentModeDiagnostic({
           scope: "api-chat",
           event: "stream.cancel",
@@ -1062,12 +1066,6 @@ export async function POST(request: NextRequest) {
         });
         clearInactivityTimeout();
         stopHistoryPolling();
-        enqueueProgress("run_aborted", activeRunId ? { runId: activeRunId } : {});
-        if (client) {
-          client.chatAbort({ sessionKey }).catch((err) => {
-            console.error("[api/chat] chat.abort failed:", err);
-          });
-        }
         void persistAssistant(true);
         for (const fn of cleanupFns) fn();
         clearHeartbeat();

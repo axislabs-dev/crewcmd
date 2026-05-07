@@ -58,7 +58,7 @@ function phaseFromProgress(
   if (event.includes("tool")) return "tool";
   if (event.includes("completed") || event.includes("complete")) return "completed";
   if (event.includes("compact") || event.includes("checkpoint")) return "waiting";
-  if (event.includes("waiting") || event.includes("heartbeat")) return "waiting";
+  if (event.includes("waiting") || event.includes("heartbeat") || event.includes("reconnect") || event.includes("interrupted")) return "waiting";
   if (event.includes("thinking") || event.includes("gateway_send")) return "thinking";
   if (event.includes("started") || event.includes("start")) return "run-started";
 
@@ -81,6 +81,9 @@ function labelFromProgress(progress: ExecutionProgressEvent | null, phase: Execu
     if (toolStatus === "start" || progress?.event === "tool_started") return `Calling ${toolName}`;
     return `Using ${toolName}`;
   }
+
+  if (progress?.event === "connection_interrupted") return "Connection interrupted";
+  if (progress?.event === "connection_recovering") return "Rehydrating session";
 
   return PHASES.find((item) => item.phase === phase)?.label ?? "Working";
 }

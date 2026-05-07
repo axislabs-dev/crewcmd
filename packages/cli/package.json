@@ -1,0 +1,43 @@
+{
+  "name": "crewcmd",
+  "version": "0.1.1",
+  "description": "Self-hosting operator CLI for CrewCmd.",
+  "type": "module",
+  "bin": {
+    "crewcmd": "./bin/crewcmd.js"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "smoke": "node scripts/smoke.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "package:smoke": "node scripts/package-smoke.mjs",
+    "release:check": "npm test && npm run smoke && npm run package:smoke && npm pack --dry-run"
+  },
+  "keywords": [
+    "crewcmd",
+    "self-hosting",
+    "cli",
+    "openclaw"
+  ],
+  "author": "Axislabs (https://axislabs.dev)",
+  "license": "BSL-1.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rogerchappel/crewcmd.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/rogerchappel/crewcmd/issues"
+  },
+  "homepage": "https://github.com/rogerchappel/crewcmd#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

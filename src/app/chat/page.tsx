@@ -380,6 +380,29 @@ export default function ChatPage() {
     () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
     [selectedSessionKey, selectedAgent]
   );
+  const persistExecutionSnapshot = useCallback((
+    progress: ExecutionProgressEvent | null,
+    events: ExecutionProgressEvent[]
+  ) => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const key = executionStorageKey(activeSessionKey);
+      if (!progress && events.length === 0) {
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+      window.sessionStorage.setItem(
+        key,
+        JSON.stringify({
+          progress,
+          events: events.slice(-40),
+        })
+      );
+    } catch {
+      // Session storage is a best-effort UI cache.
+    }
+  }, [activeSessionKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -404,25 +427,8 @@ export default function ChatPage() {
   }, [activeSessionKey]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const key = executionStorageKey(activeSessionKey);
-      if (!executionProgress && executionEvents.length === 0) {
-        window.sessionStorage.removeItem(key);
-        return;
-      }
-      window.sessionStorage.setItem(
-        key,
-        JSON.stringify({
-          progress: executionProgress,
-          events: executionEvents.slice(-40),
-        })
-      );
-    } catch {
-      // Session storage is a best-effort UI cache.
-    }
-  }, [activeSessionKey, executionProgress, executionEvents]);
+    persistExecutionSnapshot(executionProgress, executionEvents);
+  }, [executionProgress, executionEvents, persistExecutionSnapshot]);
 
   // Server-side /api/chat persists partial content on client disconnect.
 
@@ -717,10 +723,15 @@ export default function ChatPage() {
   useEffect(() => {
     if (typeof document === "undefined" || typeof window === "undefined") return;
 
+    const isMobileViewport = () =>
+      window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 900;
     const markInterrupted = () => {
       if (isLoading || abortControllerRef.current) {
         pageHiddenDuringRequestRef.current = true;
       }
+    };
+    const markMobileViewportInterrupted = () => {
+      if (isMobileViewport()) markInterrupted();
     };
     const handleVisibility = () => {
       if (document.hidden) markInterrupted();
@@ -728,9 +739,13 @@ export default function ChatPage() {
 
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("pagehide", markInterrupted);
+    window.addEventListener("orientationchange", markMobileViewportInterrupted);
+    window.addEventListener("resize", markMobileViewportInterrupted);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pagehide", markInterrupted);
+      window.removeEventListener("orientationchange", markMobileViewportInterrupted);
+      window.removeEventListener("resize", markMobileViewportInterrupted);
     };
   }, [isLoading]);
 
@@ -1559,7 +1574,11 @@ export default function ChatPage() {
 
             if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
               setExecutionProgress(parsed);
-              setExecutionEvents((events) => [...events, parsed]);
+              setExecutionEvents((events) => {
+                const nextEvents = [...events, parsed];
+                persistExecutionSnapshot(parsed, nextEvents);
+                return nextEvents;
+              });
               useActiveChatRunStore.getState().applyProgressEvent(parsed);
               return;
             }
@@ -1746,7 +1765,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
+    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot]
   );
 
   const interruptAudio = useCallback(() => {

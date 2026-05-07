@@ -57,11 +57,20 @@ interface Message {
   metadata?: { attachments?: Attachment[] } | null;
 }
 
+function hasRenderableMessageContent(message: Pick<Message, "content" | "metadata">) {
+  return Boolean(message.content.trim() || message.metadata?.attachments?.length);
+}
+
+function executionStorageKey(sessionKey: string) {
+  return `${CHAT_EXECUTION_STORAGE_PREFIX}${sessionKey.toLowerCase()}`;
+}
+
 type VoiceMode = "off" | "agent";
 type AgentOverlayMode = "transcript" | "immersive";
 
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
+const CHAT_EXECUTION_STORAGE_PREFIX = "crewcmd.chat.execution.";
 const VOICE_ACK_DELAY_MS = 5000;
 const VOICE_CHECKIN_DELAY_MS = 30000;
 const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
@@ -313,6 +322,7 @@ export default function ChatPage() {
   const firstDeltaSeenRef = useRef(false);
   const lastBusyReplyAtRef = useRef(0);
   const hasStartedResponseAudioRef = useRef(false);
+  const pageHiddenDuringRequestRef = useRef(false);
   const voiceLatencyRef = useRef<{
     requestId: string;
     startedAt: number;
@@ -371,8 +381,50 @@ export default function ChatPage() {
     [selectedSessionKey, selectedAgent]
   );
 
-  // No unmount persistence needed — server-side /api/chat route persists
-  // partial content on client disconnect via the cancel handler.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.sessionStorage.getItem(executionStorageKey(activeSessionKey));
+      if (!raw) {
+        setExecutionProgress(null);
+        setExecutionEvents([]);
+        return;
+      }
+      const snapshot = JSON.parse(raw) as {
+        progress?: ExecutionProgressEvent | null;
+        events?: ExecutionProgressEvent[];
+      };
+      setExecutionProgress(snapshot.progress ?? null);
+      setExecutionEvents(Array.isArray(snapshot.events) ? snapshot.events : []);
+    } catch {
+      setExecutionProgress(null);
+      setExecutionEvents([]);
+    }
+  }, [activeSessionKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const key = executionStorageKey(activeSessionKey);
+      if (!executionProgress && executionEvents.length === 0) {
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+      window.sessionStorage.setItem(
+        key,
+        JSON.stringify({
+          progress: executionProgress,
+          events: executionEvents.slice(-40),
+        })
+      );
+    } catch {
+      // Session storage is a best-effort UI cache.
+    }
+  }, [activeSessionKey, executionProgress, executionEvents]);
+
+  // Server-side /api/chat persists partial content on client disconnect.
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -657,6 +709,30 @@ export default function ChatPage() {
         : null,
     [selectedAgent, defaultAgent]
   );
+  const visibleMessages = useMemo(
+    () => messages.filter(hasRenderableMessageContent),
+    [messages]
+  );
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    const markInterrupted = () => {
+      if (isLoading || abortControllerRef.current) {
+        pageHiddenDuringRequestRef.current = true;
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) markInterrupted();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", markInterrupted);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", markInterrupted);
+    };
+  }, [isLoading]);
 
   const handleAgentSelect = useCallback(
     (agent: Agent, sessionKey?: string | null) => {
@@ -1399,6 +1475,7 @@ export default function ChatPage() {
       setStreamingContent("");
       streamingContentRef.current = "";
       streamingAgentRef.current = agentCallsign;
+      pageHiddenDuringRequestRef.current = false;
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
       hasStartedResponseAudioRef.current = false;
@@ -1419,7 +1496,7 @@ export default function ChatPage() {
         ...(shouldSpeakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...visibleMessages.map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: messageContent },
       ];
 
@@ -1568,18 +1645,17 @@ export default function ChatPage() {
           queueSentenceForTTS(unspokenBuffer.trim());
         }
 
-        // Parse task references and inject inline card markers
-        const enrichedContent = fullContent
-          ? injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent))
-          : "No response received.";
-
-        const assistantMsg: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: enrichedContent,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        if (fullContent.trim()) {
+          // Parse task references and inject inline card markers
+          const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
+          const assistantMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: enrichedContent,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+        }
         // Assistant message persisted server-side in /api/chat route
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
@@ -1633,28 +1709,34 @@ export default function ChatPage() {
           setExecutionProgress(abortedProgress);
           setExecutionEvents((events) => [...events, abortedProgress]);
         } else {
+          const wasBackgrounded = pageHiddenDuringRequestRef.current ||
+            (typeof document !== "undefined" && document.hidden);
           useActiveChatRunStore.getState().applyProgressEvent({
             type: "chat_progress",
-            event: "run_error",
+            event: wasBackgrounded ? "run_aborted" : "run_error",
             sessionKey: requestSessionKey,
           });
           console.error("[Chat] Error:", error);
           const errorProgress = {
-            event: "run_error",
+            event: wasBackgrounded ? "run_aborted" : "run_error",
             at: new Date().toISOString(),
-            error: error instanceof Error ? error.message : "Connection error.",
+            error: wasBackgrounded
+              ? "Connection interrupted while CrewCMD was in the background."
+              : error instanceof Error ? error.message : "Connection error.",
           };
           setExecutionProgress(errorProgress);
           setExecutionEvents((events) => [...events, errorProgress]);
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content:
-                "Connection error. Make sure the OpenClaw Gateway is reachable.",
-            },
-          ]);
+          if (fullContent.trim()) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: `${fullContent}\n\n_(connection interrupted)_`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+          }
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
           setStreamingContent("");
@@ -1664,7 +1746,7 @@ export default function ChatPage() {
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [isLoading, voiceMode, messages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
+    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent]
   );
 
   const interruptAudio = useCallback(() => {
@@ -1785,7 +1867,7 @@ export default function ChatPage() {
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
-          {messages.length === 0 && !streamingContent && (
+          {visibleMessages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
                 className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border"
@@ -1818,8 +1900,8 @@ export default function ChatPage() {
             </div>
           )}
 
-          {messages.map((msg, i) => {
-            const prevDate = i > 0 ? getDateKey(messages[i - 1].createdAt) : null;
+          {visibleMessages.map((msg, i) => {
+            const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
             return (
@@ -2028,8 +2110,8 @@ export default function ChatPage() {
             {agentOverlayMode === "transcript" ? (
               <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:px-6">
                 <div className="mx-auto max-w-4xl space-y-4 pb-8">
-                  {messages.map((msg, i) => {
-                    const prevDate = i > 0 ? getDateKey(messages[i - 1].createdAt) : null;
+                  {visibleMessages.map((msg, i) => {
+                    const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
                     const currDate = getDateKey(msg.createdAt);
                     const showSeparator = currDate && currDate !== prevDate;
                     return (

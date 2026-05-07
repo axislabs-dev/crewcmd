@@ -296,6 +296,13 @@ function extractActivityProgress(payload: Record<string, unknown>) {
   };
 }
 
+function isChatLifecycleEvent(payload: Record<string, unknown>) {
+  const eventName = firstString(payload.event);
+  if (!eventName) return true;
+
+  return eventName.toLowerCase() === "chat";
+}
+
 function sessionMatches(eventSession: string | null, allowedSessions: string[]) {
   if (!eventSession) return true;
   const event = eventSession.toLowerCase();
@@ -953,6 +960,7 @@ export async function POST(request: NextRequest) {
       if (!matchesSession) return;
 
       const state = p.state as string;
+      const isChatLifecycle = isChatLifecycleEvent(p);
       const toolProgress = extractToolProgress(p);
       const activityProgress = toolProgress ? null : extractActivityProgress(p);
       armInactivityTimeout(`gateway-${state || toolProgress?.event || "event"}`);
@@ -966,6 +974,7 @@ export async function POST(request: NextRequest) {
           matchesSession,
           matchesRun,
           activeRunId,
+          isChatLifecycle,
         },
       });
 
@@ -979,6 +988,10 @@ export async function POST(request: NextRequest) {
           ...(activeRunId ? { runId: activeRunId } : {}),
           activeTool: activityProgress.activeTool,
         });
+      }
+
+      if (!isChatLifecycle) {
+        return;
       }
 
       if (state === "delta") {

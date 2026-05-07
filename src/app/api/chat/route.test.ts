@@ -303,6 +303,62 @@ describe("POST /api/chat", () => {
     await reader.cancel();
   });
 
+  it("does not finish the chat stream for non-chat agent tool finals", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const first = await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "agent",
+      runId: "run-1",
+      stream: "tool",
+      state: "final",
+      sessionKey: "main",
+      data: {
+        name: "exec",
+        status: "completed",
+        output: "build passed",
+      },
+    });
+
+    const toolFrame = await readUntilContains(reader, "\"event\":\"tool_completed\"");
+    expect(first).toContain("\"event\":\"gateway_send_started\"");
+    expect(toolFrame).toContain("\"event\":\"tool_completed\"");
+    expect(toolFrame).toContain("\"name\":\"exec\"");
+    expect(toolFrame).not.toContain("data: [DONE]");
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "actual answer" },
+    });
+
+    const streamed = await readUntilDone(reader);
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"actual answer\"}}]");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
   it("keeps long-running chat streams alive with heartbeat progress", async () => {
     vi.useFakeTimers();
     const response = await POST(makeRequest({

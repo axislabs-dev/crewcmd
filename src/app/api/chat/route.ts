@@ -43,6 +43,8 @@ type ChatProgressEvent = {
     name: string;
     status?: string;
     detail?: string;
+    detailKind?: "input" | "output" | "status";
+    detailTruncated?: boolean;
   };
 };
 
@@ -198,8 +200,9 @@ function extractEventRunIds(payload: Record<string, unknown>) {
   ].map(asString).filter((value): value is string => Boolean(value));
 }
 
-function stringifyShort(value: unknown, maxLength = 160) {
+function stringifyToolDetail(value: unknown, maxLength = 8_000) {
   if (value === undefined || value === null) return null;
+
   let text: string;
   if (typeof value === "string") {
     text = value;
@@ -207,14 +210,19 @@ function stringifyShort(value: unknown, maxLength = 160) {
     text = String(value);
   } else {
     try {
-      text = JSON.stringify(value);
+      text = JSON.stringify(value, null, 2);
     } catch {
       text = String(value);
     }
   }
-  text = text.replace(/\s+/g, " ").trim();
+
+  text = text.trim();
   if (!text) return null;
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+
+  return {
+    detail: text.length > maxLength ? text.slice(0, maxLength) : text,
+    detailTruncated: text.length > maxLength,
+  };
 }
 
 function extractToolProgress(payload: Record<string, unknown>) {
@@ -240,9 +248,11 @@ function extractToolProgress(payload: Record<string, unknown>) {
       ? "tool_completed"
       : "tool_updated";
 
-  const detail = event === "tool_started"
-    ? stringifyShort(data.args ?? data.arguments ?? data.input)
-    : stringifyShort(data.partialResult ?? data.partial_result ?? data.result ?? data.output);
+  const detailKind: "input" | "output" = event === "tool_started" ? "input" : "output";
+  const detailValue = event === "tool_started"
+    ? data.args ?? data.arguments ?? data.input
+    : data.partialResult ?? data.partial_result ?? data.result ?? data.output;
+  const detail = stringifyToolDetail(detailValue);
 
   return {
     event,
@@ -250,7 +260,8 @@ function extractToolProgress(payload: Record<string, unknown>) {
       ...(toolCallId ? { id: toolCallId } : {}),
       name,
       status: phase,
-      ...(detail ? { detail } : {}),
+      detailKind,
+      ...(detail ? detail : {}),
     },
   };
 }
@@ -275,7 +286,7 @@ function extractActivityProgress(payload: Record<string, unknown>) {
   const stream = firstString(payload.stream, payload.event);
   const phase = firstString(data.phase, data.status, data.state, payload.state);
   const kind = firstString(data.kind, data.type, stream) ?? "activity";
-  const detail = stringifyShort(
+  const detail = stringifyToolDetail(
     data.detail ??
     data.description ??
     data.args ??
@@ -286,12 +297,17 @@ function extractActivityProgress(payload: Record<string, unknown>) {
     220
   );
 
+  const detailKind: "output" | "status" = phase && ["result", "end", "ended", "complete", "completed", "success", "succeeded"].includes(phase.toLowerCase())
+    ? "output"
+    : "status";
+
   return {
     event: "tool_updated" as ChatProgressEventName,
     activeTool: {
       name: label,
       status: phase ?? kind,
-      ...(detail ? { detail } : {}),
+      detailKind,
+      ...(detail ? detail : {}),
     },
   };
 }

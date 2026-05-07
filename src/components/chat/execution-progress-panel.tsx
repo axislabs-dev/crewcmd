@@ -12,6 +12,8 @@ export type ExecutionProgressEvent = {
     name?: string;
     status?: string | null;
     detail?: string;
+    detailKind?: "input" | "output" | "status";
+    detailTruncated?: boolean;
   };
 };
 
@@ -19,6 +21,7 @@ type ExecutionPhase = "run-started" | "thinking" | "tool" | "waiting" | "complet
 
 interface ExecutionProgressPanelProps {
   progress: ExecutionProgressEvent | null;
+  events?: ExecutionProgressEvent[];
   isLoading: boolean;
   hasStreamingContent: boolean;
   agentColor: string;
@@ -74,8 +77,103 @@ function labelFromProgress(progress: ExecutionProgressEvent | null, phase: Execu
   return PHASES.find((item) => item.phase === phase)?.label ?? "Working";
 }
 
+function toolTitle(event: ExecutionProgressEvent) {
+  const name = event.activeTool?.name ?? "tool";
+  if (event.event === "tool_started") return `Tool call - ${name}`;
+  if (event.event === "tool_completed") return `Tool output - ${name}`;
+  return `Tool update - ${name}`;
+}
+
+function toolTone(event: ExecutionProgressEvent) {
+  const status = event.activeTool?.status?.toLowerCase() ?? "";
+  if (event.event === "tool_completed" && /fail|error|exit 1|exit 2/.test(status)) return "error";
+  if (event.event === "tool_completed") return "done";
+  if (event.event === "tool_started") return "running";
+  return "neutral";
+}
+
+function toolMeta(event: ExecutionProgressEvent) {
+  const parts = [
+    event.activeTool?.status,
+    formatElapsed(event.elapsedMs),
+    event.runId,
+  ].filter(Boolean);
+  return parts.join(" - ");
+}
+
+function detailLabel(kind: "input" | "output" | "status" | undefined) {
+  if (kind === "input") return "Tool input";
+  if (kind === "output") return "Tool output";
+  return "Details";
+}
+
+function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; agentColor: string }) {
+  const tone = toolTone(event);
+  const detail = event.activeTool?.detail;
+  const markerColor =
+    tone === "error" ? "rgb(248 113 113)" :
+    tone === "done" ? "rgb(74 222 128)" :
+    agentColor;
+
+  return (
+    <details className="group rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/45">
+      <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-elevated)]/70">
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${tone === "running" ? "animate-pulse" : ""}`}
+          style={{ backgroundColor: markerColor }}
+        />
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]">
+          {toolTitle(event)}
+        </span>
+        <span className="hidden max-w-[16rem] truncate font-mono text-[10px] text-[var(--text-tertiary)] sm:block">
+          {toolMeta(event)}
+        </span>
+        <span className="text-[10px] text-[var(--text-tertiary)] transition-transform group-open:rotate-90">
+          &gt;
+        </span>
+      </summary>
+      <div className="border-t border-[var(--border-subtle)] px-3 py-3">
+        <dl className="grid gap-2 text-[11px] sm:grid-cols-[7rem_1fr]">
+          <dt className="text-[var(--text-tertiary)]">Tool</dt>
+          <dd className="font-mono text-[var(--text-secondary)]">{event.activeTool?.name ?? "tool"}</dd>
+          {event.activeTool?.id && (
+            <>
+              <dt className="text-[var(--text-tertiary)]">Call ID</dt>
+              <dd className="break-all font-mono text-[var(--text-secondary)]">{event.activeTool.id}</dd>
+            </>
+          )}
+          {event.activeTool?.status && (
+            <>
+              <dt className="text-[var(--text-tertiary)]">Status</dt>
+              <dd className="font-mono text-[var(--text-secondary)]">{event.activeTool.status}</dd>
+            </>
+          )}
+          {event.at && (
+            <>
+              <dt className="text-[var(--text-tertiary)]">Timestamp</dt>
+              <dd className="font-mono text-[var(--text-secondary)]">{event.at}</dd>
+            </>
+          )}
+        </dl>
+        {detail && (
+          <div className="mt-3">
+            <div className="mb-1 text-[10px] font-medium uppercase text-[var(--text-tertiary)]">
+              {detailLabel(event.activeTool?.detailKind)}
+              {event.activeTool?.detailTruncated ? " - truncated" : ""}
+            </div>
+            <pre className="max-h-80 overflow-auto rounded-md border border-[var(--border-subtle)] bg-black/20 p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+              <code>{detail}</code>
+            </pre>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 export function ExecutionProgressPanel({
   progress,
+  events = [],
   isLoading,
   hasStreamingContent,
   agentColor,
@@ -87,6 +185,7 @@ export function ExecutionProgressPanel({
   const activeIndex = PHASES.findIndex((item) => item.phase === phase);
   const isTerminal = phase === "completed" || phase === "error";
   const label = labelFromProgress(progress, phase);
+  const toolEvents = events.filter((event) => event.activeTool);
 
   return (
     <div
@@ -135,6 +234,17 @@ export function ExecutionProgressPanel({
       )}
       {phase === "error" && progress?.error && (
         <div className="mt-1 truncate text-[11px] text-red-300">{progress.error}</div>
+      )}
+      {toolEvents.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {toolEvents.slice(-12).map((event, index) => (
+            <ToolAuditRow
+              key={`${event.activeTool?.id ?? event.activeTool?.name ?? "tool"}-${event.event}-${event.at ?? index}-${index}`}
+              event={event}
+              agentColor={agentColor}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

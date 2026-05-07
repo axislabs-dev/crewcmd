@@ -103,8 +103,71 @@
     {
       "idx": 14,
       "version": "7",
+      "when": 1776000000000,
+      "tag": "0014_runtime_agent_access_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1776100000000,
+      "tag": "0015_gateway_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1776200000000,
+      "tag": "0016_chat_sessions_gateway_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
       "when": 1776470100000,
       "tag": "0017_runtime_managed_resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1776500000000,
+      "tag": "0018_project_url_folder",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1776600000000,
+      "tag": "0019_workspaces_and_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1776700000000,
+      "tag": "0020_personal_runtime_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1776800000000,
+      "tag": "0021_workspace_scoped_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1776900000000,
+      "tag": "0022_model_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1777000000000,
+      "tag": "0023_mobile_push_chat_runs",
       "breakpoints": true
     }
   ]

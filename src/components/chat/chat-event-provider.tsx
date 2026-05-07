@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useCompany } from "@/components/company-context";
 import { useChatStore } from "@/lib/chat-store";
+import { useActiveChatRunStore } from "@/lib/chat-active-run-store";
 
 /**
  * Layout-level component that maintains an SSE connection to
@@ -48,6 +49,12 @@ export function ChatEventProvider() {
               createdAt: data.createdAt,
               interrupted: data.interrupted,
             });
+            return;
+          }
+
+          if (data.type === "chat_progress" && data.agentId) {
+            useActiveChatRunStore.getState().applyProgressEvent(data);
+            window.dispatchEvent(new CustomEvent("crewcmd:chat-progress", { detail: data }));
           }
         } catch {
           // Ignore malformed events (pings, etc.)

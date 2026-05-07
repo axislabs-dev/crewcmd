@@ -3,10 +3,12 @@ import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
+import { buildChatExecutionSnapshot, loadChatExecutionEvents } from "@/lib/chat-session-events";
 
 /**
  * GET /api/chat/messages?sessionId=xxx&limit=100
  * GET /api/chat/messages?agentId=neo&companyId=xxx&limit=100
+ * GET /api/chat/messages?companyId=xxx&sessionKey=neo:abc&limit=100
  *
  * Fetch messages for a chat session, oldest first.
  */
@@ -22,14 +24,28 @@ export async function GET(request: NextRequest) {
   const sessionId = searchParams.get("sessionId");
   const agentId = searchParams.get("agentId");
   const companyId = searchParams.get("companyId");
+  const sessionKey = searchParams.get("sessionKey");
   const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
 
-  if (!sessionId && (!agentId || !companyId)) {
-    return Response.json({ error: "sessionId or (agentId + companyId) required" }, { status: 400 });
+  if (!sessionId && !((agentId || sessionKey) && companyId)) {
+    return Response.json({ error: "sessionId or ((agentId or sessionKey) + companyId) required" }, { status: 400 });
   }
 
   try {
     let resolvedSessionId = sessionId;
+
+    if (!resolvedSessionId && sessionKey && companyId) {
+      const sessions = await withRetry(() =>
+        db!.select().from(chatSessions)
+          .where(and(eq(chatSessions.gatewaySessionKey, sessionKey), eq(chatSessions.companyId, companyId)))
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(1)
+      );
+
+      if (sessions.length > 0) {
+        resolvedSessionId = sessions[0].id;
+      }
+    }
 
     if (!resolvedSessionId && agentId && companyId) {
       const sessions = await withRetry(() =>
@@ -40,10 +56,14 @@ export async function GET(request: NextRequest) {
       );
 
       if (sessions.length === 0) {
-        return Response.json({ messages: [], sessionId: null });
+        return Response.json({ messages: [], sessionId: null, execution: { progress: null, events: [] } });
       }
 
       resolvedSessionId = sessions[0].id;
+    }
+
+    if (!resolvedSessionId) {
+      return Response.json({ messages: [], sessionId: null, execution: { progress: null, events: [] } });
     }
 
     const messages = await withRetry(() =>
@@ -52,9 +72,13 @@ export async function GET(request: NextRequest) {
         .orderBy(asc(chatMessages.createdAt))
         .limit(limit)
     );
+    const execution = buildChatExecutionSnapshot(
+      await loadChatExecutionEvents(resolvedSessionId!, 200)
+    );
 
     return Response.json({
       sessionId: resolvedSessionId,
+      execution,
       messages: messages.map((m) => ({
         id: m.id,
         role: m.role,

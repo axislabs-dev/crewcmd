@@ -288,6 +288,8 @@ export default function ChatPage() {
   const [speakResponses, setSpeakResponses] = useState(false);
   const [agentMicMuted, setAgentMicMuted] = useState(false);
   const [agentAudioMuted, setAgentAudioMuted] = useState(false);
+  const [agentPocketLocked, setAgentPocketLocked] = useState(false);
+  const [pocketUnlocking, setPocketUnlocking] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -323,6 +325,7 @@ export default function ChatPage() {
   const lastBusyReplyAtRef = useRef(0);
   const hasStartedResponseAudioRef = useRef(false);
   const pageHiddenDuringRequestRef = useRef(false);
+  const pocketUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceLatencyRef = useRef<{
     requestId: string;
     startedAt: number;
@@ -361,6 +364,24 @@ export default function ChatPage() {
     prefetchedAudioRef.current = null;
   }, [revokeAudioObjectUrl]);
 
+  const clearPocketUnlockTimer = useCallback(() => {
+    if (pocketUnlockTimerRef.current) {
+      clearTimeout(pocketUnlockTimerRef.current);
+      pocketUnlockTimerRef.current = null;
+    }
+    setPocketUnlocking(false);
+  }, []);
+
+  const startPocketUnlock = useCallback(() => {
+    clearPocketUnlockTimer();
+    setPocketUnlocking(true);
+    pocketUnlockTimerRef.current = setTimeout(() => {
+      pocketUnlockTimerRef.current = null;
+      setPocketUnlocking(false);
+      setAgentPocketLocked(false);
+    }, 1400);
+  }, [clearPocketUnlockTimer]);
+
   const assignAudioObjectUrl = useCallback((url: string, reason: string) => {
     if (audioObjectUrlRef.current && audioObjectUrlRef.current !== url) {
       revokeAudioObjectUrl(audioObjectUrlRef.current, "replace-active-audio");
@@ -373,6 +394,34 @@ export default function ChatPage() {
       detail: { reason },
     });
   }, [revokeAudioObjectUrl]);
+
+  useEffect(() => () => clearPocketUnlockTimer(), [clearPocketUnlockTimer]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent") {
+      clearPocketUnlockTimer();
+      setAgentPocketLocked(false);
+      return;
+    }
+
+    const lockForResume = () => {
+      clearPocketUnlockTimer();
+      setAgentPocketLocked(true);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        lockForResume();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", lockForResume);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", lockForResume);
+    };
+  }, [voiceMode, clearPocketUnlockTimer]);
 
   // Derive session key: if a gateway session is selected, use it;
   // otherwise fall back to agent callsign
@@ -2071,6 +2120,19 @@ export default function ChatPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
+                    onClick={() => {
+                      setSpeakResponses(true);
+                      setAgentPocketLocked(true);
+                    }}
+                    title="Pocket lock"
+                    aria-label="Pocket lock"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
+                    </svg>
+                  </button>
+                  <button
                     onClick={() =>
                       setAgentOverlayMode((mode) => (mode === "transcript" ? "immersive" : "transcript"))
                     }
@@ -2094,6 +2156,7 @@ export default function ChatPage() {
                       setAgentOverlayMode("transcript");
                       setAgentMicMuted(false);
                       setAgentAudioMuted(false);
+                      setAgentPocketLocked(false);
                     }}
                     className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-2 text-[11px] font-medium tracking-[0.24em] text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                   >
@@ -2166,6 +2229,42 @@ export default function ChatPage() {
                 )}
               </div>
             ) : null}
+
+            {agentPocketLocked && (
+              <div
+                className="absolute inset-0 z-[70] flex touch-none flex-col items-center justify-center bg-[var(--bg-primary)]/92 px-6 text-center backdrop-blur-xl"
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerMove={(event) => event.stopPropagation()}
+                onPointerUp={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onTouchMove={(event) => event.preventDefault()}
+              >
+                <div
+                  className="mb-5 flex h-20 w-20 items-center justify-center rounded-[24px] border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-[var(--theme-shadow-lg)]"
+                  style={{ color: agentColor, boxShadow: `0 0 32px ${agentColor}22` }}
+                >
+                  <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
+                  </svg>
+                </div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--text-tertiary)]">
+                  Pocket lock
+                </div>
+                <div className="mt-2 max-w-sm text-sm text-[var(--text-secondary)]">
+                  Agent mode stays live. Touches are blocked until you unlock.
+                </div>
+                <button
+                  onPointerDown={startPocketUnlock}
+                  onPointerUp={clearPocketUnlockTimer}
+                  onPointerCancel={clearPocketUnlockTimer}
+                  onPointerLeave={clearPocketUnlockTimer}
+                  onContextMenu={(event) => event.preventDefault()}
+                  className="mt-7 min-w-44 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--text-primary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)]"
+                >
+                  {pocketUnlocking ? "Keep holding" : "Hold to unlock"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

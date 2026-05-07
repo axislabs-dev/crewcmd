@@ -693,6 +693,7 @@ export async function POST(request: NextRequest) {
     let historyPollInFlight = false;
     let historySnapshotStreamed = false;
     let hasToolActivity = false;
+    let deferredToolCompletion = false;
 
     const enqueueData = (payload: unknown) => {
       if (!streamController || done) return;
@@ -831,6 +832,10 @@ export async function POST(request: NextRequest) {
                 elapsedMs: Date.now() - requestStartedAt,
               },
             });
+            if (deferredToolCompletion) {
+              await finishStream(false);
+              break;
+            }
           }
         }
       } finally {
@@ -877,6 +882,23 @@ export async function POST(request: NextRequest) {
       streamAssistantSnapshot(recovered);
     };
 
+    const deferToolCompletionUntilAssistantText = (reason: string) => {
+      deferredToolCompletion = true;
+      hasToolActivity = true;
+      publishAgentModeDiagnostic({
+        scope: "api-chat",
+        event: "stream.finish.defer-tool-assistant",
+        sessionId: diagnosticSessionId,
+        detail: {
+          activeRunId,
+          elapsedMs: Date.now() - requestStartedAt,
+          reason,
+        },
+      });
+      startHistoryPolling();
+      armInactivityTimeout(reason);
+    };
+
     const finishStream = async (
       interrupted: boolean,
       progressEvent: "run_completed" | "run_aborted" | null = interrupted ? "run_aborted" : "run_completed",
@@ -893,9 +915,13 @@ export async function POST(request: NextRequest) {
           elapsedMs: Date.now() - requestStartedAt,
         },
       });
+      await recoverMissingAssistantText();
+      if (!interrupted && progressEvent === "run_completed" && hasToolActivity && !fullAssistantText) {
+        deferToolCompletionUntilAssistantText("tool-completion-without-assistant");
+        return;
+      }
       clearInactivityTimeout();
       stopHistoryPolling();
-      await recoverMissingAssistantText();
       await persistAssistant(interrupted);
       if (progressEvent) {
         enqueueProgress(progressEvent, activeRunId ? { runId: activeRunId } : {});
@@ -1071,7 +1097,6 @@ export async function POST(request: NextRequest) {
           fullAssistantText = finalText;
         }
         if (toolOnlyFinal || (!finalText && hasToolActivity && !fullAssistantText)) {
-          hasToolActivity = true;
           publishAgentModeDiagnostic({
             scope: "api-chat",
             event: toolOnlyFinal ? "chat-final.tool-only" : "chat-final.empty-after-tool",
@@ -1081,7 +1106,9 @@ export async function POST(request: NextRequest) {
               elapsedMs: Date.now() - requestStartedAt,
             },
           });
-          startHistoryPolling();
+          deferToolCompletionUntilAssistantText(
+            toolOnlyFinal ? "tool-only-chat-final" : "empty-chat-final-after-tool"
+          );
           return;
         }
 

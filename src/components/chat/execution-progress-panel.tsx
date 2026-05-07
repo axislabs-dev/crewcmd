@@ -33,7 +33,6 @@ const PHASES: Array<{ phase: ExecutionPhase; label: string }> = [
   { phase: "tool", label: "Tool" },
   { phase: "waiting", label: "Waiting" },
   { phase: "completed", label: "Completed" },
-  { phase: "error", label: "Error" },
 ];
 
 function phaseFromProgress(
@@ -186,6 +185,7 @@ export function ExecutionProgressPanel({
   const isCompleted = phase === "completed";
   const label = labelFromProgress(progress, phase);
   const toolEvents = events.filter((event) => event.activeTool);
+  const visibleToolEvents = toolEvents.slice(-20);
 
   return (
     <div
@@ -211,7 +211,7 @@ export function ExecutionProgressPanel({
           </span>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-6 gap-1">
+      <div className="mt-2 grid grid-cols-5 gap-1">
         {PHASES.map((item, index) => {
           const active = item.phase === phase;
           const passed = isCompleted ? index < activeIndex : !isTerminal && index < activeIndex;
@@ -236,8 +236,8 @@ export function ExecutionProgressPanel({
         <div className="mt-1 truncate text-[11px] text-red-300">{progress.error}</div>
       )}
       {toolEvents.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {toolEvents.slice(-12).map((event, index) => (
+        <div className="mt-3 max-h-72 space-y-2 overflow-y-auto overscroll-contain pr-1">
+          {visibleToolEvents.map((event, index) => (
             <ToolAuditRow
               key={`${event.activeTool?.id ?? event.activeTool?.name ?? "tool"}-${event.event}-${event.at ?? index}-${index}`}
               event={event}

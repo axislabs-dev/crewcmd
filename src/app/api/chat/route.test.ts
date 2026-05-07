@@ -420,6 +420,72 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("data: [DONE]");
   });
 
+  it("finishes after deferred tool completion when history later has assistant text", async () => {
+    vi.useFakeTimers();
+    try {
+      const chatHandlers: Array<(payload: unknown) => void> = [];
+      const chatHistory = vi.fn().mockResolvedValue({
+        messages: [
+          { role: "user", content: "inspect files" },
+          { role: "assistant", content: "late answer" },
+        ],
+      });
+      mockSelectRecoveredAssistantText.mockReturnValue("late answer");
+      mockGetGatewayClient.mockResolvedValueOnce({
+        on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+          if (event === "*") chatHandlers.push(handler);
+        }),
+        off: vi.fn(),
+        chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+        chatAbort: vi.fn(() => Promise.resolve()),
+        chatHistory,
+        rpc: vi.fn().mockResolvedValue({ sessions: [] }),
+      });
+
+      const response = await POST(makeRequest({
+        messages: [{ role: "user", content: "inspect files" }],
+        agent: "main",
+      }));
+      const reader = response.body!.getReader();
+      await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+      await vi.waitFor(() => {
+        expect(chatHandlers).toHaveLength(1);
+      });
+
+      chatHandlers[0]({
+        event: "agent",
+        runId: "run-1",
+        stream: "tool",
+        sessionKey: "main",
+        data: {
+          phase: "start",
+          name: "exec",
+          args: { command: "pnpm test" },
+        },
+      });
+      await readUntilContains(reader, "\"event\":\"tool_started\"");
+
+      chatHandlers[0]({
+        event: "chat",
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { content: "" },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      const streamed = await readUntilDone(reader);
+
+      expect(chatHistory).toHaveBeenCalledWith({ sessionKey: "main", limit: 25 });
+      expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"late answer\"}}]");
+      expect(streamed).toContain("\"event\":\"run_completed\"");
+      expect(streamed).toContain("data: [DONE]");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not finish or stream tool-result chat finals as assistant answers", async () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     mockGetGatewayClient.mockResolvedValueOnce({

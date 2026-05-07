@@ -93,7 +93,9 @@ pg_dump $DATABASE_URL > crewcmd-backup-$(date +%Y%m%d).sql
 ```bash
 git pull origin main
 pnpm install
-pnpm db:push  # Apply any schema changes
+pnpm db:migrate  # Apply tracked schema migrations
 pnpm build
 # Restart the server
 ```
+
+For migration diagnostics and baselining an older database, see [Database Migrations](database-migrations.md).

@@ -108,7 +108,7 @@ Use this for Neon, Supabase, or a self-hosted Postgres database:
 cp .env.example .env.local
 # Edit .env.local with your DATABASE_URL
 pnpm install
-pnpm db:push
+pnpm db:migrate
 pnpm dev
 ```
 

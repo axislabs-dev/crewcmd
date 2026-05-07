@@ -33,7 +33,7 @@ Use Neon, Supabase, or any Postgres instance:
 cp .env.example .env.local
 # Edit .env.local — set DATABASE_URL to your connection string
 pnpm install
-pnpm db:push
+pnpm db:migrate
 pnpm dev
 ```
 

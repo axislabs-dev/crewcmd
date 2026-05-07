@@ -21,4 +21,6 @@ jobs:
       - run: pnpm lint:check
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm --filter crewcmd run test
+      - run: pnpm --filter crewcmd run smoke
       - run: pnpm build

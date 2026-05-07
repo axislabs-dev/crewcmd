@@ -23,6 +23,7 @@ const CLIENT_ID = "gateway-client";
 const CLIENT_VERSION = "crewcmd/1.0.0";
 const CLIENT_MODE = "backend";
 const DEFAULT_ROLE = "operator";
+const DEFAULT_CAPS = ["tool-events"];
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
@@ -424,6 +425,7 @@ export class GatewayClient {
                 },
                 role: DEFAULT_ROLE,
                 scopes: DEFAULT_SCOPES,
+                caps: DEFAULT_CAPS,
                 auth: this.authToken ? { token: this.authToken } : undefined,
                 device: {
                   id: this.device.deviceId,

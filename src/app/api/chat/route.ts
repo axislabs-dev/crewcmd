@@ -219,23 +219,28 @@ function stringifyShort(value: unknown, maxLength = 160) {
 
 function extractToolProgress(payload: Record<string, unknown>) {
   const stream = firstString(payload.stream, payload.event);
+  const streamKey = stream?.toLowerCase() ?? "";
   const data = asRecord(payload.data) ?? asRecord(payload.payload) ?? payload;
-  const isToolEvent = stream === "tool" ||
-    stream === "tool_call" ||
-    stream === "agent.tool" ||
+  const kind = firstString(data.kind, data.type, payload.kind, payload.type)?.toLowerCase() ?? "";
+  const isToolEvent = streamKey === "tool" ||
+    streamKey === "tool_call" ||
+    streamKey === "agent.tool" ||
+    streamKey.includes("tool") ||
+    kind.includes("tool") ||
     Boolean(firstString(data.toolCallId, data.tool_call_id, data.toolName, data.tool_name));
   if (!isToolEvent) return null;
   const toolCallId = firstString(data.toolCallId, data.tool_call_id, payload.toolCallId, payload.tool_call_id);
   const name = firstString(data.name, data.toolName, data.tool_name, payload.toolName, payload.tool_name) ?? "tool";
-  const phase = firstString(data.phase, data.status, data.state) ?? "update";
+  const phase = firstString(data.phase, data.status, data.state, payload.phase, payload.status, payload.state) ?? "update";
+  const normalizedPhase = phase.toLowerCase();
 
-  const event: ChatProgressEventName = phase === "start"
+  const event: ChatProgressEventName = ["start", "started", "call", "calling", "running"].includes(normalizedPhase)
     ? "tool_started"
-    : phase === "result" || phase === "end" || phase === "complete" || phase === "completed"
+    : ["result", "end", "ended", "complete", "completed", "success", "succeeded"].includes(normalizedPhase)
       ? "tool_completed"
       : "tool_updated";
 
-  const detail = phase === "start"
+  const detail = event === "tool_started"
     ? stringifyShort(data.args ?? data.arguments ?? data.input)
     : stringifyShort(data.partialResult ?? data.partial_result ?? data.result ?? data.output);
 
@@ -841,7 +846,7 @@ export async function POST(request: NextRequest) {
         streamController?.enqueue(encoder.encode("data: [DONE]\n\n"));
         streamController?.close();
       } catch { /* already closed */ }
-      if (client) client.off("chat", chatHandler);
+      if (client) client.off("*", chatHandler);
       clearHeartbeat();
       releaseHeldClient();
       publishAgentModeDiagnostic({
@@ -1034,9 +1039,9 @@ export async function POST(request: NextRequest) {
         });
         holdClient(client);
 
-        client.on("chat", chatHandler);
+        client.on("*", chatHandler);
         cleanupFns.push(() => {
-          client?.off("chat", chatHandler);
+          client?.off("*", chatHandler);
         });
 
         // Close only idle streams; active long-running turns reset this on gateway events.
@@ -1069,7 +1074,7 @@ export async function POST(request: NextRequest) {
         });
         startHistoryPolling();
       } catch (err) {
-        if (client) client.off("chat", chatHandler);
+        if (client) client.off("*", chatHandler);
         releaseHeldClient();
         const msg = err instanceof Error ? err.message : String(err);
         publishAgentModeDiagnostic({

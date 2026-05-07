@@ -164,9 +164,12 @@ export default function SkillsPage() {
     }
   }, [addToast]);
 
-  const fetchMarketplace = useCallback(async () => {
+  const fetchMarketplace = useCallback(async (activeWorkspaceId?: string | null, cId?: string | null) => {
     try {
-      const res = await fetch("/api/skills/browse");
+      const params = new URLSearchParams();
+      if (activeWorkspaceId) params.set("workspaceId", activeWorkspaceId);
+      if (cId) params.set("companyId", cId);
+      const res = await fetch(`/api/skills/browse${params.toString() ? `?${params.toString()}` : ""}`);
       if (res.ok) {
         setMarketplace(await res.json());
       }
@@ -201,7 +204,7 @@ export default function SkillsPage() {
 
     const init = async () => {
       if (wId) await fetchSkills(wId, cId);
-      await Promise.all([fetchMarketplace(), wId ? fetchAgents(wId) : Promise.resolve()]);
+      await Promise.all([fetchMarketplace(wId, cId), wId ? fetchAgents(wId) : Promise.resolve()]);
       setLoading(false);
     };
     init();
@@ -346,6 +349,7 @@ export default function SkillsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          provider: ms.source,
           source: ms.source,
           name: ms.name,
           slug: ms.slug,
@@ -359,7 +363,7 @@ export default function SkillsPage() {
         }),
       });
       if (res.ok) {
-        await fetchSkills(workspaceId, companyId);
+        await Promise.all([fetchSkills(workspaceId, companyId), fetchMarketplace(workspaceId, companyId)]);
         addToast(`Installed ${ms.name}`, "success");
       } else {
         addToast(`Failed to install ${ms.name}`);
@@ -454,6 +458,13 @@ export default function SkillsPage() {
     setEditName(skill.name);
     setEditDescription(skill.description || "");
     setEditContent(skill.content || "");
+  }
+
+  function getNativeInstallStatus(ms: MarketplaceSkill): string | null {
+    const native = ms.metadata?.native;
+    if (!native || typeof native !== "object") return null;
+    const status = (native as Record<string, unknown>).installStatus;
+    return typeof status === "string" ? status : null;
   }
 
   // ── Filter logic ──
@@ -608,7 +619,8 @@ export default function SkillsPage() {
               </div>
 
               {filteredMarketplace.map((ms) => {
-                const isInstalled = installedSlugs.has(ms.slug);
+                const nativeStatus = getNativeInstallStatus(ms);
+                const isInstalled = installedSlugs.has(ms.slug) || nativeStatus === "installed";
                 return (
                   <div
                     key={`${ms.source}-${ms.slug}`}
@@ -645,7 +657,7 @@ export default function SkillsPage() {
                       </div>
                     </div>
                     <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-2">{ms.description}</p>
-                    <span className="mt-1 inline-block font-mono text-[9px] text-[var(--text-tertiary)]">v{ms.version}</span>
+                    <span className="mt-1 inline-block font-mono text-[9px] text-[var(--text-tertiary)]">v{ms.version}{nativeStatus ? ` · OpenClaw ${nativeStatus}` : ""}</span>
                   </div>
                 );
               })}
@@ -954,7 +966,7 @@ export default function SkillsPage() {
                 <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">{selectedMarketplace.description}</p>
               </div>
               <div>
-                {installedSlugs.has(selectedMarketplace.slug) ? (
+                {installedSlugs.has(selectedMarketplace.slug) || getNativeInstallStatus(selectedMarketplace) === "installed" ? (
                   <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-mono text-[10px] tracking-wider text-emerald-400">
                     INSTALLED
                   </span>
@@ -980,8 +992,8 @@ export default function SkillsPage() {
 
             <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
-                Installing this marketplace skill creates a real skill record in CrewCmd.
-                If the marketplace entry includes packaged instructions and metadata, those are preserved on install.
+                ClawHub skills install natively through the selected OpenClaw gateway, then CrewCMD records the provider metadata and install status.
+                Other marketplace sources still create CrewCMD skill records from packaged metadata.
               </p>
             </div>
           </div>

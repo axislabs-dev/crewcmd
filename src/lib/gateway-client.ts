@@ -86,10 +86,55 @@ export interface GatewaySkillStatusEntry {
   skillKey: string;
   enabled?: boolean;
   env?: Record<string, string>;
+  version?: string;
+  source?: string;
+  slug?: string;
+  path?: string;
+  installed?: boolean;
 }
 
 export interface GatewaySkillsStatusResult {
   skills: GatewaySkillStatusEntry[];
+}
+
+export interface GatewaySkillSearchResult {
+  skills?: Array<Record<string, unknown>>;
+  items?: Array<Record<string, unknown>>;
+  results?: Array<Record<string, unknown>>;
+}
+
+export interface GatewaySkillInstallResult {
+  ok?: boolean;
+  installed?: boolean;
+  updated?: boolean;
+  slug?: string;
+  version?: string;
+  path?: string;
+  warning?: string;
+  warnings?: string[];
+}
+
+export interface GatewaySkillUpdateResult {
+  ok?: boolean;
+  updated?: boolean;
+  updatedCount?: number;
+  slug?: string;
+  version?: string;
+  warnings?: string[];
+}
+
+export interface GatewaySkillsListResult {
+  skills?: GatewaySkillStatusEntry[];
+  items?: GatewaySkillStatusEntry[];
+  entries?: GatewaySkillStatusEntry[];
+}
+
+export interface GatewaySkillUninstallResult {
+  ok?: boolean;
+  removed?: boolean;
+  uninstalled?: boolean;
+  slug?: string;
+  warnings?: string[];
 }
 
 export interface GatewayConfigSnapshot {
@@ -532,6 +577,59 @@ export class GatewayClient {
     agentId?: string;
   } = {}): Promise<GatewaySkillsStatusResult> {
     return this.rpc<GatewaySkillsStatusResult>("skills.status", params);
+  }
+
+  async skillsList(params: {
+    source?: "clawhub";
+    agentId?: string;
+  } = {}): Promise<GatewaySkillsListResult> {
+    return this.rpc<GatewaySkillsListResult>("skills.list", params);
+  }
+
+  async skillsSearch(params: {
+    query?: string;
+    limit?: number;
+  } = {}): Promise<GatewaySkillSearchResult> {
+    return this.rpc<GatewaySkillSearchResult>("skills.search", params);
+  }
+
+  async skillsDetail(params: {
+    slug: string;
+    version?: string;
+  }): Promise<Record<string, unknown>> {
+    return this.rpc<Record<string, unknown>>("skills.detail", params);
+  }
+
+  async skillsInstall(params: {
+    source: "clawhub";
+    slug: string;
+    version?: string;
+    force?: boolean;
+  } | {
+    name: string;
+    installId: string;
+    dangerouslyForceUnsafeInstall?: boolean;
+    timeoutMs?: number;
+  }): Promise<GatewaySkillInstallResult> {
+    return this.rpc<GatewaySkillInstallResult>("skills.install", params);
+  }
+
+  async skillsUpdateManaged(params: {
+    source: "clawhub";
+    slug?: string;
+    all?: boolean;
+    agentId?: string;
+    force?: boolean;
+  }): Promise<GatewaySkillUpdateResult> {
+    return this.rpc<GatewaySkillUpdateResult>("skills.update", params);
+  }
+
+  async skillsUninstall(params: {
+    source: "clawhub";
+    slug: string;
+    force?: boolean;
+  }): Promise<GatewaySkillUninstallResult> {
+    return this.rpc<GatewaySkillUninstallResult>("skills.uninstall", params);
   }
 
   async configGet(): Promise<GatewayConfigSnapshot> {

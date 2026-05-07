@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { chatSessionEvents } from "@/db/schema";
 
@@ -72,11 +72,12 @@ export async function loadChatExecutionEvents(sessionId: string, limit = 200) {
   const rows = await withRetry(() =>
     db!.select().from(chatSessionEvents)
       .where(eq(chatSessionEvents.sessionId, sessionId))
-      .orderBy(asc(chatSessionEvents.createdAt))
+      .orderBy(desc(chatSessionEvents.createdAt))
       .limit(limit)
   );
 
   return rows
+    .reverse()
     .map((row) => row.payload)
     .filter(isPersistedChatProgressEvent);
 }

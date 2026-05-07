@@ -22,6 +22,7 @@ vi.mock("@/db", () => ({
 
 vi.mock("@/db/schema", () => ({
   chatMessages: Symbol("chatMessages"),
+  chatRuns: Symbol("chatRuns"),
   chatSessions: Symbol("chatSessions"),
 }));
 
@@ -38,6 +39,14 @@ vi.mock("@/lib/chat-pubsub", () => ({
 const mockSelectRecoveredAssistantText = vi.fn<(params: unknown) => string>(() => "");
 vi.mock("@/lib/chat-recovery", () => ({
   selectRecoveredAssistantText: (params: unknown) => mockSelectRecoveredAssistantText(params),
+}));
+
+vi.mock("@/lib/resolve-user", () => ({
+  resolveCurrentUser: vi.fn(() => null),
+}));
+
+vi.mock("@/lib/mobile-push", () => ({
+  sendAgentReplyNotification: vi.fn(),
 }));
 
 const mockPublishAgentModeDiagnostic = vi.fn();
@@ -163,7 +172,7 @@ describe("POST /api/chat", () => {
     });
 
     await reader.cancel();
-    expect(chatAbort).toHaveBeenCalledWith({ sessionKey: "main" });
+    expect(chatAbort).not.toHaveBeenCalled();
   });
 
   it("passes low thinking only for scoped agent mode sends", async () => {

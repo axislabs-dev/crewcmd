@@ -71,6 +71,47 @@ pnpm mobile:bootstrap-url docs/examples/mobile/bootstrap-payload.example.json
 - the device must already have network access to the CrewCmd server
 - tailnet-only deployments should instruct staff to install and sign into Tailscale first
 - the shell opens the self-hosted CrewCmd `/chat` surface and relies on existing web auth/session behavior
+- native push delivery uses Apple Push Notification service and Firebase Cloud Messaging from the self-hosted CrewCmd server; the phone still needs Tailscale or LAN reachability when the user taps the notification and returns to CrewCmd
+
+## Native Push Notifications
+
+CrewCmd can notify the prompting mobile user when an agent finishes after the Capacitor app is backgrounded, locked, or disconnected. Delivery is server-side and self-hosted: CrewCmd stores device tokens for the logged-in user and sends directly to APNs or FCM when the agent reply is persisted.
+
+Server configuration:
+
+```bash
+CREWCMD_PUSH_ENABLED=true
+
+# Android / Firebase Cloud Messaging HTTP v1
+CREWCMD_PUSH_FCM_SERVICE_ACCOUNT_JSON='{"project_id":"...","client_email":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"}'
+
+# iOS / APNs token auth
+CREWCMD_PUSH_APNS_TEAM_ID="..."
+CREWCMD_PUSH_APNS_KEY_ID="..."
+CREWCMD_PUSH_APNS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+CREWCMD_PUSH_APNS_BUNDLE_ID="com.example.crewcmd"
+CREWCMD_PUSH_APNS_ENV="production"
+```
+
+iOS requirements:
+
+- enable the Push Notifications capability on the signed Capacitor target
+- use an APNs auth key owned by the Apple Developer team that signs the app
+- set `CREWCMD_PUSH_APNS_BUNDLE_ID` to the app bundle identifier from the mobile manifest
+- use `sandbox` for development builds and `production` for distributed builds
+
+Android requirements:
+
+- create a Firebase project for the self-hosted organization
+- add the app's `google-services.json` to the native Android app module before building
+- set `CREWCMD_PUSH_FCM_SERVICE_ACCOUNT_JSON` from a Firebase service account with FCM send permission
+
+Operational notes:
+
+- push credentials stay on the CrewCmd server and are never sent to the mobile client
+- missing or invalid push configuration skips notification delivery but does not fail chat
+- fully offline environments cannot receive OS remote push notifications because APNs/FCM require internet reachability; users will still see persisted chat replies after reconnecting to CrewCmd
+- notification tap opens `/chat?agent=<agent>&session=<sessionId>` on the configured CrewCmd server
 
 ## Distribution Readiness
 

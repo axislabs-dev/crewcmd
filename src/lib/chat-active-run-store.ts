@@ -105,6 +105,8 @@ function terminalStatusForEvent(event: string | undefined): ChatRunTerminalStatu
     case "tool_started":
     case "tool_updated":
     case "tool_completed":
+    case "connection_interrupted":
+    case "connection_recovering":
       return "running";
     case "run_completed":
       return "completed";

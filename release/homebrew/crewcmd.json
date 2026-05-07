@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "repo": {
+    "owner": "rogerchappel",
+    "name": "crewcmd",
+    "description": "Open-source agent crew orchestration. Your crew. Your command.",
+    "homepage": "https://github.com/rogerchappel/crewcmd",
+    "license": "BSL-1.1",
+    "tap": {
+      "owner": "rogerchappel",
+      "name": "homebrew-tap"
+    }
+  },
+  "tagName": "v0.1.1",
+  "releaseName": "CrewCmd v0.1.1",
+  "brew": {
+    "formulaClass": "Crewcmd",
+    "formulaBinary": "crewcmd",
+    "testCommand": "crewcmd --version",
+    "dependencies": [
+      "node"
+    ],
+    "caveats": "This installs the CrewCmd operator CLI. Run `crewcmd init` to configure a self-hosted server."
+  },
+  "assets": [
+    {
+      "name": "crewcmd-v0.1.1-darwin-arm64.tar.gz",
+      "url": "https://github.com/rogerchappel/crewcmd/releases/download/v0.1.1/crewcmd-v0.1.1-darwin-arm64.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "binary": "crewcmd",
+      "kind": "formula",
+      "platform": "darwin",
+      "arch": "arm64"
+    }
+  ]
+}

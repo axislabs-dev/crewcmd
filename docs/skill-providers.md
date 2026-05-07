@@ -4,18 +4,18 @@
 
 CrewCMD should support external skill providers without making every provider a special case in the Skills UI or in `/api/skills/import`. The first provider to design for is ClawHub, because OpenClaw already has native ClawHub search, detail, install, and update support through the gateway.
 
-This design intentionally does not implement the full install flow. It defines the provider contract, ClawHub responsibilities, trust metadata, and RBAC boundary for a follow-up PR.
+CrewCMD now keeps the browse/import provider contract while using OpenClaw's native ClawHub installer during agent sync. A ClawHub marketplace import creates a CrewCMD skill record with provider metadata; when that skill is assigned to an OpenClaw-backed agent, CrewCMD calls gateway `skills.install` before patching gateway skill config. The gateway owns the workspace `skills/` directory and `.clawhub/lock.json` semantics.
 
 ## Current CrewCMD Skill Flow
 
 Current CrewCMD skill discovery and import are simple:
 
-- `/api/skills/browse` returns an in-memory marketplace list. It tries `https://clawhub.com/api/skills` and falls back to hardcoded skills.
-- `/api/skills/import` accepts caller-supplied `source`, `name`, `slug`, `content`, `metadata`, and related fields, then creates a `skills` row in the selected workspace.
+- `/api/skills/browse` returns marketplace/provider skills. When a workspace runtime is available it uses OpenClaw gateway `skills.search` plus `skills.status` for native ClawHub catalog/install state, then falls back to the HTTP catalog and hardcoded skills.
+- `/api/skills/import` accepts manual provider payloads for legacy sources. For `{ provider/source: "clawhub", slug, version?, runtimeId? }`, it first calls OpenClaw gateway `skills.install`, preserving native `.clawhub/lock.json` semantics, then creates or updates a `skills` row in the selected workspace.
 - `src/lib/skill-config-form.ts` renders forms from `skills.metadata.configSchema`.
 - `src/lib/sync-skill-to-openclaw.ts` turns a CrewCMD skill row plus assignment config into OpenClaw gateway `skills.update` config.
 
-That means CrewCMD currently treats marketplace import as "store this skill record in our DB." It does not use OpenClaw's native ClawHub installer, origin lockfile, or gateway update path.
+That means CrewCMD treats marketplace import as "store this skill record in our DB" first. Native OpenClaw installation happens when the skill is assigned/synced to an OpenClaw-backed agent; the gateway installer validates the ClawHub slug/version, writes the skill files, and maintains origin/lock metadata.
 
 ## OpenClaw Native Gateway Surface
 
@@ -66,7 +66,7 @@ Reasoning:
 - update status
 - assets/scripts support
 
-This is type-only scaffolding. It does not register a provider or change runtime behavior.
+The ClawHub provider is now wired into browse/import runtime behavior; the same type vocabulary is still used to keep future providers consistent.
 
 ## ClawHub Provider Responsibilities
 
@@ -188,15 +188,18 @@ Recommended flow:
 10. CrewCMD creates or updates a CrewCMD `skills` row with provider metadata and marks it installed.
 11. Assignment to agents remains a separate step and uses the existing config form and sync path.
 
-## Follow-Up PR Breakdown
+## Implementation Notes
 
-1. Add RBAC helper and tests for personal owner, company owner/admin, member, and viewer.
-2. Add gateway client methods for `skills.search`, `skills.detail`, ClawHub `skills.install`, and ClawHub `skills.update`.
-3. Extend `/api/skills/browse` with provider/runtime query support while preserving current fallback behavior.
-4. Extend `/api/skills/import` with a provider branch guarded by RBAC; keep existing manual import behavior unchanged.
-5. Add UI provider browse/detail/install states.
-6. Add update-check UI and manual update apply flow.
-7. Add audit events for browse detail, install, update, and blocked RBAC attempts.
+- `src/lib/gateway-client.ts` exposes native skill RPC helpers for `skills.search`, `skills.detail`, `skills.install`, `skills.list`, `skills.update`, and `skills.uninstall`.
+- `src/lib/skill-providers/clawhub.ts` normalizes ClawHub catalog entries into CrewCMD marketplace records and preserves provider/trust/update metadata.
+- `src/lib/sync-skill-to-openclaw.ts` detects `metadata.provider.id === "clawhub"` and calls `skills.install` with `{ source: "clawhub", slug, version? }` before patching gateway config and enabling the skill.
+- OpenClaw remains the source of truth for the installed skill directory and `.clawhub/lock.json`; CrewCMD stores origin metadata and assignment/config state.
+
+## Remaining Follow-Up Work
+
+1. Add stricter provider-install RBAC tests for personal owner, company owner/admin, member, and viewer.
+2. Add provider detail/update endpoints and UI for `skills.detail`, `skills.list`, and native `skills.update` apply flows.
+3. Add audit events for browse detail, install, update, and blocked RBAC attempts.
 
 ## Open Questions
 

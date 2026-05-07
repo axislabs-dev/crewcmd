@@ -24,6 +24,7 @@ type ChatProgressEventName =
   | "tool_started"
   | "tool_updated"
   | "tool_completed"
+  | "history_compacted"
   | "run_completed"
   | "run_error"
   | "run_aborted";
@@ -44,6 +45,13 @@ type ChatProgressEvent = {
     status?: string;
     detail?: string;
     detailKind?: "input" | "output" | "status";
+    detailTruncated?: boolean;
+  };
+  checkpoint?: {
+    id?: string;
+    title: string;
+    summary?: string;
+    detail?: string;
     detailTruncated?: boolean;
   };
 };
@@ -298,6 +306,52 @@ function extractToolProgress(payload: Record<string, unknown>) {
       name,
       status: phase,
       detailKind,
+      ...(detail ? detail : {}),
+    },
+  };
+}
+
+function extractCompactionProgress(payload: Record<string, unknown>) {
+  const data = asRecord(payload.data) ?? asRecord(payload.payload) ?? payload;
+  const eventText = [
+    payload.event,
+    payload.stream,
+    payload.type,
+    payload.kind,
+    payload.state,
+    data.event,
+    data.type,
+    data.kind,
+    data.phase,
+    data.title,
+    data.label,
+    data.message,
+  ].map((value) => firstString(value)?.toLowerCase()).filter(Boolean).join(" ");
+
+  const isCompaction = eventText.includes("compact") ||
+    eventText.includes("checkpoint") ||
+    eventText.includes("context_summary") ||
+    eventText.includes("context summary");
+  if (!isCompaction) return null;
+
+  const detail = stringifyToolDetail(
+    data.detail ??
+    data.description ??
+    data.summary ??
+    data.message ??
+    data.checkpoint ??
+    data.context
+  );
+  const title = firstString(data.title, data.label) ?? "Compacted history";
+  const summary = firstString(data.summary, data.message, data.description);
+  const id = firstString(data.id, data.checkpointId, data.checkpoint_id, payload.id);
+
+  return {
+    event: "history_compacted" as ChatProgressEventName,
+    checkpoint: {
+      ...(id ? { id } : {}),
+      title,
+      ...(summary ? { summary } : {}),
       ...(detail ? detail : {}),
     },
   };
@@ -706,7 +760,7 @@ export async function POST(request: NextRequest) {
 
     const enqueueProgress = (
       event: ChatProgressEventName,
-      details: Partial<Pick<ChatProgressEvent, "runId" | "error" | "activeTool">> = {},
+      details: Partial<Pick<ChatProgressEvent, "runId" | "error" | "activeTool" | "checkpoint">> = {},
     ) => {
       if (!streamController || done) return;
       const payload: ChatProgressEvent = {
@@ -720,6 +774,7 @@ export async function POST(request: NextRequest) {
         ...(details.runId ? { runId: details.runId } : {}),
         ...(details.error ? { error: details.error } : {}),
         ...(details.activeTool ? { activeTool: details.activeTool } : {}),
+        ...(details.checkpoint ? { checkpoint: details.checkpoint } : {}),
       };
 
       try {
@@ -1039,9 +1094,10 @@ export async function POST(request: NextRequest) {
 
       const state = p.state as string;
       const isChatLifecycle = isChatLifecycleEvent(p);
-      const toolProgress = extractToolProgress(p);
-      const activityProgress = toolProgress ? null : extractActivityProgress(p);
-      armInactivityTimeout(`gateway-${state || toolProgress?.event || "event"}`);
+      const compactionProgress = extractCompactionProgress(p);
+      const toolProgress = compactionProgress ? null : extractToolProgress(p);
+      const activityProgress = compactionProgress || toolProgress ? null : extractActivityProgress(p);
+      armInactivityTimeout(`gateway-${state || compactionProgress?.event || toolProgress?.event || "event"}`);
       publishAgentModeDiagnostic({
         scope: "api-chat",
         event: "gateway.chat-event",
@@ -1056,7 +1112,12 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      if (toolProgress) {
+      if (compactionProgress) {
+        enqueueProgress(compactionProgress.event, {
+          ...(activeRunId ? { runId: activeRunId } : {}),
+          checkpoint: compactionProgress.checkpoint,
+        });
+      } else if (toolProgress) {
         hasToolActivity = true;
         enqueueProgress(toolProgress.event, {
           ...(activeRunId ? { runId: activeRunId } : {}),

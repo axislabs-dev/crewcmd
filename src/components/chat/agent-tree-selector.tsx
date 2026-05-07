@@ -122,7 +122,7 @@ export function AgentTreeSelector({
             id={panelId}
             role="dialog"
             aria-label="Agent selector"
-            className="fixed inset-x-3 bottom-3 top-auto z-50 max-h-[min(70vh,32rem)] overflow-y-auto rounded-2xl border border-[var(--border-medium)] py-1 shadow-2xl md:inset-auto md:left-4 md:top-16 md:w-[28rem] md:max-w-[calc(100vw-2rem)] md:max-h-[min(70vh,36rem)]"
+            className="absolute left-0 top-full z-50 mt-2 max-h-[min(calc(100dvh-var(--mobile-app-bar-height)-6rem),32rem)] w-[min(calc(100vw-1.5rem),28rem)] overflow-y-auto rounded-2xl border border-[var(--border-medium)] py-1 shadow-2xl md:fixed md:inset-auto md:left-4 md:top-16 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-2rem)] md:max-h-[min(70vh,36rem)]"
             style={{ backgroundColor: "var(--bg-primary)" }}
           >
           {/* Tab toggle */}

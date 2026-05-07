@@ -8,6 +8,7 @@ import { publishChatEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
 import { sendAgentReplyNotification } from "@/lib/mobile-push";
+import { registerChatRunAbort } from "@/lib/chat-run-abort-registry";
 import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
@@ -1063,6 +1064,7 @@ export async function POST(request: NextRequest) {
         streamController?.close();
       } catch { /* already closed */ }
       if (client) client.off("*", chatHandler);
+      for (const fn of cleanupFns) fn();
       clearHeartbeat();
       releaseHeldClient();
       publishAgentModeDiagnostic({
@@ -1105,6 +1107,16 @@ export async function POST(request: NextRequest) {
         console.error("[api/chat] Failed to persist assistant message:", err);
       }
     };
+
+    if (chatRunId) {
+      cleanupFns.push(registerChatRunAbort(chatRunId, async () => {
+        cancelled = true;
+        if (client) {
+          await client.chatAbort({ sessionKey });
+        }
+        await finishStream(true);
+      }));
+    }
 
     const stream = new ReadableStream({
       start(controller) {

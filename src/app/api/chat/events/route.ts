@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { subscribeChatEvents } from "@/lib/chat-pubsub";
 import { db, withRetry } from "@/db";
-import { chatMessages, chatSessions } from "@/db/schema";
+import { chatMessages, chatSessionEvents, chatSessions } from "@/db/schema";
 import { eq, and, gt, asc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -46,32 +46,62 @@ export async function GET(request: NextRequest) {
           );
 
           for (const session of sessions) {
-            const msgs = await withRetry(() =>
-              db!.select().from(chatMessages)
-                .where(
-                  and(
-                    eq(chatMessages.sessionId, session.id),
-                    gt(chatMessages.createdAt, sinceDate),
+            const [msgs, progressEvents] = await Promise.all([
+              withRetry(() =>
+                db!.select().from(chatMessages)
+                  .where(
+                    and(
+                      eq(chatMessages.sessionId, session.id),
+                      gt(chatMessages.createdAt, sinceDate),
+                    )
                   )
-                )
-                .orderBy(asc(chatMessages.createdAt))
-                .limit(200)
-            );
+                  .orderBy(asc(chatMessages.createdAt))
+                  .limit(200)
+              ),
+              withRetry(() =>
+                db!.select().from(chatSessionEvents)
+                  .where(
+                    and(
+                      eq(chatSessionEvents.sessionId, session.id),
+                      gt(chatSessionEvents.createdAt, sinceDate),
+                    )
+                  )
+                  .orderBy(asc(chatSessionEvents.createdAt))
+                  .limit(200)
+              ),
+            ]);
 
-            for (const m of msgs) {
+            const events = [
+              ...msgs.map((m) => ({
+                order: m.createdAt.getTime(),
+                data: {
+                  type: "message",
+                  id: m.id,
+                  sessionId: session.id,
+                  agentId: session.agentId,
+                  companyId,
+                  role: m.role,
+                  content: m.content,
+                  metadata: m.metadata,
+                  createdAt: m.createdAt.toISOString(),
+                },
+              })),
+              ...progressEvents.map((m) => ({
+                order: m.createdAt.getTime(),
+                data: {
+                  ...(m.payload as Record<string, unknown>),
+                  type: "chat_progress",
+                  sessionId: session.id,
+                  agentId: session.agentId,
+                  companyId,
+                  sessionKey: (m.payload as Record<string, unknown>).sessionKey ?? m.gatewaySessionKey,
+                },
+              })),
+            ].sort((a, b) => a.order - b.order);
+
+            for (const event of events) {
               if (closed) return;
-              const event = JSON.stringify({
-                type: "message",
-                id: m.id,
-                sessionId: session.id,
-                agentId: session.agentId,
-                companyId,
-                role: m.role,
-                content: m.content,
-                metadata: m.metadata,
-                createdAt: m.createdAt.toISOString(),
-              });
-              controller.enqueue(encoder.encode(`data: ${event}\n\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event.data)}\n\n`));
             }
           }
         } catch (err) {
@@ -84,7 +114,9 @@ export async function GET(request: NextRequest) {
       // 2. Subscribe to real-time events
       const unsubscribe = subscribeChatEvents((event) => {
         if (closed || event.companyId !== companyId) return;
-        const data = JSON.stringify({ type: "message", ...event });
+        const data = JSON.stringify(event.type === "chat_progress"
+          ? { ...event.payload, type: "chat_progress", sessionId: event.sessionId, agentId: event.agentId, companyId: event.companyId, sessionKey: event.sessionKey }
+          : { type: "message", ...event });
         try {
           controller.enqueue(encoder.encode(`data: ${data}\n\n`));
         } catch {

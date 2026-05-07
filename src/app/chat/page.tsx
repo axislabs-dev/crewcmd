@@ -2072,6 +2072,22 @@ export default function ChatPage() {
     }
   }, []);
 
+  const stopActiveRun = useCallback(() => {
+    const runId = activeChatRunIdRef.current;
+    const abortLocalStream = () => abortControllerRef.current?.abort();
+    if (!runId) {
+      abortLocalStream();
+      return;
+    }
+
+    fetch(`/api/chat/runs/${encodeURIComponent(runId)}/abort`, {
+      method: "POST",
+      keepalive: true,
+    }).catch(() => {
+      // Local abort still stops the visible stream even if the server abort request fails.
+    }).finally(abortLocalStream);
+  }, []);
+
   const handleAgentAudioMutedChange = useCallback(
     (muted: boolean) => {
       if (muted) stopAllAudio();
@@ -2247,7 +2263,7 @@ export default function ChatPage() {
                 isStreaming={true}
               />
               <button
-                onClick={() => abortControllerRef.current?.abort()}
+                onClick={stopActiveRun}
                 className="ml-11 mt-1 flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-secondary)]"
               >
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">

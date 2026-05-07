@@ -142,4 +142,54 @@ describe("chat-active-run-store", () => {
       lastEventAt: "2026-05-01T00:00:04.000Z",
     });
   });
+
+  it("keeps mobile background connection interruptions recoverable", () => {
+    useActiveChatRunStore.getState().beginRun({
+      sessionKey: "main",
+      at: "2026-05-01T00:00:00.000Z",
+    });
+    useActiveChatRunStore.getState().acknowledgeRun({
+      sessionKey: "main",
+      runId: "run-1",
+      at: "2026-05-01T00:00:01.000Z",
+    });
+    useActiveChatRunStore.getState().applyProgressEvent({
+      type: "chat_progress",
+      event: "tool_started",
+      at: "2026-05-01T00:00:02.000Z",
+      sessionKey: "main",
+      runId: "run-1",
+      activeTool: "shell",
+    });
+
+    const interrupted = useActiveChatRunStore.getState().applyProgressEvent({
+      type: "chat_progress",
+      event: "connection_interrupted",
+      at: "2026-05-01T00:00:03.000Z",
+      sessionKey: "main",
+      runId: "run-1",
+    });
+
+    expect(interrupted).toBe(true);
+    expect(useActiveChatRunStore.getState()).toMatchObject({
+      isSending: true,
+      activeTool: { name: "shell" },
+      terminalStatus: "running",
+    });
+
+    const recovered = useActiveChatRunStore.getState().applyProgressEvent({
+      type: "chat_progress",
+      event: "connection_recovering",
+      at: "2026-05-01T00:00:04.000Z",
+      sessionKey: "main",
+      runId: "run-1",
+    });
+
+    expect(recovered).toBe(true);
+    expect(useActiveChatRunStore.getState()).toMatchObject({
+      isSending: true,
+      terminalStatus: "running",
+    });
+  });
+
 });

@@ -86,6 +86,7 @@ export function ExecutionProgressPanel({
   const elapsed = formatElapsed(progress?.elapsedMs);
   const activeIndex = PHASES.findIndex((item) => item.phase === phase);
   const isTerminal = phase === "completed" || phase === "error";
+  const isCompleted = phase === "completed";
   const label = labelFromProgress(progress, phase);
 
   return (
@@ -115,7 +116,7 @@ export function ExecutionProgressPanel({
       <div className="mt-2 grid grid-cols-6 gap-1">
         {PHASES.map((item, index) => {
           const active = item.phase === phase;
-          const passed = !isTerminal && index < activeIndex;
+          const passed = isCompleted ? index < activeIndex : !isTerminal && index < activeIndex;
           return (
             <div
               key={item.phase}

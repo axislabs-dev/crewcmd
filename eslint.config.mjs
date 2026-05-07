@@ -13,6 +13,7 @@ const eslintConfig = [
   {
     ignores: [
       ".next/**",
+      ".release-dry-run/**",
       "coverage/**",
       "node_modules/**",
       "playwright-report/**",

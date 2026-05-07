@@ -17,6 +17,7 @@
 
 # production
 /build
+/.release-dry-run/
 
 # misc
 .DS_Store

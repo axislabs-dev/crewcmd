@@ -1,0 +1,37 @@
+{
+  "projectType": "node-cli",
+  "packageManagers": [
+    "npm",
+    "github-release",
+    "homebrew"
+  ],
+  "smoke": {
+    "commands": [
+      [
+        "pnpm",
+        "--filter",
+        "crewcmd",
+        "run",
+        "smoke"
+      ],
+      [
+        "pnpm",
+        "--filter",
+        "crewcmd",
+        "run",
+        "package:smoke"
+      ],
+      [
+        "pnpm",
+        "run",
+        "release:server:dry-run"
+      ]
+    ]
+  },
+  "release": {
+    "mode": "reviewed",
+    "createGithubRelease": true,
+    "publishNpm": false,
+    "updateHomebrew": false
+  }
+}

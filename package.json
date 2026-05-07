@@ -1,5 +1,5 @@
 {
-  "name": "crewcmd",
+  "name": "@crewcmd/app",
   "version": "0.1.1",
   "private": true,
   "description": "Open-source agent crew orchestration. Your crew. Your command.",
@@ -33,6 +33,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "release:server:dry-run": "node scripts/release-server-dry-run.mjs",
+    "release:check": "pnpm typecheck && pnpm test && pnpm --filter crewcmd run test && pnpm --filter crewcmd run smoke && pnpm --filter crewcmd run package:smoke && pnpm run release:server:dry-run",
+    "release:notes": "node scripts/release-notes.mjs",
     "prepare": "husky"
   },
   "dependencies": {

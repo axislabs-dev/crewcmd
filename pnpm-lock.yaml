@@ -127,6 +127,10 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2(@types/node@22.19.15)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.15)(esbuild@0.19.12)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  packages/cli: {}
+
+  packages/crewcmd-hooks: {}
+
 packages:
 
   '@alloc/quick-lru@5.2.0':

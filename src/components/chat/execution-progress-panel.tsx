@@ -246,7 +246,7 @@ export function ExecutionProgressPanel({
   const isTerminal = phase === "completed" || phase === "error";
   const isCompleted = phase === "completed";
   const label = labelFromProgress(progress, phase);
-  const auditEvents = events.filter((event) => event.activeTool || event.checkpoint).slice(-12);
+  const auditEvents = events.filter((event) => event.activeTool || event.checkpoint);
 
   return (
     <div
@@ -297,7 +297,10 @@ export function ExecutionProgressPanel({
         <div className="mt-1 truncate text-[11px] text-red-300">{progress.error}</div>
       )}
       {auditEvents.length > 0 && (
-        <div className="mt-3 space-y-2">
+        <div
+          aria-label="Tool call audit trail"
+          className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1"
+        >
           {auditEvents.map((event, index) => (
             event.checkpoint ? (
               <CompactionAuditRow

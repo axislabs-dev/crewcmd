@@ -296,6 +296,46 @@ async function applySchema() {
     `);
   } catch { /* table may already exist */ }
 
+  // Mobile push and chat run tracking tables
+  try {
+    await queuedClient.exec(`
+      CREATE TABLE IF NOT EXISTS mobile_push_devices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        token TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(user_id, company_id, device_id, app_id)
+      )
+    `);
+    await queuedClient.exec(`
+      CREATE TABLE IF NOT EXISTS chat_runs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL,
+        gateway_session_key TEXT,
+        gateway_run_id TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        client_visibility TEXT NOT NULL DEFAULT 'visible',
+        notify_on_completion BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        completed_at TIMESTAMPTZ
+      )
+    `);
+    await queuedClient.exec(`CREATE INDEX IF NOT EXISTS mobile_push_devices_user_company_idx ON mobile_push_devices(user_id, company_id)`);
+    await queuedClient.exec(`CREATE INDEX IF NOT EXISTS chat_runs_user_status_idx ON chat_runs(user_id, status)`);
+  } catch { /* tables may already exist */ }
+
   // Agent Access Grants table
   try {
     await queuedClient.exec(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'team'`);

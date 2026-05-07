@@ -924,6 +924,51 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Mobile Push & Chat Runs ─────────────────────────────────────
+
+export const mobilePushDevices = pgTable("mobile_push_devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  platform: text("platform").notNull(),
+  provider: text("provider").notNull(),
+  token: text("token").notNull(),
+  deviceId: text("device_id").notNull(),
+  appId: text("app_id").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userDeviceUnique: unique().on(table.userId, table.companyId, table.deviceId, table.appId),
+}));
+
+export const chatRuns = pgTable("chat_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .references(() => chatSessions.id, { onDelete: "cascade" })
+    .notNull(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: text("agent_id").notNull(),
+  gatewaySessionKey: text("gateway_session_key"),
+  gatewayRunId: text("gateway_run_id"),
+  status: text("status").notNull().default("running"),
+  clientVisibility: text("client_visibility").notNull().default("visible"),
+  notifyOnCompletion: boolean("notify_on_completion").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
 // ─── Invite Tokens ────────────────────────────────────────────────
 
 export const inviteTokens = pgTable("invite_tokens", {

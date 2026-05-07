@@ -2,10 +2,13 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
-import { chatMessages, chatSessions } from "@/db/schema";
+import { chatMessages, chatRuns, chatSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { publishChatEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
+import { resolveCurrentUser } from "@/lib/resolve-user";
+import { sendAgentReplyNotification } from "@/lib/mobile-push";
+import { registerChatRunAbort } from "@/lib/chat-run-abort-registry";
 import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
@@ -639,6 +642,8 @@ export async function POST(request: NextRequest) {
       companyId: bodyCompanyId,
       sessionKey: bodySessionKey,
       agentMode: bodyAgentMode,
+      clientVisibility: bodyClientVisibility,
+      notifyOnCompletion: bodyNotifyOnCompletion,
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -687,10 +692,15 @@ export async function POST(request: NextRequest) {
     const companyId = bodyCompanyId ||
       request.cookies.get("active_company")?.value ||
       "";
+    const currentUser = await resolveCurrentUser(request);
+    const initialClientVisibility = bodyClientVisibility === "hidden" || bodyClientVisibility === "disconnected"
+      ? bodyClientVisibility
+      : "visible";
 
     // --- Server-side persistence: persist user message BEFORE sending to gateway ---
     let userMessageId: string | null = null;
     let sessionId: string | null = null;
+    let chatRunId: string | null = null;
 
     if (db && companyId) {
       try {
@@ -704,6 +714,20 @@ export async function POST(request: NextRequest) {
           body.metadata || null,
         );
         userMessageId = userMsg.id;
+        if (currentUser) {
+          const [run] = await withRetry(() =>
+            db!.insert(chatRuns).values({
+              sessionId: sessionId!,
+              userId: currentUser.id,
+              companyId,
+              agentId: agentId.toLowerCase(),
+              gatewaySessionKey: sessionKey,
+              clientVisibility: initialClientVisibility,
+              notifyOnCompletion: bodyNotifyOnCompletion !== false,
+            }).returning({ id: chatRuns.id })
+          );
+          chatRunId = run.id;
+        }
       } catch (err) {
         console.error("[api/chat] Failed to persist user message:", err);
         // Continue — gateway chat still works without DB
@@ -735,6 +759,7 @@ export async function POST(request: NextRequest) {
     let lastStreamedText = "";
     let fullAssistantText = "";
     let assistantPersisted = false;
+    let assistantMessageId: string | null = null;
     let activeRunId: string | null = null;
     let released = false;
     let gatewayAcquiredAt = 0;
@@ -937,6 +962,56 @@ export async function POST(request: NextRequest) {
       streamAssistantSnapshot(recovered);
     };
 
+    const updateChatRun = async (updates: Partial<typeof chatRuns.$inferInsert>) => {
+      if (!db || !chatRunId) return;
+      try {
+        await withRetry(() =>
+          db!.update(chatRuns)
+            .set({ ...updates, updatedAt: new Date() })
+            .where(eq(chatRuns.id, chatRunId!))
+        );
+      } catch (error) {
+        console.error("[api/chat] Failed to update chat run:", error);
+      }
+    };
+
+    const completeChatRun = async (status: "completed" | "aborted" | "failed") => {
+      if (!db || !chatRunId) return;
+      try {
+        const [run] = await withRetry(() =>
+          db!.update(chatRuns)
+            .set({ status, updatedAt: new Date(), completedAt: new Date() })
+            .where(eq(chatRuns.id, chatRunId!))
+            .returning({
+              userId: chatRuns.userId,
+              companyId: chatRuns.companyId,
+              clientVisibility: chatRuns.clientVisibility,
+              notifyOnCompletion: chatRuns.notifyOnCompletion,
+            })
+        );
+
+        if (
+          status === "completed" &&
+          run?.notifyOnCompletion &&
+          assistantMessageId &&
+          fullAssistantText &&
+          sessionId &&
+          (run.clientVisibility === "hidden" || run.clientVisibility === "disconnected")
+        ) {
+          await sendAgentReplyNotification({
+            userId: run.userId,
+            companyId: run.companyId,
+            agentId: agentId.toLowerCase(),
+            sessionId,
+            messageId: assistantMessageId,
+            body: fullAssistantText,
+          });
+        }
+      } catch (error) {
+        console.error("[api/chat] Failed to complete chat run:", error);
+      }
+    };
+
     const deferToolCompletionUntilAssistantText = (reason: string) => {
       deferredToolCompletion = true;
       hasToolActivity = true;
@@ -957,6 +1032,7 @@ export async function POST(request: NextRequest) {
     const finishStream = async (
       interrupted: boolean,
       progressEvent: "run_completed" | "run_aborted" | null = interrupted ? "run_aborted" : "run_completed",
+      finalStatus: "completed" | "aborted" | "failed" = interrupted ? "aborted" : "completed",
     ) => {
       if (done) return;
       publishAgentModeDiagnostic({
@@ -978,6 +1054,7 @@ export async function POST(request: NextRequest) {
       clearInactivityTimeout();
       stopHistoryPolling();
       await persistAssistant(interrupted);
+      await completeChatRun(finalStatus);
       if (progressEvent) {
         enqueueProgress(progressEvent, activeRunId ? { runId: activeRunId } : {});
       }
@@ -987,6 +1064,7 @@ export async function POST(request: NextRequest) {
         streamController?.close();
       } catch { /* already closed */ }
       if (client) client.off("*", chatHandler);
+      for (const fn of cleanupFns) fn();
       clearHeartbeat();
       releaseHeldClient();
       publishAgentModeDiagnostic({
@@ -1020,6 +1098,7 @@ export async function POST(request: NextRequest) {
           null,
           interrupted,
         );
+        assistantMessageId = msg.id;
         // Send assistant message ID to client as a meta event
         if (streamController && !done) {
           enqueueData({ type: "meta", messageId: msg.id, role: "assistant" });
@@ -1028,6 +1107,16 @@ export async function POST(request: NextRequest) {
         console.error("[api/chat] Failed to persist assistant message:", err);
       }
     };
+
+    if (chatRunId) {
+      cleanupFns.push(registerChatRunAbort(chatRunId, async () => {
+        cancelled = true;
+        if (client) {
+          await client.chatAbort({ sessionKey });
+        }
+        await finishStream(true);
+      }));
+    }
 
     const stream = new ReadableStream({
       start(controller) {
@@ -1038,6 +1127,9 @@ export async function POST(request: NextRequest) {
         // Send user message meta event with DB ID
         if (userMessageId) {
           enqueueData({ type: "meta", messageId: userMessageId, role: "user" });
+        }
+        if (chatRunId) {
+          enqueueData({ type: "meta", chatRunId });
         }
         enqueueProgress("gateway_send_started");
         enqueueData({
@@ -1052,24 +1144,17 @@ export async function POST(request: NextRequest) {
         });
       },
       cancel() {
-        cancelled = true;
-        // Client disconnected — persist whatever was streamed so far, but do not
-        // abort the gateway turn. Mobile/Capacitor webviews can suspend or tear
-        // down the fetch while the device is locked/backgrounded; the OpenClaw
-        // session should keep running so the UI can rehydrate from history on
-        // resume, matching Slack's server-side continuity.
+        // Client disconnected passively, such as a locked phone or suspended WebView.
+        // Keep the gateway turn alive so completion can trigger a mobile push and
+        // the UI can rehydrate from persisted history on resume.
         publishAgentModeDiagnostic({
           scope: "api-chat",
           event: "stream.cancel",
           sessionId: diagnosticSessionId,
           detail: { elapsedMs: Date.now() - requestStartedAt },
         });
-        clearInactivityTimeout();
-        stopHistoryPolling();
-        void persistAssistant(true);
-        for (const fn of cleanupFns) fn();
         clearHeartbeat();
-        releaseHeldClient();
+        void updateChatRun({ clientVisibility: "disconnected" });
       },
     });
 
@@ -1187,7 +1272,7 @@ export async function POST(request: NextRequest) {
         streamController.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         fullAssistantText += `\n\nError: ${errorMsg}`;
 
-        finishStream(true, null);
+        finishStream(true, null, "failed");
       }
     };
 
@@ -1224,6 +1309,9 @@ export async function POST(request: NextRequest) {
         });
         if (cancelled || done) return;
         activeRunId = asString(sendResult.runId);
+        if (activeRunId) {
+          void updateChatRun({ gatewayRunId: activeRunId });
+        }
         gatewaySentAt = Date.now();
         publishAgentModeDiagnostic({
           scope: "api-chat",
@@ -1259,7 +1347,7 @@ export async function POST(request: NextRequest) {
           enqueueData({
             choices: [{ delta: { content: `\n\nError: Gateway error: ${msg}` } }],
           });
-          await finishStream(true, null);
+          await finishStream(true, null, "failed");
         }
       }
     };

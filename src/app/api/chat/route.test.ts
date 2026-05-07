@@ -303,6 +303,51 @@ describe("POST /api/chat", () => {
     await reader.cancel();
   });
 
+  it("streams compaction checkpoints as progress events", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend,
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "context.compacted",
+      sessionKey: "main",
+      data: {
+        checkpointId: "ctx-1",
+        title: "Compacted history",
+        summary: "Earlier turns were preserved in a checkpoint.",
+      },
+    });
+
+    const next = await readUntilContains(reader, "\"event\":\"history_compacted\"");
+
+    expect(next).toContain("\"event\":\"history_compacted\"");
+    expect(next).toContain("\"title\":\"Compacted history\"");
+    expect(next).toContain("\"id\":\"ctx-1\"");
+    expect(next).toContain("Earlier turns were preserved");
+
+    await reader.cancel();
+  });
+
   it("does not finish the chat stream for non-chat agent tool finals", async () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     mockGetGatewayClient.mockResolvedValueOnce({

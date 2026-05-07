@@ -15,6 +15,13 @@ export type ExecutionProgressEvent = {
     detailKind?: "input" | "output" | "status";
     detailTruncated?: boolean;
   };
+  checkpoint?: {
+    id?: string;
+    title: string;
+    summary?: string;
+    detail?: string;
+    detailTruncated?: boolean;
+  };
 };
 
 type ExecutionPhase = "run-started" | "thinking" | "tool" | "waiting" | "completed" | "error";
@@ -50,6 +57,7 @@ function phaseFromProgress(
   if (event.includes("error") || event.includes("abort")) return "error";
   if (event.includes("tool")) return "tool";
   if (event.includes("completed") || event.includes("complete")) return "completed";
+  if (event.includes("compact") || event.includes("checkpoint")) return "waiting";
   if (event.includes("waiting") || event.includes("heartbeat")) return "waiting";
   if (event.includes("thinking") || event.includes("gateway_send")) return "thinking";
   if (event.includes("started") || event.includes("start")) return "run-started";
@@ -170,6 +178,59 @@ function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; ag
   );
 }
 
+function CompactionAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; agentColor: string }) {
+  const checkpoint = event.checkpoint;
+  if (!checkpoint) return null;
+
+  return (
+    <details className="group rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/45">
+      <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-elevated)]/70">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: agentColor }}
+        />
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]">
+          {checkpoint.title || "Compacted history"}
+        </span>
+        <span className="hidden max-w-[18rem] truncate text-[10px] text-[var(--text-tertiary)] sm:block">
+          {checkpoint.summary ?? formatElapsed(event.elapsedMs) ?? "Context checkpoint"}
+        </span>
+        <span className="text-[10px] text-[var(--text-tertiary)] transition-transform group-open:rotate-90">
+          &gt;
+        </span>
+      </summary>
+      <div className="border-t border-[var(--border-subtle)] px-3 py-3">
+        <dl className="grid gap-2 text-[11px] sm:grid-cols-[7rem_1fr]">
+          <dt className="text-[var(--text-tertiary)]">Event</dt>
+          <dd className="font-mono text-[var(--text-secondary)]">history_compacted</dd>
+          {checkpoint.id && (
+            <>
+              <dt className="text-[var(--text-tertiary)]">Checkpoint</dt>
+              <dd className="break-all font-mono text-[var(--text-secondary)]">{checkpoint.id}</dd>
+            </>
+          )}
+          {event.at && (
+            <>
+              <dt className="text-[var(--text-tertiary)]">Timestamp</dt>
+              <dd className="font-mono text-[var(--text-secondary)]">{event.at}</dd>
+            </>
+          )}
+        </dl>
+        {checkpoint.detail && (
+          <div className="mt-3">
+            <div className="mb-1 text-[10px] font-medium uppercase text-[var(--text-tertiary)]">
+              Compaction detail{checkpoint.detailTruncated ? " - truncated" : ""}
+            </div>
+            <pre className="max-h-80 overflow-auto rounded-md border border-[var(--border-subtle)] bg-black/20 p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+              <code>{checkpoint.detail}</code>
+            </pre>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 export function ExecutionProgressPanel({
   progress,
   events = [],
@@ -185,7 +246,7 @@ export function ExecutionProgressPanel({
   const isTerminal = phase === "completed" || phase === "error";
   const isCompleted = phase === "completed";
   const label = labelFromProgress(progress, phase);
-  const toolEvents = events.filter((event) => event.activeTool);
+  const auditEvents = events.filter((event) => event.activeTool || event.checkpoint).slice(-12);
 
   return (
     <div
@@ -235,14 +296,22 @@ export function ExecutionProgressPanel({
       {phase === "error" && progress?.error && (
         <div className="mt-1 truncate text-[11px] text-red-300">{progress.error}</div>
       )}
-      {toolEvents.length > 0 && (
+      {auditEvents.length > 0 && (
         <div className="mt-3 space-y-2">
-          {toolEvents.slice(-12).map((event, index) => (
-            <ToolAuditRow
-              key={`${event.activeTool?.id ?? event.activeTool?.name ?? "tool"}-${event.event}-${event.at ?? index}-${index}`}
-              event={event}
-              agentColor={agentColor}
-            />
+          {auditEvents.map((event, index) => (
+            event.checkpoint ? (
+              <CompactionAuditRow
+                key={`${event.checkpoint.id ?? event.checkpoint.title}-${event.event}-${event.at ?? index}-${index}`}
+                event={event}
+                agentColor={agentColor}
+              />
+            ) : (
+              <ToolAuditRow
+                key={`${event.activeTool?.id ?? event.activeTool?.name ?? "tool"}-${event.event}-${event.at ?? index}-${index}`}
+                event={event}
+                agentColor={agentColor}
+              />
+            )
           ))}
         </div>
       )}

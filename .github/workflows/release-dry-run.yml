@@ -1,0 +1,43 @@
+name: Release dry run
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "releasebox.config.json"
+      - "packages/cli/**"
+      - "scripts/release-server-dry-run.mjs"
+      - "release/homebrew/**"
+      - ".github/workflows/release*.yml"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run release:check
+      - name: Release notes preview
+        run: |
+          if pnpm run --silent release:notes > release-notes-preview.md && [ -s release-notes-preview.md ]; then
+            cat release-notes-preview.md
+          else
+            echo "## Release candidate" > release-notes-preview.md
+            git log --oneline --max-count=20 >> release-notes-preview.md
+            cat release-notes-preview.md
+          fi
+      - name: Publish release notes summary
+        run: cat release-notes-preview.md >> "$GITHUB_STEP_SUMMARY"

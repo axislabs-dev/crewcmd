@@ -174,6 +174,43 @@ function extractText(value: unknown, seen = new WeakSet<object>()): string {
   return "";
 }
 
+function isToolOnlyMessage(value: unknown): boolean {
+  const message = asRecord(value);
+  if (!message) return false;
+
+  const role = firstString(message.role)?.toLowerCase() ?? "";
+  if (["tool", "tool_result", "toolresult"].includes(role)) return true;
+
+  const toolCalls = message.tool_calls ?? message.toolCalls;
+  const hasOpenAiToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return hasOpenAiToolCalls && !firstString(content);
+  }
+
+  let hasToolContent = hasOpenAiToolCalls;
+  let hasTextContent = false;
+  let hasNonToolContent = false;
+  for (const block of content) {
+    const record = asRecord(block);
+    if (!record) continue;
+    const type = firstString(record.type)?.toLowerCase() ?? "";
+    if (["tool_use", "tool_result", "toolcall", "toolresult"].includes(type)) {
+      hasToolContent = true;
+      continue;
+    }
+    if (type === "text" && firstString(record.text)) {
+      hasTextContent = true;
+      continue;
+    }
+    if (type && type !== "thinking") {
+      hasNonToolContent = true;
+    }
+  }
+
+  return hasToolContent && !hasTextContent && !hasNonToolContent;
+}
+
 function extractEventSession(payload: Record<string, unknown>) {
   const session = asRecord(payload.session);
   return firstString(
@@ -641,6 +678,7 @@ export async function POST(request: NextRequest) {
     let historyPollAttempts = 0;
     let historyPollInFlight = false;
     let historySnapshotStreamed = false;
+    let hasToolActivity = false;
 
     const enqueueData = (payload: unknown) => {
       if (!streamController || done) return;
@@ -979,11 +1017,13 @@ export async function POST(request: NextRequest) {
       });
 
       if (toolProgress) {
+        hasToolActivity = true;
         enqueueProgress(toolProgress.event, {
           ...(activeRunId ? { runId: activeRunId } : {}),
           activeTool: toolProgress.activeTool,
         });
       } else if (activityProgress) {
+        hasToolActivity = true;
         enqueueProgress(activityProgress.event, {
           ...(activeRunId ? { runId: activeRunId } : {}),
           activeTool: activityProgress.activeTool,
@@ -1010,9 +1050,25 @@ export async function POST(request: NextRequest) {
           }
         }
       } else if (state === "final") {
-        const finalText = extractText(p.message || p);
+        const finalMessage = p.message || p;
+        const toolOnlyFinal = isToolOnlyMessage(finalMessage);
+        const finalText = toolOnlyFinal ? "" : extractText(finalMessage);
         if (finalText && !streamAssistantSnapshot(finalText)) {
           fullAssistantText = finalText;
+        }
+        if (toolOnlyFinal || (!finalText && hasToolActivity && !fullAssistantText)) {
+          hasToolActivity = true;
+          publishAgentModeDiagnostic({
+            scope: "api-chat",
+            event: toolOnlyFinal ? "chat-final.tool-only" : "chat-final.empty-after-tool",
+            sessionId: diagnosticSessionId,
+            detail: {
+              activeRunId,
+              elapsedMs: Date.now() - requestStartedAt,
+            },
+          });
+          startHistoryPolling();
+          return;
         }
 
         // Persist the complete assistant response

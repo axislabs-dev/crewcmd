@@ -4,11 +4,12 @@ import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-
 import { db, withRetry } from "@/db";
 import { chatMessages, chatRuns, chatSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { publishChatEvent } from "@/lib/chat-pubsub";
+import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
 import { sendAgentReplyNotification } from "@/lib/mobile-push";
 import { registerChatRunAbort } from "@/lib/chat-run-abort-registry";
+import { persistChatProgressEvent } from "@/lib/chat-session-events";
 import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
@@ -28,6 +29,8 @@ type ChatProgressEventName =
   | "tool_updated"
   | "tool_completed"
   | "history_compacted"
+  | "connection_interrupted"
+  | "connection_recovering"
   | "run_completed"
   | "run_error"
   | "run_aborted";
@@ -801,6 +804,29 @@ export async function POST(request: NextRequest) {
         ...(details.activeTool ? { activeTool: details.activeTool } : {}),
         ...(details.checkpoint ? { checkpoint: details.checkpoint } : {}),
       };
+
+      if (sessionId && companyId) {
+        const persistedPayload = payload as unknown as Record<string, unknown>;
+        void persistChatProgressEvent({
+          sessionId,
+          companyId,
+          agentId,
+          gatewaySessionKey: sessionKey,
+          payload: payload as Parameters<typeof persistChatProgressEvent>[0]["payload"],
+        }).catch((error) => {
+          console.error("[api/chat] Failed to persist chat progress:", error);
+        });
+        publishChatProgressEvent({
+          type: "chat_progress",
+          sessionId,
+          agentId: agentId.toLowerCase(),
+          companyId,
+          sessionKey,
+          event,
+          at: payload.at,
+          payload: persistedPayload,
+        });
+      }
 
       try {
         streamController.enqueue(encoder.encode(`event: chat_progress\ndata: ${JSON.stringify(payload)}\n\n`));

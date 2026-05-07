@@ -58,6 +58,16 @@ interface Message {
   metadata?: { attachments?: Attachment[] } | null;
 }
 
+type ChatExecutionSnapshot = {
+  progress?: ExecutionProgressEvent | null;
+  events?: ExecutionProgressEvent[];
+} | null;
+
+type ChatHistoryLoadResult = {
+  sessionId: string | null;
+  execution: ChatExecutionSnapshot;
+} | null;
+
 function hasRenderableMessageContent(message: Pick<Message, "content" | "metadata">) {
   return Boolean(message.content.trim() || message.metadata?.attachments?.length);
 }
@@ -257,7 +267,7 @@ function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
 }
 
 /** Load persisted CrewCmd message history, falling back to gateway history if no session exists. */
-async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | null) {
+async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | null): Promise<ChatHistoryLoadResult> {
   try {
     if (companyId) {
       const params = new URLSearchParams({
@@ -267,8 +277,9 @@ async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | 
       });
       const res = await fetch(`/api/chat/messages?${params.toString()}`);
       if (res.ok) {
-        const { messages, sessionId } = await res.json() as {
+        const { messages, sessionId, execution } = await res.json() as {
           sessionId: string | null;
+          execution?: ChatExecutionSnapshot;
           messages: {
             id: string;
             role: "user" | "assistant" | "system";
@@ -290,18 +301,18 @@ async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | 
               metadata: m.metadata ?? null,
             }))
           );
-          return;
+          return { sessionId, execution: execution ?? null };
         }
       }
     }
 
     const res = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(agentId)}&limit=200`);
-    if (!res.ok) return;
+    if (!res.ok) return null;
 
     const { messages } = await res.json() as {
       messages: { id: string; role: "user" | "assistant"; content: string }[];
     };
-    if (!messages?.length) return;
+    if (!messages?.length) return null;
 
     const baseTime = Date.now();
     useChatStore.getState().loadSession(
@@ -315,8 +326,45 @@ async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | 
         metadata: null,
       }))
     );
+    return null;
   } catch {
     // History unavailable
+    return null;
+  }
+}
+
+async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: string | null): Promise<ChatHistoryLoadResult> {
+  if (!companyId) return null;
+  try {
+    const params = new URLSearchParams({ sessionKey, companyId, limit: "200" });
+    const res = await fetch(`/api/chat/messages?${params.toString()}`);
+    if (!res.ok) return null;
+    const { messages, sessionId, execution } = await res.json() as {
+      sessionId: string | null;
+      execution?: ChatExecutionSnapshot;
+      messages: {
+        id: string;
+        role: "user" | "assistant" | "system";
+        content: string;
+        createdAt: string;
+        metadata?: Record<string, unknown> | null;
+      }[];
+    };
+    if (!sessionId) return null;
+    useChatStore.getState().loadSession(
+      sessionKey.toLowerCase(),
+      messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
+        id: m.id,
+        agentId: sessionKey.toLowerCase(),
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+        metadata: m.metadata ?? null,
+      }))
+    );
+    return { sessionId, execution: execution ?? null };
+  } catch {
+    return null;
   }
 }
 
@@ -562,6 +610,20 @@ export default function ChatPage() {
     () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
     [selectedSessionKey, selectedAgent]
   );
+  const applyExecutionSnapshot = useCallback((snapshot: ChatExecutionSnapshot) => {
+    const progress = snapshot?.progress ?? null;
+    const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
+    setExecutionProgress(progress);
+    setExecutionEvents(events);
+    if (progress) {
+      const progressRecord = progress as ExecutionProgressEvent & { sessionKey?: string };
+      useActiveChatRunStore.getState().applyProgressEvent({
+        type: "chat_progress",
+        ...progressRecord,
+        sessionKey: progressRecord.sessionKey ?? activeSessionKey,
+      });
+    }
+  }, [activeSessionKey]);
   const persistExecutionSnapshot = useCallback((
     progress: ExecutionProgressEvent | null,
     events: ExecutionProgressEvent[]
@@ -611,6 +673,25 @@ export default function ChatPage() {
   useEffect(() => {
     persistExecutionSnapshot(executionProgress, executionEvents);
   }, [executionProgress, executionEvents, persistExecutionSnapshot]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const matchesActiveSession = (event: ExecutionProgressEvent & { sessionKey?: string; agentId?: string }) => {
+      const active = activeSessionKey.toLowerCase();
+      return event.sessionKey?.toLowerCase() === active || event.agentId?.toLowerCase() === active;
+    };
+
+    const handleProgress = (customEvent: Event) => {
+      const detail = (customEvent as CustomEvent).detail as (ExecutionProgressEvent & { sessionKey?: string; agentId?: string }) | undefined;
+      if (!detail?.event || !matchesActiveSession(detail)) return;
+      setExecutionProgress(detail);
+      setExecutionEvents((events) => [...events, detail].slice(-40));
+    };
+
+    window.addEventListener("crewcmd:chat-progress", handleProgress);
+    return () => window.removeEventListener("crewcmd:chat-progress", handleProgress);
+  }, [activeSessionKey]);
 
   // Server-side /api/chat persists partial content on client disconnect.
 
@@ -715,7 +796,8 @@ export default function ChatPage() {
     if (selectedSessionKey) {
       if (!loadedAgentsRef.current.has(selectedSessionKey)) {
         loadedAgentsRef.current.add(selectedSessionKey);
-        loadSessionPreviewIntoStore(selectedSessionKey).then(() => {
+        loadCrewCmdSessionHistoryByKey(selectedSessionKey, company?.id).then(async (result) => {
+          const loaded = result ?? (await loadSessionPreviewIntoStore(selectedSessionKey).then((ok) => ok ? null : null));
           if (cancelled) return;
           const updated = useChatStore.getState().messagesByAgent[selectedSessionKey.toLowerCase()] || [];
           if (updated.length > 0) {
@@ -727,12 +809,13 @@ export default function ChatPage() {
               metadata: m.metadata,
             })));
           }
+          if (loaded?.execution) applyExecutionSnapshot(loaded.execution);
         });
       }
     } else if (!loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
       // Otherwise load standard thread history
       loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
-      loadThreadHistoryIntoStore(agentId, company?.id).then(() => {
+      loadThreadHistoryIntoStore(agentId, company?.id).then((result) => {
         if (cancelled) return;
         const updated = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
         setMessages(updated.map((m) => ({
@@ -742,6 +825,7 @@ export default function ChatPage() {
           createdAt: m.createdAt,
           metadata: m.metadata,
         })));
+        if (result?.execution) applyExecutionSnapshot(result.execution);
       });
     }
 
@@ -749,7 +833,7 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id]);
+  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id, applyExecutionSnapshot]);
 
   const refreshSessionPreview = useCallback(async (sessionKey: string) => {
     const loaded = await loadSessionPreviewIntoStore(sessionKey);

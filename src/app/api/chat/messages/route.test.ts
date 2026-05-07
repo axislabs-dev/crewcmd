@@ -18,6 +18,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   chatMessages: Symbol("chatMessages"),
   chatSessions: Symbol("chatSessions"),
+  chatSessionEvents: Symbol("chatSessionEvents"),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -50,9 +51,13 @@ describe("GET /api/chat/messages", () => {
   });
 
   it("returns messages for a session", async () => {
-    mockSelect.mockReturnValue({
-      where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
-    });
+    mockSelect
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      });
 
     const res = await GET(makeRequest("/api/chat/messages?sessionId=sess-1"));
     const body = await res.json();
@@ -67,7 +72,7 @@ describe("GET /api/chat/messages", () => {
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toBe("sessionId or (agentId + companyId) required");
+    expect(body.error).toBe("sessionId or ((agentId or sessionKey) + companyId) required");
   });
 
   it("returns messages for latest agent session", async () => {
@@ -78,6 +83,9 @@ describe("GET /api/chat/messages", () => {
       })
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       });
 
     const res = await GET(makeRequest("/api/chat/messages?agentId=Neo&companyId=co-1"));

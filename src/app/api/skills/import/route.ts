@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
+import { canInstallNativeSkill, resolveWorkspaceRuntime, withGateway } from "@/lib/native-clawhub";
+import { normalizeClawhubEntry } from "@/lib/skill-providers/clawhub";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +16,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
+      provider,
+      runtimeId,
       source,
       query,
       companyId,
@@ -24,9 +29,11 @@ export async function POST(request: NextRequest) {
       sourceUrl,
       content,
       metadata,
+      force,
     } = body;
 
-    if (!source) {
+    const effectiveProvider = provider || source;
+    if (!effectiveProvider) {
       return NextResponse.json({ error: "source is required" }, { status: 400 });
     }
 
@@ -45,6 +52,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "metadata must be an object when provided" }, { status: 400 });
     }
 
+    if (effectiveProvider === "clawhub" && typeof slug === "string" && slug.trim()) {
+      const native = await installNativeClawhubSkill({
+        request,
+        workspace,
+        runtimeId: typeof runtimeId === "string" ? runtimeId : null,
+        slug: slug.trim(),
+        version: typeof version === "string" ? version : undefined,
+        force: Boolean(force),
+        fallback: { name, description, sourceUrl, metadata },
+      });
+      if (native) return native;
+    }
+
     const skillName = name || query || "Imported Skill";
     const skillSlug = slug || skillName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
@@ -54,7 +74,7 @@ export async function POST(request: NextRequest) {
         name: skillName,
         slug: skillSlug,
         description: description || null,
-        source,
+        source: effectiveProvider,
         sourceUrl: sourceUrl || null,
         version: version || null,
         content: content || null,
@@ -69,4 +89,124 @@ export async function POST(request: NextRequest) {
     console.error("[api/skills/import] POST Error:", err);
     return NextResponse.json({ error: "Failed to import skill" }, { status: 500 });
   }
+}
+
+async function installNativeClawhubSkill(params: {
+  request: NextRequest;
+  workspace: NonNullable<Awaited<ReturnType<typeof resolveAccessibleWorkspace>>>;
+  runtimeId: string | null;
+  slug: string;
+  version?: string;
+  force: boolean;
+  fallback: {
+    name?: string;
+    description?: string;
+    sourceUrl?: string;
+    metadata?: Record<string, unknown>;
+  };
+}): Promise<NextResponse | null> {
+  if (!(await canInstallNativeSkill(params.request, params.workspace))) {
+    return NextResponse.json({ error: "Not authorized to install native ClawHub skills" }, { status: 403 });
+  }
+
+  const runtime = await resolveWorkspaceRuntime({ runtimeId: params.runtimeId, workspace: params.workspace });
+  if (!runtime?.gatewayUrl) {
+    return NextResponse.json({ error: "No OpenClaw gateway runtime is available for this workspace" }, { status: 409 });
+  }
+
+  const result = await withGateway(runtime, async (client) => {
+    const detail = await client.skillsDetail({
+      slug: params.slug,
+      ...(params.version ? { version: params.version } : {}),
+    }).catch(() => null);
+    const install = await client.skillsInstall({
+      source: "clawhub",
+      slug: params.slug,
+      ...(params.version ? { version: params.version } : {}),
+      ...(params.force ? { force: true } : {}),
+    });
+    return { detail, install };
+  });
+
+  const normalized = result.detail && typeof result.detail === "object"
+    ? normalizeClawhubEntry(result.detail)
+    : null;
+  const skillName = normalized?.name || params.fallback.name || params.slug;
+  const skillVersion = result.install.version || normalized?.version || params.version || null;
+  const providerMetadata = {
+    ...(normalized?.metadata || {}),
+    ...(params.fallback.metadata || {}),
+    provider: {
+      ...((normalized?.metadata?.provider && typeof normalized.metadata.provider === "object") ? normalized.metadata.provider as Record<string, unknown> : {}),
+      ...((params.fallback.metadata?.provider && typeof params.fallback.metadata.provider === "object") ? params.fallback.metadata.provider as Record<string, unknown> : {}),
+      id: "clawhub",
+      skillId: result.install.slug || params.slug,
+      version: skillVersion ?? undefined,
+      installedAt: new Date().toISOString(),
+    },
+    native: {
+      runtimeId: runtime.id,
+      gatewayUrl: runtime.gatewayUrl,
+      installPath: result.install.path,
+      installStatus: result.install.installed ?? result.install.ok ?? true ? "installed" : "unknown",
+      warnings: [
+        ...(typeof result.install.warning === "string" ? [result.install.warning] : []),
+        ...(Array.isArray(result.install.warnings) ? result.install.warnings.filter((item): item is string => typeof item === "string") : []),
+      ],
+    },
+    update: {
+      ...((normalized?.metadata?.update && typeof normalized.metadata.update === "object") ? normalized.metadata.update as Record<string, unknown> : {}),
+      status: "current",
+      currentVersion: skillVersion ?? undefined,
+      checkedAt: new Date().toISOString(),
+    },
+  };
+
+  const [existing] = await withRetry(() =>
+    db!
+      .select()
+      .from(schema.skills)
+      .where(and(eq(schema.skills.workspaceId, params.workspace.id), eq(schema.skills.slug, params.slug)))
+      .limit(1)
+  );
+
+  if (existing) {
+    const [updated] = await withRetry(() =>
+      db!
+        .update(schema.skills)
+        .set({
+          name: skillName,
+          description: normalized?.description || params.fallback.description || existing.description,
+          source: "clawhub",
+          sourceUrl: normalized?.sourceUrl || params.fallback.sourceUrl || existing.sourceUrl,
+          sourceRef: result.install.path || existing.sourceRef,
+          version: skillVersion,
+          metadata: providerMetadata,
+          installed: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.skills.id, existing.id))
+        .returning()
+    );
+    return NextResponse.json(updated, { status: 200 });
+  }
+
+  const [created] = await withRetry(() =>
+    db!.insert(schema.skills).values({
+      workspaceId: params.workspace.id,
+      companyId: params.workspace.companyId,
+      name: skillName,
+      slug: params.slug,
+      description: normalized?.description || params.fallback.description || null,
+      source: "clawhub",
+      sourceUrl: normalized?.sourceUrl || params.fallback.sourceUrl || null,
+      sourceRef: result.install.path || null,
+      version: skillVersion,
+      content: null,
+      metadata: providerMetadata,
+      installed: true,
+    }).returning()
+  );
+
+  return NextResponse.json(created, { status: 201 });
 }

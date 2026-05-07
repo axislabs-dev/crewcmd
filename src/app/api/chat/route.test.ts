@@ -82,6 +82,23 @@ async function readUntilDone(reader: ReadableStreamDefaultReader<Uint8Array>) {
   return output;
 }
 
+async function readUntilContains(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  text: string,
+  maxReads = 10,
+) {
+  const decoder = new TextDecoder();
+  let output = "";
+
+  for (let i = 0; i < maxReads && !output.includes(text); i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    output += decoder.decode(value);
+  }
+
+  return output;
+}
+
 describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -186,7 +203,7 @@ describe("POST /api/chat", () => {
     const chatSend = vi.fn().mockResolvedValue({ runId: "run-1" });
     mockGetGatewayClient.mockResolvedValueOnce({
       on: vi.fn((event: string, handler: (payload: unknown) => void) => {
-        if (event === "chat") chatHandlers.push(handler);
+        if (event === "*") chatHandlers.push(handler);
       }),
       off: vi.fn(),
       chatSend,
@@ -240,6 +257,52 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("data: [DONE]");
   });
 
+  it("streams wildcard tool progress while gateway chatSend is still pending", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend,
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "inspect files" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const initial = await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "tool_call",
+      sessionKey: "main",
+      data: {
+        type: "tool_call",
+        name: "read",
+        status: "started",
+        input: { path: "AGENTS.md" },
+      },
+    });
+
+    const next = await readUntilContains(reader, "\"event\":\"tool_started\"");
+
+    expect(initial).toContain("\"event\":\"gateway_send_started\"");
+    expect(next).toContain("\"event\":\"tool_started\"");
+    expect(next).toContain("\"name\":\"read\"");
+    expect(next).toContain("AGENTS.md");
+
+    await reader.cancel();
+  });
+
   it("keeps long-running chat streams alive with heartbeat progress", async () => {
     vi.useFakeTimers();
     const response = await POST(makeRequest({
@@ -270,7 +333,7 @@ describe("POST /api/chat", () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     mockGetGatewayClient.mockResolvedValueOnce({
       on: vi.fn((event: string, handler: (payload: unknown) => void) => {
-        if (event === "chat") chatHandlers.push(handler);
+        if (event === "*") chatHandlers.push(handler);
       }),
       off: vi.fn(),
       chatSend: vi.fn().mockResolvedValue({ runId: "run-abort" }),
@@ -313,7 +376,7 @@ describe("POST /api/chat", () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     mockGetGatewayClient.mockResolvedValueOnce({
       on: vi.fn((event: string, handler: (payload: unknown) => void) => {
-        if (event === "chat") chatHandlers.push(handler);
+        if (event === "*") chatHandlers.push(handler);
       }),
       off: vi.fn(),
       chatSend: vi.fn().mockResolvedValue({ runId: "run-active" }),
@@ -376,7 +439,7 @@ describe("POST /api/chat", () => {
       });
       mockGetGatewayClient.mockResolvedValueOnce({
         on: vi.fn((event: string, handler: (payload: unknown) => void) => {
-          if (event === "chat") chatHandlers.push(handler);
+          if (event === "*") chatHandlers.push(handler);
         }),
         off: vi.fn(),
         chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
@@ -425,7 +488,7 @@ describe("POST /api/chat", () => {
       const chatHistory = vi.fn().mockRejectedValue(new Error("RPC timeout: chat.history"));
       mockGetGatewayClient.mockResolvedValueOnce({
         on: vi.fn((event: string, handler: (payload: unknown) => void) => {
-          if (event === "chat") chatHandlers.push(handler);
+          if (event === "*") chatHandlers.push(handler);
         }),
         off: vi.fn(),
         chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
@@ -487,7 +550,7 @@ describe("POST /api/chat", () => {
       });
       mockGetGatewayClient.mockResolvedValueOnce({
         on: vi.fn((event: string, handler: (payload: unknown) => void) => {
-          if (event === "chat") chatHandlers.push(handler);
+          if (event === "*") chatHandlers.push(handler);
         }),
         off: vi.fn(),
         chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),

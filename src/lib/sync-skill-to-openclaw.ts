@@ -32,6 +32,13 @@ export interface SyncResult {
   checksum: string;
   errors: string[];
   syncedAt: string;
+  nativeInstall?: {
+    provider: "clawhub";
+    slug: string;
+    version?: string;
+    installed: boolean;
+    warnings: string[];
+  };
 }
 
 interface SkillData {
@@ -45,6 +52,13 @@ interface SkillData {
 
 const CREWCMD_MANAGEMENT_SLUG = "crewcmd-management";
 const CREWCMD_OPERATING_LAYER_SLUG = "crewcmd-operating-layer";
+
+export interface NativeClawhubInstallRequest {
+  provider: "clawhub";
+  slug: string;
+  version?: string;
+  force?: boolean;
+}
 
 // ─── Public API ─────────────────────────────────────────────────────
 
@@ -128,26 +142,40 @@ export async function syncSkillToOpenClaw(
     resolvedEnv
   );
 
+  const nativeInstall = resolveNativeClawhubInstallRequest(skillData.skill.metadata, skillData.skill.slug, skillData.skill.version ?? undefined);
+
   try {
-    await syncSkillEntryViaGateway({
+    const gatewayResult = await syncSkillEntryViaGateway({
       runtime: skillData.runtime,
       runtimeRef,
       slug,
       entry: skillEntry,
+      nativeInstall,
     });
+
+    return {
+      success: true,
+      skillPath: gatewayResult.skillPath,
+      configPath: configTarget,
+      checksum,
+      errors: [],
+      syncedAt: now,
+      ...(gatewayResult.nativeInstall
+        ? {
+            nativeInstall: {
+              provider: "clawhub",
+              slug: gatewayResult.nativeInstall.slug,
+              version: gatewayResult.nativeInstall.version,
+              installed: gatewayResult.nativeInstall.installed,
+              warnings: gatewayResult.nativeInstall.warnings,
+            },
+          }
+        : {}),
+    };
   } catch (err) {
     errors.push(`Failed to sync gateway config: ${err instanceof Error ? err.message : String(err)}`);
     return makeFailure("Gateway config sync failed", checksum, "", configTarget, errors, now);
   }
-
-  return {
-    success: true,
-    skillPath: "",
-    configPath: configTarget,
-    checksum,
-    errors: [],
-    syncedAt: now,
-  };
 }
 
 // ─── DB Loading ─────────────────────────────────────────────────────
@@ -474,7 +502,8 @@ async function syncSkillEntryViaGateway(params: {
   runtimeRef: string;
   slug: string;
   entry: OpenClawSkillEntry;
-}): Promise<void> {
+  nativeInstall?: NativeClawhubInstallRequest | null;
+}): Promise<{ skillPath: string; nativeInstall?: SyncResult["nativeInstall"] }> {
   const meta = params.runtime.metadata as Record<string, unknown> | null;
   const deviceKeyPem = meta?.devicePrivateKeyPem as string | undefined;
   const client = new GatewayClient(
@@ -486,6 +515,29 @@ async function syncSkillEntryViaGateway(params: {
 
   try {
     await client.connect();
+
+    let nativeResult: SyncResult["nativeInstall"] | undefined;
+    let nativeSkillPath = "";
+    if (params.nativeInstall) {
+      const install = await client.skillsInstall({
+        source: "clawhub",
+        slug: params.nativeInstall.slug,
+        ...(params.nativeInstall.version ? { version: params.nativeInstall.version } : {}),
+        ...(typeof params.nativeInstall.force === "boolean" ? { force: params.nativeInstall.force } : {}),
+      });
+      nativeSkillPath = typeof install.path === "string" ? install.path : "";
+      nativeResult = {
+        provider: "clawhub",
+        slug: install.slug || params.nativeInstall.slug,
+        version: install.version || params.nativeInstall.version,
+        installed: install.installed ?? install.ok ?? true,
+        warnings: [
+          ...(typeof install.warning === "string" ? [install.warning] : []),
+          ...(Array.isArray(install.warnings) ? install.warnings.filter((value): value is string => typeof value === "string") : []),
+        ],
+      };
+    }
+
     const snapshot = await client.configGet();
     const agentEntry = findGatewayAgentEntry(snapshot.config, params.runtimeRef);
     if (!agentEntry) {
@@ -528,9 +580,42 @@ async function syncSkillEntryViaGateway(params: {
       ...(params.entry.apiKey ? { apiKey: params.entry.apiKey } : {}),
       ...(Object.keys(params.entry.env).length > 0 ? { env: params.entry.env } : {}),
     });
+
+    return {
+      skillPath: nativeSkillPath,
+      ...(nativeResult ? { nativeInstall: nativeResult } : {}),
+    };
   } finally {
     client.close();
   }
+}
+
+export function resolveNativeClawhubInstallRequest(
+  metadata: Record<string, unknown> | null | undefined,
+  fallbackSlug: string,
+  fallbackVersion?: string
+): NativeClawhubInstallRequest | null {
+  const meta = isPlainObject(metadata) ? metadata : {};
+  const provider = isPlainObject(meta.provider) ? meta.provider : null;
+  const source = typeof meta.source === "string" ? meta.source : undefined;
+  const providerId = typeof provider?.id === "string" ? provider.id : undefined;
+
+  if (providerId !== "clawhub" && source !== "clawhub") {
+    return null;
+  }
+
+  const slug = typeof provider?.skillId === "string" && provider.skillId.trim()
+    ? provider.skillId.trim()
+    : fallbackSlug;
+  const version = typeof provider?.version === "string" && provider.version.trim()
+    ? provider.version.trim()
+    : fallbackVersion;
+
+  return {
+    provider: "clawhub",
+    slug,
+    ...(version ? { version } : {}),
+  };
 }
 
 function findGatewayAgentEntry(

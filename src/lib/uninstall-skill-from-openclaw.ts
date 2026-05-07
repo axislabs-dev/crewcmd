@@ -111,9 +111,9 @@ export async function uninstallSkillFromOpenClaw(
 
     if (data.runtime?.gatewayUrl) {
       try {
-        await disableSkillViaGateway(data.runtime, data.skill.slug);
+        await removeSkillViaGateway(data.runtime, data.skill.slug, data.skill.metadata);
       } catch (err) {
-        warnings.push(`Gateway disable failed: ${err instanceof Error ? err.message : String(err)}`);
+        warnings.push(`Gateway native uninstall/disable failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }
@@ -237,9 +237,10 @@ async function removeOpenClawSkillEntry(configPath: string, slug: string): Promi
   return true;
 }
 
-async function disableSkillViaGateway(
+async function removeSkillViaGateway(
   runtime: typeof companyRuntimes.$inferSelect,
-  slug: string
+  slug: string,
+  metadata: Record<string, unknown> | null | undefined
 ): Promise<void> {
   const meta = runtime.metadata as Record<string, unknown> | null;
   const deviceKeyPem = meta?.devicePrivateKeyPem as string | undefined;
@@ -252,13 +253,26 @@ async function disableSkillViaGateway(
 
   try {
     await client.connect();
-    await client.skillsUpdate({
-      skillKey: slug,
-      enabled: false,
-    });
+    if (isNativeClawhubSkill(metadata)) {
+      await client.skillsUninstall({
+        source: "clawhub",
+        slug,
+      });
+    } else {
+      await client.skillsUpdate({
+        skillKey: slug,
+        enabled: false,
+      });
+    }
   } finally {
     client.close();
   }
+}
+
+function isNativeClawhubSkill(metadata: Record<string, unknown> | null | undefined): boolean {
+  if (!isPlainObject(metadata)) return false;
+  const provider = isPlainObject(metadata.provider) ? metadata.provider : null;
+  return provider?.id === "clawhub" || metadata.source === "clawhub";
 }
 
 function skillDirectoryFor(params: {

@@ -701,7 +701,7 @@ export function VoiceAgent({
   const displayState: AgentState = isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
 
   return (
-    <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : "gap-5 py-3"}`}>
+    <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : "gap-2 py-1"}`}>
       {error && (
         <div
           className="w-full max-w-sm rounded-2xl border px-4 py-2 text-center text-[11px]"
@@ -717,7 +717,7 @@ export function VoiceAgent({
 
       <button
         onClick={isActive ? deactivate : activate}
-        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${immersive ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]" : "h-[18rem] w-[18rem] sm:h-[20rem] sm:w-[20rem]"}`}
+        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${immersive ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]" : "h-[10rem] w-[10rem] sm:h-[12rem] sm:w-[12rem]"}`}
         style={
           {
             "--voice-accent-rgb": activeRgb,
@@ -787,7 +787,7 @@ export function VoiceAgent({
         />
 
         <div
-          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${immersive ? "h-56 w-56 sm:h-72 sm:w-72" : "h-34 w-34 sm:h-40 sm:w-40"} ${
+          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${immersive ? "h-56 w-56 sm:h-72 sm:w-72" : "h-20 w-20 sm:h-24 sm:w-24"} ${
             state === "idle"
               ? "cursor-pointer border-[var(--border-medium)]"
               : state === "listening"
@@ -914,7 +914,7 @@ export function VoiceAgent({
       </button>
 
       {showCompactStatus ? (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-1.5">
           <span
             className="rounded-full border px-4 py-1.5 text-[11px] font-medium tracking-[0.28em] transition-colors duration-300"
             style={{
@@ -1018,7 +1018,7 @@ export function VoiceAgent({
       )}
 
       {isActive && !immersive && (
-        <div className="flex h-12 items-end gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-4 py-2">
+        <div className="flex h-8 items-end gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-4 py-1.5">
           {Array.from({ length: 24 }).map((_, i) => (
             <div
               key={i}
@@ -1027,8 +1027,8 @@ export function VoiceAgent({
                 height: `${Math.max(
                   4,
                   Math.min(
-                    28,
-                    volumeLevel * 28 * (0.45 + Math.random() * 0.65)
+                    18,
+                    volumeLevel * 18 * (0.45 + Math.random() * 0.65)
                   )
                 )}px`,
                 backgroundColor:

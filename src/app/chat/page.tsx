@@ -271,6 +271,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgressEvent | null>(null);
+  const [executionEvents, setExecutionEvents] = useState<ExecutionProgressEvent[]>([]);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -669,6 +670,7 @@ export default function ChatPage() {
       setIsLoading(false);
       setStreamingContent("");
       setExecutionProgress(null);
+      setExecutionEvents([]);
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
@@ -1261,11 +1263,13 @@ export default function ChatPage() {
         wasAtBottomRef.current = true;
         setInput("");
         setIsLoading(true);
-        setExecutionProgress({
+        const startedProgress = {
           event: "run_started",
           at: new Date().toISOString(),
           elapsedMs: 0,
-        });
+        };
+        setExecutionProgress(startedProgress);
+        setExecutionEvents([startedProgress]);
 
         try {
           const res = await fetch("/api/tasks", {
@@ -1311,11 +1315,13 @@ export default function ChatPage() {
             }).catch(() => {});
           }
         } catch {
-          setExecutionProgress({
+          const errorProgress = {
             event: "run_error",
             at: new Date().toISOString(),
             error: "Failed to create task.",
-          });
+          };
+          setExecutionProgress(errorProgress);
+          setExecutionEvents((events) => [...events, errorProgress]);
           setMessages((prev) => [
             ...prev,
             {
@@ -1383,11 +1389,13 @@ export default function ChatPage() {
       // User message persisted server-side in /api/chat route
       setInput("");
       setIsLoading(true);
-      setExecutionProgress({
+      const startedProgress = {
         event: "run_started",
         at: new Date().toISOString(),
         elapsedMs: 0,
-      });
+      };
+      setExecutionProgress(startedProgress);
+      setExecutionEvents([startedProgress]);
       setStreamingContent("");
       streamingContentRef.current = "";
       streamingAgentRef.current = agentCallsign;
@@ -1474,6 +1482,7 @@ export default function ChatPage() {
 
             if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
               setExecutionProgress(parsed);
+              setExecutionEvents((events) => [...events, parsed]);
               useActiveChatRunStore.getState().applyProgressEvent(parsed);
               return;
             }
@@ -1575,14 +1584,20 @@ export default function ChatPage() {
         streamingContentRef.current = "";
         streamingAgentRef.current = null;
         setStreamingContent("");
+        const completedProgress = {
+          event: "run_completed",
+          at: new Date().toISOString(),
+        };
         setExecutionProgress((current) =>
           current?.event === "run_error" || current?.event === "run_aborted"
             ? current
-            : {
-                event: "run_completed",
-                at: new Date().toISOString(),
-              }
+            : completedProgress
         );
+        setExecutionEvents((events) => {
+          const last = events.at(-1);
+          if (last?.event === "run_error" || last?.event === "run_aborted") return events;
+          return [...events, completedProgress];
+        });
         useActiveChatRunStore.getState().applyProgressEvent({
           type: "chat_progress",
           event: "run_completed",
@@ -1611,10 +1626,12 @@ export default function ChatPage() {
           streamingContentRef.current = "";
           streamingAgentRef.current = null;
           setStreamingContent("");
-          setExecutionProgress({
+          const abortedProgress = {
             event: "run_aborted",
             at: new Date().toISOString(),
-          });
+          };
+          setExecutionProgress(abortedProgress);
+          setExecutionEvents((events) => [...events, abortedProgress]);
         } else {
           useActiveChatRunStore.getState().applyProgressEvent({
             type: "chat_progress",
@@ -1622,11 +1639,13 @@ export default function ChatPage() {
             sessionKey: requestSessionKey,
           });
           console.error("[Chat] Error:", error);
-          setExecutionProgress({
+          const errorProgress = {
             event: "run_error",
             at: new Date().toISOString(),
             error: error instanceof Error ? error.message : "Connection error.",
-          });
+          };
+          setExecutionProgress(errorProgress);
+          setExecutionEvents((events) => [...events, errorProgress]);
           setMessages((prev) => [
             ...prev,
             {
@@ -1674,6 +1693,7 @@ export default function ChatPage() {
   const clearChat = async () => {
     setMessages([]);
     setExecutionProgress(null);
+    setExecutionEvents([]);
     storeClearAgent(activeSessionKey);
     loadedAgentsRef.current.add(activeSessionKey);
     loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
@@ -1814,6 +1834,7 @@ export default function ChatPage() {
           {(isLoading || executionProgress) && (
             <ExecutionProgressPanel
               progress={executionProgress}
+              events={executionEvents}
               isLoading={isLoading}
               hasStreamingContent={Boolean(streamingContent)}
               agentColor={agentColor}

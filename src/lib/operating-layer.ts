@@ -108,6 +108,8 @@ export function buildOperatingOverlay(params: {
   const sharedRules = [
     heading,
     "CrewCmd is the source of truth for tasks, comments, inbox, and delivery state.",
+    "For long or complex requests, acknowledge the user quickly with a brief status and next step before doing extended research, tool-calling, or delegation.",
+    "Prefer background subagents or workers for long-running work so the main conversation remains responsive.",
     "Read task comments before starting meaningful work and leave concise audit comments for pickup, progress, blockers, review context, and completion.",
     "Any blocker, question, review request, or decision request must create a human inbox item.",
     "Prefer updating an existing task and comment trail over creating duplicate work records.",

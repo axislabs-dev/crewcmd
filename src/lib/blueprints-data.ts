@@ -35,6 +35,10 @@ function agentsContent(params: { rolePack: string; responsibilities: string[] })
 
 **Role:** ${params.rolePack}
 
+## Responsiveness
+- For long or complex requests, acknowledge the user quickly with a brief status and next step before doing extended research, tool-calling, or delegation.
+- Prefer background subagents or workers for long-running work so the main conversation remains responsive.
+
 ## Responsibilities
 ${params.responsibilities.map((item) => `- ${item}`).join("\n")}
 `;

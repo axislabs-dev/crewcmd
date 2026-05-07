@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
@@ -76,6 +77,7 @@ const VOICE_CHECKIN_DELAY_MS = 30000;
 const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
 const VOICE_FAST_START_MIN_CHARS = 48;
 const VOICE_FAST_START_MAX_CHARS = 110;
+const POCKET_SLIDE_COMPLETE = 0.86;
 
 const VOICE_SYSTEM_PROMPT = [
   "VOICE MODE. Responses are spoken aloud via TTS. The user cannot see text.",
@@ -291,7 +293,8 @@ export default function ChatPage() {
   const [agentMicMuted, setAgentMicMuted] = useState(false);
   const [agentAudioMuted, setAgentAudioMuted] = useState(false);
   const [agentPocketLocked, setAgentPocketLocked] = useState(false);
-  const [pocketUnlocking, setPocketUnlocking] = useState(false);
+  const [pocketSlideProgress, setPocketSlideProgress] = useState(0);
+  const [isPocketSliding, setIsPocketSliding] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -327,7 +330,7 @@ export default function ChatPage() {
   const lastBusyReplyAtRef = useRef(0);
   const hasStartedResponseAudioRef = useRef(false);
   const pageHiddenDuringRequestRef = useRef(false);
-  const pocketUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pocketSliderTrackRef = useRef<HTMLDivElement>(null);
   const voiceLatencyRef = useRef<{
     requestId: string;
     startedAt: number;
@@ -366,23 +369,58 @@ export default function ChatPage() {
     prefetchedAudioRef.current = null;
   }, [revokeAudioObjectUrl]);
 
-  const clearPocketUnlockTimer = useCallback(() => {
-    if (pocketUnlockTimerRef.current) {
-      clearTimeout(pocketUnlockTimerRef.current);
-      pocketUnlockTimerRef.current = null;
-    }
-    setPocketUnlocking(false);
+  const resetPocketSlide = useCallback(() => {
+    setIsPocketSliding(false);
+    setPocketSlideProgress(0);
   }, []);
 
-  const startPocketUnlock = useCallback(() => {
-    clearPocketUnlockTimer();
-    setPocketUnlocking(true);
-    pocketUnlockTimerRef.current = setTimeout(() => {
-      pocketUnlockTimerRef.current = null;
-      setPocketUnlocking(false);
-      setAgentPocketLocked(false);
-    }, 1400);
-  }, [clearPocketUnlockTimer]);
+  const updatePocketSlideFromPointer = useCallback((clientX: number) => {
+    const track = pocketSliderTrackRef.current;
+    if (!track) return 0;
+
+    const rect = track.getBoundingClientRect();
+    const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    setPocketSlideProgress(progress);
+    return progress;
+  }, []);
+
+  const completePocketUnlock = useCallback(() => {
+    setAgentPocketLocked(false);
+    resetPocketSlide();
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate(12);
+    }
+  }, [resetPocketSlide]);
+
+  const handlePocketSliderPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    setIsPocketSliding(true);
+    updatePocketSlideFromPointer(event.clientX);
+  }, [updatePocketSlideFromPointer]);
+
+  const handlePocketSliderPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isPocketSliding) return;
+    event.preventDefault();
+    event.stopPropagation();
+    updatePocketSlideFromPointer(event.clientX);
+  }, [isPocketSliding, updatePocketSlideFromPointer]);
+
+  const handlePocketSliderPointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isPocketSliding) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const progress = updatePocketSlideFromPointer(event.clientX);
+    if (progress >= POCKET_SLIDE_COMPLETE) {
+      completePocketUnlock();
+      return;
+    }
+    resetPocketSlide();
+  }, [completePocketUnlock, isPocketSliding, resetPocketSlide, updatePocketSlideFromPointer]);
 
   const assignAudioObjectUrl = useCallback((url: string, reason: string) => {
     if (audioObjectUrlRef.current && audioObjectUrlRef.current !== url) {
@@ -397,17 +435,15 @@ export default function ChatPage() {
     });
   }, [revokeAudioObjectUrl]);
 
-  useEffect(() => () => clearPocketUnlockTimer(), [clearPocketUnlockTimer]);
-
   useEffect(() => {
     if (voiceMode !== "agent") {
-      clearPocketUnlockTimer();
+      resetPocketSlide();
       setAgentPocketLocked(false);
       return;
     }
 
     const lockForResume = () => {
-      clearPocketUnlockTimer();
+      resetPocketSlide();
       setAgentPocketLocked(true);
     };
     const handleVisibilityChange = () => {
@@ -423,7 +459,7 @@ export default function ChatPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", lockForResume);
     };
-  }, [voiceMode, clearPocketUnlockTimer]);
+  }, [voiceMode, resetPocketSlide]);
 
   // Derive session key: if a gateway session is selected, use it;
   // otherwise fall back to agent callsign
@@ -2322,16 +2358,18 @@ export default function ChatPage() {
 
             {agentPocketLocked && (
               <div
-                className="absolute inset-0 z-[70] flex touch-none flex-col items-center justify-center bg-[var(--bg-primary)]/92 px-6 text-center backdrop-blur-xl"
+                className="absolute inset-0 z-[70] flex select-none touch-none flex-col items-center justify-center bg-[var(--bg-primary)]/94 px-6 text-center backdrop-blur-xl [-webkit-touch-callout:none] [-webkit-user-select:none]"
                 onPointerDown={(event) => event.stopPropagation()}
                 onPointerMove={(event) => event.stopPropagation()}
                 onPointerUp={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
+                onContextMenu={(event) => event.preventDefault()}
                 onTouchMove={(event) => event.preventDefault()}
               >
                 <div
-                  className="mb-5 flex h-20 w-20 items-center justify-center rounded-[24px] border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-[var(--theme-shadow-lg)]"
-                  style={{ color: agentColor, boxShadow: `0 0 32px ${agentColor}22` }}
+                  className="mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-[var(--theme-shadow-lg)]"
+                  style={{ color: agentColor, boxShadow: `0 0 34px ${agentColor}26` }}
+                  aria-hidden="true"
                 >
                   <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
@@ -2341,18 +2379,51 @@ export default function ChatPage() {
                   Pocket lock
                 </div>
                 <div className="mt-2 max-w-sm text-sm text-[var(--text-secondary)]">
-                  Agent mode stays live. Touches are blocked until you unlock.
+                  Agent mode stays live. Slide deliberately to unlock.
                 </div>
-                <button
-                  onPointerDown={startPocketUnlock}
-                  onPointerUp={clearPocketUnlockTimer}
-                  onPointerCancel={clearPocketUnlockTimer}
-                  onPointerLeave={clearPocketUnlockTimer}
-                  onContextMenu={(event) => event.preventDefault()}
-                  className="mt-7 min-w-44 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--text-primary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)]"
+
+                <div
+                  ref={pocketSliderTrackRef}
+                  role="slider"
+                  aria-label="Slide to unlock pocket lock"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(pocketSlideProgress * 100)}
+                  tabIndex={0}
+                  onPointerDown={handlePocketSliderPointerDown}
+                  onPointerMove={handlePocketSliderPointerMove}
+                  onPointerUp={handlePocketSliderPointerEnd}
+                  onPointerCancel={resetPocketSlide}
+                  onLostPointerCapture={resetPocketSlide}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      completePocketUnlock();
+                    }
+                  }}
+                  className="relative mt-8 h-16 w-full max-w-[320px] overflow-hidden rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 p-1.5 text-left shadow-[var(--theme-shadow)] outline-none transition focus-visible:border-[var(--accent-medium)]"
+                  style={{ touchAction: "none" }}
                 >
-                  {pocketUnlocking ? "Keep holding" : "Hold to unlock"}
-                </button>
+                  <div
+                    className="absolute inset-y-1.5 left-1.5 rounded-full transition-[width] duration-100 ease-out"
+                    style={{
+                      width: `calc(${Math.max(0.18, pocketSlideProgress) * 100}% - 0.75rem)`,
+                      background: `linear-gradient(90deg, ${agentColor}33, ${agentColor}66)`,
+                    }}
+                  />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+                    {pocketSlideProgress >= POCKET_SLIDE_COMPLETE ? "Release to unlock" : "Slide to unlock"}
+                  </div>
+                  <div
+                    className="absolute top-1.5 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-[var(--theme-shadow-lg)] transition-transform duration-75 ease-out"
+                    style={{ left: `calc(${pocketSlideProgress * 100}% - ${pocketSlideProgress * 3.25}rem + 0.375rem)`, color: agentColor }}
+                    aria-hidden="true"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             )}
           </div>

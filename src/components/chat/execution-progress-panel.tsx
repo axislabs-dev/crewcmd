@@ -247,6 +247,11 @@ export function ExecutionProgressPanel({
   const isCompleted = phase === "completed";
   const label = labelFromProgress(progress, phase);
   const auditEvents = events.filter((event) => event.activeTool || event.checkpoint);
+  const statusDetail =
+    phase === "tool" ? progress?.activeTool?.detail :
+    phase === "error" ? progress?.error :
+    "";
+  const hasStatusDetail = Boolean(statusDetail);
 
   return (
     <div
@@ -288,14 +293,14 @@ export function ExecutionProgressPanel({
           );
         })}
       </div>
-      {progress?.activeTool?.detail && phase === "tool" && (
-        <div className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">
-          {progress.activeTool.detail}
-        </div>
-      )}
-      {phase === "error" && progress?.error && (
-        <div className="mt-1 truncate text-[11px] text-red-300">{progress.error}</div>
-      )}
+      <div
+        aria-hidden={!hasStatusDetail}
+        className={`mt-1 min-h-[0.875rem] truncate text-[10px] leading-[0.875rem] ${
+          phase === "error" ? "text-red-300" : "font-mono text-[var(--text-tertiary)]"
+        }`}
+      >
+        {statusDetail}
+      </div>
       {auditEvents.length > 0 && (
         <div
           aria-label="Tool call audit trail"

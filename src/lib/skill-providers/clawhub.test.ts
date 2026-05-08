@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveMarketplaceSkills } from "@/lib/skill-providers/catalog";
-import { fetchClawhubCatalog, getClawhubCatalogConfig, normalizeClawhubEntry } from "@/lib/skill-providers/clawhub";
+import {
+  fetchClawhubCatalog,
+  fetchClawhubCatalogPage,
+  getClawhubCatalogConfig,
+  normalizeClawhubEntry,
+} from "@/lib/skill-providers/clawhub";
 
 describe("Clawhub skill catalog provider", () => {
   it("normalizes Clawhub entries into marketplace skills with provider metadata", () => {
@@ -23,7 +28,7 @@ describe("Clawhub skill catalog provider", () => {
         latest_version: "1.2.4",
         supports_scripts: true,
       },
-      "https://clawhub.example"
+      "https://clawhub.example",
     );
 
     expect(skill).toMatchObject({
@@ -106,7 +111,7 @@ describe("Clawhub skill catalog provider", () => {
       "https://clawhub.example/api/v1/search?q=git&limit=5",
       expect.objectContaining({
         headers: { Authorization: "Bearer token_123" },
-      })
+      }),
     );
     expect(skills).toHaveLength(1);
     expect(skills?.[0]).toMatchObject({
@@ -120,6 +125,101 @@ describe("Clawhub skill catalog provider", () => {
         },
       },
     });
+  });
+
+  it("hydrates thin search results with ClawHub detail metadata", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              slug: "frontend",
+              displayName: "Frontend",
+              summary: "Frontend development with React.",
+              version: null,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          slug: "frontend",
+          displayName: "Frontend",
+          summary: "Frontend development with React.",
+          tags: { latest: "1.0.2" },
+          latestVersion: { version: "1.0.2" },
+          stats: {
+            downloads: 10174,
+            stars: 16,
+            installsAllTime: 77,
+            versions: 3,
+          },
+        }),
+      });
+
+    const skills = await fetchClawhubCatalog({
+      query: "frontend",
+      limit: 5,
+      config: {
+        enabled: true,
+        registryUrl: "https://clawhub.example",
+        timeoutMs: 1000,
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://clawhub.example/api/v1/skills/frontend",
+      expect.any(Object),
+    );
+    expect(skills?.[0]).toMatchObject({
+      slug: "frontend",
+      version: "1.0.2",
+      metadata: {
+        stats: {
+          downloads: 10174,
+          stars: 16,
+          installsAllTime: 77,
+          versions: 3,
+        },
+      },
+    });
+  });
+
+  it("passes sort through for ClawHub browse pages", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        skills: [
+          {
+            slug: "popular-skill",
+            name: "Popular Skill",
+            latest_version: "1.0.0",
+            stats: { downloads: 500 },
+          },
+        ],
+      }),
+    });
+
+    await fetchClawhubCatalogPage({
+      sort: "downloads",
+      limit: 5,
+      config: {
+        enabled: true,
+        registryUrl: "https://clawhub.example",
+        timeoutMs: 1000,
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://clawhub.example/api/v1/skills?limit=5&sort=downloads",
+      expect.any(Object),
+    );
   });
 
   it("falls back to built-in marketplace skills when Clawhub fails", async () => {

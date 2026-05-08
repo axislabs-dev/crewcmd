@@ -54,12 +54,45 @@ interface Agent {
 
 // ─── Source Badge ────────────────────────────────────────────────────────
 
-const SOURCE_STYLES: Record<string, { label: string; icon: string; color: string; border: string; bg: string }> = {
-  clawhub: { label: "ClawHub", icon: "\u{1F43E}", color: "text-[#00f0ff]", border: "border-[#00f0ff]/30", bg: "bg-[#00f0ff]/10" },
-  skills_sh: { label: "skills.sh", icon: "\u25B2", color: "text-[var(--text-primary)]", border: "border-[var(--border-medium)]", bg: "bg-[var(--bg-surface-hover)]" },
-  github: { label: "GitHub", icon: "\u2B24", color: "text-[#8b949e]", border: "border-[#8b949e]/30", bg: "bg-[#8b949e]/10" },
-  system: { label: "System", icon: "\u{1F512}", color: "text-violet-400", border: "border-violet-400/30", bg: "bg-violet-400/10" },
-  custom: { label: "Custom", icon: "\u270F\uFE0F", color: "text-amber-400", border: "border-amber-400/30", bg: "bg-amber-400/10" },
+const SOURCE_STYLES: Record<
+  string,
+  { label: string; icon: string; color: string; border: string; bg: string }
+> = {
+  clawhub: {
+    label: "ClawHub",
+    icon: "\u{1F43E}",
+    color: "text-[#00f0ff]",
+    border: "border-[#00f0ff]/30",
+    bg: "bg-[#00f0ff]/10",
+  },
+  skills_sh: {
+    label: "skills.sh",
+    icon: "\u25B2",
+    color: "text-[var(--text-primary)]",
+    border: "border-[var(--border-medium)]",
+    bg: "bg-[var(--bg-surface-hover)]",
+  },
+  github: {
+    label: "GitHub",
+    icon: "\u2B24",
+    color: "text-[#8b949e]",
+    border: "border-[#8b949e]/30",
+    bg: "bg-[#8b949e]/10",
+  },
+  system: {
+    label: "System",
+    icon: "\u{1F512}",
+    color: "text-violet-400",
+    border: "border-violet-400/30",
+    bg: "bg-violet-400/10",
+  },
+  custom: {
+    label: "Custom",
+    icon: "\u270F\uFE0F",
+    color: "text-amber-400",
+    border: "border-amber-400/30",
+    bg: "bg-amber-400/10",
+  },
 };
 
 function SourceBadge({ source }: { source: string }) {
@@ -74,8 +107,62 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
-function mergeMarketplace(existing: MarketplaceSkill[], incoming: MarketplaceSkill[]): MarketplaceSkill[] {
-  const seen = new Set(existing.map((skill) => `${skill.source}:${skill.slug}`));
+function formatCompactNumber(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: value >= 1000 ? 1 : 0,
+  }).format(value);
+}
+
+function getMetadataRecord(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | null {
+  const value = metadata?.[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getMarketplaceVersion(ms: MarketplaceSkill): string | null {
+  if (ms.version?.trim()) return ms.version.trim();
+  const provider = getMetadataRecord(ms.metadata, "provider");
+  const providerVersion = provider?.version;
+  return typeof providerVersion === "string" && providerVersion.trim()
+    ? providerVersion.trim()
+    : null;
+}
+
+function getMarketplaceSignals(ms: MarketplaceSkill): string[] {
+  const stats = getMetadataRecord(ms.metadata, "stats");
+  const signals: string[] = [];
+  const downloads = formatCompactNumber(stats?.downloads);
+  const stars = formatCompactNumber(stats?.stars);
+  const installs = formatCompactNumber(stats?.installsAllTime);
+  const versions = formatCompactNumber(stats?.versions);
+  if (downloads) signals.push(`${downloads} downloads`);
+  if (stars) signals.push(`${stars} stars`);
+  if (installs) signals.push(`${installs} installs`);
+  if (versions) signals.push(`${versions} versions`);
+  return signals;
+}
+
+function getMarketplaceSortLabel(search: string, sourceFilter: string): string {
+  if (search.trim())
+    return "Search results are relevance-ranked by ClawHub; cards show version and marketplace signals when available.";
+  if (sourceFilter === "clawhub" || sourceFilter === "all")
+    return "ClawHub browse is sorted by downloads/popularity; cards show version, downloads, stars, and installs when ClawHub provides them.";
+  return "Browse results are ordered by the selected source; cards show source metadata when available.";
+}
+
+function mergeMarketplace(
+  existing: MarketplaceSkill[],
+  incoming: MarketplaceSkill[],
+): MarketplaceSkill[] {
+  const seen = new Set(
+    existing.map((skill) => `${skill.source}:${skill.slug}`),
+  );
   const merged = [...existing];
   for (const skill of incoming) {
     const key = `${skill.source}:${skill.slug}`;
@@ -101,7 +188,13 @@ interface Toast {
 
 let toastId = 0;
 
-function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+function Toasts({
+  toasts,
+  onDismiss,
+}: {
+  toasts: Toast[];
+  onDismiss: (id: number) => void;
+}) {
   if (toasts.length === 0) return null;
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -115,7 +208,12 @@ function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number
           }`}
         >
           <span>{t.message}</span>
-          <button onClick={() => onDismiss(t.id)} className="ml-2 opacity-60 hover:opacity-100">&times;</button>
+          <button
+            onClick={() => onDismiss(t.id)}
+            className="ml-2 opacity-60 hover:opacity-100"
+          >
+            &times;
+          </button>
         </div>
       ))}
     </div>
@@ -127,25 +225,36 @@ function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number
 export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [marketplace, setMarketplace] = useState<MarketplaceSkill[]>([]);
-  const [marketplaceNextCursor, setMarketplaceNextCursor] = useState<string | null>(null);
+  const [marketplaceNextCursor, setMarketplaceNextCursor] = useState<
+    string | null
+  >(null);
   const [marketplaceLoadingMore, setMarketplaceLoadingMore] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceSkill | null>(null);
-  const [tab, setTab] = useState<"installed" | "browse" | "custom">("installed");
+  const [selectedMarketplace, setSelectedMarketplace] =
+    useState<MarketplaceSkill | null>(null);
+  const [tab, setTab] = useState<"installed" | "browse" | "custom">(
+    "installed",
+  );
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [installing, setInstalling] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, type: "error" | "success" = "error") => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
-  }, []);
+  const addToast = useCallback(
+    (message: string, type: "error" | "success" = "error") => {
+      const id = ++toastId;
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(
+        () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+        3000,
+      );
+    },
+    [],
+  );
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -166,57 +275,95 @@ export default function SkillsPage() {
   const [savingEdit, setSavingEdit] = useState(false);
 
   // Agent skill assignments for detail view
-  const [skillAssignments, setSkillAssignments] = useState<AgentSkillAssignment[]>([]);
+  const [skillAssignments, setSkillAssignments] = useState<
+    AgentSkillAssignment[]
+  >([]);
   const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
   const [importingBuiltIn, setImportingBuiltIn] = useState(false);
 
-  const fetchSkills = useCallback(async (activeWorkspaceId: string, cId?: string | null) => {
-    try {
-      const params = new URLSearchParams({ workspaceId: activeWorkspaceId });
-      if (cId) params.set("company_id", cId);
-      const res = await fetch(`/api/skills?${params.toString()}`);
-      if (res.ok) {
-        setSkills(await res.json());
+  const fetchSkills = useCallback(
+    async (activeWorkspaceId: string, cId?: string | null) => {
+      try {
+        const params = new URLSearchParams({ workspaceId: activeWorkspaceId });
+        if (cId) params.set("company_id", cId);
+        const res = await fetch(`/api/skills?${params.toString()}`);
+        if (res.ok) {
+          setSkills(await res.json());
+        }
+      } catch {
+        addToast("Failed to load skills");
       }
-    } catch {
-      addToast("Failed to load skills");
-    }
-  }, [addToast]);
+    },
+    [addToast],
+  );
 
-  const fetchMarketplace = useCallback(async (activeWorkspaceId?: string | null, cId?: string | null, options?: { query?: string; provider?: string; cursor?: string; append?: boolean }) => {
-    try {
-      if (options?.append) setMarketplaceLoadingMore(true);
-      const params = new URLSearchParams({ limit: "50" });
-      if (activeWorkspaceId) params.set("workspaceId", activeWorkspaceId);
-      if (cId) params.set("companyId", cId);
-      if (options?.query?.trim()) params.set("query", options.query.trim());
-      if (options?.provider && options.provider !== "all") params.set("provider", options.provider);
-      if (options?.cursor) params.set("cursor", options.cursor);
-      const res = await fetch(`/api/skills/browse${params.toString() ? `?${params.toString()}` : ""}`);
-      if (res.ok) {
-        const data = await res.json();
-        const parsed: MarketplaceResponse = Array.isArray(data) ? { skills: data, nextCursor: null } : data;
-        setMarketplace((prev) => options?.append ? mergeMarketplace(prev, parsed.skills || []) : parsed.skills || []);
-        setMarketplaceNextCursor(parsed.nextCursor ?? null);
+  const fetchMarketplace = useCallback(
+    async (
+      activeWorkspaceId?: string | null,
+      cId?: string | null,
+      options?: {
+        query?: string;
+        provider?: string;
+        cursor?: string;
+        append?: boolean;
+      },
+    ) => {
+      try {
+        if (options?.append) setMarketplaceLoadingMore(true);
+        const params = new URLSearchParams({ limit: "50" });
+        if (activeWorkspaceId) params.set("workspaceId", activeWorkspaceId);
+        if (cId) params.set("companyId", cId);
+        if (options?.query?.trim()) params.set("query", options.query.trim());
+        if (options?.provider && options.provider !== "all")
+          params.set("provider", options.provider);
+        if (options?.cursor) params.set("cursor", options.cursor);
+        if (
+          !options?.query?.trim() &&
+          (!options?.provider ||
+            options.provider === "all" ||
+            options.provider === "clawhub")
+        )
+          params.set("sort", "downloads");
+        const res = await fetch(
+          `/api/skills/browse${params.toString() ? `?${params.toString()}` : ""}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const parsed: MarketplaceResponse = Array.isArray(data)
+            ? { skills: data, nextCursor: null }
+            : data;
+          setMarketplace((prev) =>
+            options?.append
+              ? mergeMarketplace(prev, parsed.skills || [])
+              : parsed.skills || [],
+          );
+          setMarketplaceNextCursor(parsed.nextCursor ?? null);
+        }
+      } catch {
+        addToast("Failed to load marketplace");
+      } finally {
+        if (options?.append) setMarketplaceLoadingMore(false);
       }
-    } catch {
-      addToast("Failed to load marketplace");
-    } finally {
-      if (options?.append) setMarketplaceLoadingMore(false);
-    }
-  }, [addToast]);
+    },
+    [addToast],
+  );
 
-  const fetchAgents = useCallback(async (activeWorkspaceId: string) => {
-    try {
-      const res = await fetch(`/api/agents?workspaceId=${encodeURIComponent(activeWorkspaceId)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAgents(data.agents || []);
+  const fetchAgents = useCallback(
+    async (activeWorkspaceId: string) => {
+      try {
+        const res = await fetch(
+          `/api/agents?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setAgents(data.agents || []);
+        }
+      } catch {
+        addToast("Failed to load agents");
       }
-    } catch {
-      addToast("Failed to load agents");
-    }
-  }, [addToast]);
+    },
+    [addToast],
+  );
 
   useEffect(() => {
     const companyCookie = document.cookie
@@ -232,7 +379,10 @@ export default function SkillsPage() {
 
     const init = async () => {
       if (wId) await fetchSkills(wId, cId);
-      await Promise.all([fetchMarketplace(wId, cId), wId ? fetchAgents(wId) : Promise.resolve()]);
+      await Promise.all([
+        fetchMarketplace(wId, cId),
+        wId ? fetchAgents(wId) : Promise.resolve(),
+      ]);
       setLoading(false);
     };
     init();
@@ -241,10 +391,21 @@ export default function SkillsPage() {
   useEffect(() => {
     if (loading || tab !== "browse") return;
     const timeout = window.setTimeout(() => {
-      void fetchMarketplace(workspaceId, companyId, { query: search, provider: sourceFilter });
+      void fetchMarketplace(workspaceId, companyId, {
+        query: search,
+        provider: sourceFilter,
+      });
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [companyId, fetchMarketplace, loading, search, sourceFilter, tab, workspaceId]);
+  }, [
+    companyId,
+    fetchMarketplace,
+    loading,
+    search,
+    sourceFilter,
+    tab,
+    workspaceId,
+  ]);
 
   // Fetch agent assignments for a skill via batch endpoint
   const fetchSkillAssignments = useCallback(async (skillId: string) => {
@@ -261,100 +422,114 @@ export default function SkillsPage() {
   }, []);
 
   // Ensure a built-in skill has a DB record, returns the real DB skill ID
-  const ensureBuiltInSkill = useCallback(async (skill: Skill): Promise<string | null> => {
-    if (!workspaceId) return null;
-    // Check if a DB record already exists for this slug
-    const existing = skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"));
-    if (existing) return existing.id;
+  const ensureBuiltInSkill = useCallback(
+    async (skill: Skill): Promise<string | null> => {
+      if (!workspaceId) return null;
+      // Check if a DB record already exists for this slug
+      const existing = skills.find(
+        (s) => s.slug === skill.slug && !s.id.startsWith("built-in:"),
+      );
+      if (existing) return existing.id;
 
-    // Create DB record from built-in metadata
-    setImportingBuiltIn(true);
-    try {
-      const res = await fetch("/api/skills", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: skill.name,
-          slug: skill.slug,
-          description: skill.description,
-          source: "built-in",
-          workspaceId,
-          companyId,
-          metadata: skill.metadata || {},
-        }),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        await fetchSkills(workspaceId, companyId);
-        return created.id;
+      // Create DB record from built-in metadata
+      setImportingBuiltIn(true);
+      try {
+        const res = await fetch("/api/skills", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: skill.name,
+            slug: skill.slug,
+            description: skill.description,
+            source: "built-in",
+            workspaceId,
+            companyId,
+            metadata: skill.metadata || {},
+          }),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          await fetchSkills(workspaceId, companyId);
+          return created.id;
+        }
+      } catch {
+        addToast("Failed to import built-in skill");
+      } finally {
+        setImportingBuiltIn(false);
       }
-    } catch {
-      addToast("Failed to import built-in skill");
-    } finally {
-      setImportingBuiltIn(false);
-    }
-    return null;
-  }, [addToast, companyId, workspaceId, skills, fetchSkills]);
+      return null;
+    },
+    [addToast, companyId, workspaceId, skills, fetchSkills],
+  );
 
   // Toggle agent assignment for the selected skill
-  const toggleAgentAssignment = useCallback(async (skill: Skill, agentId: string) => {
-    setTogglingAgent(agentId);
-    try {
-      let realSkillId = skill.id;
+  const toggleAgentAssignment = useCallback(
+    async (skill: Skill, agentId: string) => {
+      setTogglingAgent(agentId);
+      try {
+        let realSkillId = skill.id;
 
-      // Built-in skills need a DB record before assignment
-      if (skill.id.startsWith("built-in:")) {
-        const dbId = await ensureBuiltInSkill(skill);
-        if (!dbId) {
-          setTogglingAgent(null);
-          return;
+        // Built-in skills need a DB record before assignment
+        if (skill.id.startsWith("built-in:")) {
+          const dbId = await ensureBuiltInSkill(skill);
+          if (!dbId) {
+            setTogglingAgent(null);
+            return;
+          }
+          realSkillId = dbId;
+          // Update selectedSkill to point to the real DB record
+          const updated = skills.find((s) => s.id === dbId);
+          if (updated) {
+            setSelectedSkill(updated);
+          }
         }
-        realSkillId = dbId;
-        // Update selectedSkill to point to the real DB record
-        const updated = skills.find((s) => s.id === dbId);
-        if (updated) {
-          setSelectedSkill(updated);
+
+        const res = await fetch(`/api/skills/${realSkillId}/agents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agentId }),
+        });
+
+        if (res.ok) {
+          await fetchSkillAssignments(realSkillId);
+        } else {
+          addToast("Failed to toggle agent assignment");
         }
-      }
-
-      const res = await fetch(`/api/skills/${realSkillId}/agents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId }),
-      });
-
-      if (res.ok) {
-        await fetchSkillAssignments(realSkillId);
-      } else {
+      } catch {
         addToast("Failed to toggle agent assignment");
+      } finally {
+        setTogglingAgent(null);
       }
-    } catch {
-      addToast("Failed to toggle agent assignment");
-    } finally {
-      setTogglingAgent(null);
-    }
-  }, [ensureBuiltInSkill, skills, fetchSkillAssignments, addToast]);
+    },
+    [ensureBuiltInSkill, skills, fetchSkillAssignments, addToast],
+  );
 
   // Toggle enabled/disabled for an existing assignment
-  const toggleAgentEnabled = useCallback(async (agentCallsign: string, skillId: string, enabled: boolean) => {
-    setTogglingAgent(agentCallsign);
-    try {
-      const res = await fetch(`/api/agents/${agentCallsign}/skills/${skillId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      if (res.ok) {
-        await fetchSkillAssignments(skillId);
-      } else {
+  const toggleAgentEnabled = useCallback(
+    async (agentCallsign: string, skillId: string, enabled: boolean) => {
+      setTogglingAgent(agentCallsign);
+      try {
+        const res = await fetch(
+          `/api/agents/${agentCallsign}/skills/${skillId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled }),
+          },
+        );
+        if (res.ok) {
+          await fetchSkillAssignments(skillId);
+        } else {
+          addToast("Failed to toggle agent assignment");
+        }
+      } catch {
         addToast("Failed to toggle agent assignment");
+      } finally {
+        setTogglingAgent(null);
       }
-    } catch {
-      addToast("Failed to toggle agent assignment");
-    } finally {
-      setTogglingAgent(null);
-    }
-  }, [fetchSkillAssignments, addToast]);
+    },
+    [fetchSkillAssignments, addToast],
+  );
 
   function selectSkill(skill: Skill) {
     setSelectedSkill(skill);
@@ -363,7 +538,9 @@ export default function SkillsPage() {
     setSkillAssignments([]);
     // For built-in skills, check if a DB record exists and use its ID for fetching
     const realSkillId = skill.id.startsWith("built-in:")
-      ? skills.find((s) => s.slug === skill.slug && !s.id.startsWith("built-in:"))?.id
+      ? skills.find(
+          (s) => s.slug === skill.slug && !s.id.startsWith("built-in:"),
+        )?.id
       : skill.id;
     if (realSkillId) {
       fetchSkillAssignments(realSkillId);
@@ -399,7 +576,10 @@ export default function SkillsPage() {
         }),
       });
       if (res.ok) {
-        await Promise.all([fetchSkills(workspaceId, companyId), fetchMarketplace(workspaceId, companyId)]);
+        await Promise.all([
+          fetchSkills(workspaceId, companyId),
+          fetchMarketplace(workspaceId, companyId),
+        ]);
         addToast(`Installed ${ms.name}`, "success");
       } else {
         addToast(`Failed to install ${ms.name}`);
@@ -415,7 +595,10 @@ export default function SkillsPage() {
     if (!companyId || !workspaceId || !customName.trim()) return;
     setSavingCustom(true);
     try {
-      const slug = customName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const slug = customName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
       const res = await fetch("/api/skills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -508,19 +691,29 @@ export default function SkillsPage() {
   const installedSlugs = new Set(skills.map((s) => s.slug));
 
   const filteredInstalled = skills.filter(
-    (s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.slug.includes(search.toLowerCase())
+    (s) =>
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.slug.includes(search.toLowerCase()),
   );
 
   const filteredMarketplace = marketplace.filter((ms) => {
     if (sourceFilter !== "all" && ms.source !== sourceFilter) return false;
     const needle = search.toLowerCase();
-    if (needle && !ms.name.toLowerCase().includes(needle) && !ms.slug.toLowerCase().includes(needle) && !ms.description.toLowerCase().includes(needle)) return false;
+    if (
+      needle &&
+      !ms.name.toLowerCase().includes(needle) &&
+      !ms.slug.toLowerCase().includes(needle) &&
+      !ms.description.toLowerCase().includes(needle)
+    )
+      return false;
     return true;
   });
 
   const customSkills = skills.filter((s) => s.source === "custom");
   const filteredCustom = customSkills.filter(
-    (s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.slug.includes(search.toLowerCase())
+    (s) =>
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.slug.includes(search.toLowerCase()),
   );
 
   // ── Count agents per skill ──
@@ -538,8 +731,12 @@ export default function SkillsPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="text-sm text-[var(--text-tertiary)]">No workspace selected</p>
-          <p className="mt-1 text-xs text-[var(--text-tertiary)]">Select a workspace from the sidebar to manage skills.</p>
+          <p className="text-sm text-[var(--text-tertiary)]">
+            No workspace selected
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+            Select a workspace from the sidebar to manage skills.
+          </p>
         </div>
       </div>
     );
@@ -552,8 +749,12 @@ export default function SkillsPage() {
         {/* Header */}
         <div className="border-b border-[var(--border-subtle)] px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">SKILLS</h1>
-            <span className="text-[11px] text-[var(--text-tertiary)]">{skills.length} INSTALLED</span>
+            <h1 className="font-mono text-lg font-bold tracking-wider text-[var(--accent)]">
+              SKILLS
+            </h1>
+            <span className="text-[11px] text-[var(--text-tertiary)]">
+              {skills.length} INSTALLED
+            </span>
           </div>
           <div className="mt-3">
             <input
@@ -590,7 +791,9 @@ export default function SkillsPage() {
             <>
               {filteredInstalled.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-10 text-center">
-                  <p className="text-xs text-[var(--text-tertiary)]">No skills installed</p>
+                  <p className="text-xs text-[var(--text-tertiary)]">
+                    No skills installed
+                  </p>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                     Browse the marketplace to install skills.
                   </p>
@@ -613,15 +816,21 @@ export default function SkillsPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs text-[var(--text-primary)]">{skill.name}</span>
+                      <span className="font-mono text-xs text-[var(--text-primary)]">
+                        {skill.name}
+                      </span>
                       <SourceBadge source={skill.source} />
                     </div>
                     {skill.description && (
-                      <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-1">{skill.description}</p>
+                      <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-1">
+                        {skill.description}
+                      </p>
                     )}
                     <div className="mt-1.5 flex items-center gap-2">
                       {skill.version && (
-                        <span className="font-mono text-[9px] text-[var(--text-tertiary)]">v{skill.version}</span>
+                        <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
+                          v{skill.version}
+                        </span>
                       )}
                     </div>
                   </button>
@@ -634,45 +843,59 @@ export default function SkillsPage() {
           {tab === "browse" && (
             <>
               {/* Source filter */}
-              <div className="flex gap-1.5 pb-1">
-                {[
-                  { value: "all", label: "All" },
-                  { value: "clawhub", label: "ClawHub" },
-                  { value: "skills_sh", label: "skills.sh" },
-                  { value: "github", label: "GitHub" },
-                ].map((f) => (
-                  <button
-                    key={f.value}
-                    onClick={() => setSourceFilter(f.value)}
-                    className={`rounded-full px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors border ${
-                      sourceFilter === f.value
-                        ? "border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                        : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                    }`}
-                  >
-                    {f.label.toUpperCase()}
-                  </button>
-                ))}
+              <div className="space-y-2 pb-1">
+                <p className="font-mono text-[9px] leading-relaxed text-[var(--text-tertiary)]">
+                  {getMarketplaceSortLabel(search, sourceFilter)}
+                </p>
+                <div className="flex gap-1.5">
+                  {[
+                    { value: "all", label: "All" },
+                    { value: "clawhub", label: "ClawHub" },
+                    { value: "skills_sh", label: "skills.sh" },
+                    { value: "github", label: "GitHub" },
+                  ].map((f) => (
+                    <button
+                      key={f.value}
+                      onClick={() => setSourceFilter(f.value)}
+                      className={`rounded-full px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors border ${
+                        sourceFilter === f.value
+                          ? "border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                          : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {f.label.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {filteredMarketplace.map((ms) => {
                 const nativeStatus = getNativeInstallStatus(ms);
-                const isInstalled = installedSlugs.has(ms.slug) || nativeStatus === "installed";
+                const isInstalled =
+                  installedSlugs.has(ms.slug) || nativeStatus === "installed";
+                const version = getMarketplaceVersion(ms);
+                const signals = getMarketplaceSignals(ms);
                 return (
                   <div
                     key={`${ms.source}-${ms.slug}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => selectMarketplaceSkill(ms)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") selectMarketplaceSkill(ms); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ")
+                        selectMarketplaceSkill(ms);
+                    }}
                     className={`w-full cursor-pointer rounded-lg border p-3 text-left transition-colors ${
-                      selectedMarketplace?.slug === ms.slug && selectedMarketplace?.source === ms.source
+                      selectedMarketplace?.slug === ms.slug &&
+                      selectedMarketplace?.source === ms.source
                         ? "border-[var(--accent-medium)] bg-[var(--accent-soft)]"
                         : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface)]"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs text-[var(--text-primary)]">{ms.name}</span>
+                      <span className="font-mono text-xs text-[var(--text-primary)]">
+                        {ms.name}
+                      </span>
                       <div className="flex items-center gap-2">
                         <SourceBadge source={ms.source} />
                         {isInstalled ? (
@@ -688,24 +911,45 @@ export default function SkillsPage() {
                             disabled={!workspaceId || installing === ms.slug}
                             className="rounded-full border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                           >
-                            {!workspaceId ? "SELECT WORKSPACE" : installing === ms.slug ? "..." : "INSTALL"}
+                            {!workspaceId
+                              ? "SELECT WORKSPACE"
+                              : installing === ms.slug
+                                ? "..."
+                                : "INSTALL"}
                           </button>
                         )}
                       </div>
                     </div>
-                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-2">{ms.description}</p>
-                    <span className="mt-1 inline-block font-mono text-[9px] text-[var(--text-tertiary)]">v{ms.version}{nativeStatus ? ` · OpenClaw ${nativeStatus}` : ""}</span>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-2">
+                      {ms.description}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[9px] text-[var(--text-tertiary)]">
+                      {version && <span>v{version}</span>}
+                      {signals.map((signal) => (
+                        <span key={signal}>· {signal}</span>
+                      ))}
+                      {nativeStatus && <span>· OpenClaw {nativeStatus}</span>}
+                    </div>
                   </div>
                 );
               })}
 
               {marketplaceNextCursor && (
                 <button
-                  onClick={() => fetchMarketplace(workspaceId, companyId, { query: search, provider: sourceFilter, cursor: marketplaceNextCursor, append: true })}
+                  onClick={() =>
+                    fetchMarketplace(workspaceId, companyId, {
+                      query: search,
+                      provider: sourceFilter,
+                      cursor: marketplaceNextCursor,
+                      append: true,
+                    })
+                  }
                   disabled={marketplaceLoadingMore}
                   className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] disabled:opacity-50"
                 >
-                  {marketplaceLoadingMore ? "LOADING..." : "LOAD MORE CLAWHUB SKILLS"}
+                  {marketplaceLoadingMore
+                    ? "LOADING..."
+                    : "LOAD MORE CLAWHUB SKILLS"}
                 </button>
               )}
             </>
@@ -732,18 +976,24 @@ export default function SkillsPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-[var(--text-primary)]">{skill.name}</span>
+                    <span className="font-mono text-xs text-[var(--text-primary)]">
+                      {skill.name}
+                    </span>
                     <SourceBadge source="custom" />
                   </div>
                   {skill.description && (
-                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-1">{skill.description}</p>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)] line-clamp-1">
+                      {skill.description}
+                    </p>
                   )}
                 </button>
               ))}
 
               {filteredCustom.length === 0 && !showCustomForm && (
                 <div className="py-6 text-center">
-                  <p className="font-mono text-[10px] text-[var(--text-tertiary)]">No custom skills yet.</p>
+                  <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                    No custom skills yet.
+                  </p>
                 </div>
               )}
             </>
@@ -751,8 +1001,12 @@ export default function SkillsPage() {
 
           {tab === "custom" && !companyId && (
             <div className="py-8 text-center">
-              <p className="font-mono text-[10px] text-[var(--text-tertiary)]">Custom skills are company-scoped.</p>
-              <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">Switch to a company workspace to create them.</p>
+              <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                Custom skills are company-scoped.
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                Switch to a company workspace to create them.
+              </p>
             </div>
           )}
         </div>
@@ -763,10 +1017,14 @@ export default function SkillsPage() {
         {/* Custom skill creation form */}
         {showCustomForm && (
           <div className="mx-auto max-w-2xl p-6">
-            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">NEW CUSTOM SKILL</h2>
+            <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--accent)]">
+              NEW CUSTOM SKILL
+            </h2>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">NAME</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                  NAME
+                </label>
                 <input
                   type="text"
                   value={customName}
@@ -777,7 +1035,9 @@ export default function SkillsPage() {
                 />
               </div>
               <div>
-                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">DESCRIPTION</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                  DESCRIPTION
+                </label>
                 <input
                   type="text"
                   value={customDescription}
@@ -787,12 +1047,16 @@ export default function SkillsPage() {
                 />
               </div>
               <div>
-                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">SKILL.MD CONTENT</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                  SKILL.MD CONTENT
+                </label>
                 <textarea
                   value={customContent}
                   onChange={(e) => setCustomContent(e.target.value)}
                   rows={12}
-                  placeholder={"# My Skill\n\nDescribe the skill capabilities, tools, and instructions..."}
+                  placeholder={
+                    "# My Skill\n\nDescribe the skill capabilities, tools, and instructions..."
+                  }
                   className={`mt-1 ${inputClass}`}
                 />
               </div>
@@ -821,14 +1085,20 @@ export default function SkillsPage() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">{selectedSkill.name}</h2>
+                  <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                    {selectedSkill.name}
+                  </h2>
                   <SourceBadge source={selectedSkill.source} />
                 </div>
                 {selectedSkill.version && (
-                  <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">v{selectedSkill.version}</p>
+                  <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                    v{selectedSkill.version}
+                  </p>
                 )}
                 {selectedSkill.description && (
-                  <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">{selectedSkill.description}</p>
+                  <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">
+                    {selectedSkill.description}
+                  </p>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -840,11 +1110,12 @@ export default function SkillsPage() {
                     EDIT
                   </button>
                 )}
-                {selectedSkill.source !== "custom" && selectedSkill.source !== "system" && (
-                  <button className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]">
-                    CHECK FOR UPDATES
-                  </button>
-                )}
+                {selectedSkill.source !== "custom" &&
+                  selectedSkill.source !== "system" && (
+                    <button className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]">
+                      CHECK FOR UPDATES
+                    </button>
+                  )}
               </div>
             </div>
 
@@ -870,7 +1141,9 @@ export default function SkillsPage() {
             {editing && (
               <div className="mt-4 space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
                 <div>
-                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">NAME</label>
+                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                    NAME
+                  </label>
                   <input
                     type="text"
                     value={editName}
@@ -879,7 +1152,9 @@ export default function SkillsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">DESCRIPTION</label>
+                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                    DESCRIPTION
+                  </label>
                   <input
                     type="text"
                     value={editDescription}
@@ -888,7 +1163,9 @@ export default function SkillsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">CONTENT</label>
+                  <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                    CONTENT
+                  </label>
                   <textarea
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
@@ -917,7 +1194,9 @@ export default function SkillsPage() {
             {/* Content display */}
             {!editing && selectedSkill.content && (
               <div className="mt-4">
-                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">SKILL.MD</label>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                  SKILL.MD
+                </label>
                 <pre className="mt-2 max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 font-mono text-xs text-[var(--text-secondary)]">
                   {selectedSkill.content}
                 </pre>
@@ -930,14 +1209,21 @@ export default function SkillsPage() {
                 AGENTS
               </label>
               {agents.length === 0 ? (
-                <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">No agents found. Create agents first.</p>
+                <p className="mt-2 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  No agents found. Create agents first.
+                </p>
               ) : (
                 <div className="mt-2 space-y-1">
                   {agents.map((agent) => {
-                    const assignment = skillAssignments.find((a) => a.agentId === agent.id);
+                    const assignment = skillAssignments.find(
+                      (a) => a.agentId === agent.id,
+                    );
                     const isAssigned = !!assignment;
                     const isEnabled = assignment?.enabled ?? false;
-                    const isBusy = togglingAgent === agent.id || togglingAgent === agent.callsign || importingBuiltIn;
+                    const isBusy =
+                      togglingAgent === agent.id ||
+                      togglingAgent === agent.callsign ||
+                      importingBuiltIn;
 
                     return (
                       <div
@@ -949,19 +1235,35 @@ export default function SkillsPage() {
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-sm">{agent.emoji || "\u{1F916}"}</span>
-                          <span className="font-mono text-xs text-[var(--text-primary)]">{agent.name}</span>
-                          <span className="font-mono text-[10px] text-[var(--text-tertiary)]">{agent.callsign}</span>
+                          <span className="text-sm">
+                            {agent.emoji || "\u{1F916}"}
+                          </span>
+                          <span className="font-mono text-xs text-[var(--text-primary)]">
+                            {agent.name}
+                          </span>
+                          <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                            {agent.callsign}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2">
                           {/* Enable/disable toggle (only shown when assigned) */}
                           {isAssigned && (
                             <button
                               onClick={() => {
-                                const realSkillId = selectedSkill!.id.startsWith("built-in:")
-                                  ? skills.find((s) => s.slug === selectedSkill!.slug && !s.id.startsWith("built-in:"))?.id
-                                  : selectedSkill!.id;
-                                if (realSkillId) toggleAgentEnabled(agent.callsign, realSkillId, !isEnabled);
+                                const realSkillId =
+                                  selectedSkill!.id.startsWith("built-in:")
+                                    ? skills.find(
+                                        (s) =>
+                                          s.slug === selectedSkill!.slug &&
+                                          !s.id.startsWith("built-in:"),
+                                      )?.id
+                                    : selectedSkill!.id;
+                                if (realSkillId)
+                                  toggleAgentEnabled(
+                                    agent.callsign,
+                                    realSkillId,
+                                    !isEnabled,
+                                  );
                               }}
                               disabled={isBusy}
                               className={`rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wider transition-colors border ${
@@ -969,25 +1271,39 @@ export default function SkillsPage() {
                                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                                   : "border-amber-500/30 bg-amber-500/10 text-amber-400"
                               } disabled:opacity-50`}
-                              title={isEnabled ? "Click to disable" : "Click to enable"}
+                              title={
+                                isEnabled
+                                  ? "Click to disable"
+                                  : "Click to enable"
+                              }
                             >
                               {isEnabled ? "ON" : "OFF"}
                             </button>
                           )}
                           {/* Assign/unassign toggle switch */}
                           <button
-                            onClick={() => toggleAgentAssignment(selectedSkill!, agent.id)}
+                            onClick={() =>
+                              toggleAgentAssignment(selectedSkill!, agent.id)
+                            }
                             disabled={isBusy}
                             className="group relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50"
                             style={{
-                              backgroundColor: isAssigned ? "var(--accent)" : "var(--bg-surface-hover)",
+                              backgroundColor: isAssigned
+                                ? "var(--accent)"
+                                : "var(--bg-surface-hover)",
                               border: `1px solid ${isAssigned ? "var(--accent-medium)" : "var(--border-medium)"}`,
                             }}
-                            title={isAssigned ? "Unassign skill" : "Assign skill"}
+                            title={
+                              isAssigned ? "Unassign skill" : "Assign skill"
+                            }
                           >
                             <span
                               className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
-                              style={{ transform: isAssigned ? "translateX(16px)" : "translateX(2px)" }}
+                              style={{
+                                transform: isAssigned
+                                  ? "translateX(16px)"
+                                  : "translateX(2px)",
+                              }}
                             />
                           </button>
                         </div>
@@ -1006,24 +1322,38 @@ export default function SkillsPage() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">{selectedMarketplace.name}</h2>
+                  <h2 className="font-mono text-sm font-bold tracking-wider text-[var(--text-primary)]">
+                    {selectedMarketplace.name}
+                  </h2>
                   <SourceBadge source={selectedMarketplace.source} />
                 </div>
-                <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">v{selectedMarketplace.version}</p>
-                <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">{selectedMarketplace.description}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  {getMarketplaceVersion(selectedMarketplace) && (
+                    <span>v{getMarketplaceVersion(selectedMarketplace)}</span>
+                  )}
+                  {getMarketplaceSignals(selectedMarketplace).map((signal) => (
+                    <span key={signal}>· {signal}</span>
+                  ))}
+                </div>
+                <p className="mt-2 font-mono text-xs text-[var(--text-secondary)]">
+                  {selectedMarketplace.description}
+                </p>
               </div>
               <div>
-                {installedSlugs.has(selectedMarketplace.slug) || getNativeInstallStatus(selectedMarketplace) === "installed" ? (
+                {installedSlugs.has(selectedMarketplace.slug) ||
+                getNativeInstallStatus(selectedMarketplace) === "installed" ? (
                   <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-mono text-[10px] tracking-wider text-emerald-400">
                     INSTALLED
                   </span>
                 ) : (
                   <button
                     onClick={() => handleInstall(selectedMarketplace)}
-                    disabled={!workspaceId || installing === selectedMarketplace.slug}
+                    disabled={
+                      !workspaceId || installing === selectedMarketplace.slug
+                    }
                     className="rounded-lg border border-[var(--accent-medium)] bg-[var(--accent-soft)] px-4 py-2 text-[11px] tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-50"
                   >
-                    {(!workspaceId)
+                    {!workspaceId
                       ? "SELECT WORKSPACE"
                       : installing === selectedMarketplace.slug
                         ? "INSTALLING..."
@@ -1039,8 +1369,10 @@ export default function SkillsPage() {
 
             <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
-                ClawHub skills install natively through the selected OpenClaw gateway, then CrewCMD records the provider metadata and install status.
-                Other marketplace sources still create CrewCMD skill records from packaged metadata.
+                ClawHub skills install natively through the selected OpenClaw
+                gateway, then CrewCMD records the provider metadata and install
+                status. Other marketplace sources still create CrewCMD skill
+                records from packaged metadata.
               </p>
             </div>
           </div>
@@ -1051,12 +1383,26 @@ export default function SkillsPage() {
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                <svg className="h-6 w-6 text-[var(--text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 0 1-.657.643 48.39 48.39 0 0 1-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 0 1-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 0 0-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 0 1-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 0 0 .657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 0 1-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 0 0 5.427-.63 48.05 48.05 0 0 0 .582-4.717.532.532 0 0 0-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 0 0 .658-.663 48.422 48.422 0 0 0-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 0 1-.61-.58v0Z" />
+                <svg
+                  className="h-6 w-6 text-[var(--text-tertiary)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 0 1-.657.643 48.39 48.39 0 0 1-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 0 1-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 0 0-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 0 1-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 0 0 .657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 0 1-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 0 0 5.427-.63 48.05 48.05 0 0 0 .582-4.717.532.532 0 0 0-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 0 0 .658-.663 48.422 48.422 0 0 0-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 0 1-.61-.58v0Z"
+                  />
                 </svg>
               </div>
-              <p className="text-xs text-[var(--text-tertiary)]">Select a skill to view details</p>
-              <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Or browse the marketplace to discover new skills.</p>
+              <p className="text-xs text-[var(--text-tertiary)]">
+                Select a skill to view details
+              </p>
+              <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                Or browse the marketplace to discover new skills.
+              </p>
             </div>
           </div>
         )}

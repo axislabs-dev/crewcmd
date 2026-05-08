@@ -33,6 +33,11 @@ interface MarketplaceSkill {
   metadata?: Record<string, unknown>;
 }
 
+interface MarketplaceResponse {
+  skills: MarketplaceSkill[];
+  nextCursor?: string | null;
+}
+
 interface AgentSkillAssignment {
   agentSkillId: string;
   agentId: string;
@@ -69,10 +74,22 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
+function mergeMarketplace(existing: MarketplaceSkill[], incoming: MarketplaceSkill[]): MarketplaceSkill[] {
+  const seen = new Set(existing.map((skill) => `${skill.source}:${skill.slug}`));
+  const merged = [...existing];
+  for (const skill of incoming) {
+    const key = `${skill.source}:${skill.slug}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(skill);
+  }
+  return merged;
+}
+
 // ─── Styling Constants ──────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-white placeholder:text-[var(--text-tertiary)] outline-none focus:border-[#00f0ff]/40 transition-colors";
+  "w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[#00f0ff]/40 transition-colors";
 
 // ─── Toast Component ────────────────────────────────────────────────────
 
@@ -110,6 +127,8 @@ function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number
 export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [marketplace, setMarketplace] = useState<MarketplaceSkill[]>([]);
+  const [marketplaceNextCursor, setMarketplaceNextCursor] = useState<string | null>(null);
+  const [marketplaceLoadingMore, setMarketplaceLoadingMore] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -164,17 +183,26 @@ export default function SkillsPage() {
     }
   }, [addToast]);
 
-  const fetchMarketplace = useCallback(async (activeWorkspaceId?: string | null, cId?: string | null) => {
+  const fetchMarketplace = useCallback(async (activeWorkspaceId?: string | null, cId?: string | null, options?: { query?: string; provider?: string; cursor?: string; append?: boolean }) => {
     try {
-      const params = new URLSearchParams();
+      if (options?.append) setMarketplaceLoadingMore(true);
+      const params = new URLSearchParams({ limit: "50" });
       if (activeWorkspaceId) params.set("workspaceId", activeWorkspaceId);
       if (cId) params.set("companyId", cId);
+      if (options?.query?.trim()) params.set("query", options.query.trim());
+      if (options?.provider && options.provider !== "all") params.set("provider", options.provider);
+      if (options?.cursor) params.set("cursor", options.cursor);
       const res = await fetch(`/api/skills/browse${params.toString() ? `?${params.toString()}` : ""}`);
       if (res.ok) {
-        setMarketplace(await res.json());
+        const data = await res.json();
+        const parsed: MarketplaceResponse = Array.isArray(data) ? { skills: data, nextCursor: null } : data;
+        setMarketplace((prev) => options?.append ? mergeMarketplace(prev, parsed.skills || []) : parsed.skills || []);
+        setMarketplaceNextCursor(parsed.nextCursor ?? null);
       }
     } catch {
       addToast("Failed to load marketplace");
+    } finally {
+      if (options?.append) setMarketplaceLoadingMore(false);
     }
   }, [addToast]);
 
@@ -209,6 +237,14 @@ export default function SkillsPage() {
     };
     init();
   }, [fetchSkills, fetchMarketplace, fetchAgents]);
+
+  useEffect(() => {
+    if (loading || tab !== "browse") return;
+    const timeout = window.setTimeout(() => {
+      void fetchMarketplace(workspaceId, companyId, { query: search, provider: sourceFilter });
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [companyId, fetchMarketplace, loading, search, sourceFilter, tab, workspaceId]);
 
   // Fetch agent assignments for a skill via batch endpoint
   const fetchSkillAssignments = useCallback(async (skillId: string) => {
@@ -258,7 +294,7 @@ export default function SkillsPage() {
       setImportingBuiltIn(false);
     }
     return null;
-  }, [companyId, workspaceId, skills, fetchSkills]);
+  }, [addToast, companyId, workspaceId, skills, fetchSkills]);
 
   // Toggle agent assignment for the selected skill
   const toggleAgentAssignment = useCallback(async (skill: Skill, agentId: string) => {
@@ -477,7 +513,8 @@ export default function SkillsPage() {
 
   const filteredMarketplace = marketplace.filter((ms) => {
     if (sourceFilter !== "all" && ms.source !== sourceFilter) return false;
-    if (search && !ms.name.toLowerCase().includes(search.toLowerCase()) && !ms.slug.includes(search.toLowerCase())) return false;
+    const needle = search.toLowerCase();
+    if (needle && !ms.name.toLowerCase().includes(needle) && !ms.slug.toLowerCase().includes(needle) && !ms.description.toLowerCase().includes(needle)) return false;
     return true;
   });
 
@@ -661,6 +698,16 @@ export default function SkillsPage() {
                   </div>
                 );
               })}
+
+              {marketplaceNextCursor && (
+                <button
+                  onClick={() => fetchMarketplace(workspaceId, companyId, { query: search, provider: sourceFilter, cursor: marketplaceNextCursor, append: true })}
+                  disabled={marketplaceLoadingMore}
+                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-2 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                >
+                  {marketplaceLoadingMore ? "LOADING..." : "LOAD MORE CLAWHUB SKILLS"}
+                </button>
+              )}
             </>
           )}
 

@@ -3,7 +3,7 @@ import {
   resolveMarketplaceSkills,
   type MarketplaceSkill,
 } from "@/lib/skill-providers/catalog";
-import { fetchClawhubCatalog, getClawhubCatalogConfig } from "@/lib/skill-providers/clawhub";
+import { fetchClawhubCatalog, fetchClawhubCatalogPage, getClawhubCatalogConfig } from "@/lib/skill-providers/clawhub";
 import { listNativeClawhubSkills, resolveWorkspaceRuntime } from "@/lib/native-clawhub";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
@@ -11,7 +11,12 @@ export const dynamic = "force-dynamic";
 
 // ─── In-memory cache ─────────────────────────────────────────────────
 
-const cachedSkills = new Map<string, { skills: MarketplaceSkill[]; timestamp: number }>();
+interface BrowseSkillsResponse {
+  skills: MarketplaceSkill[];
+  nextCursor?: string | null;
+}
+
+const cachedSkills = new Map<string, { response: BrowseSkillsResponse; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // ─── Route handler ───────────────────────────────────────────────────
@@ -24,25 +29,35 @@ export async function GET(request: NextRequest) {
   const workspaceId = params.get("workspaceId") || undefined;
   const companyId = params.get("companyId") || params.get("company_id") || undefined;
   const limit = parseLimit(params.get("limit"));
+  const cursor = params.get("cursor") || undefined;
   const config = getClawhubCatalogConfig();
-  const cacheKey = JSON.stringify({ provider, query, limit, runtimeId, workspaceId, companyId, clawhubEnabled: config.enabled, clawhubUrl: config.registryUrl });
+  const cacheKey = JSON.stringify({ provider, query, limit, cursor, runtimeId, workspaceId, companyId, clawhubEnabled: config.enabled, clawhubUrl: config.registryUrl });
   const now = Date.now();
 
   const cached = cachedSkills.get(cacheKey);
   if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-    return NextResponse.json(cached.skills);
+    return NextResponse.json(cached.response);
   }
 
-  const nativeClawhub = await fetchNativeClawhubCatalog({ request, provider, query, limit, runtimeId, workspaceId, companyId });
-  const filtered = await resolveMarketplaceSkills({
-    provider,
-    query,
-    limit,
-    fetchClawhub: async () => nativeClawhub ?? fetchClawhubCatalog({ query, limit, config }),
-  });
+  const directClawhub = provider === "all" || provider === "clawhub"
+    ? await fetchClawhubCatalogPage({ query, limit, cursor, config })
+    : null;
+  const nativeClawhub = directClawhub ? null : await fetchNativeClawhubCatalog({ request, provider, query, limit, runtimeId, workspaceId, companyId });
+  const filtered = cursor && directClawhub
+    ? directClawhub.skills
+    : await resolveMarketplaceSkills({
+        provider,
+        query,
+        limit,
+        fetchClawhub: async () => directClawhub?.skills ?? nativeClawhub ?? fetchClawhubCatalog({ query, limit, config }),
+      });
+  const response: BrowseSkillsResponse = {
+    skills: filtered,
+    nextCursor: directClawhub?.nextCursor ?? null,
+  };
 
-  cachedSkills.set(cacheKey, { skills: filtered, timestamp: now });
-  return NextResponse.json(filtered);
+  cachedSkills.set(cacheKey, { response, timestamp: now });
+  return NextResponse.json(response);
 }
 
 async function fetchNativeClawhubCatalog(params: {

@@ -14,8 +14,14 @@ export interface ClawhubCatalogConfig {
 interface ClawhubFetchParams {
   query?: string;
   limit?: number;
+  cursor?: string;
   config?: ClawhubCatalogConfig;
   fetchImpl?: typeof fetch;
+}
+
+export interface ClawhubCatalogPage {
+  skills: MarketplaceSkill[];
+  nextCursor?: string | null;
 }
 
 type ClawhubEntry = Record<string, unknown>;
@@ -39,6 +45,11 @@ export function getClawhubCatalogConfig(env: Record<string, string | undefined> 
 }
 
 export async function fetchClawhubCatalog(params: ClawhubFetchParams = {}): Promise<MarketplaceSkill[] | null> {
+  const page = await fetchClawhubCatalogPage(params);
+  return page && page.skills.length > 0 ? page.skills : null;
+}
+
+export async function fetchClawhubCatalogPage(params: ClawhubFetchParams = {}): Promise<ClawhubCatalogPage | null> {
   const config = params.config ?? getClawhubCatalogConfig();
   if (!config.enabled) return null;
 
@@ -47,7 +58,7 @@ export async function fetchClawhubCatalog(params: ClawhubFetchParams = {}): Prom
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
   try {
-    const url = buildCatalogUrl(config.registryUrl, params.query, params.limit);
+    const url = buildCatalogUrl(config.registryUrl, params.query, params.limit, params.cursor);
     const res = await fetchFn(url, {
       signal: controller.signal,
       headers: config.token ? { Authorization: `Bearer ${config.token}` } : undefined,
@@ -61,7 +72,10 @@ export async function fetchClawhubCatalog(params: ClawhubFetchParams = {}): Prom
       .map((entry) => normalizeClawhubEntry(entry, config.registryUrl))
       .filter((skill): skill is MarketplaceSkill => Boolean(skill));
 
-    return skills.length > 0 ? skills : null;
+    return {
+      skills,
+      nextCursor: extractNextCursor(data),
+    };
   } catch {
     return null;
   } finally {
@@ -104,16 +118,18 @@ export function normalizeClawhubEntry(entry: ClawhubEntry, registryUrl = DEFAULT
   };
 }
 
-function buildCatalogUrl(registryUrl: string, query?: string, limit?: number): string {
+function buildCatalogUrl(registryUrl: string, query?: string, limit?: number, cursor?: string): string {
   if (query?.trim()) {
     const url = new URL("/api/v1/search", registryUrl);
     url.searchParams.set("q", query.trim());
     if (limit && limit > 0) url.searchParams.set("limit", String(limit));
+    if (cursor?.trim()) url.searchParams.set("cursor", cursor.trim());
     return url.toString();
   }
 
   const url = new URL("/api/v1/skills", registryUrl);
   if (limit && limit > 0) url.searchParams.set("limit", String(limit));
+  if (cursor?.trim()) url.searchParams.set("cursor", cursor.trim());
   return url.toString();
 }
 
@@ -127,6 +143,11 @@ function extractClawhubEntries(data: unknown): ClawhubEntry[] {
   }
 
   return [];
+}
+
+function extractNextCursor(data: unknown): string | null {
+  if (!isObject(data)) return null;
+  return readString(data, ["nextCursor", "next_cursor", "cursor"]) ?? null;
 }
 
 function normalizeTrustMetadata(entry: ClawhubEntry): SkillProviderTrust {

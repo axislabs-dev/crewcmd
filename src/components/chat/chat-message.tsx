@@ -278,6 +278,9 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
   const attachments = metadata?.attachments;
   const [showActions, setShowActions] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const messageWidthClass = isUser
+    ? "max-w-[72%] sm:max-w-[34rem]"
+    : "max-w-[88%] sm:max-w-[58rem]";
 
   // Mobile: hide actions when tapping outside the bubble
   useEffect(() => {
@@ -297,7 +300,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
 
   return (
     <div
-      className={`flex gap-3 animate-fade-in ${isUser ? "flex-row-reverse" : ""}`}
+      className={`flex items-start gap-3 animate-fade-in ${isUser ? "flex-row-reverse" : ""}`}
     >
       {/* Avatar */}
       <div
@@ -313,17 +316,18 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
       {/* Message bubble */}
       <div
         ref={bubbleRef}
-        className="group relative max-w-[85%]"
+        className={`group relative ${messageWidthClass}`}
         onTouchEnd={() => setShowActions((v) => !v)}
       >
         <MessageActions content={content} showSpeak={!isUser} mobileVisible={showActions} />
         <div
-          className={`overflow-hidden rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
+          className={`relative overflow-hidden text-[13px] leading-relaxed ${
             isUser
-              ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] border border-[var(--border-medium)]"
-              : "bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)]"
+              ? "rounded-2xl rounded-tr-md border border-[var(--border-strong)] bg-[var(--bg-tertiary)] px-4 py-3 text-[var(--text-primary)] shadow-[0_10px_24px_rgba(0,0,0,0.10)]"
+              : "rounded-xl border border-[var(--border-medium)] bg-[color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-surface-hover)_8%)] px-5 py-3.5 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(0,0,0,0.10)]"
           }`}
         >
+        {!isUser && <div className="absolute bottom-3 left-0 top-3 w-px rounded-full bg-[var(--accent)] opacity-70" aria-hidden="true" />}
         {isUser ? (
           <p className="whitespace-pre-wrap">{content}</p>
         ) : (

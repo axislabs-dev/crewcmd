@@ -5,27 +5,34 @@
       <stop offset="0.46" stop-color="#141417" />
       <stop offset="1" stop-color="#0a0a0c" />
     </linearGradient>
-    <linearGradient id="markFill" x1="1126" y1="1120" x2="1606" y2="1612" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f7f3e8" />
-      <stop offset="1" stop-color="#c7b78d" />
-    </linearGradient>
-    <filter id="softShadow" x="996" y="990" width="740" height="760" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+    <radialGradient id="coreGlow" cx="50%" cy="48%" r="52%">
+      <stop offset="0" stop-color="#f4f1eb" stop-opacity="0.9" />
+      <stop offset="0.32" stop-color="#9fbeb8" stop-opacity="0.34" />
+      <stop offset="1" stop-color="#111113" stop-opacity="0" />
+    </radialGradient>
+    <filter id="softShadow" x="930" y="930" width="872" height="872" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
       <feDropShadow dx="0" dy="34" stdDeviation="40" flood-color="#000000" flood-opacity="0.28" />
     </filter>
   </defs>
 
   <rect width="2732" height="2732" fill="url(#bg)" />
-  <path d="M1024 1800h684" stroke="#f4f1eb" stroke-opacity="0.08" stroke-width="2" />
 
   <g filter="url(#softShadow)">
-    <rect x="1132" y="1124" width="468" height="468" rx="104" fill="#101113" stroke="#f4f1eb" stroke-opacity="0.14" stroke-width="6" />
-    <path d="M1214 1225c39-39 90-59 150-59 62 0 113 21 153 62l-71 71c-21-20-48-30-82-30-32 0-59 11-80 33-21 22-32 49-32 80s11 58 33 80c22 22 49 34 81 34 33 0 60-11 81-32l70 70c-40 41-92 62-153 62-60 0-111-20-150-59-40-40-60-91-60-151s20-111 60-151Z" fill="url(#markFill)" />
-    <path d="M1399 1221 1515 1337 1399 1453" fill="none" stroke="#d7b56d" stroke-width="42" stroke-linecap="round" stroke-linejoin="round" />
-    <path d="M1308 1531h164" fill="none" stroke="#f7f3e8" stroke-width="38" stroke-linecap="round" />
+    <circle cx="1366" cy="1324" r="334" fill="url(#coreGlow)" opacity="0.76" />
+    <circle cx="1366" cy="1324" r="170" fill="#101113" stroke="#f4f1eb" stroke-opacity="0.16" stroke-width="7" />
+    <path d="M1366 952a372 372 0 0 1 298 149" fill="none" stroke="#f4f1eb" stroke-width="46" stroke-linecap="round" />
+    <path d="M1667 1546a372 372 0 0 1-350 146" fill="none" stroke="#f4f1eb" stroke-opacity="0.72" stroke-width="46" stroke-linecap="round" />
+    <path d="M1067 1103a372 372 0 0 0-54 321" fill="none" stroke="#9fbeb8" stroke-width="46" stroke-linecap="round" />
+    <path d="M1130 1574a306 306 0 0 1-42-373" fill="none" stroke="#d7b56d" stroke-width="22" stroke-linecap="round" />
+    <path d="M1484 1034a306 306 0 0 1 184 252" fill="none" stroke="#d7b56d" stroke-width="22" stroke-linecap="round" />
+    <circle cx="1366" cy="1324" r="68" fill="#f4f1eb" />
+    <circle cx="1366" cy="1324" r="28" fill="#d7b56d" />
+    <circle cx="1177" cy="1085" r="30" fill="#9fbeb8" />
+    <circle cx="1595" cy="1519" r="30" fill="#c7b7d8" />
   </g>
 
   <g fill="#f4f1eb" font-family="Helvetica, Arial, sans-serif" text-anchor="middle">
-    <text x="1366" y="1718" font-size="42" font-weight="700" letter-spacing="0">CrewCmd</text>
-    <text x="1366" y="1772" font-size="18" letter-spacing="7" opacity="0.62">MOBILE</text>
+    <text x="1366" y="1780" font-size="42" font-weight="700" letter-spacing="0">CrewCmd</text>
+    <text x="1366" y="1834" font-size="18" letter-spacing="7" opacity="0.62">AGENT MODE</text>
   </g>
 </svg>

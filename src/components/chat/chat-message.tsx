@@ -304,13 +304,8 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs ${
           isUser
             ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
-            : "border-neo/20 bg-neo/10 text-[var(--accent)]"
+            : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
         }`}
-        style={
-          !isUser
-            ? { boxShadow: "0 0 12px rgba(0, 240, 255, 0.15)" }
-            : undefined
-        }
       >
         {isUser ? "YOU" : "AI"}
       </div>
@@ -326,7 +321,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
           className={`overflow-hidden rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
             isUser
               ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] border border-[var(--border-medium)]"
-              : "bg-neo/[0.06] text-[var(--text-primary)] border border-neo/10"
+              : "bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)]"
           }`}
         >
         {isUser ? (
@@ -378,7 +373,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
         )}
 
         {isStreaming && (
-          <span className="inline-block w-2 h-4 ml-1 bg-neo/60 animate-pulse rounded-sm" />
+          <span className="inline-block w-2 h-4 ml-1 bg-[var(--accent)]/70 animate-pulse rounded-sm" />
         )}
         </div>
         {/* Timestamp */}

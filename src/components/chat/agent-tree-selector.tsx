@@ -49,11 +49,11 @@ const statusColor = (status: string) => {
   switch (status) {
     case "online":
     case "working":
-      return "bg-green-400";
+      return "bg-[var(--success)]";
     case "idle":
-      return "bg-yellow-400";
+      return "bg-[var(--warning)]";
     default:
-      return "bg-zinc-500";
+      return "bg-[var(--text-tertiary)]";
   }
 };
 
@@ -84,7 +84,7 @@ export function AgentTreeSelector({
 
   const agentCallsign = selectedAgent?.callsign || "MAIN";
   const agentEmoji = selectedAgent?.emoji || "💬";
-  const agentColor = selectedAgent?.color || "#00f0ff";
+  const agentSwatch = selectedAgent?.color || "var(--accent)";
 
   return (
     <div className="relative" ref={ref}>
@@ -94,10 +94,14 @@ export function AgentTreeSelector({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono font-bold tracking-wider transition-all hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
-        style={{ color: agentColor }}
+        className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border-medium)] bg-[var(--control-bg)] px-3 py-1.5 text-sm font-semibold text-[var(--text-primary)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--control-bg-hover)]"
       >
-        <span>{agentEmoji}</span>
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: agentSwatch }}
+          aria-hidden="true"
+        />
+        <span className="text-[13px]">{agentEmoji}</span>
         <span>{agentCallsign}</span>
         <svg
           className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
@@ -122,14 +126,14 @@ export function AgentTreeSelector({
             id={panelId}
             role="dialog"
             aria-label="Agent selector"
-            className="absolute left-0 top-full z-50 mt-2 max-h-[min(calc(100dvh-var(--mobile-app-bar-height)-6rem),32rem)] w-[min(calc(100vw-1.5rem),28rem)] overflow-y-auto rounded-2xl border border-[var(--border-medium)] py-1 shadow-2xl md:fixed md:inset-auto md:left-4 md:top-16 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-2rem)] md:max-h-[min(70vh,36rem)]"
+            className="absolute left-0 top-full z-50 mt-2 max-h-[min(calc(100dvh-var(--mobile-app-bar-height)-6rem),32rem)] w-[min(calc(100vw-1.5rem),28rem)] overflow-y-auto rounded-[var(--radius-panel)] border border-[var(--border-medium)] py-1 shadow-2xl md:fixed md:inset-auto md:left-4 md:top-16 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-2rem)] md:max-h-[min(70vh,36rem)]"
             style={{ backgroundColor: "var(--bg-primary)" }}
           >
           {/* Tab toggle */}
           <div className="border-b border-[var(--border-subtle)] px-2 pt-2 md:hidden">
             <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-[var(--border-medium)]" />
             <div className="px-2 pb-2">
-              <div className="text-[10px] font-mono tracking-[0.24em] text-[var(--text-tertiary)]">
+              <div className="text-[10px] font-medium text-[var(--text-tertiary)]">
                 ACTIVE CHAT
               </div>
               <div className="mt-1 flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)]">
@@ -144,9 +148,9 @@ export function AgentTreeSelector({
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 rounded-md px-3 py-1 text-[11px] font-mono tracking-wider uppercase transition-colors ${
+                className={`flex-1 rounded-[var(--radius-control)] px-3 py-1 text-[11px] font-medium capitalize transition-colors ${
                   tab === t
-                    ? "bg-[var(--bg-surface-hover)] text-[var(--accent)] font-bold"
+                    ? "bg-[var(--selected-bg)] text-[var(--selected-text)]"
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 }`}
               >
@@ -176,7 +180,7 @@ export function AgentTreeSelector({
                     }}
                     className={`flex w-full items-center gap-2 px-3 py-3 text-left text-[12px] transition-colors hover:bg-[var(--bg-surface-hover)] md:py-2 ${
                       isSelected
-                        ? "bg-[var(--bg-surface-hover)] border-l-2 border-l-[var(--accent)]"
+                        ? "bg-[var(--selected-bg)] border-l-2 border-l-[var(--accent)]"
                         : ""
                     }`}
                     style={{ paddingLeft: `${12 + depth * 16}px` }}
@@ -184,10 +188,8 @@ export function AgentTreeSelector({
                     <span className="text-base shrink-0">{agent.emoji}</span>
 
                     <div className="flex flex-1 items-center gap-2 overflow-hidden">
-                      <span
-                        className={`font-mono tracking-wider ${isSelected ? "font-bold" : "font-medium"}`}
-                        style={{ color: agent.color }}
-                      >
+                      <span className={`h-2 w-2 shrink-0 rounded-full`} style={{ backgroundColor: agent.color }} />
+                      <span className={`text-[var(--text-primary)] ${isSelected ? "font-semibold" : "font-medium"}`}>
                         {agent.callsign}
                       </span>
                       <span className="truncate text-[var(--text-tertiary)]">

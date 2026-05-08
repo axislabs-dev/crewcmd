@@ -147,7 +147,7 @@ function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
 
   if (workspace?.type === "personal") {
     return (
-      <div className={`${logoSize} flex items-center justify-center rounded-md bg-[var(--accent-soft)] font-mono text-[10px] font-bold text-[var(--accent)]`}>
+      <div className={`${logoSize} flex items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono text-[10px] font-bold text-[var(--text-secondary)]`}>
         P
       </div>
     );

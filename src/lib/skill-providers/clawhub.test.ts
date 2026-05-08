@@ -147,4 +147,40 @@ describe("Clawhub skill catalog provider", () => {
       timeoutMs: 2500,
     });
   });
+
+  it("returns null when catalog is disabled (default behavior)", () => {
+    // Simulate default config without CREWCMD_CLAWHUB_CATALOG_ENABLED
+    const config = getClawhubCatalogConfig({});
+    expect(config.enabled).toBe(false);
+  });
+
+  it("combines ClawHub skills with FALLBACK_SKILLS when catalog is enabled", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            slug: "test-skill",
+            name: "Test Skill",
+            description: "A test skill from ClawHub",
+            latest_version: "1.0.0",
+          },
+        ],
+      }),
+    });
+
+    const skills = await fetchClawhubCatalog({
+      config: {
+        enabled: true,
+        registryUrl: "https://clawhub.example",
+        timeoutMs: 1000,
+      },
+      fetchImpl,
+    });
+
+    expect(skills).not.toBeNull();
+    expect(skills).toHaveLength(1);
+    expect(skills?.[0].slug).toBe("test-skill");
+    expect(skills?.[0].source).toBe("clawhub");
+  });
 });

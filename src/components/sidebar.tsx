@@ -44,7 +44,7 @@ const navSections = [
     ],
   },
   {
-    label: "WORK",
+    label: "Work",
     items: [
       {
         href: "/tasks",
@@ -76,7 +76,7 @@ const navSections = [
     ],
   },
   {
-    label: "AGENTS",
+    label: "Agents",
     items: [
       {
         href: "/team",
@@ -212,17 +212,15 @@ export function Sidebar() {
             iconOnly ? "justify-center px-2.5" : "gap-3 px-3.5"
           } ${
             active
-              ? "border border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
+              ? "font-semibold text-[var(--text-primary)]"
               : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           }`}
         >
-          {active && !iconOnly && <div className="absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
-          <span className={`transition-colors ${active ? "text-[var(--accent)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
+          {active && <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
+          <span className={`transition-colors ${active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
             {item.icon}
           </span>
-          {!iconOnly && <span>{item.label.toUpperCase()}</span>}
-          {active && !iconOnly && <div className="ml-auto h-2 w-2 rounded-full bg-[var(--accent)]" />}
-          {active && iconOnly && <span className="absolute right-1.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
+          {!iconOnly && <span>{item.label}</span>}
         </Link>
       </li>
     );
@@ -232,7 +230,7 @@ export function Sidebar() {
     <div className={iconOnly ? "space-y-3" : "space-y-4"}>
       {navSections.map((section, idx) => (
         <div key={idx}>
-          {section.label && !iconOnly && <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">{section.label}</div>}
+          {section.label && !iconOnly && <div className="mb-1.5 px-3 text-[11px] font-medium text-[var(--text-tertiary)]">{section.label}</div>}
           {section.label && iconOnly && <div className="mx-auto mb-1.5 h-px w-8 bg-[var(--border-subtle)]" />}
           <ul className="space-y-0.5">
             {section.items.map((item) => (
@@ -250,7 +248,7 @@ export function Sidebar() {
       </div>
       {isSuperAdmin && (
         <div>
-          {!iconOnly && <div className="mx-3 mb-1.5 mt-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">Admin</div>}
+          {!iconOnly && <div className="mx-3 mb-1.5 mt-3 text-[11px] font-medium text-[var(--text-tertiary)]">Admin</div>}
           {iconOnly && <div className="mx-auto mb-1.5 mt-3 h-px w-8 bg-[var(--border-subtle)]" />}
           <ul className="space-y-0.5">
             <NavLink item={{ ...settingsItem, href: "/dashboard/settings", label: "Admin settings" }} onClick={onClick} iconOnly={iconOnly} />
@@ -279,7 +277,7 @@ export function Sidebar() {
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
       </svg>
-      SIGN OUT
+      Sign out
     </button>
   );
 
@@ -394,7 +392,7 @@ export function Sidebar() {
         <nav className="flex-1 overflow-y-auto px-2 py-4">
           <NavList iconOnly={collapsed} />
         </nav>
-        <div className={`mx-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-3 ${collapsed ? "px-2" : "px-3"}`}>
+        <div className={`border-t border-[var(--border-subtle)] py-3 ${collapsed ? "mx-2 px-2" : "mx-3 px-1"}`}>
           {collapsed ? (
             <div className="flex flex-col items-center gap-2">
               <Link href="/settings" title="Settings" aria-label="Settings" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]">

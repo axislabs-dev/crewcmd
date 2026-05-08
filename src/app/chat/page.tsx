@@ -980,7 +980,8 @@ export default function ChatPage() {
 
   const agentCallsign = selectedAgent?.callsign || "MAIN";
   const agentEmoji = selectedAgent?.emoji || "💬";
-  const agentColor = selectedAgent?.color || "#00f0ff";
+  const agentColor = "var(--accent)";
+  const agentIdentityColor = selectedAgent?.color || "var(--accent)";
   const agentAbbrev = agentCallsign.slice(0, 3).toUpperCase();
 
   // Find parent agent for header display
@@ -2224,8 +2225,7 @@ export default function ChatPage() {
             <div
               className={`h-2.5 w-2.5 rounded-full transition-opacity ${isPaused ? "opacity-30" : ""}`}
               style={{
-                backgroundColor: isPaused ? "var(--text-tertiary)" : agentColor,
-                boxShadow: isPaused ? "none" : `0 0 10px ${agentColor}80`,
+                backgroundColor: isPaused ? "var(--text-tertiary)" : agentIdentityColor,
               }}
             />
 
@@ -2285,19 +2285,14 @@ export default function ChatPage() {
           {visibleMessages.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
-                className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border"
+                className="mb-4 flex h-16 w-16 items-center justify-center rounded-[var(--radius-panel)] border border-[var(--border-medium)] bg-[var(--bg-surface)]"
                 style={{
-                  borderColor: `${agentColor}33`,
-                  backgroundColor: `${agentColor}15`,
-                  boxShadow: `0 0 30px ${agentColor}26`,
+                  boxShadow: "var(--theme-shadow)",
                 }}
               >
                 <span className="text-xl">{agentEmoji}</span>
               </div>
-              <h2
-                className="mb-2 font-mono text-lg tracking-wider"
-                style={{ color: agentColor }}
-              >
+              <h2 className="mb-2 text-lg font-semibold text-[var(--text-primary)]">
                 {agentCallsign}
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
@@ -2362,40 +2357,16 @@ export default function ChatPage() {
           {isLoading && !streamingContent && !executionProgress && (
             <div className="flex gap-3 animate-fade-in">
               <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-mono"
-                style={{
-                  borderColor: `${agentColor}40`,
-                  backgroundColor: `${agentColor}15`,
-                  color: agentColor,
-                }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-[var(--border-medium)] bg-[var(--bg-surface)] text-xs font-medium text-[var(--text-secondary)]"
               >
                 {agentAbbrev}
               </div>
               <div
-                className="flex items-center gap-1.5 rounded-xl border px-4 py-3"
-                style={{
-                  borderColor: `${agentColor}1a`,
-                  backgroundColor: `${agentColor}0f`,
-                }}
+                className="flex items-center gap-1.5 rounded-[var(--radius-panel)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
               >
-                <span
-                  className="h-2 w-2 rounded-full animate-pulse"
-                  style={{ backgroundColor: `${agentColor}80` }}
-                />
-                <span
-                  className="h-2 w-2 rounded-full animate-pulse"
-                  style={{
-                    backgroundColor: `${agentColor}80`,
-                    animationDelay: "0.15s",
-                  }}
-                />
-                <span
-                  className="h-2 w-2 rounded-full animate-pulse"
-                  style={{
-                    backgroundColor: `${agentColor}80`,
-                    animationDelay: "0.3s",
-                  }}
-                />
+                <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70" />
+                <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.15s]" />
+                <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.3s]" />
               </div>
               <span className="ml-2 self-center text-[11px] text-[var(--text-tertiary)] opacity-60">
                 Esc to cancel
@@ -2553,9 +2524,9 @@ export default function ChatPage() {
                   {isLoading && (
                     <div className="flex justify-center py-4">
                       <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow)]">
-                        <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80` }} />
-                        <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80`, animationDelay: "0.15s" }} />
-                        <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: `${agentColor}80`, animationDelay: "0.3s" }} />
+                        <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70" />
+                        <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.15s]" />
+                        <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.3s]" />
                       </div>
                     </div>
                   )}
@@ -2589,7 +2560,7 @@ export default function ChatPage() {
               >
                 <div
                   className="mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-[var(--theme-shadow-lg)]"
-                  style={{ color: agentColor, boxShadow: `0 0 34px ${agentColor}26` }}
+                  style={{ color: agentColor }}
                   aria-hidden="true"
                 >
                   <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -2629,7 +2600,7 @@ export default function ChatPage() {
                     className="absolute inset-y-1.5 left-1.5 rounded-full transition-[width] duration-100 ease-out"
                     style={{
                       width: `calc(${Math.max(0.18, pocketSlideProgress) * 100}% - 0.75rem)`,
-                      background: `linear-gradient(90deg, ${agentColor}33, ${agentColor}66)`,
+                      background: "linear-gradient(90deg, var(--accent-soft), var(--accent-medium))",
                     }}
                   />
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
@@ -2678,9 +2649,9 @@ export default function ChatPage() {
             }}
           />
           <div
-            className={`relative rounded-2xl border bg-[var(--bg-surface)] transition-colors focus-within:border-neo/30 focus-within:bg-[var(--bg-surface-hover)] ${
+            className={`relative rounded-[var(--radius-panel)] border bg-[var(--bg-surface)] transition-colors focus-within:border-[var(--control-border-focus)] focus-within:bg-[var(--bg-surface-hover)] ${
               isDragOver
-                ? "border-[var(--accent)] bg-neo/[0.04]"
+                ? "border-[var(--accent)] bg-[var(--accent-soft)]"
                 : "border-[var(--border-medium)]"
             }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
@@ -2787,7 +2758,7 @@ export default function ChatPage() {
                   title={speakResponses ? "Mute responses" : "Speak responses"}
                   className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
                     speakResponses
-                      ? "bg-neo/15 text-[var(--accent)]"
+                      ? "bg-[var(--accent-soft)] text-[var(--accent)]"
                       : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
                   }`}
                 >

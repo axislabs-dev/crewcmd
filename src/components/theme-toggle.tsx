@@ -38,8 +38,7 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
-      <span className="mr-1 text-[10px] tracking-wider text-[var(--text-tertiary)]">THEME</span>
+    <div className="flex items-center rounded-lg px-3 py-1.5">
       <div className="flex rounded-md border border-[var(--border-medium)] bg-[var(--bg-surface)] p-0.5">
         {THEME_OPTIONS.map((opt) => (
           <button
@@ -47,7 +46,7 @@ export function ThemeToggle() {
             onClick={() => setTheme(opt.value)}
             className={`flex items-center justify-center rounded px-2 py-1 transition-all ${
               theme === opt.value
-                ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                ? "bg-[var(--bg-surface-hover)] text-[var(--accent)] shadow-[inset_0_0_0_1px_var(--accent-medium)]"
                 : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             }`}
             aria-label={`${opt.value} theme`}

@@ -78,7 +78,7 @@ export function CompanySwitcher() {
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
       >
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-[var(--accent-soft)] font-mono text-[10px] font-bold text-[var(--accent)]">
+        <div className="flex h-6 w-6 items-center justify-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono text-[10px] font-bold text-[var(--text-secondary)]">
           {active?.type === "personal" ? "P" : active?.name?.[0]?.toUpperCase() ?? "?"}
         </div>
         <div className="min-w-0 flex-1">
@@ -114,10 +114,10 @@ export function CompanySwitcher() {
                 key={workspace.id}
                 onClick={() => switchWorkspace(workspace.id)}
                 className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)] ${
-                  workspace.id === activeId ? "bg-neo/5" : ""
+                  workspace.id === activeId ? "bg-[var(--selected-bg)]" : ""
                 }`}
               >
-                <div className="flex h-5 w-5 items-center justify-center rounded bg-neo/15 font-mono text-[9px] font-bold text-[var(--accent)]">
+                <div className="flex h-5 w-5 items-center justify-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono text-[9px] font-bold text-[var(--text-secondary)]">
                   {workspace.type === "personal" ? "P" : label[0]?.toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -130,8 +130,8 @@ export function CompanySwitcher() {
                 </div>
                 {workspace.id === activeId && (
                   <div
-                    className="h-1.5 w-1.5 rounded-full bg-neo"
-                    style={{ boxShadow: "0 0 6px rgba(0, 240, 255, 0.6)" }}
+                    className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
+                    aria-hidden="true"
                   />
                 )}
               </button>

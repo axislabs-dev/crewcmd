@@ -1,55 +1,37 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1179 2556" role="img" aria-label="CrewCmd splash placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732" role="img" aria-label="CrewCmd mobile splash">
   <defs>
-    <radialGradient id="coreGlow" cx="50%" cy="42%" r="48%">
-      <stop offset="0%" stop-color="#9CF8FF" stop-opacity="0.95" />
-      <stop offset="38%" stop-color="#35D6E2" stop-opacity="0.36" />
-      <stop offset="100%" stop-color="#010405" stop-opacity="0" />
+    <linearGradient id="bg" x1="416" y1="232" x2="2316" y2="2500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24221f" />
+      <stop offset="0.46" stop-color="#141417" />
+      <stop offset="1" stop-color="#0a0a0c" />
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="50%" cy="48%" r="52%">
+      <stop offset="0" stop-color="#f4f1eb" stop-opacity="0.9" />
+      <stop offset="0.32" stop-color="#9fbeb8" stop-opacity="0.34" />
+      <stop offset="1" stop-color="#111113" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="ringWarm" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFD56A" />
-      <stop offset="100%" stop-color="#F7B500" />
-    </linearGradient>
-    <linearGradient id="wordmark" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#F4FFFE" />
-      <stop offset="100%" stop-color="#C8F7FA" />
-    </linearGradient>
+    <filter id="softShadow" x="884" y="884" width="964" height="964" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="34" stdDeviation="40" flood-color="#000000" flood-opacity="0.28" />
+    </filter>
   </defs>
 
-  <rect width="1179" height="2556" fill="#020405" />
-  <rect width="1179" height="2556" fill="url(#coreGlow)" opacity="0.5" />
+  <rect width="2732" height="2732" fill="url(#bg)" />
 
-  <g transform="translate(589.5 1032)">
-    <circle r="188" fill="url(#coreGlow)" opacity="0.88" />
-    <circle r="128" fill="none" stroke="#DFFBFF" stroke-width="8" opacity="0.9" />
-    <circle r="88" fill="none" stroke="url(#ringWarm)" stroke-width="8" opacity="0.98" />
-    <circle r="38" fill="#F7FBFF" />
-    <circle r="22" fill="#FFDDB7" opacity="0.88" />
+  <g filter="url(#softShadow)">
+    <circle cx="1366" cy="1324" r="374" fill="url(#coreGlow)" opacity="0.72" />
+    <circle cx="1366" cy="1324" r="182" fill="#101113" stroke="#f4f1eb" stroke-opacity="0.18" stroke-width="9" />
+    <path d="M1366 905a419 419 0 0 1 333 164" fill="none" stroke="#f4f1eb" stroke-width="69" stroke-linecap="round" />
+    <path d="M1704 1575a419 419 0 0 1-390 164" fill="none" stroke="#f4f1eb" stroke-opacity="0.76" stroke-width="69" stroke-linecap="round" />
+    <path d="M1024 1083a419 419 0 0 0-60 362" fill="none" stroke="#9fbeb8" stroke-width="69" stroke-linecap="round" />
+    <path d="M1140 1609a326 326 0 0 1-56-398" fill="none" stroke="#d7b56d" stroke-width="36" stroke-linecap="round" />
+    <path d="M1494 1006a326 326 0 0 1 195 269" fill="none" stroke="#d7b56d" stroke-width="36" stroke-linecap="round" />
+    <circle cx="1366" cy="1324" r="87" fill="#f4f1eb" />
+    <circle cx="1366" cy="1324" r="35" fill="#d7b56d" />
+    <circle cx="1166" cy="1060" r="38" fill="#9fbeb8" />
   </g>
 
-  <g transform="translate(589.5 1328)">
-    <text
-      x="0"
-      y="0"
-      text-anchor="middle"
-      fill="url(#wordmark)"
-      font-size="34"
-      font-weight="600"
-      font-family="Helvetica, Arial, sans-serif"
-      letter-spacing="8"
-    >
-      CREWCMD
-    </text>
-    <text
-      x="0"
-      y="52"
-      text-anchor="middle"
-      fill="#7ED5DB"
-      font-size="14"
-      font-family="Helvetica, Arial, sans-serif"
-      letter-spacing="5"
-      opacity="0.82"
-    >
-      CREW OPERATIONS
-    </text>
+  <g fill="#f4f1eb" font-family="Helvetica, Arial, sans-serif" text-anchor="middle">
+    <text x="1366" y="1780" font-size="42" font-weight="700" letter-spacing="0">CrewCmd</text>
+    <text x="1366" y="1834" font-size="18" letter-spacing="7" opacity="0.62">AGENT MODE</text>
   </g>
 </svg>

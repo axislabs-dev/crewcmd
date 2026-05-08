@@ -1,5 +1,16 @@
 # Skill Provider Integration Design
 
+## Quick Start: Enable ClawHub Skills
+
+ClawHub marketplace skills require one env variable to enable live browsing:
+
+```bash
+# .env or .env.local
+CREWCMD_CLAWHUB_CATALOG_ENABLED="true"
+```
+
+Without this, only hardcoded `FALLBACK_SKILLS` appear. The `.env.example` file now includes this enabled by default.
+
 ## Purpose
 
 CrewCMD should support external skill providers without making every provider a special case in the Skills UI or in `/api/skills/import`. The first provider to design for is ClawHub, because OpenClaw already has native ClawHub search, detail, install, and update support through the gateway.

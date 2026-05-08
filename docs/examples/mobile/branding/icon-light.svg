@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="CrewCmd mobile light icon">
+  <defs>
+    <linearGradient id="shell" x1="144" y1="92" x2="880" y2="932" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf8" />
+      <stop offset="0.58" stop-color="#f0ece3" />
+      <stop offset="1" stop-color="#d8ceb7" />
+    </linearGradient>
+    <filter id="shadow" x="116" y="116" width="792" height="792" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#6c604d" flood-opacity="0.28" />
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="url(#shell)" />
+  <path d="M182 800V264c0-45.3 36.7-82 82-82h496c45.3 0 82 36.7 82 82v496c0 45.3-36.7 82-82 82H264c-45.3 0-82-36.7-82-82Z" fill="none" stroke="#141417" stroke-opacity="0.1" stroke-width="4" />
+
+  <g filter="url(#shadow)">
+    <rect x="256" y="256" width="512" height="512" rx="116" fill="#141417" />
+    <path d="M346 370c42-42 96-63 160-63 66 0 121 22 164 66l-76 76c-23-22-52-33-88-33-34 0-63 12-86 36-22 23-34 51-34 85 0 35 12 64 35 87 23 24 52 36 87 36 36 0 65-11 87-34l75 75c-43 44-98 66-164 66-64 0-118-21-160-63-43-42-64-96-64-160s21-117 64-160Z" fill="#f6f2e8" />
+    <path d="M548 366 676 494 548 622" fill="none" stroke="#d7b56d" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M446 704h180" fill="none" stroke="#f6f2e8" stroke-width="42" stroke-linecap="round" />
+  </g>
+</svg>

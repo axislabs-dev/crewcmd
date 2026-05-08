@@ -9,7 +9,7 @@ interface WaveformVisualizerProps {
 
 export function WaveformVisualizer({
   isActive,
-  color = "var(--color-neo)",
+  color = "var(--accent)",
 }: WaveformVisualizerProps) {
   const [bars] = useState(() =>
     Array.from({ length: 24 }, (_, i) => ({

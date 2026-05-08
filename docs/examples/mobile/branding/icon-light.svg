@@ -10,7 +10,7 @@
       <stop offset="0.34" stop-color="#9fbeb8" stop-opacity="0.28" />
       <stop offset="1" stop-color="#f4f1eb" stop-opacity="0" />
     </radialGradient>
-    <filter id="shadow" x="132" y="132" width="760" height="760" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+    <filter id="shadow" x="96" y="96" width="832" height="832" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
       <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#6c604d" flood-opacity="0.26" />
     </filter>
   </defs>
@@ -19,16 +19,15 @@
   <path d="M182 800V264c0-45.3 36.7-82 82-82h496c45.3 0 82 36.7 82 82v496c0 45.3-36.7 82-82 82H264c-45.3 0-82-36.7-82-82Z" fill="none" stroke="#141417" stroke-opacity="0.09" stroke-width="4" />
 
   <g filter="url(#shadow)">
-    <circle cx="512" cy="512" r="260" fill="url(#coreGlow)" opacity="0.86" />
-    <circle cx="512" cy="512" r="132" fill="#fffdf8" stroke="#141417" stroke-opacity="0.14" stroke-width="6" />
-    <path d="M512 222a290 290 0 0 1 232 116" fill="none" stroke="#161412" stroke-width="36" stroke-linecap="round" />
-    <path d="M746 685a290 290 0 0 1-272 114" fill="none" stroke="#161412" stroke-opacity="0.66" stroke-width="36" stroke-linecap="round" />
-    <path d="M278 340a290 290 0 0 0-42 250" fill="none" stroke="#7fa8a2" stroke-width="36" stroke-linecap="round" />
-    <path d="M327 707a238 238 0 0 1-33-290" fill="none" stroke="#d1a94f" stroke-width="18" stroke-linecap="round" />
-    <path d="M604 286a238 238 0 0 1 143 196" fill="none" stroke="#d1a94f" stroke-width="18" stroke-linecap="round" />
-    <circle cx="512" cy="512" r="54" fill="#161412" />
-    <circle cx="512" cy="512" r="22" fill="#d1a94f" />
-    <circle cx="365" cy="326" r="24" fill="#7fa8a2" />
-    <circle cx="690" cy="664" r="24" fill="#b8adc9" />
+    <circle cx="512" cy="512" r="292" fill="url(#coreGlow)" opacity="0.8" />
+    <circle cx="512" cy="512" r="142" fill="#fffdf8" stroke="#141417" stroke-opacity="0.16" stroke-width="8" />
+    <path d="M512 185a327 327 0 0 1 260 128" fill="none" stroke="#161412" stroke-width="54" stroke-linecap="round" />
+    <path d="M776 708a327 327 0 0 1-304 128" fill="none" stroke="#161412" stroke-opacity="0.7" stroke-width="54" stroke-linecap="round" />
+    <path d="M245 324a327 327 0 0 0-47 282" fill="none" stroke="#7fa8a2" stroke-width="54" stroke-linecap="round" />
+    <path d="M336 735a254 254 0 0 1-44-310" fill="none" stroke="#d1a94f" stroke-width="28" stroke-linecap="round" />
+    <path d="M612 265a254 254 0 0 1 152 210" fill="none" stroke="#d1a94f" stroke-width="28" stroke-linecap="round" />
+    <circle cx="512" cy="512" r="68" fill="#161412" />
+    <circle cx="512" cy="512" r="27" fill="#d1a94f" />
+    <circle cx="356" cy="306" r="30" fill="#7fa8a2" />
   </g>
 </svg>

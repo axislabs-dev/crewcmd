@@ -8,106 +8,63 @@
   </head>
   <body>
     <div class="app-shell" hidden>
-      <div class="ambient ambient-a"></div>
-      <div class="ambient ambient-b"></div>
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">CrewCmd Mobile</p>
-          <h1 id="app-name">Connect to your self-hosted CrewCmd</h1>
-          <p id="app-subtitle" class="subtitle">
-            Pin this app to your deployment, then continue through your existing CrewCmd sign-in flow.
-          </p>
+      <header class="brand-header">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="brand-c">C</span>
+          <span class="brand-chevron">&gt;</span>
+          <span class="brand-line"></span>
         </div>
-        <div class="orb-frame">
-          <div class="orb-core"></div>
-          <div class="orb-ring orb-ring-a"></div>
-          <div class="orb-ring orb-ring-b"></div>
-          <div class="orb-ring orb-ring-c"></div>
-        </div>
+        <p id="app-name" class="eyebrow">CrewCmd Mobile</p>
       </header>
 
-      <main class="content">
-        <section class="panel status-panel">
-          <div class="panel-header">
-            <div>
-              <p class="panel-label">Deployment</p>
-              <h2 id="org-name">Not configured</h2>
-            </div>
-            <span id="environment-chip" class="chip">Unconfigured</span>
-          </div>
-          <dl class="detail-grid">
-            <div>
-              <dt>Server</dt>
-              <dd id="server-url">No server selected</dd>
-            </div>
-            <div>
-              <dt>Profile</dt>
-              <dd id="profile-id">Not configured</dd>
-            </div>
-            <div>
-              <dt>Reachability</dt>
-              <dd id="network-hint">Waiting for bootstrap</dd>
-            </div>
-          </dl>
-          <div class="cta-row">
-            <button id="open-crewcmd" class="primary-button" type="button">Open CrewCmd</button>
-            <button id="test-connection" class="secondary-button" type="button">Test connection</button>
-          </div>
-          <p id="connection-status" class="status-line">Bootstrap the app with a QR payload or config link to begin.</p>
-        </section>
+      <main class="connect-card">
+        <div class="connect-copy">
+          <p class="panel-label">Deployment</p>
+          <h1 id="org-name">Not configured</h1>
+          <p id="connection-status" class="status-line">Paste a signed bootstrap link from your CrewCmd admin.</p>
+        </div>
 
-        <section class="panel bootstrap-panel">
-          <div class="panel-header">
-            <div>
-              <p class="panel-label">Bootstrap</p>
-              <h2>QR or signed link</h2>
-            </div>
-            <span id="lock-chip" class="chip chip-outline">Multi-server</span>
+        <dl class="detail-grid">
+          <div>
+            <dt>Status</dt>
+            <dd id="environment-chip">Unconfigured</dd>
           </div>
-          <p class="body-copy">
-            Open a crewcmd:// bootstrap link from QR, MDM, email, or intranet. The payload pins the app to your self-hosted deployment and theme profile.
-          </p>
+          <div>
+            <dt>Server</dt>
+            <dd id="server-url">No server selected</dd>
+          </div>
+          <div>
+            <dt>Profile</dt>
+            <dd id="profile-id">Not configured</dd>
+          </div>
+          <div class="hidden">
+            <dt>Reachability</dt>
+            <dd id="network-hint">Waiting for bootstrap</dd>
+          </div>
+        </dl>
+
+        <section id="bootstrap-panel" class="bootstrap-panel">
           <label class="field">
-            <span>Paste bootstrap deep link or JSON payload</span>
-            <textarea id="bootstrap-input" rows="4" placeholder="crewcmd://bootstrap?payload=..."></textarea>
+            <span>Bootstrap link or JSON payload</span>
+            <textarea id="bootstrap-input" rows="3" placeholder="crewcmd://bootstrap?payload=..."></textarea>
           </label>
-          <div class="cta-row">
-            <button id="apply-bootstrap" class="primary-button" type="button">Apply bootstrap</button>
-            <button id="clear-bootstrap" class="ghost-button" type="button">Clear</button>
-          </div>
+          <button id="apply-bootstrap" class="primary-button" type="button">Connect CrewCmd</button>
         </section>
 
-        <section id="manual-panel" class="panel manual-panel hidden">
-          <div class="panel-header">
-            <div>
-              <p class="panel-label">Admin override</p>
-              <h2>Manual server URL</h2>
-            </div>
-          </div>
-          <label class="field">
-            <span>Server URL</span>
-            <input id="manual-server-input" type="url" placeholder="https://crewcmd.example.internal" />
-          </label>
-          <button id="apply-manual-server" class="secondary-button" type="button">Save override</button>
+        <section id="configured-panel" class="configured-panel hidden">
+          <button id="open-crewcmd" class="primary-button" type="button">Open CrewCmd</button>
+          <button id="clear-bootstrap" class="ghost-button" type="button">Reset connection</button>
         </section>
 
-        <section class="panel footer-panel">
-          <div class="footer-grid">
-            <div>
-              <p class="panel-label">Mobile features</p>
-              <ul class="feature-list">
-                <li>Chat and voice mode</li>
-                <li>Push and deep-link entry points</li>
-                <li>Secure local config storage</li>
-                <li>Tailscale-friendly deployment bootstrap</li>
-              </ul>
-            </div>
-            <div>
-              <p class="panel-label">Support</p>
-              <p id="support-line" class="body-copy">Contact your CrewCmd administrator.</p>
-            </div>
-          </div>
-        </section>
+        <div class="hidden">
+          <span id="lock-chip">Multi-server</span>
+          <span id="support-line">Support: support@example.com</span>
+          <button id="test-connection" type="button">Test connection</button>
+          <section id="manual-panel">
+            <input id="manual-server-input" type="url" />
+            <button id="apply-manual-server" type="button">Save override</button>
+          </section>
+        </div>
       </main>
     </div>
 

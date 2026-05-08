@@ -4,7 +4,7 @@ const CONFIG_PATH = "./brand.generated.json";
 const state = {
   brand: null,
   bootstrap: null,
-  connectionStatus: "Bootstrap the app with a QR payload or config link to begin.",
+  connectionStatus: "Paste a signed bootstrap link from your CrewCmd admin.",
   autoOpened: false,
 };
 
@@ -180,27 +180,29 @@ function setStatus(message, isError = false) {
 
 function applyThemeColors(source) {
   if (!source) return;
-  document.documentElement.style.setProperty("--accent", source.primaryColor);
-  document.documentElement.style.setProperty("--accent-strong", source.primaryColor);
-  document.documentElement.style.setProperty("--signal", source.secondaryColor);
+  document.documentElement.style.setProperty("--accent", source.secondaryColor || "#d7b56d");
+  document.documentElement.style.setProperty("--accent-strong", source.secondaryColor || "#e2c37f");
 }
 
 function updateUI() {
   const bootstrap = state.bootstrap;
   const brand = state.brand;
   const activeBrand = bootstrap?.branding ?? brand;
+  const hasBootstrap = Boolean(bootstrap?.serverUrl);
 
   elements.appName.textContent = activeBrand?.displayName || "CrewCmd Mobile";
-  elements.orgName.textContent = bootstrap?.orgName || brand?.orgName || "Not configured";
-  elements.serverUrl.textContent = bootstrap?.serverUrl || brand?.defaultBaseUrl || "No server selected";
-  elements.profileId.textContent = bootstrap?.profileId || brand?.profileId || "Not configured";
-  elements.environmentChip.textContent = bootstrap?.environmentLabel || brand?.environmentLabel || "Unconfigured";
+  elements.orgName.textContent = hasBootstrap ? bootstrap.orgName : "Not configured";
+  elements.serverUrl.textContent = hasBootstrap ? bootstrap.serverUrl : "No server selected";
+  elements.profileId.textContent = hasBootstrap ? bootstrap.profileId : "Not configured";
+  elements.environmentChip.textContent = hasBootstrap ? bootstrap.environmentLabel : "Unconfigured";
   elements.supportLine.textContent = `Support: ${(bootstrap?.support?.email || brand?.supportEmail || "support@example.com")}`;
   elements.lockChip.textContent = bootstrap?.lockToSingleServer || brand?.lockToSingleServer ? "Locked" : "Multi-server";
-  elements.networkHint.textContent = bootstrap?.tailscaleRequired || brand?.tailscaleRequired
-    ? "Requires Tailscale reachability"
-    : "Reachable over standard network access";
-  elements.openCrewCmd.disabled = !Boolean(bootstrap?.serverUrl || brand?.defaultBaseUrl);
+  elements.networkHint.textContent = hasBootstrap
+    ? (bootstrap?.tailscaleRequired ? "Requires Tailscale reachability" : "Reachable over standard network access")
+    : "Waiting for bootstrap";
+  elements.openCrewCmd.disabled = !hasBootstrap;
+  elements.bootstrapPanel.classList.toggle("hidden", hasBootstrap);
+  elements.configuredPanel.classList.toggle("hidden", !hasBootstrap);
   elements.manualPanel.classList.toggle("hidden", !brand?.allowManualServerOverride && !bootstrap?.allowManualServerOverride);
   elements.bootstrapInput.placeholder = `${brand?.deepLinkScheme || "crewcmd"}://bootstrap?payload=...`;
   applyThemeColors(activeBrand || brand);
@@ -232,7 +234,11 @@ async function applyBootstrapPayload(rawInput) {
 }
 
 function getActiveServerUrl() {
-  return state.bootstrap?.serverUrl || state.brand?.defaultBaseUrl || "";
+  if (state.bootstrap?.serverUrl) {
+    return state.bootstrap.serverUrl;
+  }
+
+  return state.brand?.bootstrapMode === "qr-or-url" ? "" : state.brand?.defaultBaseUrl || "";
 }
 
 function shouldAutoOpenCrewCmd() {
@@ -301,7 +307,7 @@ async function clearBootstrap() {
   elements.bootstrapInput.value = "";
   elements.manualServerInput.value = "";
   updateUI();
-  setStatus("Bootstrap cleared. Apply a new QR payload or link.", false);
+  setStatus("Paste a signed bootstrap link from your CrewCmd admin.", false);
 }
 
 async function applyManualServer() {
@@ -396,6 +402,8 @@ function cacheElements() {
   elements.connectionStatus = $("connection-status");
   elements.supportLine = $("support-line");
   elements.lockChip = $("lock-chip");
+  elements.bootstrapPanel = $("bootstrap-panel");
+  elements.configuredPanel = $("configured-panel");
   elements.openCrewCmd = $("open-crewcmd");
   elements.testConnection = $("test-connection");
   elements.bootstrapInput = $("bootstrap-input");

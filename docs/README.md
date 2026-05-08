@@ -23,6 +23,10 @@ Everything you need to get started, self-host, and contribute.
 - [Self-Hosting](guides/self-hosting.md) — Production deployment, HTTPS, reverse proxy
 - [Budgets & Governance](guides/budgets-governance.md) — Spending limits, approval gates, audit trails
 
+## Launch & Positioning
+
+- [Soft Launch Plan](SOFT-LAUNCH-PLAN.md) — Early-access launch checklist, messaging, and rollout plan
+
 ## Reference
 
 - [API Reference](API.md) — Full REST API documentation

@@ -11,7 +11,7 @@ vi.mock("@/db", () => ({
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: async () => existingSkill ? [existingSkill] : [],
+          limit: async () => (existingSkill ? [existingSkill] : []),
         }),
       }),
     }),
@@ -61,32 +61,66 @@ vi.mock("@/lib/workspace", () => ({
   })),
 }));
 
-const nativeMocks = vi.hoisted(() => ({
-  canInstallNativeSkill: vi.fn(async () => true),
-  resolveWorkspaceRuntime: vi.fn(async () => ({
-    id: "runtime-1",
-    gatewayUrl: "ws://localhost:18789",
-    authToken: null,
-  })),
-  withGateway: vi.fn(async (_runtime: unknown, fn: (client: Record<string, unknown>) => Promise<unknown>) => fn({
-    skillsDetail: vi.fn(async () => ({
-      slug: "calendar",
-      name: "Calendar",
-      description: "Manage calendar events.",
-      version: "1.2.3",
-      owner: "axislabs",
-      trust: { level: "verified", verificationTier: "reviewed", scanStatus: "passed" },
-      warnings: ["requires OAuth"],
+const nativeMocks = vi.hoisted(() => {
+  const detailCalls: unknown[] = [];
+  const installCalls: unknown[] = [];
+  let rejectVersionOnce = false;
+
+  return {
+    detailCalls,
+    installCalls,
+    setRejectVersionOnce: (value: boolean) => {
+      rejectVersionOnce = value;
+    },
+    canInstallNativeSkill: vi.fn(async () => true),
+    resolveWorkspaceRuntime: vi.fn(async () => ({
+      id: "runtime-1",
+      gatewayUrl: "ws://localhost:18789",
+      authToken: null,
     })),
-    skillsInstall: vi.fn(async () => ({
-      ok: true,
-      installed: true,
-      slug: "calendar",
-      version: "1.2.3",
-      path: "skills/calendar",
-    })),
-  })),
-}));
+    withGateway: vi.fn(
+      async (
+        _runtime: unknown,
+        fn: (client: Record<string, unknown>) => Promise<unknown>,
+      ) =>
+        fn({
+          skillsDetail: vi.fn(async (params: unknown) => {
+            detailCalls.push(params);
+            return {
+              slug: "calendar",
+              name: "Calendar",
+              description: "Manage calendar events.",
+              version: "1.2.3",
+              owner: "axislabs",
+              trust: {
+                level: "verified",
+                verificationTier: "reviewed",
+                scanStatus: "passed",
+              },
+              warnings: ["requires OAuth"],
+            };
+          }),
+          skillsInstall: vi.fn(async (params: Record<string, unknown>) => {
+            installCalls.push(params);
+            if (rejectVersionOnce && params.version) {
+              rejectVersionOnce = false;
+              throw new Error(
+                "ClawHub /api/v1/download failed (404): Version not found",
+              );
+            }
+            return {
+              ok: true,
+              installed: true,
+              slug: "calendar",
+              version:
+                typeof params.version === "string" ? params.version : "1.2.3",
+              path: "skills/calendar",
+            };
+          }),
+        }),
+    ),
+  };
+});
 
 vi.mock("@/lib/native-clawhub", () => nativeMocks);
 
@@ -97,6 +131,9 @@ describe("POST /api/skills/import native ClawHub", () => {
     createdRows.length = 0;
     updatedRows.length = 0;
     existingSkill = null;
+    nativeMocks.detailCalls.length = 0;
+    nativeMocks.installCalls.length = 0;
+    nativeMocks.setRejectVersionOnce(false);
     vi.clearAllMocks();
   });
 
@@ -143,5 +180,29 @@ describe("POST /api/skills/import native ClawHub", () => {
       status: "current",
       currentVersion: "1.2.3",
     });
+  });
+
+  it("omits placeholder versions and retries latest when ClawHub rejects a stale version", async () => {
+    nativeMocks.setRejectVersionOnce(true);
+    const request = new NextRequest("http://localhost/api/skills/import", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: "clawhub",
+        slug: "calendar",
+        version: "0.0.0",
+        workspaceId: "workspace-1",
+      }),
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(nativeMocks.detailCalls[0]).toEqual({ slug: "calendar" });
+    expect(nativeMocks.installCalls).toEqual([
+      { source: "clawhub", slug: "calendar", version: "1.2.3" },
+      { source: "clawhub", slug: "calendar" },
+    ]);
+    expect(json.version).toBe("1.2.3");
   });
 });

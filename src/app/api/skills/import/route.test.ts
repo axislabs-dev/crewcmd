@@ -65,12 +65,16 @@ const nativeMocks = vi.hoisted(() => {
   const detailCalls: unknown[] = [];
   const installCalls: unknown[] = [];
   let rejectVersionOnce = false;
+  let rejectAlreadyExistsOnce = false;
 
   return {
     detailCalls,
     installCalls,
     setRejectVersionOnce: (value: boolean) => {
       rejectVersionOnce = value;
+    },
+    setRejectAlreadyExistsOnce: (value: boolean) => {
+      rejectAlreadyExistsOnce = value;
     },
     canInstallNativeSkill: vi.fn(async () => true),
     resolveWorkspaceRuntime: vi.fn(async () => ({
@@ -102,6 +106,12 @@ const nativeMocks = vi.hoisted(() => {
           }),
           skillsInstall: vi.fn(async (params: Record<string, unknown>) => {
             installCalls.push(params);
+            if (rejectAlreadyExistsOnce) {
+              rejectAlreadyExistsOnce = false;
+              throw new Error(
+                "Skill already exists at /Users/roger/.openclaw/workspace/skills/calendar. Re-run with force/update.",
+              );
+            }
             if (rejectVersionOnce && params.version) {
               rejectVersionOnce = false;
               throw new Error(
@@ -134,6 +144,7 @@ describe("POST /api/skills/import native ClawHub", () => {
     nativeMocks.detailCalls.length = 0;
     nativeMocks.installCalls.length = 0;
     nativeMocks.setRejectVersionOnce(false);
+    nativeMocks.setRejectAlreadyExistsOnce(false);
     vi.clearAllMocks();
   });
 
@@ -204,5 +215,34 @@ describe("POST /api/skills/import native ClawHub", () => {
       { source: "clawhub", slug: "calendar" },
     ]);
     expect(json.version).toBe("1.2.3");
+  });
+
+  it("reconciles a gateway skill that is already installed in the workspace", async () => {
+    nativeMocks.setRejectAlreadyExistsOnce(true);
+    const request = new NextRequest("http://localhost/api/skills/import", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: "clawhub",
+        slug: "calendar",
+        version: "1.2.3",
+        workspaceId: "workspace-1",
+      }),
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(createdRows).toHaveLength(1);
+    expect(json).toMatchObject({
+      slug: "calendar",
+      source: "clawhub",
+      sourceRef: "/Users/roger/.openclaw/workspace/skills/calendar",
+      installed: true,
+    });
+    expect(json.metadata.native).toMatchObject({
+      installPath: "/Users/roger/.openclaw/workspace/skills/calendar",
+      installStatus: "installed",
+    });
   });
 });

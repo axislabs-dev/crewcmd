@@ -222,14 +222,14 @@ describe("Clawhub skill catalog provider", () => {
     );
   });
 
-  it("falls back to built-in marketplace skills when Clawhub fails", async () => {
+  it("does not include inactive skills.sh or GitHub marketplace fallbacks", async () => {
     const skills = await resolveMarketplaceSkills({
       fetchClawhub: async () => null,
     });
 
     expect(skills.length).toBeGreaterThan(0);
-    expect(skills.some((skill) => skill.source === "skills_sh")).toBe(true);
-    expect(skills.some((skill) => skill.source === "github")).toBe(true);
+    expect(skills.some((skill) => skill.source === "skills_sh")).toBe(false);
+    expect(skills.some((skill) => skill.source === "github")).toBe(false);
   });
 
   it("reads the opt-in catalog config from environment variables", () => {

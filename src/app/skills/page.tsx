@@ -65,20 +65,6 @@ const SOURCE_STYLES: Record<
     border: "border-[#00f0ff]/30",
     bg: "bg-[#00f0ff]/10",
   },
-  skills_sh: {
-    label: "skills.sh",
-    icon: "\u25B2",
-    color: "text-[var(--text-primary)]",
-    border: "border-[var(--border-medium)]",
-    bg: "bg-[var(--bg-surface-hover)]",
-  },
-  github: {
-    label: "GitHub",
-    icon: "\u2B24",
-    color: "text-[#8b949e]",
-    border: "border-[#8b949e]/30",
-    bg: "bg-[#8b949e]/10",
-  },
   system: {
     label: "System",
     icon: "\u{1F512}",
@@ -148,12 +134,10 @@ function getMarketplaceSignals(ms: MarketplaceSkill): string[] {
   return signals;
 }
 
-function getMarketplaceSortLabel(search: string, sourceFilter: string): string {
+function getMarketplaceSortLabel(search: string): string {
   if (search.trim())
     return "Search results are relevance-ranked by ClawHub; cards show version and marketplace signals when available.";
-  if (sourceFilter === "clawhub" || sourceFilter === "all")
-    return "ClawHub browse is sorted by downloads/popularity; cards show version, downloads, stars, and installs when ClawHub provides them.";
-  return "Browse results are ordered by the selected source; cards show source metadata when available.";
+  return "ClawHub browse is sorted by downloads/popularity; cards show version, downloads, stars, and installs when ClawHub provides them.";
 }
 
 function mergeMarketplace(
@@ -845,14 +829,12 @@ export default function SkillsPage() {
               {/* Source filter */}
               <div className="space-y-2 pb-1">
                 <p className="font-mono text-[9px] leading-relaxed text-[var(--text-tertiary)]">
-                  {getMarketplaceSortLabel(search, sourceFilter)}
+                  {getMarketplaceSortLabel(search)}
                 </p>
                 <div className="flex gap-1.5">
                   {[
                     { value: "all", label: "All" },
                     { value: "clawhub", label: "ClawHub" },
-                    { value: "skills_sh", label: "skills.sh" },
-                    { value: "github", label: "GitHub" },
                   ].map((f) => (
                     <button
                       key={f.value}
@@ -1371,8 +1353,7 @@ export default function SkillsPage() {
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
                 ClawHub skills install natively through the selected OpenClaw
                 gateway, then CrewCMD records the provider metadata and install
-                status. Other marketplace sources still create CrewCMD skill
-                records from packaged metadata.
+                status.
               </p>
             </div>
           </div>

@@ -139,6 +139,19 @@ function isVersionNotFoundError(error: unknown): boolean {
   return /version not found/i.test(error.message);
 }
 
+function isSkillAlreadyExistsError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /skill already exists at /i.test(error.message);
+}
+
+function extractExistingSkillPath(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const match = error.message.match(
+    /skill already exists at (.+?)(?:\. Re-run|$)/i,
+  );
+  return match?.[1]?.trim() || undefined;
+}
+
 async function installNativeClawhubSkill(params: {
   request: NextRequest;
   workspace: NonNullable<
@@ -202,6 +215,18 @@ async function installNativeClawhubSkill(params: {
       });
       return { detail, install };
     } catch (error) {
+      if (isSkillAlreadyExistsError(error)) {
+        return {
+          detail,
+          install: {
+            ok: true,
+            installed: true,
+            slug: params.slug,
+            version: installVersion,
+            path: extractExistingSkillPath(error),
+          },
+        };
+      }
       if (!installVersion || !isVersionNotFoundError(error)) throw error;
       const install = await client.skillsInstall(baseInstallParams);
       return { detail, install };

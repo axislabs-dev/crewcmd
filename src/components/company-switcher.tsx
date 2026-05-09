@@ -11,7 +11,12 @@ interface Workspace {
   memberRole: string | null;
 }
 
-export function CompanySwitcher() {
+type CompanySwitcherProps = {
+  compact?: boolean;
+  className?: string;
+};
+
+export function CompanySwitcher({ compact = false, className = "" }: CompanySwitcherProps) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -73,21 +78,32 @@ export function CompanySwitcher() {
     : "PRIVATE WORKSPACE";
 
   return (
-    <div ref={ref} className="relative px-3 pb-3">
+    <div
+      ref={ref}
+      className={`relative ${compact ? "" : "px-3 pb-3"} ${className}`}
+    >
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
+        className={`flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-left transition-colors hover:bg-[var(--bg-surface-hover)] ${
+          compact ? "px-2 py-1.5" : "px-3 py-2"
+        }`}
       >
-        <div className="flex h-6 w-6 items-center justify-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono text-[10px] font-bold text-[var(--text-secondary)]">
+        <div
+          className={`flex items-center justify-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono font-bold text-[var(--text-secondary)] ${
+            compact ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]"
+          }`}
+        >
           {active?.type === "personal" ? "P" : active?.name?.[0]?.toUpperCase() ?? "?"}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[10px] tracking-wider text-[var(--text-primary)]">
             {title}
           </p>
-          <p className="truncate text-[8px] tracking-wider text-[var(--text-tertiary)]">
-            {subtitle}
-          </p>
+          {!compact && (
+            <p className="truncate text-[8px] tracking-wider text-[var(--text-tertiary)]">
+              {subtitle}
+            </p>
+          )}
         </div>
         <svg
           className={`h-3 w-3 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
@@ -101,7 +117,11 @@ export function CompanySwitcher() {
       </button>
 
       {open && (
-        <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] py-1 shadow-xl backdrop-blur-xl">
+        <div
+          className={`absolute top-full z-50 mt-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] py-1 shadow-xl backdrop-blur-xl ${
+            compact ? "right-0 w-64 max-w-[calc(100vw-1.5rem)]" : "left-3 right-3"
+          }`}
+        >
           {workspaces.map((workspace) => {
             const label = workspace.type === "company"
               ? workspace.companyName || workspace.name

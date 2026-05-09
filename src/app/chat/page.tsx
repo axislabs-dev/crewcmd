@@ -23,6 +23,7 @@ import { useChatStore } from "@/lib/chat-store";
 import type { ChatStoreMessage } from "@/lib/chat-store";
 import { useActiveChatRunStore } from "@/lib/chat-active-run-store";
 import { useWorkspace } from "@/components/company-context";
+import { CompanySwitcher } from "@/components/company-switcher";
 import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
@@ -2268,6 +2269,8 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <CompanySwitcher compact className="w-36 sm:w-40 lg:hidden" />
+
             {/* Clear chat */}
             <button
               onClick={clearChat}

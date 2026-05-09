@@ -169,6 +169,13 @@
       "when": 1777000000000,
       "tag": "0023_mobile_push_chat_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1777100000000,
+      "tag": "0024_chat_session_events",
+      "breakpoints": true
     }
   ]
 }

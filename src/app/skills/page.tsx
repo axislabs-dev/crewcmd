@@ -773,6 +773,21 @@ export default function SkillsPage() {
       s.slug.includes(search.toLowerCase()),
   );
 
+  const hasActiveMobileDetail = Boolean(
+    showCustomForm || selectedSkill || selectedMarketplace,
+  );
+  const mobileDetailTitle = showCustomForm
+    ? "New custom skill"
+    : selectedSkill?.name || selectedMarketplace?.name || "Skill details";
+
+  function closeMobileDetail() {
+    setShowCustomForm(false);
+    setSelectedSkill(null);
+    setSelectedMarketplace(null);
+    setEditing(false);
+    setSkillAssignments([]);
+  }
+
   // ── Count agents per skill ──
   // We don't have this preloaded, so we'll show it in the detail view only
 
@@ -802,7 +817,11 @@ export default function SkillsPage() {
   return (
     <div className="flex h-[calc(100vh-56px)] lg:h-screen">
       {/* ── Left Panel: Skills Library ── */}
-      <div className="flex w-full flex-col border-r border-[var(--border-subtle)] lg:w-[420px] lg:flex-shrink-0">
+      <div
+        className={`${
+          hasActiveMobileDetail ? "hidden lg:flex" : "flex"
+        } w-full flex-col border-r border-[var(--border-subtle)] lg:w-[420px] lg:flex-shrink-0`}
+      >
         {/* Header */}
         <div className="border-b border-[var(--border-subtle)] px-4 py-4">
           <div className="flex items-center justify-between">
@@ -1068,7 +1087,25 @@ export default function SkillsPage() {
       </div>
 
       {/* ── Right Panel: Detail / Form ── */}
-      <div className="hidden flex-1 overflow-y-auto lg:block">
+      <div
+        className={`${
+          hasActiveMobileDetail ? "block" : "hidden"
+        } flex-1 overflow-y-auto lg:block`}
+      >
+        {hasActiveMobileDetail && (
+          <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/95 px-4 py-3 backdrop-blur lg:hidden">
+            <button
+              onClick={closeMobileDetail}
+              className="rounded-lg border border-[var(--border-medium)] px-3 py-1.5 font-mono text-[10px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+            >
+              ← BACK
+            </button>
+            <p className="min-w-0 flex-1 truncate font-mono text-xs font-semibold tracking-wider text-[var(--text-primary)]">
+              {mobileDetailTitle}
+            </p>
+          </div>
+        )}
+
         {/* Custom skill creation form */}
         {showCustomForm && (
           <div className="mx-auto max-w-2xl p-6">

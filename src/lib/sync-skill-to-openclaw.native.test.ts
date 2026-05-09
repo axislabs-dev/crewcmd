@@ -26,6 +26,7 @@ const state = vi.hoisted(() => {
         },
       },
       installResult: { ok: true, installed: true, slug: "calendar", version: "1.2.3", path: "/Users/testuser/.openclaw/skills/calendar" },
+      installError: null as Error | null,
     },
   };
 });
@@ -70,7 +71,11 @@ vi.mock("@/lib/gateway-client", () => ({
   GatewayClient: class MockGatewayClient {
     constructor() {}
     async connect() { state.gateway.calls.push({ method: "connect" }); return { version: "test" }; }
-    async skillsInstall(params: unknown) { state.gateway.calls.push({ method: "skills.install", params }); return state.gateway.installResult; }
+    async skillsInstall(params: unknown) {
+      state.gateway.calls.push({ method: "skills.install", params });
+      if (state.gateway.installError) throw state.gateway.installError;
+      return state.gateway.installResult;
+    }
     async configGet() { state.gateway.calls.push({ method: "config.get" }); return state.gateway.config; }
     async configPatch(params: unknown) { state.gateway.calls.push({ method: "config.patch", params }); return { ok: true }; }
     async skillsUpdate(params: unknown) { state.gateway.calls.push({ method: "skills.update", params }); return { ok: true }; }
@@ -84,6 +89,7 @@ describe("syncSkillToOpenClaw native ClawHub install", () => {
   beforeEach(() => {
     state.gateway.calls = [];
     state.gateway.installResult = { ok: true, installed: true, slug: "calendar", version: "1.2.3", path: "/Users/testuser/.openclaw/skills/calendar" };
+    state.gateway.installError = null;
     state.gateway.config = {
       hash: "hash-1",
       config: {
@@ -139,6 +145,39 @@ describe("syncSkillToOpenClaw native ClawHub install", () => {
     expect(state.gateway.calls.find((call) => call.method === "skills.update")?.params).toEqual({
       skillKey: "calendar",
       enabled: true,
+    });
+  });
+
+  it("continues to add the skill to the agent allowlist when ClawHub reports it is already installed", async () => {
+    state.gateway.installError = new Error(
+      "Skill already exists at /Users/testuser/.openclaw/workspace/skills/calendar. Re-run with force/update.",
+    );
+
+    const result = await syncSkillToOpenClaw({ skillId: "skill-1", agentId: "agent-1", companyId: "company-1" });
+
+    expect(result.success).toBe(true);
+    expect(result.skillPath).toBe("/Users/testuser/.openclaw/workspace/skills/calendar");
+    expect(result.nativeInstall).toEqual({
+      provider: "clawhub",
+      slug: "calendar",
+      version: "1.2.3",
+      installed: true,
+      warnings: [],
+    });
+    expect(state.gateway.calls.map((call) => call.method)).toEqual([
+      "connect",
+      "skills.install",
+      "config.get",
+      "config.patch",
+      "skills.update",
+      "close",
+    ]);
+    expect(state.gateway.calls.find((call) => call.method === "config.patch")?.params).toMatchObject({
+      patch: {
+        agents: { list: [{ id: "cipher", skills: ["existing", "calendar"] }] },
+        skills: { entries: { calendar: { enabled: true, config: { color: "blue" } } } },
+      },
+      baseHash: "hash-1",
     });
   });
 });

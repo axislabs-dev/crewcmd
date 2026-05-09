@@ -4,6 +4,13 @@ import type { CSSProperties } from "react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useOrientationLock } from "@/hooks/use-orientation-lock";
 import {
+  buildMediaRecorderOptions,
+  createBrowserAudioContext,
+  getAudioBlobType,
+  getAudioFilenameForMime,
+  selectAudioRecorderFormat,
+} from "@/lib/audio-capture";
+import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
 } from "@/lib/agent-mode-diagnostics";
@@ -89,7 +96,10 @@ export function VoiceAgent({
       });
       try {
         const formData = new FormData();
-        formData.append("audio", audioBlob, "audio.webm");
+        const uploadFormat = selectAudioRecorderFormat();
+        const uploadMimeType = audioBlob.type || uploadFormat.mimeType || "audio/webm";
+        formData.append("audio", audioBlob, getAudioFilenameForMime(uploadMimeType, uploadFormat));
+        formData.append("mimeType", uploadMimeType);
 
         const response = await fetch("/api/stt", {
           method: "POST",
@@ -160,11 +170,8 @@ export function VoiceAgent({
     recordingStartTimeRef.current = Date.now();
     chunksRef.current = [];
 
-    const recorder = new MediaRecorder(streamRef.current, {
-      mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm",
-    });
+    const recorderFormat = selectAudioRecorderFormat();
+    const recorder = new MediaRecorder(streamRef.current, buildMediaRecorderOptions(recorderFormat));
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
@@ -181,7 +188,9 @@ export function VoiceAgent({
       }
       const duration = Date.now() - recordingStartTimeRef.current;
       if (duration >= MIN_RECORDING_MS && chunksRef.current.length > 0) {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, {
+          type: getAudioBlobType(mediaRecorderRef.current?.mimeType, recorderFormat),
+        });
         transcribe(blob);
       } else {
         setState("listening");
@@ -193,7 +202,7 @@ export function VoiceAgent({
       scope: "voice-agent",
       event: "media-recorder.start",
       sessionId: diagnosticSessionRef.current ?? undefined,
-      detail: { mimeType: recorder.mimeType },
+      detail: { mimeType: recorder.mimeType, extension: recorderFormat.extension },
     });
     recorder.start(100); // collect in 100ms chunks
   }, [isMicMuted, transcribe]);
@@ -382,7 +391,7 @@ export function VoiceAgent({
         detail: { tracks: stream.getTracks().map((track) => `${track.kind}:${track.readyState}`) },
       });
 
-      const audioContext = new AudioContext();
+      const audioContext = createBrowserAudioContext();
       audioContextRef.current = audioContext;
       publishAgentModeDiagnostic({
         scope: "voice-agent",

@@ -63,6 +63,24 @@ As a user in agent mode, I can keep speaking naturally for an extended turn, inc
 
 ## Current Failure Points
 
+## 0. iOS/native audio-session gaps
+
+CrewCmd already has browser-side voice agent mode, wake-lock reacquisition, Media Session metadata, and mobile push recovery. The missing mobile/iOS layer was native audio-session hardening:
+
+- no generated `NSMicrophoneUsageDescription` contract for iOS review/runtime prompts
+- no generated `UIBackgroundModes = audio` contract for long-running voice sessions
+- no app-delegate `AVAudioSession` setup for `playAndRecord` + `voiceChat`
+- web capture assumed `audio/webm`, which is not the best compatibility target for iOS WebKit/Capacitor
+
+Fixes added in this branch:
+
+- `apps/mobile/scripts/ensure-ios-audio-session.mjs` idempotently patches the iOS native project when present and writes `.generated/ios-audio-session.json` when it is not present yet
+- `apps/mobile/scripts/apply-branding.mjs` runs that guard during normal mobile branding
+- `src/lib/audio-capture.ts` centralizes MediaRecorder format detection and prefers iOS-compatible `audio/mp4`/`.m4a` when WebM is unavailable
+- `VoiceAgent` and `VoiceRecorder` now upload the actual recorder MIME type and matching filename instead of hard-coding `audio.webm`
+
+Platform limit: if the web view process is fully suspended by iOS after backgrounding, browser JavaScript VAD/timers cannot keep progressing indefinitely. The native audio session/background-audio mode keeps CrewCmd in the correct class of app behavior, but true indefinite background hot-mic behavior may still require a native audio capture plugin if testing shows WebKit suspends the capture loop too aggressively.
+
 ## 1. Single-blob capture in agent mode
 
 Current code in `src/components/chat/voice-agent.tsx`:

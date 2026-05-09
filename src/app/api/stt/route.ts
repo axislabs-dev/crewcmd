@@ -53,10 +53,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Write audio to temp file for local whisper
+    const audioFile = audio as Blob & { name?: string; type?: string };
+    const declaredMimeType = formData.get("mimeType");
+    const audioMimeType = typeof declaredMimeType === "string" ? declaredMimeType : audioFile.type;
+    const audioFilename = audioFile.name || getAudioFilenameForMime(audioMimeType);
+
+    // Write audio to temp file for local whisper using the browser's actual container.
     const audioBuffer = Buffer.from(await audio.arrayBuffer());
     const tempId = randomUUID();
-    const tempAudioPath = join(tmpdir(), `crewcmd-stt-${tempId}.webm`);
+    const tempAudioPath = join(tmpdir(), `crewcmd-stt-${tempId}.${getAudioExtension(audioFilename, audioMimeType)}`);
 
     // 1. Try local whisper CLI
     const localResult = await tryLocalWhisper(audioBuffer, tempAudioPath);
@@ -66,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Try OpenAI Whisper API
     if (OPENAI_API_KEY) {
-      const openaiResult = await tryOpenAIWhisper(audio);
+      const openaiResult = await tryOpenAIWhisper(audio, audioFilename);
       if (openaiResult) {
         return Response.json({ text: openaiResult, provider: "openai" });
       }
@@ -213,10 +218,27 @@ let whisperBinCache: WhisperBinInfo | null | undefined = undefined;
  * Try OpenAI Whisper API.
  * Returns transcribed text or null on failure.
  */
-async function tryOpenAIWhisper(audio: Blob): Promise<string | null> {
+function getAudioFilenameForMime(mimeType: string | undefined): string {
+  return `audio.${getAudioExtension(undefined, mimeType)}`;
+}
+
+function getAudioExtension(filename: string | undefined, mimeType: string | undefined): string {
+  const filenameExtension = filename?.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+  if (filenameExtension && /^[a-z0-9]+$/.test(filenameExtension)) {
+    return filenameExtension === "mp4" ? "m4a" : filenameExtension;
+  }
+
+  if (mimeType?.includes("mp4") || mimeType?.includes("m4a")) return "m4a";
+  if (mimeType?.includes("mpeg")) return "mp3";
+  if (mimeType?.includes("wav")) return "wav";
+  if (mimeType?.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+async function tryOpenAIWhisper(audio: Blob, filename: string): Promise<string | null> {
   try {
     const whisperForm = new FormData();
-    whisperForm.append("file", audio, "audio.webm");
+    whisperForm.append("file", audio, filename);
     whisperForm.append("model", "whisper-1");
     whisperForm.append("language", "en");
 

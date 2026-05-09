@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import sharp from "sharp";
 
 const [, , manifestArgFromCli] = process.argv;
@@ -208,5 +209,14 @@ fs.writeFileSync(
 
 await writeIosAppIcons();
 await writeIosSplashAssets();
+
+const iosAudioSessionResult = spawnSync(process.execPath, [path.join(appDir, "scripts", "ensure-ios-audio-session.mjs")], {
+  cwd: appDir,
+  stdio: "inherit",
+  env: process.env,
+});
+if (iosAudioSessionResult.status !== 0) {
+  throw new Error("Unable to apply iOS audio-session configuration.");
+}
 
 console.log(`Applied mobile branding manifest from ${path.relative(repoRoot, manifestPath)}`);

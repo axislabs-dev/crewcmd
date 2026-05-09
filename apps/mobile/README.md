@@ -34,3 +34,13 @@ When an iOS Capacitor project already exists under `apps/mobile/ios`, the brandi
 - renders the manifest icon into `Assets.xcassets/AppIcon.appiconset/` so Xcode picks up the branded home-screen icon automatically
 - renders the manifest splash artwork into `Assets.xcassets/Splash.imageset/`
 - rewrites `capacitor.config.json` with the branded app name, splash color, and `allowNavigation` host derived from the configured CrewCmd base URL
+- ensures `Info.plist` contains `NSMicrophoneUsageDescription` and `UIBackgroundModes = audio`
+- configures the iOS app delegate to start CrewCmd with an `AVAudioSession` category of `playAndRecord`, `voiceChat` mode, Bluetooth support, and default speaker output
+
+You can re-run just the native audio-session guard with:
+
+```bash
+pnpm ios:audio-session
+```
+
+The script is idempotent. If the iOS project has not been generated yet, it records the intended native audio-session contract in `.generated/ios-audio-session.json` so the next branding/sync pass can apply it.

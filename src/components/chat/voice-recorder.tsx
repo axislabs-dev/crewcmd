@@ -1,6 +1,13 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import {
+  buildMediaRecorderOptions,
+  createBrowserAudioContext,
+  getAudioBlobType,
+  getAudioFilenameForMime,
+  selectAudioRecorderFormat,
+} from "@/lib/audio-capture";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SpeechRecognitionInstance = any;
@@ -71,7 +78,7 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
   // VU meter animation loop
   const startVUMeter = useCallback((stream: MediaStream) => {
     try {
-      const audioContext = new AudioContext();
+      const audioContext = createBrowserAudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -178,11 +185,8 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
       startTimeRef.current = Date.now();
       startVUMeter(stream);
 
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : "audio/webm",
-      });
+      const recorderFormat = selectAudioRecorderFormat();
+      const recorder = new MediaRecorder(stream, buildMediaRecorderOptions(recorderFormat));
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -198,12 +202,16 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
         const duration = Date.now() - startTimeRef.current;
         if (duration < MIN_RECORDING_MS || chunksRef.current.length === 0) return;
 
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, {
+          type: getAudioBlobType(mediaRecorderRef.current?.mimeType, recorderFormat),
+        });
         setIsTranscribing(true);
 
         try {
           const formData = new FormData();
-          formData.append("audio", blob, "audio.webm");
+          const uploadMimeType = blob.type || recorderFormat.mimeType || "audio/webm";
+          formData.append("audio", blob, getAudioFilenameForMime(uploadMimeType, recorderFormat));
+          formData.append("mimeType", uploadMimeType);
 
           const response = await fetch("/api/stt", {
             method: "POST",

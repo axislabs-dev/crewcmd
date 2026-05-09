@@ -2388,7 +2388,7 @@ export default function ChatPage() {
         </div>
 
         {/* Scroll to bottom floating button */}
-        {showScrollButton && (
+        {showScrollButton && !showAddMenu && (
           <button
             onClick={scrollToBottom}
             className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-4 py-2 text-xs text-[var(--text-secondary)] shadow-lg transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)] animate-fade-in"
@@ -2568,7 +2568,7 @@ export default function ChatPage() {
                 </div>
 
                 {/* Scroll to bottom in agent mode */}
-                {showScrollButton && (
+                {showScrollButton && !showAddMenu && (
                   <button
                     onClick={scrollToBottom}
                     className="sticky bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/92 px-4 py-2 text-xs text-[var(--text-secondary)] shadow-[var(--theme-shadow)] backdrop-blur-sm transition-all hover:border-[var(--accent-medium)] hover:text-[var(--text-primary)] animate-fade-in"

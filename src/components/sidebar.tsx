@@ -344,7 +344,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      {mobileOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />}
+      {mobileOpen && <div className="fixed inset-0 z-40 bg-transparent lg:hidden" onClick={() => setMobileOpen(false)} />}
 
       <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col overflow-hidden border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] pt-[var(--mobile-safe-top)] shadow-[0_18px_44px_rgba(15,23,42,0.18)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="relative flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface-strong)_84%,var(--bg-primary)_16%)] px-5 py-4 backdrop-blur-xl">

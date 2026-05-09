@@ -2521,7 +2521,38 @@ export default function ChatPage() {
                       </div>
                     );
                   })}
-                  {isLoading && (
+                  {/* Execution progress */}
+                  {(isLoading || executionProgress) && (
+                    <ExecutionProgressPanel
+                      progress={executionProgress}
+                      events={executionEvents}
+                      isLoading={isLoading}
+                      hasStreamingContent={Boolean(streamingContent)}
+                      agentColor={agentColor}
+                    />
+                  )}
+
+                  {/* Streaming message */}
+                  {streamingContent && (
+                    <div>
+                      <ChatMessage
+                        role="assistant"
+                        content={streamingContent}
+                        isStreaming={true}
+                      />
+                      <button
+                        onClick={stopActiveRun}
+                        className="ml-11 mt-1 flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-secondary)]"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                          <rect x="3" y="3" width="10" height="10" rx="2" />
+                        </svg>
+                        Stop
+                      </button>
+                    </div>
+                  )}
+
+                  {isLoading && !executionProgress && !streamingContent && (
                     <div className="flex justify-center py-4">
                       <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow)]">
                         <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70" />

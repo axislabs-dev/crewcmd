@@ -60,6 +60,19 @@ export interface NativeClawhubInstallRequest {
   force?: boolean;
 }
 
+function isSkillAlreadyExistsError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /skill already exists at /i.test(error.message);
+}
+
+function extractExistingSkillPath(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const match = error.message.match(
+    /skill already exists at (.+?)(?:\. Re-run|$)/i,
+  );
+  return match?.[1]?.trim() || undefined;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────
 
 /**
@@ -519,12 +532,24 @@ async function syncSkillEntryViaGateway(params: {
     let nativeResult: SyncResult["nativeInstall"] | undefined;
     let nativeSkillPath = "";
     if (params.nativeInstall) {
-      const install = await client.skillsInstall({
-        source: "clawhub",
-        slug: params.nativeInstall.slug,
-        ...(params.nativeInstall.version ? { version: params.nativeInstall.version } : {}),
-        ...(typeof params.nativeInstall.force === "boolean" ? { force: params.nativeInstall.force } : {}),
-      });
+      let install;
+      try {
+        install = await client.skillsInstall({
+          source: "clawhub",
+          slug: params.nativeInstall.slug,
+          ...(params.nativeInstall.version ? { version: params.nativeInstall.version } : {}),
+          ...(typeof params.nativeInstall.force === "boolean" ? { force: params.nativeInstall.force } : {}),
+        });
+      } catch (error) {
+        if (!isSkillAlreadyExistsError(error)) throw error;
+        install = {
+          ok: true,
+          installed: true,
+          slug: params.nativeInstall.slug,
+          version: params.nativeInstall.version,
+          path: extractExistingSkillPath(error),
+        };
+      }
       nativeSkillPath = typeof install.path === "string" ? install.path : "";
       nativeResult = {
         provider: "clawhub",

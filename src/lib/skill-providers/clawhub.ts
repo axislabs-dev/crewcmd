@@ -155,6 +155,8 @@ export function normalizeClawhubEntry(
       "html_url",
     ]) || `${registryUrl}/skills/${slug}`;
   const trust = normalizeTrustMetadata(entry);
+  const moderation = normalizeModerationMetadata(entry);
+  const security = normalizeSecurityMetadata(entry);
   const update = normalizeUpdateMetadata(entry, version ?? "");
   const stats = normalizeStatsMetadata(entry);
   const updatedAt =
@@ -184,6 +186,8 @@ export function normalizeClawhubEntry(
         version: version ?? undefined,
       },
       trust,
+      moderation,
+      security,
       update,
       stats,
       updatedAt,
@@ -240,8 +244,11 @@ function extractNextCursor(data: unknown): string | null {
 
 function normalizeTrustMetadata(entry: ClawhubEntry): SkillProviderTrust {
   const trust = isObject(entry.trust) ? entry.trust : {};
+  const moderation = isObject(entry.moderation) ? entry.moderation : {};
+  const security = isObject(entry.security) ? entry.security : {};
   const rawLevel =
     readString(trust, ["level"]) ||
+    readString(security, ["level", "riskLevel", "risk_level"]) ||
     readString(entry, ["trustLevel", "trust_level"]);
   const isOfficial =
     readBoolean(trust, ["isOfficial", "official"]) ??
@@ -261,6 +268,8 @@ function normalizeTrustMetadata(entry: ClawhubEntry): SkillProviderTrust {
       readString(entry, ["verificationTier", "verification_tier"]),
     scanStatus:
       readString(trust, ["scanStatus", "scan_status"]) ||
+      readString(security, ["scanStatus", "scan_status", "status"]) ||
+      readString(moderation, ["scanStatus", "scan_status", "status"]) ||
       readString(entry, ["scanStatus", "scan_status"]),
     sourceRepo:
       readString(trust, ["sourceRepo", "source_repo"]) ||
@@ -274,6 +283,65 @@ function normalizeTrustMetadata(entry: ClawhubEntry): SkillProviderTrust {
     warnings:
       readStringArray(trust.warnings) || readStringArray(entry.warnings) || [],
   };
+}
+
+function normalizeModerationMetadata(
+  entry: ClawhubEntry,
+): Record<string, unknown> | null {
+  const moderation = isObject(entry.moderation) ? entry.moderation : null;
+  if (!moderation) return null;
+
+  const normalized: Record<string, unknown> = {};
+  for (const key of [
+    "status",
+    "scanStatus",
+    "scan_status",
+    "result",
+    "reviewedAt",
+    "reviewed_at",
+  ] as const) {
+    const value = moderation[key];
+    if (typeof value === "string" && value.trim()) normalized[key] = value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) normalized[key] = value;
+    if (typeof value === "boolean") normalized[key] = value;
+  }
+  const warnings = readStringArray(moderation.warnings);
+  if (warnings) normalized.warnings = warnings;
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function normalizeSecurityMetadata(
+  entry: ClawhubEntry,
+): Record<string, unknown> | null {
+  const security = isObject(entry.security) ? entry.security : {};
+  const moderation = isObject(entry.moderation) ? entry.moderation : {};
+  const score =
+    readNumber(security, ["score", "securityScore", "security_score"]) ??
+    readNumber(moderation, ["score", "securityScore", "security_score"]) ??
+    readNumber(entry, ["securityScore", "security_score"]);
+  const scanStatus =
+    readString(security, ["scanStatus", "scan_status", "status"]) ||
+    readString(moderation, ["scanStatus", "scan_status", "status"]) ||
+    readString(entry, ["scanStatus", "scan_status"]);
+  const level =
+    readString(security, ["level", "riskLevel", "risk_level"]) ||
+    readString(entry, [
+      "securityLevel",
+      "security_level",
+      "riskLevel",
+      "risk_level",
+    ]);
+  const warnings =
+    readStringArray(security.warnings) ||
+    readStringArray(moderation.warnings) ||
+    readStringArray(entry.warnings);
+
+  const normalized: Record<string, unknown> = {};
+  if (score !== undefined) normalized.score = score;
+  if (scanStatus) normalized.scanStatus = scanStatus;
+  if (level) normalized.level = level;
+  if (warnings) normalized.warnings = warnings;
+  return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
 function normalizeUpdateMetadata(

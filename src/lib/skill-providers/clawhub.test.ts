@@ -25,6 +25,15 @@ describe("Clawhub skill catalog provider", () => {
           has_provenance: true,
           warnings: ["requires OAuth"],
         },
+        moderation: {
+          status: "reviewed",
+          warnings: ["external network access"],
+        },
+        security: {
+          score: 92,
+          scan_status: "passed",
+          level: "low-risk",
+        },
         latest_version: "1.2.4",
         supports_scripts: true,
       },
@@ -53,6 +62,15 @@ describe("Clawhub skill catalog provider", () => {
           sourceRepo: "https://github.com/axislabs/calendar-skill",
           hasProvenance: true,
           warnings: ["requires OAuth"],
+        },
+        moderation: {
+          status: "reviewed",
+          warnings: ["external network access"],
+        },
+        security: {
+          score: 92,
+          scanStatus: "passed",
+          level: "low-risk",
         },
         update: {
           status: "not-installed",

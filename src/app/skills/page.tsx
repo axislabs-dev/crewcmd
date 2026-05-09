@@ -134,6 +134,79 @@ function getMarketplaceSignals(ms: MarketplaceSkill): string[] {
   return signals;
 }
 
+function readMetadataString(
+  metadata: Record<string, unknown> | undefined,
+  section: string,
+  key: string,
+): string | null {
+  const record = getMetadataRecord(metadata, section);
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(
+  metadata: Record<string, unknown> | undefined,
+  section: string,
+  key: string,
+): number | null {
+  const record = getMetadataRecord(metadata, section);
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getMarketplaceSecuritySignals(ms: MarketplaceSkill): string[] {
+  const trust = getMetadataRecord(ms.metadata, "trust");
+  const signals: string[] = [];
+  const score = readMetadataNumber(ms.metadata, "security", "score");
+  const scanStatus =
+    readMetadataString(ms.metadata, "security", "scanStatus") ||
+    readMetadataString(ms.metadata, "trust", "scanStatus") ||
+    readMetadataString(ms.metadata, "moderation", "status");
+  const verificationTier = readMetadataString(
+    ms.metadata,
+    "trust",
+    "verificationTier",
+  );
+  const trustLevel = readMetadataString(ms.metadata, "trust", "level");
+
+  signals.push(
+    score === null ? "Security score: not published" : `Security score: ${score}`,
+  );
+  signals.push(
+    scanStatus
+      ? `Security scan: ${scanStatus}`
+      : "Security scan: not published",
+  );
+  if (verificationTier) signals.push(`Verification: ${verificationTier}`);
+  else if (trustLevel) signals.push(`Trust: ${trustLevel}`);
+  if (trust?.hasProvenance === true) signals.push("Provenance: available");
+  if (trust?.hasProvenance === false) signals.push("Provenance: not published");
+  return signals;
+}
+
+function getMarketplaceWarnings(ms: MarketplaceSkill): string[] {
+  const trust = getMetadataRecord(ms.metadata, "trust");
+  const security = getMetadataRecord(ms.metadata, "security");
+  const moderation = getMetadataRecord(ms.metadata, "moderation");
+  for (const value of [trust?.warnings, security?.warnings, moderation?.warnings]) {
+    if (Array.isArray(value)) {
+      return value.filter(
+        (warning): warning is string =>
+          typeof warning === "string" && Boolean(warning.trim()),
+      );
+    }
+  }
+  return [];
+}
+
+function getMarketplaceExternalUrl(ms: MarketplaceSkill): string {
+  if (ms.source !== "clawhub") return ms.sourceUrl;
+  const registryUrl = readMetadataString(ms.metadata, "provider", "registryUrl");
+  const skillId = readMetadataString(ms.metadata, "provider", "skillId") || ms.slug;
+  if (!registryUrl || !skillId) return ms.sourceUrl;
+  return `${registryUrl.replace(/\/$/, "")}/skills/${encodeURIComponent(skillId)}`;
+}
+
 function getMarketplaceSortLabel(search: string): string {
   if (search.trim())
     return "Search results are relevance-ranked by ClawHub; cards show version and marketplace signals when available.";
@@ -1345,16 +1418,52 @@ export default function SkillsPage() {
               </div>
             </div>
 
-            <p className="mt-3 font-mono text-[10px] text-[var(--text-tertiary)]">
-              Source: {selectedMarketplace.sourceUrl}
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] text-[var(--text-tertiary)]">
+              <span>Source:</span>
+              <a
+                href={getMarketplaceExternalUrl(selectedMarketplace)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[var(--accent)] underline decoration-[var(--accent-medium)] underline-offset-2 hover:text-[var(--accent-strong)]"
+              >
+                {selectedMarketplace.source === "clawhub"
+                  ? "Open on ClawHub ↗"
+                  : "Open source page ↗"}
+              </a>
+            </div>
 
-            <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+            <div className="mt-6 space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
                 ClawHub skills install natively through the selected OpenClaw
                 gateway, then CrewCMD records the provider metadata and install
                 status.
               </p>
+              <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-3">
+                <p className="font-mono text-[10px] font-semibold tracking-wider text-[var(--text-secondary)]">
+                  TRUST & SECURITY
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {getMarketplaceSecuritySignals(selectedMarketplace).map(
+                    (signal) => (
+                      <span
+                        key={signal}
+                        className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)]"
+                      >
+                        {signal}
+                      </span>
+                    ),
+                  )}
+                </div>
+                {getMarketplaceWarnings(selectedMarketplace).length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-4 font-mono text-[9px] text-amber-300">
+                    {getMarketplaceWarnings(selectedMarketplace).map(
+                      (warning) => (
+                        <li key={warning}>{warning}</li>
+                      ),
+                    )}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -26,6 +26,8 @@ const generatedDir = path.join(appDir, outputDirName);
 fs.mkdirSync(generatedDir, { recursive: true });
 const channel = process.env.CREWCMD_MOBILE_CHANNEL || manifest.distribution.channel;
 const iconSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.iconPath);
+const iconLightSourcePath = resolveOptionalBrandingAsset("iconLightPath", iconSourcePath, "light");
+const iconDarkSourcePath = resolveOptionalBrandingAsset("iconDarkPath", iconSourcePath, "dark");
 const splashSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.splashPath);
 const defaultBaseUrl = parseDefaultBaseUrl(manifest.server.defaultBaseUrl);
 const allowedNavigationHost = defaultBaseUrl.hostname;
@@ -46,6 +48,17 @@ function requireSourceFile(sourcePath, label) {
   if (!fs.existsSync(sourcePath)) {
     throw new Error(`${label} source not found: ${sourcePath}`);
   }
+}
+
+function resolveOptionalBrandingAsset(manifestKey, fallbackSourcePath, suffix) {
+  const manifestValue = manifest.branding[manifestKey];
+  if (manifestValue) {
+    return path.resolve(path.dirname(manifestPath), manifestValue);
+  }
+
+  const parsedPath = path.parse(fallbackSourcePath);
+  const siblingPath = path.join(parsedPath.dir, `${parsedPath.name}-${suffix}${parsedPath.ext}`);
+  return fs.existsSync(siblingPath) ? siblingPath : null;
 }
 
 function copyWebBrandAsset(sourcePath, outputName) {
@@ -74,26 +87,39 @@ async function writeIosAppIcons() {
   const appIconSetDir = path.join(assetCatalogDir, "AppIcon.appiconset");
   fs.mkdirSync(appIconSetDir, { recursive: true });
 
-  const iconFilename = "AppIcon-512@2x.png";
-  const iconOutputPath = path.join(appIconSetDir, iconFilename);
+  const iconSources = [
+    { filename: "AppIcon-512@2x.png", sourcePath: iconSourcePath },
+    { filename: "AppIcon-Light-512@2x.png", sourcePath: iconLightSourcePath, luminosity: "light" },
+    { filename: "AppIcon-Dark-512@2x.png", sourcePath: iconDarkSourcePath, luminosity: "dark" },
+  ].filter((icon) => icon.sourcePath);
 
-  await sharp(iconSourcePath)
-    .resize(1024, 1024, {
-      fit: "contain",
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .png()
-    .toFile(iconOutputPath);
+  for (const icon of iconSources) {
+    await sharp(icon.sourcePath)
+      .resize(1024, 1024, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toFile(path.join(appIconSetDir, icon.filename));
+  }
 
   writeJsonFile(path.join(appIconSetDir, "Contents.json"), {
-    images: [
-      {
-        filename: iconFilename,
-        idiom: "universal",
-        platform: "ios",
-        size: "1024x1024",
-      },
-    ],
+    images: iconSources.map((icon) => ({
+      filename: icon.filename,
+      idiom: "universal",
+      platform: "ios",
+      size: "1024x1024",
+      ...(icon.luminosity
+        ? {
+            appearances: [
+              {
+                appearance: "luminosity",
+                value: icon.luminosity,
+              },
+            ],
+          }
+        : {}),
+    })),
     info: {
       author: "xcode",
       version: 1,
@@ -209,6 +235,8 @@ fs.writeFileSync(path.join(generatedDir, "distribution-summary.md"), nativeMetad
 
 const webBrandAssets = {
   iconPath: copyWebBrandAsset(iconSourcePath, "icon"),
+  iconLightPath: iconLightSourcePath ? copyWebBrandAsset(iconLightSourcePath, "icon-light") : null,
+  iconDarkPath: iconDarkSourcePath ? copyWebBrandAsset(iconDarkSourcePath, "icon-dark") : null,
   splashPath: copyWebBrandAsset(splashSourcePath, "splash")
 };
 
@@ -228,6 +256,8 @@ const webConfig = {
   deepLinkScheme: manifest.deepLinks.scheme,
   deepLinkHost: manifest.deepLinks.host,
   iconPath: webBrandAssets.iconPath,
+  iconLightPath: webBrandAssets.iconLightPath,
+  iconDarkPath: webBrandAssets.iconDarkPath,
   splashPath: webBrandAssets.splashPath
 };
 

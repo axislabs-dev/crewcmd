@@ -12,6 +12,8 @@
     "primaryColor": "#0A7B83",
     "secondaryColor": "#F7B500",
     "iconPath": "./branding/icon.svg",
+    "iconLightPath": "./branding/icon-light.svg",
+    "iconDarkPath": "./branding/icon-dark.svg",
     "splashPath": "./branding/splash.svg"
   },
   "distribution": {

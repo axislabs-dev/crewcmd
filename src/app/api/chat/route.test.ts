@@ -474,6 +474,52 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("data: [DONE]");
   });
 
+  it("keeps waiting when a chat final has no assistant text before any tool activity", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn().mockResolvedValue({ messages: [] }),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "how did it go?" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    const first = await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "" },
+    });
+
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { content: "actual answer" },
+    });
+
+    const streamed = first + await readUntilDone(reader);
+    expect(streamed).toContain("\"event\":\"gateway_send_started\"");
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"actual answer\"}}]");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
   it("finishes after deferred tool completion when history later has assistant text", async () => {
     vi.useFakeTimers();
     try {
@@ -804,6 +850,12 @@ describe("POST /api/chat", () => {
         sessionKey: "main",
         runId: "run-1",
         message: { content: "" },
+      });
+      chatHandlers[0]({
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { content: "answer after timeout" },
       });
       await readUntilDone(reader);
 

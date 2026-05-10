@@ -191,6 +191,7 @@ function updateUI() {
   const hasBootstrap = Boolean(bootstrap?.serverUrl);
 
   elements.appName.textContent = activeBrand?.displayName || "CrewCmd Mobile";
+  elements.brandIcon.src = brand?.iconPath || "";
   elements.orgName.textContent = hasBootstrap ? bootstrap.orgName : "Not configured";
   elements.serverUrl.textContent = hasBootstrap ? bootstrap.serverUrl : "No server selected";
   elements.profileId.textContent = hasBootstrap ? bootstrap.profileId : "Not configured";
@@ -394,6 +395,7 @@ async function handleInitialUrl() {
 function cacheElements() {
   elements.appShell = document.querySelector(".app-shell");
   elements.appName = $("app-name");
+  elements.brandIcon = $("brand-icon");
   elements.orgName = $("org-name");
   elements.serverUrl = $("server-url");
   elements.profileId = $("profile-id");

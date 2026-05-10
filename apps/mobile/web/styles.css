@@ -51,41 +51,16 @@ body {
   height: 52px;
   display: grid;
   place-items: center;
-  position: relative;
   border-radius: 8px;
-  background: #f4f1eb;
-  color: #111113;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
 }
 
-.brand-c {
-  position: absolute;
-  left: 9px;
-  top: 7px;
-  font-size: 33px;
-  font-weight: 900;
-  letter-spacing: 0;
-  line-height: 1;
-}
-
-.brand-chevron {
-  position: absolute;
-  right: 10px;
-  top: 12px;
-  color: var(--accent);
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.brand-line {
-  position: absolute;
-  right: 11px;
-  bottom: 11px;
-  width: 19px;
-  height: 4px;
-  border-radius: 999px;
-  background: #111113;
+.brand-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .eyebrow,

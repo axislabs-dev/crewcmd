@@ -5,6 +5,7 @@
   "description": "CrewCmd mobile shell for self-hosted and enterprise distribution.",
   "scripts": {
     "brand": "CREWCMD_MOBILE_MANIFEST=../../docs/examples/mobile/org.mobile.example.json node scripts/apply-branding.mjs",
+    "brand:local": "CREWCMD_MOBILE_MANIFEST=./org.mobile.local.json node scripts/apply-branding.mjs",
     "brand:manifest": "node scripts/apply-branding.mjs",
     "check": "node scripts/check-web-assets.mjs",
     "ios:audio-session": "node scripts/ensure-ios-audio-session.mjs",

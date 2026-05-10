@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment } from "@/components/chat/chat-message";
@@ -88,6 +88,70 @@ const VOICE_CHECKIN_DELAY_MS = 30000;
 const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
 const VOICE_FAST_START_MIN_CHARS = 48;
 const VOICE_FAST_START_MAX_CHARS = 110;
+
+function useFileObjectUrl(file: File) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file.type.startsWith("image/")) {
+      setUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  return url;
+}
+
+const PendingFilePreview = memo(function PendingFilePreview({
+  file,
+  index,
+  onRemove,
+}: {
+  file: File;
+  index: number;
+  onRemove: (index: number) => void;
+}) {
+  const imageUrl = useFileObjectUrl(file);
+
+  return (
+    <div className="group relative">
+      {file.type.startsWith("image/") ? (
+        <div className="relative h-16 w-16 rounded-lg overflow-hidden border border-[var(--border-medium)]">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- object URLs for local previews should not route through Next Image.
+            <img
+              src={imageUrl}
+              alt={file.name}
+              className="h-full w-full object-cover"
+            />
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-2.5 py-1.5 text-[11px] text-[var(--text-secondary)]">
+          <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+          </svg>
+          <span className="max-w-[100px] truncate">{file.name}</span>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => onRemove(index)}
+        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--bg-primary)] border border-[var(--border-medium)] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
+        aria-label={`Remove ${file.name}`}
+      >
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+});
 const POCKET_SLIDE_COMPLETE = 0.86;
 
 type CapacitorPushToken = { value: string };
@@ -2700,32 +2764,12 @@ export default function ChatPage() {
             {pendingFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 px-4 pt-3">
                 {pendingFiles.map((file, i) => (
-                  <div key={i} className="group relative">
-                    {file.type.startsWith("image/") ? (
-                      <div className="relative h-16 w-16 rounded-lg overflow-hidden border border-[var(--border-medium)]">
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={file.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-2.5 py-1.5 text-[11px] text-[var(--text-secondary)]">
-                        <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                        </svg>
-                        <span className="max-w-[100px] truncate">{file.name}</span>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => removeFile(i)}
-                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--bg-primary)] border border-[var(--border-medium)] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
-                    >
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+                  <PendingFilePreview
+                    key={`${file.name}-${file.size}-${file.lastModified}-${i}`}
+                    file={file}
+                    index={i}
+                    onRemove={removeFile}
+                  />
                 ))}
               </div>
             )}

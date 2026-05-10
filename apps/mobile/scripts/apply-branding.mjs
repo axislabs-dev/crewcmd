@@ -169,6 +169,24 @@ async function writeIosSplashAssets() {
       author: "xcode",
     },
   });
+
+  ensureIosLaunchScreenAspectFit(iosAppDir);
+}
+
+function ensureIosLaunchScreenAspectFit(iosAppDir) {
+  const storyboardPath = path.join(iosAppDir, "Base.lproj", "LaunchScreen.storyboard");
+  if (!fs.existsSync(storyboardPath)) {
+    return;
+  }
+
+  let storyboard = fs.readFileSync(storyboardPath, "utf8");
+  storyboard = storyboard.replace(/contentMode="scaleAspectFill"/g, 'contentMode="scaleAspectFit"');
+  storyboard = storyboard.replace(
+    /<color key="backgroundColor" systemColor="systemBackgroundColor"\/>/g,
+    '<color key="backgroundColor" red="0.03921568627" green="0.03921568627" blue="0.04705882353" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>',
+  );
+
+  fs.writeFileSync(storyboardPath, storyboard);
 }
 
 const runtimeConfig = {

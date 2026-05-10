@@ -29,9 +29,4 @@
     <circle cx="1366" cy="1324" r="35" fill="#d7b56d" />
     <circle cx="1166" cy="1060" r="38" fill="#9fbeb8" />
   </g>
-
-  <g fill="#f4f1eb" font-family="Helvetica, Arial, sans-serif" text-anchor="middle">
-    <text x="1366" y="1780" font-size="42" font-weight="700" letter-spacing="0">CrewCmd</text>
-    <text x="1366" y="1834" font-size="18" letter-spacing="7" opacity="0.62">AGENT MODE</text>
-  </g>
 </svg>

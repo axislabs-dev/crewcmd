@@ -73,6 +73,14 @@
           "type": "string",
           "minLength": 1
         },
+        "iconLightPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "iconDarkPath": {
+          "type": "string",
+          "minLength": 1
+        },
         "splashPath": {
           "type": "string",
           "minLength": 1

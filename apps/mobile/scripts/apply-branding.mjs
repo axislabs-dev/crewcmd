@@ -278,4 +278,13 @@ if (iosAudioSessionResult.status !== 0) {
   throw new Error("Unable to apply iOS audio-session configuration.");
 }
 
+const iosVoiceSessionResult = spawnSync(process.execPath, [path.join(appDir, "scripts", "ensure-ios-voice-session.mjs")], {
+  cwd: appDir,
+  stdio: "inherit",
+  env: process.env,
+});
+if (iosVoiceSessionResult.status !== 0) {
+  throw new Error("Unable to apply iOS voice-session plugin configuration.");
+}
+
 console.log(`Applied mobile branding manifest from ${path.relative(repoRoot, manifestPath)}`);

@@ -36,11 +36,13 @@ When an iOS Capacitor project already exists under `apps/mobile/ios`, the brandi
 - rewrites `capacitor.config.json` with the branded app name, splash color, and `allowNavigation` host derived from the configured CrewCmd base URL
 - ensures `Info.plist` contains `NSMicrophoneUsageDescription` and `UIBackgroundModes = audio`
 - configures the iOS app delegate to start CrewCmd with an `AVAudioSession` category of `playAndRecord`, `voiceChat` mode, Bluetooth support, and default speaker output
+- installs the `CrewCmdVoiceSession` Capacitor plugin skeleton for native iOS microphone-session diagnostics when an iOS project is present
 
-You can re-run just the native audio-session guard with:
+You can re-run just the native guards with:
 
 ```bash
 pnpm ios:audio-session
+pnpm ios:voice-session
 ```
 
-The script is idempotent. If the iOS project has not been generated yet, it records the intended native audio-session contract in `.generated/ios-audio-session.json` so the next branding/sync pass can apply it.
+Both scripts are idempotent. If the iOS project has not been generated yet, they record the intended native contracts in `.generated/ios-audio-session.json` and `.generated/ios-voice-session.json` so the next branding/sync pass can apply them.

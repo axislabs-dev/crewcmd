@@ -647,26 +647,7 @@ export default function ChatPage() {
     if (voiceMode !== "agent") {
       resetPocketSlide();
       setAgentPocketLocked(false);
-      return;
     }
-
-    const lockForResume = () => {
-      resetPocketSlide();
-      setAgentPocketLocked(true);
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        lockForResume();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", lockForResume);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", lockForResume);
-    };
   }, [voiceMode, resetPocketSlide]);
 
   // Derive session key: if a gateway session is selected, use it;
@@ -2669,7 +2650,7 @@ export default function ChatPage() {
                   Pocket lock
                 </div>
                 <div className="mt-2 max-w-sm text-sm text-[var(--text-secondary)]">
-                  Agent mode stays live. Slide deliberately to unlock.
+                  Agent mode stays live while CrewCMD remains foregrounded. Slide deliberately to unlock.
                 </div>
 
                 <div

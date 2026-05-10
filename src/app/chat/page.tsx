@@ -320,6 +320,32 @@ function selectedSessionBelongsToAgent(
   return key === agent || key.startsWith(`${agent}:`);
 }
 
+function chatMessageFromStore(message: ChatStoreMessage): Message {
+  return {
+    id: message.id,
+    role: message.role as "user" | "assistant",
+    content: message.content,
+    createdAt: message.createdAt,
+    metadata: message.metadata,
+  };
+}
+
+function selectStoreMessagesForKeys(
+  messagesByAgent: Record<string, ChatStoreMessage[]>,
+  keys: string[],
+) {
+  const byId = new Map<string, ChatStoreMessage>();
+  for (const key of keys) {
+    for (const message of messagesByAgent[key.toLowerCase()] || []) {
+      byId.set(message.id, message);
+    }
+  }
+
+  return Array.from(byId.values()).sort((a, b) =>
+    (a.createdAt || "").localeCompare(b.createdAt || "")
+  );
+}
+
 function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
   if (runtimeRef === "main") return "main";
@@ -656,6 +682,20 @@ export default function ChatPage() {
     () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
     [selectedSessionKey, selectedAgent]
   );
+  const activeStoreKeys = useMemo(() => {
+    const keys = [activeSessionKey.toLowerCase()];
+    const agentKey = selectedAgent?.callsign.toLowerCase();
+    if (agentKey && selectedSessionBelongsToAgent(activeSessionKey, agentKey)) {
+      keys.push(agentKey);
+    }
+    return Array.from(new Set(keys));
+  }, [activeSessionKey, selectedAgent?.callsign]);
+  const getActiveStoreMessages = useCallback(() => {
+    return selectStoreMessagesForKeys(
+      useChatStore.getState().messagesByAgent,
+      activeStoreKeys,
+    );
+  }, [activeStoreKeys]);
   const applyExecutionSnapshot = useCallback((snapshot: ChatExecutionSnapshot) => {
     const progress = snapshot?.progress ?? null;
     const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
@@ -725,7 +765,13 @@ export default function ChatPage() {
 
     const matchesActiveSession = (event: ExecutionProgressEvent & { sessionKey?: string; agentId?: string }) => {
       const active = activeSessionKey.toLowerCase();
-      return event.sessionKey?.toLowerCase() === active || event.agentId?.toLowerCase() === active;
+      const eventSession = event.sessionKey?.toLowerCase();
+      const eventAgent = event.agentId?.toLowerCase();
+      return eventSession === active ||
+        eventAgent === active ||
+        (eventSession ? selectedSessionBelongsToAgent(eventSession, active) : false) ||
+        (eventSession ? selectedSessionBelongsToAgent(activeSessionKey, eventSession) : false) ||
+        (eventAgent ? selectedSessionBelongsToAgent(activeSessionKey, eventAgent) : false);
     };
 
     const handleProgress = (customEvent: Event) => {
@@ -825,15 +871,9 @@ export default function ChatPage() {
     const agentId = selectedAgent?.callsign || activeSessionKey;
 
     // Read whatever the store already has (from SSE)
-    const storeMessages = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
+    const storeMessages = getActiveStoreMessages();
     if (storeMessages.length > 0 && !cancelled) {
-      setMessages(storeMessages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        content: m.content,
-        createdAt: m.createdAt,
-        metadata: m.metadata,
-      })));
+      setMessages(storeMessages.map(chatMessageFromStore));
     } else {
       setMessages([]);
     }
@@ -845,15 +885,9 @@ export default function ChatPage() {
         loadCrewCmdSessionHistoryByKey(selectedSessionKey, company?.id).then(async (result) => {
           const loaded = result ?? (await loadSessionPreviewIntoStore(selectedSessionKey).then((ok) => ok ? null : null));
           if (cancelled) return;
-          const updated = useChatStore.getState().messagesByAgent[selectedSessionKey.toLowerCase()] || [];
+          const updated = getActiveStoreMessages();
           if (updated.length > 0) {
-            setMessages(updated.map((m) => ({
-              id: m.id,
-              role: m.role as "user" | "assistant",
-              content: m.content,
-              createdAt: m.createdAt,
-              metadata: m.metadata,
-            })));
+            setMessages(updated.map(chatMessageFromStore));
           }
           if (loaded?.execution) applyExecutionSnapshot(loaded.execution);
         });
@@ -863,14 +897,8 @@ export default function ChatPage() {
       loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
       loadThreadHistoryIntoStore(agentId, company?.id).then((result) => {
         if (cancelled) return;
-        const updated = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
-        setMessages(updated.map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          createdAt: m.createdAt,
-          metadata: m.metadata,
-        })));
+        const updated = getActiveStoreMessages();
+        setMessages(updated.map(chatMessageFromStore));
         if (result?.execution) applyExecutionSnapshot(result.execution);
       });
     }
@@ -879,27 +907,21 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id, applyExecutionSnapshot]);
+  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id, applyExecutionSnapshot, getActiveStoreMessages]);
 
   const refreshSessionPreview = useCallback(async (sessionKey: string) => {
     const loaded = await loadSessionPreviewIntoStore(sessionKey);
     if (!loaded) return false;
 
     const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
-    setMessages(updated.map((m) => ({
-      id: m.id,
-      role: m.role as "user" | "assistant",
-      content: m.content,
-      createdAt: m.createdAt,
-      metadata: m.metadata,
-    })));
+    setMessages(updated.map(chatMessageFromStore));
     return true;
   }, []);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
     const unsub = useChatStore.subscribe((state) => {
-      const storeMessages = state.messagesByAgent[activeSessionKey.toLowerCase()] || [];
+      const storeMessages = selectStoreMessagesForKeys(state.messagesByAgent, activeStoreKeys);
       setMessages((prev) => {
         // Only update if store has messages we don't have
         if (storeMessages.length <= prev.length) {
@@ -924,13 +946,7 @@ export default function ChatPage() {
             !storeContentKeys.has(`${m.role}::${m.content}`)
         );
         const merged = [
-          ...storeMessages.map((m) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            createdAt: m.createdAt,
-            metadata: m.metadata,
-          })),
+          ...storeMessages.map(chatMessageFromStore),
           ...optimistic,
         ].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 
@@ -938,7 +954,7 @@ export default function ChatPage() {
       });
     });
     return unsub;
-  }, [activeSessionKey]);
+  }, [activeStoreKeys]);
 
   // Check if user is near bottom of scroll container
   const isNearBottom = useCallback(() => {

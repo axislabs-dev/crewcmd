@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatRuns, chatSessions } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
@@ -73,11 +73,28 @@ async function resolveSessionId(
 ): Promise<string> {
   const agentLower = agentId.toLowerCase();
 
+  if (gatewaySessionKey) {
+    const existingByGatewayKey = await withRetry(() =>
+      db!.select().from(chatSessions)
+        .where(and(
+          eq(chatSessions.gatewaySessionKey, gatewaySessionKey),
+          eq(chatSessions.companyId, companyId)
+        ))
+        .orderBy(desc(chatSessions.updatedAt))
+        .limit(1)
+    );
+
+    if (existingByGatewayKey.length > 0) {
+      return existingByGatewayKey[0].id;
+    }
+  }
+
   const existing = await withRetry(() =>
     db!.select().from(chatSessions)
       .where(and(
         eq(chatSessions.agentId, agentLower),
-        eq(chatSessions.companyId, companyId)
+        eq(chatSessions.companyId, companyId),
+        isNull(chatSessions.gatewaySessionKey)
       ))
       .orderBy(desc(chatSessions.updatedAt))
       .limit(1)
@@ -599,6 +616,7 @@ async function persistAndPublish(
   content: string,
   metadata?: Record<string, unknown> | null,
   interrupted?: boolean,
+  gatewaySessionKey?: string | null,
 ) {
   const [message] = await withRetry(() =>
     db!.insert(chatMessages).values({
@@ -621,6 +639,7 @@ async function persistAndPublish(
     sessionId,
     agentId: agentId.toLowerCase(),
     companyId,
+    sessionKey: gatewaySessionKey || null,
     role,
     content,
     metadata: metadata || null,
@@ -715,6 +734,8 @@ export async function POST(request: NextRequest) {
           "user",
           lastUserMessage.content,
           body.metadata || null,
+          false,
+          sessionKey,
         );
         userMessageId = userMsg.id;
         if (currentUser) {
@@ -1123,6 +1144,7 @@ export async function POST(request: NextRequest) {
           content,
           null,
           interrupted,
+          sessionKey,
         );
         assistantMessageId = msg.id;
         // Send assistant message ID to client as a meta event

@@ -1038,12 +1038,12 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    const deferToolCompletionUntilAssistantText = (reason: string) => {
+    const deferCompletionUntilAssistantText = (reason: string, markToolActivity = false) => {
       deferredToolCompletion = true;
-      hasToolActivity = true;
+      if (markToolActivity) hasToolActivity = true;
       publishAgentModeDiagnostic({
         scope: "api-chat",
-        event: "stream.finish.defer-tool-assistant",
+        event: "stream.finish.defer-assistant",
         sessionId: diagnosticSessionId,
         detail: {
           activeRunId,
@@ -1074,7 +1074,7 @@ export async function POST(request: NextRequest) {
       });
       await recoverMissingAssistantText();
       if (!interrupted && progressEvent === "run_completed" && hasToolActivity && !fullAssistantText) {
-        deferToolCompletionUntilAssistantText("tool-completion-without-assistant");
+        deferCompletionUntilAssistantText("tool-completion-without-assistant", true);
         return;
       }
       clearInactivityTimeout();
@@ -1266,18 +1266,27 @@ export async function POST(request: NextRequest) {
         if (finalText && !streamAssistantSnapshot(finalText)) {
           fullAssistantText = finalText;
         }
-        if (toolOnlyFinal || (!finalText && hasToolActivity && !fullAssistantText)) {
+        if (!finalText && !fullAssistantText) {
           publishAgentModeDiagnostic({
             scope: "api-chat",
-            event: toolOnlyFinal ? "chat-final.tool-only" : "chat-final.empty-after-tool",
+            event: toolOnlyFinal
+              ? "chat-final.tool-only"
+              : hasToolActivity
+                ? "chat-final.empty-after-tool"
+                : "chat-final.empty",
             sessionId: diagnosticSessionId,
             detail: {
               activeRunId,
               elapsedMs: Date.now() - requestStartedAt,
             },
           });
-          deferToolCompletionUntilAssistantText(
-            toolOnlyFinal ? "tool-only-chat-final" : "empty-chat-final-after-tool"
+          deferCompletionUntilAssistantText(
+            toolOnlyFinal
+              ? "tool-only-chat-final"
+              : hasToolActivity
+                ? "empty-chat-final-after-tool"
+                : "empty-chat-final",
+            toolOnlyFinal,
           );
           return;
         }

@@ -57,6 +57,7 @@ certificates.pglite/
 /apps/mobile/node_modules
 /apps/mobile/dist
 /apps/mobile/.generated
+/apps/mobile/web/.generated
 /apps/mobile/org.mobile.local.json
 /apps/mobile/android
 /apps/mobile/ios

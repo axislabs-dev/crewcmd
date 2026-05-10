@@ -14,6 +14,13 @@ import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
 } from "@/lib/agent-mode-diagnostics";
+import {
+  addNativeVoiceSessionListener,
+  getNativeVoiceSessionAvailability,
+  setNativeVoiceSessionMuted,
+  startNativeVoiceSession,
+  stopNativeVoiceSession,
+} from "@/lib/native-voice-session";
 
 type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
@@ -66,6 +73,8 @@ export function VoiceAgent({
   const [isActive, setIsActive] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [nativeBackgroundCapable, setNativeBackgroundCapable] = useState(false);
+  const [nativeSessionActive, setNativeSessionActive] = useState(false);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -84,6 +93,8 @@ export function VoiceAgent({
   const isRecordingRef = useRef(false);
   const recordingStartTimeRef = useRef<number>(0);
   const discardRecordingRef = useRef(false);
+  const nativeVoiceSessionIdRef = useRef<string | null>(null);
+  const nativeSessionActiveRef = useRef(false);
 
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
@@ -364,14 +375,53 @@ export function VoiceAgent({
       },
     });
 
-    // mediaDevices requires a secure context (HTTPS or localhost)
+    const nativeAvailability = await getNativeVoiceSessionAvailability();
+    setNativeBackgroundCapable(nativeAvailability.backgroundCapable);
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "native-voice.availability",
+      sessionId,
+      detail: nativeAvailability,
+    });
+
+    if (nativeAvailability.available) {
+      try {
+        const nativeSession = await startNativeVoiceSession({
+          voiceSessionId: sessionId,
+          muted: isMicMuted,
+        });
+        nativeVoiceSessionIdRef.current = nativeSession?.voiceSessionId ?? sessionId;
+        nativeSessionActiveRef.current = Boolean(nativeSession?.status.active);
+        setNativeSessionActive(nativeSessionActiveRef.current);
+      } catch (error) {
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "native-voice.start.error",
+          sessionId,
+          detail: { message: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }
+
+    // mediaDevices requires a secure context (HTTPS or localhost). On native iOS,
+    // the CrewCmdVoiceSession plugin can still prove native background capture even
+    // when WebView recording is unavailable, but transcription remains web-backed
+    // until the native chunk upload phase lands.
     if (!navigator.mediaDevices) {
       publishAgentModeDiagnostic({
         scope: "voice-agent",
         event: "activate.unsupported",
         sessionId,
+        detail: { nativeBackgroundCapable: nativeAvailability.backgroundCapable },
       });
-      setError("Voice requires HTTPS. Access via localhost or run: pnpm dev:https");
+      if (nativeAvailability.available) {
+        await requestWakeLock();
+        setIsActive(true);
+        setState("listening");
+        setError("Native mic session active; web transcription is unavailable in this context.");
+      } else {
+        setError("Voice requires HTTPS. Access via localhost or run: pnpm dev:https");
+      }
       return;
     }
 
@@ -416,6 +466,7 @@ export function VoiceAgent({
         scope: "voice-agent",
         event: "activate.complete",
         sessionId,
+        detail: { nativeBackgroundCapable: nativeAvailability.backgroundCapable },
       });
     } catch (err) {
       console.error("[VoiceAgent] Mic error:", err);
@@ -425,7 +476,14 @@ export function VoiceAgent({
         sessionId,
         detail: { message: err instanceof Error ? err.message : String(err) },
       });
-      setError("Microphone access denied. Please allow mic access and retry.");
+      if (nativeAvailability.available) {
+        await requestWakeLock();
+        setIsActive(true);
+        setState("listening");
+        setError("Native mic session active; browser recording is unavailable until native upload is enabled.");
+      } else {
+        setError("Microphone access denied. Please allow mic access and retry.");
+      }
     }
   }, [isAgentMuted, isMicMuted, isPlayingAudio, requestWakeLock]);
 
@@ -439,10 +497,25 @@ export function VoiceAgent({
         hasStream: Boolean(streamRef.current),
         audioContextState: audioContextRef.current?.state ?? null,
         mediaRecorderState: mediaRecorderRef.current?.state ?? null,
+        nativeSessionActive: nativeSessionActiveRef.current,
         rafActive: Boolean(rafRef.current),
         vadFrames: vadFrameCountRef.current,
       },
     });
+
+    if (nativeSessionActiveRef.current) {
+      void stopNativeVoiceSession().catch((error) => {
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "native-voice.stop.error",
+          sessionId,
+          detail: { message: error instanceof Error ? error.message : String(error) },
+        });
+      });
+    }
+    nativeVoiceSessionIdRef.current = null;
+    nativeSessionActiveRef.current = false;
+    setNativeSessionActive(false);
     // Stop VAD loop
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
@@ -515,6 +588,16 @@ export function VoiceAgent({
     streamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !isMicMuted;
     });
+    if (nativeSessionActive) {
+      void setNativeVoiceSessionMuted(isMicMuted).catch((error) => {
+        publishAgentModeDiagnostic({
+          scope: "voice-agent",
+          event: "native-voice.mute.error",
+          sessionId: diagnosticSessionRef.current ?? undefined,
+          detail: { message: error instanceof Error ? error.message : String(error) },
+        });
+      });
+    }
     if (isMicMuted) {
       if (isRecordingRef.current) {
         discardRecordingRef.current = true;
@@ -524,7 +607,50 @@ export function VoiceAgent({
       silenceStartTimeRef.current = 0;
       setVolumeLevel(0);
     }
-  }, [isActive, isMicMuted, stopRecording]);
+  }, [isActive, isMicMuted, nativeSessionActive, stopRecording]);
+
+  useEffect(() => {
+    if (!nativeSessionActive) return;
+
+    let disposed = false;
+    const handles: Array<{ remove: () => Promise<void> }> = [];
+
+    const installListeners = async () => {
+      const levelHandle = await addNativeVoiceSessionListener("voiceLevel", (event) => {
+        if (disposed || !nativeSessionActive || isMicMuted || streamRef.current) return;
+        const level = typeof event.level === "number" ? event.level : 0;
+        setVolumeLevel(Math.max(0, Math.min(1, level)));
+      });
+      if (levelHandle) handles.push(levelHandle);
+
+      const diagnosticHandle = await addNativeVoiceSessionListener("voiceSessionDiagnostic", (event) => {
+        if (disposed) return;
+        publishAgentModeDiagnostic({
+          scope: "native-voice-session",
+          event: typeof event.event === "string" ? event.event : "native.event",
+          sessionId: nativeVoiceSessionIdRef.current ?? diagnosticSessionRef.current ?? undefined,
+          detail: event,
+        });
+      });
+      if (diagnosticHandle) handles.push(diagnosticHandle);
+    };
+
+    void installListeners().catch((error) => {
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "native-voice.listener.error",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: { message: error instanceof Error ? error.message : String(error) },
+      });
+    });
+
+    return () => {
+      disposed = true;
+      for (const handle of handles) {
+        void handle.remove();
+      }
+    };
+  }, [isMicMuted, nativeSessionActive]);
 
   // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
   useEffect(() => {
@@ -971,7 +1097,9 @@ export function VoiceAgent({
                 : state === "speaking"
                 ? "SPEAK TO INTERRUPT"
                 : state === "listening"
-                  ? "SPEAK NATURALLY"
+                  ? nativeSessionActive && nativeBackgroundCapable
+                    ? "NATIVE MIC SESSION ACTIVE"
+                    : "SPEAK NATURALLY"
                   : state === "processing"
                     ? "THINKING"
                   : ""}
@@ -1002,6 +1130,11 @@ export function VoiceAgent({
             Mic
           </button>
           <span className="h-4 w-px bg-[var(--border-subtle)]" />
+          {nativeSessionActive && nativeBackgroundCapable ? (
+            <span className="rounded-full bg-[var(--bg-surface-hover)] px-3 py-1.5 text-[9px] tracking-[0.18em] text-[var(--text-tertiary)]">
+              Native iOS
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={() => onAgentMutedChange?.(!isAgentMuted)}

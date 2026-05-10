@@ -87,8 +87,9 @@ async function writeIosAppIcons() {
   const appIconSetDir = path.join(assetCatalogDir, "AppIcon.appiconset");
   fs.mkdirSync(appIconSetDir, { recursive: true });
 
+  const defaultIconSourcePath = iconLightSourcePath || iconSourcePath;
   const iconSources = [
-    { filename: "AppIcon-512@2x.png", sourcePath: iconSourcePath },
+    { filename: "AppIcon-512@2x.png", sourcePath: defaultIconSourcePath },
     { filename: "AppIcon-Light-512@2x.png", sourcePath: iconLightSourcePath, luminosity: "light" },
     { filename: "AppIcon-Dark-512@2x.png", sourcePath: iconDarkSourcePath, luminosity: "dark" },
   ].filter((icon) => icon.sourcePath);

@@ -27,11 +27,39 @@ fs.mkdirSync(generatedDir, { recursive: true });
 const channel = process.env.CREWCMD_MOBILE_CHANNEL || manifest.distribution.channel;
 const iconSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.iconPath);
 const splashSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.splashPath);
-const defaultBaseUrl = new URL(manifest.server.defaultBaseUrl);
+const defaultBaseUrl = parseDefaultBaseUrl(manifest.server.defaultBaseUrl);
 const allowedNavigationHost = defaultBaseUrl.hostname;
 
 function writeJsonFile(targetPath, value) {
   fs.writeFileSync(targetPath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function parseDefaultBaseUrl(value) {
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(`server.defaultBaseUrl must be a full URL including http:// or https://. Received: ${value}`);
+  }
+}
+
+function requireSourceFile(sourcePath, label) {
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`${label} source not found: ${sourcePath}`);
+  }
+}
+
+function copyWebBrandAsset(sourcePath, outputName) {
+  requireSourceFile(sourcePath, outputName);
+
+  const extension = path.extname(sourcePath) || ".svg";
+  const webGeneratedDir = path.join(appDir, "web", ".generated", "branding");
+  const outputFile = `${outputName}${extension}`;
+  const outputPath = path.join(webGeneratedDir, outputFile);
+
+  fs.mkdirSync(webGeneratedDir, { recursive: true });
+  fs.copyFileSync(sourcePath, outputPath);
+
+  return `./.generated/branding/${outputFile}`;
 }
 
 async function writeIosAppIcons() {
@@ -40,9 +68,7 @@ async function writeIosAppIcons() {
     return;
   }
 
-  if (!fs.existsSync(iconSourcePath)) {
-    throw new Error(`Mobile icon source not found: ${iconSourcePath}`);
-  }
+  requireSourceFile(iconSourcePath, "Mobile icon");
 
   const assetCatalogDir = path.join(iosAppDir, "Assets.xcassets");
   const appIconSetDir = path.join(assetCatalogDir, "AppIcon.appiconset");
@@ -81,9 +107,7 @@ async function writeIosSplashAssets() {
     return;
   }
 
-  if (!fs.existsSync(splashSourcePath)) {
-    throw new Error(`Mobile splash source not found: ${splashSourcePath}`);
-  }
+  requireSourceFile(splashSourcePath, "Mobile splash");
 
   const assetCatalogDir = path.join(iosAppDir, "Assets.xcassets");
   const splashSetDir = path.join(assetCatalogDir, "Splash.imageset");
@@ -183,6 +207,11 @@ Distribution note: ${manifest.distribution.android.distributionNote}
 
 fs.writeFileSync(path.join(generatedDir, "distribution-summary.md"), nativeMetadata);
 
+const webBrandAssets = {
+  iconPath: copyWebBrandAsset(iconSourcePath, "icon"),
+  splashPath: copyWebBrandAsset(splashSourcePath, "splash")
+};
+
 const webConfig = {
   displayName: manifest.app.displayName,
   orgName: manifest.branding.orgName,
@@ -198,8 +227,8 @@ const webConfig = {
   environmentLabel: manifest.managedConfig.environmentLabel,
   deepLinkScheme: manifest.deepLinks.scheme,
   deepLinkHost: manifest.deepLinks.host,
-  iconPath: path.relative(path.join(appDir, "web"), path.resolve(path.dirname(manifestPath), manifest.branding.iconPath)),
-  splashPath: path.relative(path.join(appDir, "web"), path.resolve(path.dirname(manifestPath), manifest.branding.splashPath))
+  iconPath: webBrandAssets.iconPath,
+  splashPath: webBrandAssets.splashPath
 };
 
 fs.writeFileSync(

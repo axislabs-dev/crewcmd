@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
@@ -178,6 +177,7 @@ function ChatComposer({
   speakResponses,
   onToggleSpeak,
   onEnterAgentMode,
+  agentButtonTitle = "Enter agent mode (hands-free)",
   addMenuLabel = "Add to Chat",
   isDragOver = false,
   onDragOver,
@@ -196,6 +196,7 @@ function ChatComposer({
   speakResponses: boolean;
   onToggleSpeak: () => void;
   onEnterAgentMode: () => void;
+  agentButtonTitle?: string;
   addMenuLabel?: string;
   isDragOver?: boolean;
   onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -353,7 +354,7 @@ function ChatComposer({
             ) : (
               <button
                 onClick={onEnterAgentMode}
-                title="Enter agent mode (hands-free)"
+                title={agentButtonTitle}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
               >
                 <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -413,8 +414,6 @@ function ChatComposer({
     </>
   );
 }
-const POCKET_SLIDE_COMPLETE = 0.86;
-
 type CapacitorPushToken = { value: string };
 type CapacitorNotificationAction = { notification?: { data?: Record<string, unknown> } };
 type CapacitorPluginHandle = { remove: () => Promise<void> };
@@ -777,9 +776,6 @@ export default function ChatPage() {
   const [speakResponses, setSpeakResponses] = useState(false);
   const [agentMicMuted, setAgentMicMuted] = useState(false);
   const [agentAudioMuted, setAgentAudioMuted] = useState(false);
-  const [agentPocketLocked, setAgentPocketLocked] = useState(false);
-  const [pocketSlideProgress, setPocketSlideProgress] = useState(0);
-  const [isPocketSliding, setIsPocketSliding] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -814,7 +810,6 @@ export default function ChatPage() {
   const lastBusyReplyAtRef = useRef(0);
   const hasStartedResponseAudioRef = useRef(false);
   const pageHiddenDuringRequestRef = useRef(false);
-  const pocketSliderTrackRef = useRef<HTMLDivElement>(null);
   const voiceLatencyRef = useRef<{
     requestId: string;
     startedAt: number;
@@ -853,59 +848,6 @@ export default function ChatPage() {
     prefetchedAudioRef.current = null;
   }, [revokeAudioObjectUrl]);
 
-  const resetPocketSlide = useCallback(() => {
-    setIsPocketSliding(false);
-    setPocketSlideProgress(0);
-  }, []);
-
-  const updatePocketSlideFromPointer = useCallback((clientX: number) => {
-    const track = pocketSliderTrackRef.current;
-    if (!track) return 0;
-
-    const rect = track.getBoundingClientRect();
-    const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    setPocketSlideProgress(progress);
-    return progress;
-  }, []);
-
-  const completePocketUnlock = useCallback(() => {
-    setAgentPocketLocked(false);
-    resetPocketSlide();
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-      navigator.vibrate(12);
-    }
-  }, [resetPocketSlide]);
-
-  const handlePocketSliderPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 && event.pointerType === "mouse") return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    setIsPocketSliding(true);
-    updatePocketSlideFromPointer(event.clientX);
-  }, [updatePocketSlideFromPointer]);
-
-  const handlePocketSliderPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isPocketSliding) return;
-    event.preventDefault();
-    event.stopPropagation();
-    updatePocketSlideFromPointer(event.clientX);
-  }, [isPocketSliding, updatePocketSlideFromPointer]);
-
-  const handlePocketSliderPointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isPocketSliding) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const progress = updatePocketSlideFromPointer(event.clientX);
-    if (progress >= POCKET_SLIDE_COMPLETE) {
-      completePocketUnlock();
-      return;
-    }
-    resetPocketSlide();
-  }, [completePocketUnlock, isPocketSliding, resetPocketSlide, updatePocketSlideFromPointer]);
-
   const assignAudioObjectUrl = useCallback((url: string, reason: string) => {
     if (audioObjectUrlRef.current && audioObjectUrlRef.current !== url) {
       revokeAudioObjectUrl(audioObjectUrlRef.current, "replace-active-audio");
@@ -918,13 +860,6 @@ export default function ChatPage() {
       detail: { reason },
     });
   }, [revokeAudioObjectUrl]);
-
-  useEffect(() => {
-    if (voiceMode !== "agent") {
-      resetPocketSlide();
-      setAgentPocketLocked(false);
-    }
-  }, [voiceMode, resetPocketSlide]);
 
   // Derive session key: if a gateway session is selected, use it;
   // otherwise fall back to agent callsign
@@ -3102,47 +3037,17 @@ export default function ChatPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {agentOverlayMode === "immersive" ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          setSpeakResponses(true);
-                          setAgentPocketLocked(true);
-                        }}
-                        title="Pocket lock"
-                        aria-label="Pocket lock"
-                        className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setAgentOverlayMode("transcript")}
-                        title="Return to transcript mode"
-                        aria-label="Return to transcript mode"
-                        className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                      >
+                    <button
+                      onClick={() => setAgentOverlayMode("transcript")}
+                      title="Return to transcript mode"
+                      aria-label="Return to transcript mode"
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                    >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5H5.25A.75.75 0 0 0 4.5 5.25V9m10.5-4.5h3.75a.75.75 0 0 1 .75.75V9M9 19.5H5.25a.75.75 0 0 1-.75-.75V15m10.5 4.5h3.75a.75.75 0 0 0 .75-.75V15M8.25 8.25l-3.75-3.75m15 0-3.75 3.75m-7.5 7.5-3.75 3.75m15 0-3.75-3.75" />
                       </svg>
-                      </button>
-                    </>
+                    </button>
                   ) : null}
-                  <button
-                    onClick={() => {
-                      setVoiceMode("off");
-                      setAgentOverlayMode("transcript");
-                      setAgentMicMuted(false);
-                      setAgentAudioMuted(false);
-                      setAgentPocketLocked(false);
-                    }}
-                    className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-2 text-[11px] font-medium tracking-[0.24em] text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                    EXIT
-                  </button>
                 </div>
               </div>
             </div>
@@ -3300,19 +3205,6 @@ export default function ChatPage() {
                   <div className="relative mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
                     <div className="absolute right-2 top-2 flex items-center gap-1">
                       <button
-                        onClick={() => {
-                          setSpeakResponses(true);
-                          setAgentPocketLocked(true);
-                        }}
-                        title="Pocket lock"
-                        aria-label="Pocket lock"
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
-                        </svg>
-                      </button>
-                      <button
                         onClick={() => setAgentOverlayMode("immersive")}
                         title="Enter fullscreen visual mode"
                         aria-label="Enter fullscreen visual mode"
@@ -3358,83 +3250,18 @@ export default function ChatPage() {
                       if (speakResponses) stopAllAudio();
                       setSpeakResponses(!speakResponses);
                     }}
-                    onEnterAgentMode={() => setAgentOverlayMode("immersive")}
+                    onEnterAgentMode={() => {
+                      setVoiceMode("off");
+                      setAgentOverlayMode("transcript");
+                      setAgentMicMuted(false);
+                      setAgentAudioMuted(false);
+                    }}
+                    agentButtonTitle="Exit agent mode"
                     addMenuLabel={activeThread ? "Add to Thread" : "Add to Chat"}
                   />
                 </div>
               </div>
             ) : null}
-
-            {agentPocketLocked && (
-              <div
-                className="absolute inset-0 z-[70] flex select-none touch-none flex-col items-center justify-center bg-[var(--bg-primary)]/94 px-6 text-center backdrop-blur-xl [-webkit-touch-callout:none] [-webkit-user-select:none]"
-                onPointerDown={(event) => event.stopPropagation()}
-                onPointerMove={(event) => event.stopPropagation()}
-                onPointerUp={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-                onContextMenu={(event) => event.preventDefault()}
-                onTouchMove={(event) => event.preventDefault()}
-              >
-                <div
-                  className="mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-[var(--theme-shadow-lg)]"
-                  style={{ color: agentColor }}
-                  aria-hidden="true"
-                >
-                  <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
-                  </svg>
-                </div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--text-tertiary)]">
-                  Pocket lock
-                </div>
-                <div className="mt-2 max-w-sm text-sm text-[var(--text-secondary)]">
-                  Agent mode stays live while CrewCMD remains foregrounded. Slide deliberately to unlock.
-                </div>
-
-                <div
-                  ref={pocketSliderTrackRef}
-                  role="slider"
-                  aria-label="Slide to unlock pocket lock"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(pocketSlideProgress * 100)}
-                  tabIndex={0}
-                  onPointerDown={handlePocketSliderPointerDown}
-                  onPointerMove={handlePocketSliderPointerMove}
-                  onPointerUp={handlePocketSliderPointerEnd}
-                  onPointerCancel={resetPocketSlide}
-                  onLostPointerCapture={resetPocketSlide}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      completePocketUnlock();
-                    }
-                  }}
-                  className="relative mt-8 h-16 w-full max-w-[320px] overflow-hidden rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 p-1.5 text-left shadow-[var(--theme-shadow)] outline-none transition focus-visible:border-[var(--accent-medium)]"
-                  style={{ touchAction: "none" }}
-                >
-                  <div
-                    className="absolute inset-y-1.5 left-1.5 rounded-full transition-[width] duration-100 ease-out"
-                    style={{
-                      width: `calc(${Math.max(0.18, pocketSlideProgress) * 100}% - 0.75rem)`,
-                      background: "linear-gradient(90deg, var(--accent-soft), var(--accent-medium))",
-                    }}
-                  />
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
-                    {pocketSlideProgress >= POCKET_SLIDE_COMPLETE ? "Release to unlock" : "Slide to unlock"}
-                  </div>
-                  <div
-                    className="absolute top-1.5 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-[var(--theme-shadow-lg)] transition-transform duration-75 ease-out"
-                    style={{ left: `calc(${pocketSlideProgress * 100}% - ${pocketSlideProgress * 3.25}rem + 0.375rem)`, color: agentColor }}
-                    aria-hidden="true"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

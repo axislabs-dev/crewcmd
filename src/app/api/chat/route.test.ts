@@ -207,6 +207,55 @@ describe("POST /api/chat", () => {
     await reader.cancel();
   });
 
+  it("adds parent context to threaded chat sends", async () => {
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    const chatAbort = vi.fn(() => Promise.resolve());
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn(),
+      off: vi.fn(),
+      chatSend,
+      chatAbort,
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "Can you expand on that?" }],
+      agent: "main",
+      sessionKey: "main:thread:parent-1",
+      threadContext: {
+        parentSessionKey: "main",
+        threadSessionKey: "main:thread:parent-1",
+        parentMessage: {
+          role: "assistant",
+          content: "The build failed because the API returned 500.",
+        },
+        contextMessages: [
+          { role: "user", content: "How did the build go?" },
+          { role: "assistant", content: "The build failed because the API returned 500." },
+        ],
+      },
+    }));
+    const reader = response.body!.getReader();
+
+    await reader.read();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const sent = (chatSend.mock.calls as unknown[][])[0]?.[0] as { message: string } | undefined;
+    expect(sent).toBeDefined();
+    expect(chatSend).toHaveBeenCalledWith({
+      message: expect.stringContaining("CrewCMD threaded reply."),
+      sessionKey: "main:thread:parent-1",
+    });
+    expect(sent!.message).toContain("Parent session: main");
+    expect(sent!.message).toContain("Parent assistant message:");
+    expect(sent!.message).toContain("Nearby prior context:");
+    expect(sent!.message).toContain("User thread reply:");
+
+    await reader.cancel();
+  });
+
   it("streams structured progress events alongside OpenAI-compatible text deltas", async () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     const chatSend = vi.fn().mockResolvedValue({ runId: "run-1" });

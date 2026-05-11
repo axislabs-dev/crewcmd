@@ -164,6 +164,255 @@ const PendingFilePreview = memo(function PendingFilePreview({
     </div>
   );
 });
+
+function ChatComposer({
+  value,
+  onValueChange,
+  placeholder,
+  pendingFiles,
+  onAddFiles,
+  onRemoveFile,
+  onSend,
+  onTranscript,
+  isLoading,
+  speakResponses,
+  onToggleSpeak,
+  onEnterAgentMode,
+  addMenuLabel = "Add to Chat",
+  isDragOver = false,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder: string;
+  pendingFiles: File[];
+  onAddFiles: (files: FileList | File[]) => void;
+  onRemoveFile: (index: number) => void;
+  onSend: (value: string) => void;
+  onTranscript: (value: string) => void;
+  isLoading: boolean;
+  speakResponses: boolean;
+  onToggleSpeak: () => void;
+  onEnterAgentMode: () => void;
+  addMenuLabel?: string;
+  isDragOver?: boolean;
+  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+}) {
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.pdf,.txt,.md,.csv"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          if (event.target.files) onAddFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => {
+          if (event.target.files) onAddFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <div
+        className={`relative rounded-[var(--radius-panel)] border bg-[var(--bg-surface)] transition-colors focus-within:border-[var(--control-border-focus)] focus-within:bg-[var(--bg-surface-hover)] ${
+          isDragOver
+            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+            : "border-[var(--border-medium)]"
+        }`}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pt-3">
+            {pendingFiles.map((file, index) => (
+              <PendingFilePreview
+                key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                file={file}
+                index={index}
+                onRemove={onRemoveFile}
+              />
+            ))}
+          </div>
+        )}
+
+        {isDragOver && (
+          <div className="flex items-center justify-center px-4 py-3">
+            <span className="text-[12px] text-[var(--accent)]">Drop files to attach</span>
+          </div>
+        )}
+
+        <textarea
+          value={value}
+          onChange={(event) => {
+            onValueChange(event.target.value);
+            setShowAddMenu(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onSend(value);
+            }
+          }}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData.items)
+              .filter((item) => item.kind === "file")
+              .map((item) => item.getAsFile())
+              .filter((file): file is File => file !== null);
+            if (files.length) {
+              event.preventDefault();
+              onAddFiles(files);
+            }
+          }}
+          placeholder={placeholder}
+          rows={1}
+          className="w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] sm:text-[14px]"
+          style={{ maxHeight: "140px" }}
+          onInput={(event) => {
+            const target = event.target as HTMLTextAreaElement;
+            target.style.height = "auto";
+            target.style.height = `${Math.min(target.scrollHeight, 140)}px`;
+          }}
+        />
+
+        <div className="flex items-center justify-between px-2 pb-2 pt-1">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowAddMenu(!showAddMenu)}
+              title={addMenuLabel}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                showAddMenu
+                  ? "bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
+                  : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </button>
+
+            <button
+              onClick={onToggleSpeak}
+              title={speakResponses ? "Mute responses" : "Speak responses"}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                speakResponses
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                  : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              {speakResponses ? (
+                <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              ) : (
+                <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <VoiceRecorder
+              onTranscript={onTranscript}
+              isDisabled={isLoading}
+            />
+            {value.trim() || pendingFiles.length > 0 ? (
+              <button
+                onClick={() => onSend(value)}
+                disabled={isLoading}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-20"
+                title="Send message"
+                style={
+                  !isLoading
+                    ? { boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }
+                    : undefined
+                }
+              >
+                <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                onClick={onEnterAgentMode}
+                title="Enter agent mode (hands-free)"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+              >
+                <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showAddMenu && (
+          <div className="absolute bottom-full left-2 z-20 mb-2 w-64 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-xl backdrop-blur-xl animate-fade-in">
+            <div className="flex items-center justify-between px-4 pb-2 pt-3">
+              <span className="text-sm font-medium text-[var(--text-primary)]">{addMenuLabel}</span>
+              <button
+                onClick={() => setShowAddMenu(false)}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--text-tertiary)] transition-all hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex gap-2 px-4 pb-3">
+              <button
+                onClick={() => { cameraInputRef.current?.click(); setShowAddMenu(false); }}
+                className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
+                </svg>
+                <span className="text-[11px] font-medium">Camera</span>
+              </button>
+              <button
+                onClick={() => { fileInputRef.current?.setAttribute("accept", "image/*"); fileInputRef.current?.click(); setShowAddMenu(false); setTimeout(() => fileInputRef.current?.setAttribute("accept", "image/*,.pdf,.txt,.md,.csv"), 100); }}
+                className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Z" />
+                </svg>
+                <span className="text-[11px] font-medium">Image</span>
+              </button>
+              <button
+                onClick={() => { fileInputRef.current?.click(); setShowAddMenu(false); }}
+                className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+                <span className="text-[11px] font-medium">File</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
 const POCKET_SLIDE_COMPLETE = 0.86;
 
 type CapacitorPushToken = { value: string };
@@ -543,17 +792,14 @@ export default function ChatPage() {
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [threadPendingFiles, setThreadPendingFiles] = useState<File[]>([]);
   const [preferredAgentCallsign, setPreferredAgentCallsign] = useState<string | null>(null);
   const [preferredSessionKey, setPreferredSessionKey] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showAddMenu, setShowAddMenu] = useState(false);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const agentScrollContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
   const ttsSessionRef = useRef<string>(createAgentModeSessionId("tts"));
@@ -1704,8 +1950,17 @@ export default function ChatPage() {
     if (allowed.length) setPendingFiles((prev) => [...prev, ...allowed]);
   }, []);
 
+  const addThreadFiles = useCallback((files: FileList | File[]) => {
+    const allowed = Array.from(files).filter((f) => ACCEPTED_TYPES.includes(f.type) && f.size <= 10 * 1024 * 1024);
+    if (allowed.length) setThreadPendingFiles((prev) => [...prev, ...allowed]);
+  }, []);
+
   const removeFile = useCallback((index: number) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const removeThreadFile = useCallback((index: number) => {
+    setThreadPendingFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   /** Upload a single file and return attachment metadata */
@@ -2270,18 +2525,45 @@ export default function ChatPage() {
     [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview]
   );
 
-  const sendThreadMessage = useCallback(async () => {
+  const sendThreadMessage = useCallback(async (overrideContent?: string) => {
     const thread = activeThread;
-    const trimmed = threadInput.trim();
-    if (!thread || !trimmed || isThreadLoading) return;
+    const trimmed = (overrideContent ?? threadInput).trim();
+    const hasFiles = threadPendingFiles.length > 0;
+    if (!thread || (!trimmed && !hasFiles) || isThreadLoading) return;
+
+    let attachments: Attachment[] = [];
+    const filesToUpload = [...threadPendingFiles];
+    setThreadPendingFiles([]);
+
+    if (filesToUpload.length > 0) {
+      try {
+        attachments = await Promise.all(filesToUpload.map(uploadFile));
+      } catch (err) {
+        console.error("[chat] Thread file upload failed:", err);
+        setThreadPendingFiles(filesToUpload);
+        return;
+      }
+    }
+
+    let messageContent = trimmed;
+    if (attachments.length > 0) {
+      const refs = attachments.map((a) =>
+        a.mimeType.startsWith("image/")
+          ? `![${a.filename}](${a.url})`
+          : `[${a.filename}](${a.url})`
+      ).join("\n");
+      messageContent = messageContent ? `${messageContent}\n\n${refs}` : refs;
+    }
+
+    const metadata = attachments.length > 0 ? { attachments } : null;
 
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
     const userMsg: Message = {
       id: optimisticId,
       role: "user",
-      content: trimmed,
+      content: trimmed || "(attachments)",
       createdAt: new Date().toISOString(),
-      metadata: null,
+      metadata,
     };
     setThreadMessages((prev) => [...prev, userMsg]);
     setThreadInput("");
@@ -2304,7 +2586,7 @@ export default function ChatPage() {
           messages: [
             ...thread.contextMessages.map((message) => ({ role: message.role, content: message.content })),
             ...threadMessages.map((message) => ({ role: message.role, content: message.content })),
-            { role: "user", content: trimmed },
+            { role: "user", content: messageContent },
           ],
           agent: selectedAgent?.callsign,
           gatewayAgent: delegatedViaAgent?.callsign ?? selectedAgent?.callsign,
@@ -2317,7 +2599,7 @@ export default function ChatPage() {
               }
             : undefined,
           companyId: company?.id,
-          metadata: null,
+          metadata,
           sessionKey: thread.sessionKey,
           clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
           notifyOnCompletion: true,
@@ -2431,7 +2713,7 @@ export default function ChatPage() {
     } finally {
       setIsThreadLoading(false);
     }
-  }, [activeThread, company?.id, delegatedViaAgent, isThreadLoading, selectedAgent, threadInput, threadMessages]);
+  }, [activeThread, company?.id, delegatedViaAgent, isThreadLoading, selectedAgent, threadInput, threadMessages, threadPendingFiles]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {
@@ -2464,13 +2746,6 @@ export default function ChatPage() {
     },
     [stopAllAudio]
   );
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
-    }
-  };
 
   const clearChat = async () => {
     setMessages([]);
@@ -2567,15 +2842,26 @@ export default function ChatPage() {
 
       {activeThread && (
         <div className="fixed inset-0 z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:bg-black/10">
-          <section className="flex h-full w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[420px]">
-            <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Thread</div>
-                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{selectedAgent?.callsign ?? "Agent"}</div>
+          <section className="flex h-full w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[480px]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-3 pb-3 pt-[var(--mobile-safe-top)] sm:px-4 sm:pt-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  onClick={closeThread}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] sm:hidden"
+                  aria-label="Back to chat"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Thread</div>
+                  <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{selectedAgent?.callsign ?? "Agent"}</div>
+                </div>
               </div>
               <button
                 onClick={closeThread}
-                className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-2 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                className="hidden rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-2 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] sm:block"
                 aria-label="Close thread"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -2584,18 +2870,18 @@ export default function ChatPage() {
               </button>
             </header>
 
-            <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-4 py-3">
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Parent message</div>
-              <div className="line-clamp-4 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--text-secondary)]">
-                {activeThread.parentMessage.content}
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4">
               <div className="space-y-4">
+                <ChatMessage
+                  role={activeThread.parentMessage.role}
+                  content={activeThread.parentMessage.content}
+                  timestamp={activeThread.parentMessage.createdAt}
+                  metadata={activeThread.parentMessage.metadata}
+                />
+                <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
                 {threadMessages.length === 0 && !threadStreamingContent && !isThreadLoading && (
-                  <div className="py-10 text-center text-[12px] text-[var(--text-tertiary)]">
-                    Reply to branch this conversation from the selected message.
+                  <div className="ml-11 py-6 text-[12px] text-[var(--text-tertiary)]">
+                    Reply to continue this thread.
                   </div>
                 )}
                 {threadMessages.map((message) => (
@@ -2622,32 +2908,34 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-[var(--border-subtle)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <div className="rounded-[var(--radius-panel)] border border-[var(--border-medium)] bg-[var(--bg-surface)]">
-                <textarea
-                  value={threadInput}
-                  onChange={(event) => setThreadInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void sendThreadMessage();
-                    }
-                  }}
-                  placeholder="Reply in thread..."
-                  rows={2}
-                  disabled={isThreadLoading}
-                  className="max-h-32 min-h-[56px] w-full resize-none bg-transparent px-3 py-3 text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] disabled:opacity-60"
-                />
-                <div className="flex justify-end px-2 pb-2">
-                  <button
-                    onClick={() => void sendThreadMessage()}
-                    disabled={!threadInput.trim() || isThreadLoading}
-                    className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
+            <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4">
+              <ChatComposer
+                value={threadInput}
+                onValueChange={setThreadInput}
+                placeholder="Reply in thread..."
+                pendingFiles={threadPendingFiles}
+                onAddFiles={addThreadFiles}
+                onRemoveFile={removeThreadFile}
+                onSend={() => void sendThreadMessage()}
+                onTranscript={(text) => void sendThreadMessage(text)}
+                isLoading={isThreadLoading}
+                speakResponses={speakResponses}
+                onToggleSpeak={() => {
+                  if (speakResponses) stopAllAudio();
+                  setSpeakResponses(!speakResponses);
+                }}
+                onEnterAgentMode={() => {
+                  if (audioRef.current) {
+                    audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                    audioRef.current.play().catch(() => {});
+                  }
+                  setAgentMicMuted(false);
+                  setAgentAudioMuted(false);
+                  setAgentOverlayMode("transcript");
+                  setVoiceMode("agent");
+                  setSpeakResponses(true);
+                }}
+              />
             </div>
           </section>
         </div>
@@ -2766,7 +3054,7 @@ export default function ChatPage() {
         </div>
 
         {/* Scroll to bottom floating button */}
-        {showScrollButton && !showAddMenu && (
+        {showScrollButton && (
           <button
             onClick={scrollToBottom}
             className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-4 py-2 text-xs text-[var(--text-secondary)] shadow-lg transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)] animate-fade-in"
@@ -2782,7 +3070,7 @@ export default function ChatPage() {
       {/* Agent mode fullscreen overlay */}
       {voiceMode === "agent" && (
         <div
-          className="fixed inset-0 z-50 overflow-hidden"
+          className="fixed inset-0 z-[90] overflow-hidden"
           style={{
             color: "var(--text-primary)",
             background: "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))",
@@ -2872,10 +3160,10 @@ export default function ChatPage() {
               <div className={`mx-auto rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
                 <div className="flex flex-col items-center gap-2">
                   <VoiceAgent
-                    onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
+                    onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
                     isPlayingAudio={isPlayingAudio}
                     onInterrupt={interruptAudio}
-                    isLoading={isLoading}
+                    isLoading={activeThread ? isThreadLoading : isLoading}
                     accentColor={agentColor}
                     autoActivate
                     immersive={agentOverlayMode === "immersive"}
@@ -2886,7 +3174,7 @@ export default function ChatPage() {
                     agent={selectedAgent?.callsign}
                     gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
                     companyId={company?.id}
-                    sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                    sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
                       ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                       : gatewaySessionKeyForAgent(selectedAgent)}
                   />
@@ -2897,61 +3185,101 @@ export default function ChatPage() {
             {agentOverlayMode === "transcript" ? (
               <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:px-6">
                 <div className="mx-auto max-w-4xl space-y-4 pb-8">
-                  {visibleMessages.map((msg, i) => {
-                    const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
-                    const currDate = getDateKey(msg.createdAt);
-                    const showSeparator = currDate && currDate !== prevDate;
-                    return (
-                      <div key={msg.id}>
-                        {showSeparator && <DateSeparator date={msg.createdAt!} />}
-                        <ChatMessage
-                          role={msg.role}
-                          content={msg.content}
-                          timestamp={msg.createdAt}
-                          metadata={msg.metadata}
-                          onReplyInThread={() => openThreadForMessage(msg, i)}
-                          threadReplyCount={(messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || []).length}
-                        />
-                      </div>
-                    );
-                  })}
-                  {/* Execution progress */}
-                  {(isLoading || executionProgress) && (
-                    <ExecutionProgressPanel
-                      progress={executionProgress}
-                      events={executionEvents}
-                      isLoading={isLoading}
-                      hasStreamingContent={Boolean(streamingContent)}
-                      agentColor={agentColor}
-                    />
-                  )}
-
-                  {/* Streaming message */}
-                  {streamingContent && (
-                    <div>
+                  {activeThread ? (
+                    <>
                       <ChatMessage
-                        role="assistant"
-                        content={streamingContent}
-                        isStreaming={true}
+                        role={activeThread.parentMessage.role}
+                        content={activeThread.parentMessage.content}
+                        timestamp={activeThread.parentMessage.createdAt}
+                        metadata={activeThread.parentMessage.metadata}
                       />
-                      <button
-                        onClick={stopActiveRun}
-                        className="ml-11 mt-1 flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-secondary)]"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                          <rect x="3" y="3" width="10" height="10" rx="2" />
-                        </svg>
-                        Stop
-                      </button>
-                    </div>
+                      <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
+                      {threadMessages.map((message) => (
+                        <ChatMessage
+                          key={message.id}
+                          role={message.role}
+                          content={message.content}
+                          timestamp={message.createdAt}
+                          metadata={message.metadata}
+                        />
+                      ))}
+                      {(isThreadLoading || threadProgress) && (
+                        <ExecutionProgressPanel
+                          progress={threadProgress}
+                          events={threadEvents}
+                          isLoading={isThreadLoading}
+                          hasStreamingContent={Boolean(threadStreamingContent)}
+                          agentColor={agentColor}
+                        />
+                      )}
+                      {threadStreamingContent && (
+                        <ChatMessage role="assistant" content={threadStreamingContent} isStreaming />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {visibleMessages.map((msg, i) => {
+                        const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
+                        const currDate = getDateKey(msg.createdAt);
+                        const showSeparator = currDate && currDate !== prevDate;
+                        return (
+                          <div key={msg.id}>
+                            {showSeparator && <DateSeparator date={msg.createdAt!} />}
+                            <ChatMessage
+                              role={msg.role}
+                              content={msg.content}
+                              timestamp={msg.createdAt}
+                              metadata={msg.metadata}
+                              onReplyInThread={() => openThreadForMessage(msg, i)}
+                              threadReplyCount={(messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || []).length}
+                            />
+                          </div>
+                        );
+                      })}
+                      {(isLoading || executionProgress) && (
+                        <ExecutionProgressPanel
+                          progress={executionProgress}
+                          events={executionEvents}
+                          isLoading={isLoading}
+                          hasStreamingContent={Boolean(streamingContent)}
+                          agentColor={agentColor}
+                        />
+                      )}
+                      {streamingContent && (
+                        <div>
+                          <ChatMessage
+                            role="assistant"
+                            content={streamingContent}
+                            isStreaming={true}
+                          />
+                          <button
+                            onClick={stopActiveRun}
+                            className="ml-11 mt-1 flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-secondary)]"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                              <rect x="3" y="3" width="10" height="10" rx="2" />
+                            </svg>
+                            Stop
+                          </button>
+                        </div>
+                      )}
+                      {isLoading && !executionProgress && !streamingContent && (
+                        <div className="flex justify-center py-4">
+                          <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow)]">
+                            <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70" />
+                            <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.15s]" />
+                            <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.3s]" />
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
-
-                  {isLoading && !executionProgress && !streamingContent && (
+                  {activeThread && isThreadLoading && !threadProgress && !threadStreamingContent && (
                     <div className="flex justify-center py-4">
                       <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow)]">
-                        <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70" />
-                        <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.15s]" />
-                        <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.3s]" />
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]/70" />
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]/70 [animation-delay:0.15s]" />
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]/70 [animation-delay:0.3s]" />
                       </div>
                     </div>
                   )}
@@ -2959,7 +3287,7 @@ export default function ChatPage() {
                 </div>
 
                 {/* Scroll to bottom in agent mode */}
-                {showScrollButton && !showAddMenu && (
+                {showScrollButton && (
                   <button
                     onClick={scrollToBottom}
                     className="sticky bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/92 px-4 py-2 text-xs text-[var(--text-secondary)] shadow-[var(--theme-shadow)] backdrop-blur-sm transition-all hover:border-[var(--accent-medium)] hover:text-[var(--text-primary)] animate-fade-in"
@@ -3050,233 +3378,41 @@ export default function ChatPage() {
       {/* Input area — Claude-style layout */}
       <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 transition-opacity ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
-          {/* Hidden file inputs */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.pdf,.txt,.md,.csv"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) addFiles(e.target.files);
-              e.target.value = "";
+          <ChatComposer
+            value={input}
+            onValueChange={setInput}
+            placeholder={isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
+            pendingFiles={pendingFiles}
+            onAddFiles={addFiles}
+            onRemoveFile={removeFile}
+            onSend={(text) => sendMessage(text)}
+            onTranscript={sendMessage}
+            isLoading={isLoading}
+            speakResponses={speakResponses}
+            onToggleSpeak={() => {
+              if (speakResponses) stopAllAudio();
+              setSpeakResponses(!speakResponses);
             }}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) addFiles(e.target.files);
-              e.target.value = "";
+            onEnterAgentMode={() => {
+              if (audioRef.current) {
+                audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                audioRef.current.play().catch(() => {});
+              }
+              setAgentMicMuted(false);
+              setAgentAudioMuted(false);
+              setAgentOverlayMode("transcript");
+              setVoiceMode("agent");
+              setSpeakResponses(true);
             }}
-          />
-          <div
-            className={`relative rounded-[var(--radius-panel)] border bg-[var(--bg-surface)] transition-colors focus-within:border-[var(--control-border-focus)] focus-within:bg-[var(--bg-surface-hover)] ${
-              isDragOver
-                ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                : "border-[var(--border-medium)]"
-            }`}
-            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-            onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
-            onDrop={(e) => {
-              e.preventDefault();
+            isDragOver={isDragOver}
+            onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={(event) => { event.preventDefault(); setIsDragOver(false); }}
+            onDrop={(event) => {
+              event.preventDefault();
               setIsDragOver(false);
-              if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+              if (event.dataTransfer.files.length) addFiles(event.dataTransfer.files);
             }}
-          >
-            {/* Attachment previews */}
-            {pendingFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 px-4 pt-3">
-                {pendingFiles.map((file, i) => (
-                  <PendingFilePreview
-                    key={`${file.name}-${file.size}-${file.lastModified}-${i}`}
-                    file={file}
-                    index={i}
-                    onRemove={removeFile}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Drag overlay indicator */}
-            {isDragOver && (
-              <div className="flex items-center justify-center py-3 px-4">
-                <span className="text-[12px] text-[var(--accent)]">Drop files to attach</span>
-              </div>
-            )}
-
-            {/* Textarea */}
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => { setInput(e.target.value); setShowAddMenu(false); }}
-              onKeyDown={handleKeyDown}
-              onPaste={(e) => {
-                const files = Array.from(e.clipboardData.items)
-                  .filter((item) => item.kind === "file")
-                  .map((item) => item.getAsFile())
-                  .filter((f): f is File => f !== null);
-                if (files.length) {
-                  e.preventDefault();
-                  addFiles(files);
-                }
-              }}
-              placeholder={isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
-              rows={1}
-              className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base sm:text-[14px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none"
-              style={{ maxHeight: "140px" }}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement;
-                target.style.height = "auto";
-                target.style.height = `${Math.min(target.scrollHeight, 140)}px`;
-              }}
-            />
-
-            {/* Action buttons — bottom row */}
-            <div className="flex items-center justify-between px-2 pb-2 pt-1">
-              {/* Left: + button and mute */}
-              <div className="flex items-center gap-1">
-                {/* Add to Chat (+) button */}
-                <button
-                  onClick={() => setShowAddMenu(!showAddMenu)}
-                  title="Add to Chat"
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
-                    showAddMenu
-                      ? "bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
-                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
-                  }`}
-                >
-                  <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                </button>
-
-                {/* Mute/unmute toggle */}
-                <button
-                  onClick={() => {
-                    if (speakResponses) stopAllAudio();
-                    setSpeakResponses(!speakResponses);
-                  }}
-                  title={speakResponses ? "Mute responses" : "Speak responses"}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
-                    speakResponses
-                      ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
-                  }`}
-                >
-                  {speakResponses ? (
-                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                    </svg>
-                  ) : (
-                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-
-              {/* Right: Mic + contextual Agent/Send button */}
-              <div className="flex items-center gap-1">
-                {/* Mic (toggle to record) */}
-                <VoiceRecorder
-                  onTranscript={sendMessage}
-                  isDisabled={isLoading}
-                />
-
-                {/* Contextual button: Send (when text) or Agent mode (when empty) */}
-                {input.trim() || pendingFiles.length > 0 ? (
-                  <button
-                    onClick={() => sendMessage(input)}
-                    disabled={isLoading}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
-                    title="Send message"
-                    style={
-                      !isLoading
-                        ? { boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }
-                        : undefined
-                    }
-                  >
-                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      // Unlock audio on iOS — must happen in user gesture handler
-                      if (audioRef.current) {
-                        audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                        audioRef.current.play().catch(() => {});
-                      }
-                      setAgentMicMuted(false);
-                      setAgentAudioMuted(false);
-                      setAgentOverlayMode("transcript"); setVoiceMode("agent"); setSpeakResponses(true);
-                    }}
-                    title="Enter agent mode (hands-free)"
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-primary)] border border-[var(--border-medium)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-                  >
-                    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* "Add to Chat" popover menu */}
-            {showAddMenu && (
-              <div className="absolute bottom-full left-2 mb-2 z-20 w-64 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] shadow-xl backdrop-blur-xl animate-fade-in">
-                <div className="flex items-center justify-between px-4 pt-3 pb-2">
-                  <span className="text-sm font-medium text-[var(--text-primary)]">Add to Chat</span>
-                  <button
-                    onClick={() => setShowAddMenu(false)}
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] transition-all"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex gap-2 px-4 pb-3">
-                  {/* Camera */}
-                  <button
-                    onClick={() => { cameraInputRef.current?.click(); setShowAddMenu(false); }}
-                    className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
-                    </svg>
-                    <span className="text-[11px] font-medium">Camera</span>
-                  </button>
-                  {/* Photos */}
-                  <button
-                    onClick={() => { fileInputRef.current?.setAttribute("accept", "image/*"); fileInputRef.current?.click(); setShowAddMenu(false); setTimeout(() => fileInputRef.current?.setAttribute("accept", "image/*,.pdf,.txt,.md,.csv"), 100); }}
-                    className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                    </svg>
-                    <span className="text-[11px] font-medium">Photos</span>
-                  </button>
-                  {/* Files */}
-                  <button
-                    onClick={() => { fileInputRef.current?.click(); setShowAddMenu(false); }}
-                    className="flex flex-1 flex-col items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] py-3 text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                    </svg>
-                    <span className="text-[11px] font-medium">Files</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          />
         </div>
       </div>
     </div>

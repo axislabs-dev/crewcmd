@@ -57,12 +57,26 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     private var recordingStartedAt: TimeInterval?
     private var uploadInFlight = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private var sessionBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private var notificationObservers = [NSObjectProtocol]()
+    private var lastAudioBufferAt: TimeInterval?
 
     private let silenceThreshold = 0.015
     private let speechStartMs = 200.0
     private let silenceEndMs = 1600.0
     private let minRecordingMs = 500.0
     private let maxRecordingMs = 20000.0
+
+    public override func load() {
+        super.load()
+        installLifecycleObservers()
+    }
+
+    deinit {
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 
     @objc func isAvailable(_ call: CAPPluginCall) {
         call.resolve([
@@ -101,6 +115,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 do {
                     try self.configureAudioSession()
                     try self.startEngine()
+                    self.beginSessionBackgroundTask()
                     self.active = true
                     self.state = .listening
                     self.notifyDiagnostic("native.engine.started", detail: self.audioSessionDetail())
@@ -122,6 +137,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func stop(_ call: CAPPluginCall) {
         captureQueue.async {
             self.stopEngine()
+            self.endSessionBackgroundTask()
             self.active = false
             self.state = .idle
             self.resetRecording()
@@ -155,7 +171,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         try session.setCategory(
             .playAndRecord,
             mode: .voiceChat,
-            options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+            options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers]
         )
         try session.setActive(true)
         notifyDiagnostic("native.audio-session.configured", detail: audioSessionDetail())
@@ -199,6 +215,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let channelData = buffer.floatChannelData else { return }
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
+        lastAudioBufferAt = Date().timeIntervalSince1970 * 1000
 
         let samples = channelData[0]
         var sum: Float = 0
@@ -221,7 +238,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 "voiceSessionId": currentSessionId ?? "",
                 "level": normalized,
                 "audioSessionActive": self.active,
-                "backgroundCapable": true
+                "backgroundCapable": true,
+                "applicationState": self.applicationStateName(UIApplication.shared.applicationState),
+                "engineRunning": self.audioEngine.isRunning
             ])
         }
 
@@ -354,6 +373,135 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         }.resume()
     }
 
+
+
+    private func installLifecycleObservers() {
+        let center = NotificationCenter.default
+        notificationObservers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] notification in
+            self?.captureQueue.async {
+                self?.handleAudioSessionInterruption(notification)
+            }
+        })
+        notificationObservers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] notification in
+            self?.captureQueue.async {
+                self?.handleAudioRouteChange(notification)
+            }
+        })
+        notificationObservers.append(center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] _ in
+            self?.captureQueue.async {
+                self?.recoverAudioEngine(reason: "media-services-reset")
+            }
+        })
+        notificationObservers.append(center.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.captureQueue.async {
+                self?.notifyDiagnostic("native.app.background", detail: self?.audioSessionDetail() ?? [:])
+                self?.recoverAudioEngine(reason: "app-backgrounded")
+            }
+        })
+        notificationObservers.append(center.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.captureQueue.async {
+                self?.notifyDiagnostic("native.app.foreground", detail: self?.audioSessionDetail() ?? [:])
+            }
+        })
+    }
+
+    private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
+        switch type {
+        case .began:
+            notifyDiagnostic("native.audio-session.interruption.began", detail: audioSessionDetail())
+        case .ended:
+            let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+            notifyDiagnostic("native.audio-session.interruption.ended", detail: [
+                "shouldResume": options.contains(.shouldResume),
+                "applicationState": applicationStateName(UIApplication.shared.applicationState)
+            ])
+            recoverAudioEngine(reason: "interruption-ended")
+        @unknown default:
+            notifyDiagnostic("native.audio-session.interruption.unknown", detail: audioSessionDetail())
+        }
+    }
+
+    private func handleAudioRouteChange(_ notification: Notification) {
+        let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+        let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue)
+        notifyDiagnostic("native.audio-session.route-change", detail: [
+            "reason": reason.map { String($0.rawValue) } ?? "unknown",
+            "applicationState": applicationStateName(UIApplication.shared.applicationState),
+            "engineRunning": audioEngine.isRunning
+        ])
+        if active && !audioEngine.isRunning {
+            recoverAudioEngine(reason: "route-change")
+        }
+    }
+
+    private func recoverAudioEngine(reason: String) {
+        guard active else { return }
+        do {
+            try configureAudioSession()
+            if !audioEngine.isRunning {
+                try startEngine()
+            }
+            beginSessionBackgroundTask()
+            notifyDiagnostic("native.engine.recovered", detail: [
+                "reason": reason,
+                "engineRunning": audioEngine.isRunning,
+                "applicationState": applicationStateName(UIApplication.shared.applicationState)
+            ])
+        } catch {
+            lastError = error.localizedDescription
+            state = .error
+            notifyDiagnostic("native.engine.recover.error", detail: [
+                "reason": reason,
+                "message": error.localizedDescription
+            ])
+        }
+    }
+
+    private func beginSessionBackgroundTask() {
+        DispatchQueue.main.async {
+            if self.sessionBackgroundTask != .invalid { return }
+            self.sessionBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "CrewCmdVoiceSession") { [weak self] in
+                guard let self = self else { return }
+                self.captureQueue.async {
+                    self.notifyDiagnostic("native.session-background-task.expired", detail: self.audioSessionDetail())
+                    self.endSessionBackgroundTask()
+                }
+            }
+            self.notifyDiagnostic("native.session-background-task.begin", detail: ["started": self.sessionBackgroundTask != .invalid])
+        }
+    }
+
+    private func endSessionBackgroundTask() {
+        DispatchQueue.main.async {
+            guard self.sessionBackgroundTask != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(self.sessionBackgroundTask)
+            self.sessionBackgroundTask = .invalid
+            self.notifyDiagnostic("native.session-background-task.end", detail: [:])
+        }
+    }
 
     private func beginBackgroundTask() {
         DispatchQueue.main.async {
@@ -493,7 +641,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             "audioSessionActive": active,
             "pendingChunks": uploadInFlight ? 1 : 0,
             "currentTurnId": currentSessionId ?? "",
-            "lastError": lastError ?? NSNull()
+            "lastError": lastError ?? NSNull(),
+            "engineRunning": audioEngine.isRunning,
+            "lastAudioBufferAt": lastAudioBufferAt ?? NSNull(),
+            "applicationState": applicationStateName(UIApplication.shared.applicationState)
         ]
     }
 
@@ -503,7 +654,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             "category": session.category.rawValue,
             "mode": session.mode.rawValue,
             "sampleRate": session.sampleRate,
-            "inputAvailable": session.isInputAvailable
+            "inputAvailable": session.isInputAvailable,
+            "engineRunning": audioEngine.isRunning,
+            "applicationState": applicationStateName(UIApplication.shared.applicationState),
+            "lastAudioBufferAt": lastAudioBufferAt ?? NSNull()
         ]
     }
 

@@ -32,6 +32,7 @@ interface VoiceAgentProps {
   accentColor?: string;
   autoActivate?: boolean;
   immersive?: boolean;
+  compact?: boolean;
   isMicMuted?: boolean;
   isAgentMuted?: boolean;
   onMicMutedChange?: (muted: boolean) => void;
@@ -68,6 +69,7 @@ export function VoiceAgent({
   accentColor = "#63b7aa",
   autoActivate = false,
   immersive = false,
+  compact = false,
   isMicMuted = false,
   isAgentMuted = false,
   onMicMutedChange,
@@ -857,7 +859,7 @@ export function VoiceAgent({
         : state === "processing"
           ? Math.min(1, 0.22 + volumeLevel * 0.45)
           : 0;
-  const haloSize = immersive ? 285 + motionLevel * 75 : 170 + motionLevel * 90;
+  const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 92 + motionLevel * 28 : 170 + motionLevel * 90;
   const orbScale = immersive
     ? 1.22 + motionLevel * (state === "speaking" ? 0.06 : 0.045)
     : 1 + motionLevel * 0.06;
@@ -868,7 +870,7 @@ export function VoiceAgent({
   const displayState: AgentState = isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
 
   return (
-    <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : "gap-2 py-1"}`}>
+    <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : compact ? "gap-1.5 py-0" : "gap-2 py-1"}`}>
       {error && (
         <div
           className="w-full max-w-sm rounded-2xl border px-4 py-2 text-center text-[11px]"
@@ -884,7 +886,13 @@ export function VoiceAgent({
 
       <button
         onClick={isActive ? deactivate : activate}
-        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${immersive ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]" : "h-[10rem] w-[10rem] sm:h-[12rem] sm:w-[12rem]"}`}
+        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${
+          immersive
+            ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]"
+            : compact
+              ? "h-[5.75rem] w-[5.75rem]"
+              : "h-[10rem] w-[10rem] sm:h-[12rem] sm:w-[12rem]"
+        }`}
         style={
           {
             "--voice-accent-rgb": activeRgb,
@@ -954,7 +962,9 @@ export function VoiceAgent({
         />
 
         <div
-          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${immersive ? "h-56 w-56 sm:h-72 sm:w-72" : "h-20 w-20 sm:h-24 sm:w-24"} ${
+          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${
+            immersive ? "h-56 w-56 sm:h-72 sm:w-72" : compact ? "h-14 w-14" : "h-20 w-20 sm:h-24 sm:w-24"
+          } ${
             state === "idle"
               ? "cursor-pointer border-[var(--border-medium)]"
               : state === "listening"
@@ -999,7 +1009,7 @@ export function VoiceAgent({
             </div>
           ) : state === "idle" ? (
             <svg
-              className="h-10 w-10 text-[var(--text-tertiary)] sm:h-12 sm:w-12"
+              className={`${compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"} text-[var(--text-tertiary)]`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -1013,7 +1023,7 @@ export function VoiceAgent({
             </svg>
           ) : state === "muted" ? (
             <svg
-              className="h-10 w-10 text-[var(--text-tertiary)] sm:h-12 sm:w-12"
+              className={`${compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"} text-[var(--text-tertiary)]`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -1028,7 +1038,7 @@ export function VoiceAgent({
           ) : state === "listening" ? (
             <>
               <svg
-                className="h-10 w-10 sm:h-12 sm:w-12"
+                className={compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke={listeningColor}
@@ -1064,7 +1074,7 @@ export function VoiceAgent({
             </div>
           ) : (
             <svg
-              className="h-10 w-10 sm:h-12 sm:w-12"
+              className={compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"}
               fill="none"
               viewBox="0 0 24 24"
               stroke={speakingColor}
@@ -1083,7 +1093,7 @@ export function VoiceAgent({
       {showCompactStatus ? (
         <div className="flex flex-col items-center gap-1.5">
           <span
-            className="rounded-full border px-4 py-1.5 text-[11px] font-medium tracking-[0.28em] transition-colors duration-300"
+            className={`${compact ? "px-3 py-1 text-[9px] tracking-[0.2em]" : "px-4 py-1.5 text-[11px] tracking-[0.28em]"} rounded-full border font-medium transition-colors duration-300`}
             style={{
               color: stateColor,
               borderColor: state === "idle" ? "var(--border-medium)" : `color-mix(in srgb, ${stateColor} 32%, transparent)`,
@@ -1099,7 +1109,7 @@ export function VoiceAgent({
                 onClick={() => onMicMutedChange?.(!isMicMuted)}
                 aria-pressed={isMicMuted}
                 title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-                className={`min-h-11 min-w-24 rounded-full border px-5 py-3 text-[11px] font-medium tracking-[0.2em] transition sm:min-h-10 sm:min-w-20 sm:px-4 sm:py-2 ${
+                className={`${compact ? "min-h-8 min-w-16 px-3 py-1.5 text-[9px] tracking-[0.16em]" : "min-h-11 min-w-24 px-5 py-3 text-[11px] tracking-[0.2em] sm:min-h-10 sm:min-w-20 sm:px-4 sm:py-2"} rounded-full border font-medium transition ${
                   isMicMuted
                     ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
                     : "border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
@@ -1112,7 +1122,7 @@ export function VoiceAgent({
                 onClick={() => onAgentMutedChange?.(!isAgentMuted)}
                 aria-pressed={isAgentMuted}
                 title={isAgentMuted ? "Unmute agent audio" : "Mute agent audio"}
-                className={`min-h-11 min-w-24 rounded-full border px-5 py-3 text-[11px] font-medium tracking-[0.2em] transition sm:min-h-10 sm:min-w-20 sm:px-4 sm:py-2 ${
+                className={`${compact ? "min-h-8 min-w-16 px-3 py-1.5 text-[9px] tracking-[0.16em]" : "min-h-11 min-w-24 px-5 py-3 text-[11px] tracking-[0.2em] sm:min-h-10 sm:min-w-20 sm:px-4 sm:py-2"} rounded-full border font-medium transition ${
                   isAgentMuted
                     ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-tertiary)]"
                     : "border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
@@ -1122,7 +1132,7 @@ export function VoiceAgent({
               </button>
             </div>
           )}
-          {isActive && (
+          {isActive && !compact && (
             <span className="text-center text-[11px] tracking-[0.16em] text-[var(--text-tertiary)]">
               {isMicMuted
                 ? "MIC MUTED"
@@ -1191,7 +1201,7 @@ export function VoiceAgent({
         </div>
       )}
 
-      {isActive && !immersive && (
+      {isActive && !immersive && !compact && (
         <div className="flex h-8 items-end gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-4 py-1.5">
           {Array.from({ length: 24 }).map((_, i) => (
             <div

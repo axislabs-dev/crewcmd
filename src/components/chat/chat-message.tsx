@@ -49,8 +49,8 @@ function SpeakerIcon({ className }: { className?: string }) {
 
 function ReplyIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75H8.25A2.25 2.25 0 0 0 6 12v.75A2.25 2.25 0 0 0 8.25 15h4.5L18 19.5V12a2.25 2.25 0 0 0-2.25-2.25h-.375M8.625 9.75A2.25 2.25 0 0 1 10.875 7.5h2.25a2.25 2.25 0 0 1 2.25 2.25M8.625 9.75h6.75" />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 18.75 4.5 21v-4.5A7.5 7.5 0 1 1 12 19.5a8.3 8.3 0 0 1-4.5-.75Z" />
     </svg>
   );
 }
@@ -166,7 +166,7 @@ function MessageActions({
   }, [stopSpeaking]);
 
   const btnClass =
-    "p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer";
+    "flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer";
 
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
@@ -179,8 +179,8 @@ function MessageActions({
         {copied ? <CheckIcon className="h-4 w-4 text-green-400" /> : <CopyIcon className="h-4 w-4" />}
       </button>
       {onReplyInThread && (
-        <button onClick={onReplyInThread} aria-label="Reply in thread" className={btnClass}>
-          <ReplyIcon className="h-4 w-4" />
+        <button onClick={onReplyInThread} aria-label="Reply in thread" title="Reply in thread" className={btnClass}>
+          <ReplyIcon className="h-5 w-5" />
         </button>
       )}
       {showSpeak && (

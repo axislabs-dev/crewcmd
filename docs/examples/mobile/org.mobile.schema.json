@@ -209,6 +209,41 @@
           "minLength": 1
         }
       }
+    },
+    "push": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ios": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "apnsEnvironment": {
+              "type": "string",
+              "enum": [
+                "sandbox",
+                "production"
+              ]
+            }
+          }
+        },
+        "android": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "firebaseProjectId": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
     }
   }
 }

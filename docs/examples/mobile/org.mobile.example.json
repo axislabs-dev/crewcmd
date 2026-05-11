@@ -41,5 +41,14 @@
     "allowManualServerOverride": false,
     "supportEmail": "it@acme.example",
     "environmentLabel": "Production"
+  },
+  "push": {
+    "enabled": true,
+    "ios": {
+      "apnsEnvironment": "production"
+    },
+    "android": {
+      "firebaseProjectId": "acme-crewcmd"
+    }
   }
 }

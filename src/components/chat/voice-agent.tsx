@@ -13,6 +13,7 @@ import {
 import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
+  recordVoiceCrashBreadcrumb,
 } from "@/lib/agent-mode-diagnostics";
 import {
   addNativeVoiceSessionListener,
@@ -107,8 +108,32 @@ export function VoiceAgent({
   const nativeSessionActiveRef = useRef(false);
   const deactivateRef = useRef<() => void>(() => {});
 
+  const recordVoiceBreadcrumb = useCallback((
+    event: string,
+    detail?: Record<string, unknown>,
+  ) => {
+    recordVoiceCrashBreadcrumb({
+      scope: "voice-agent",
+      event,
+      sessionId: nativeVoiceSessionIdRef.current ?? diagnosticSessionRef.current ?? undefined,
+      detail: {
+        state,
+        isActive,
+        nativeSessionActive: nativeSessionActiveRef.current,
+        agent: agent ?? null,
+        gatewayAgent: gatewayAgent ?? null,
+        sessionKey: sessionKey ?? null,
+        isPlayingAudio,
+        isMicMuted,
+        isAgentMuted,
+        ...detail,
+      },
+    });
+  }, [agent, gatewayAgent, isActive, isAgentMuted, isMicMuted, isPlayingAudio, sessionKey, state]);
+
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
+      recordVoiceBreadcrumb("stt.fetch.start", { bytes: audioBlob.size, type: audioBlob.type });
       setState("processing");
       publishAgentModeDiagnostic({
         scope: "voice-agent",
@@ -129,6 +154,7 @@ export function VoiceAgent({
         });
 
         if (!response.ok) {
+          recordVoiceBreadcrumb("stt.fetch.error", { status: response.status });
           publishAgentModeDiagnostic({
             scope: "voice-agent",
             event: "stt.fetch.error",
@@ -143,6 +169,7 @@ export function VoiceAgent({
         }
 
         const { text } = await response.json();
+        recordVoiceBreadcrumb("stt.fetch.complete", { hasText: Boolean(text && text.trim()) });
         publishAgentModeDiagnostic({
           scope: "voice-agent",
           event: "stt.fetch.complete",
@@ -156,6 +183,7 @@ export function VoiceAgent({
           setState("listening");
         }
       } catch (error) {
+        recordVoiceBreadcrumb("stt.fetch.exception", { message: error instanceof Error ? error.message : String(error) });
         publishAgentModeDiagnostic({
           scope: "voice-agent",
           event: "stt.fetch.exception",
@@ -166,7 +194,7 @@ export function VoiceAgent({
         setState("listening");
       }
     },
-    [onTranscript]
+    [onTranscript, recordVoiceBreadcrumb]
   );
 
   const stopRecording = useCallback(() => {
@@ -377,6 +405,7 @@ export function VoiceAgent({
     setError(null);
     const sessionId = createAgentModeSessionId("voice-agent");
     diagnosticSessionRef.current = sessionId;
+    recordVoiceBreadcrumb("activate.start", { sessionId });
     publishAgentModeDiagnostic({
       scope: "voice-agent",
       event: "activate.start",
@@ -390,6 +419,7 @@ export function VoiceAgent({
 
     const nativeAvailability = await getNativeVoiceSessionAvailability();
     setNativeBackgroundCapable(nativeAvailability.backgroundCapable);
+    recordVoiceBreadcrumb("native-voice.availability", nativeAvailability);
     publishAgentModeDiagnostic({
       scope: "voice-agent",
       event: "native-voice.availability",
@@ -410,7 +440,9 @@ export function VoiceAgent({
         nativeVoiceSessionIdRef.current = nativeSession?.voiceSessionId ?? sessionId;
         nativeSessionActiveRef.current = Boolean(nativeSession?.status.active);
         setNativeSessionActive(nativeSessionActiveRef.current);
+        recordVoiceBreadcrumb("native-voice.start.complete", nativeSession?.status ?? {});
       } catch (error) {
+        recordVoiceBreadcrumb("native-voice.start.error", { message: error instanceof Error ? error.message : String(error) });
         publishAgentModeDiagnostic({
           scope: "voice-agent",
           event: "native-voice.start.error",
@@ -435,6 +467,7 @@ export function VoiceAgent({
         await requestWakeLock();
         setIsActive(true);
         setState("listening");
+        recordVoiceBreadcrumb("activate.native-only");
         setError("Native mic session active; web transcription is unavailable in this context.");
       } else {
         setError("Voice requires HTTPS. Access via localhost or run: pnpm dev:https");
@@ -479,6 +512,11 @@ export function VoiceAgent({
 
       setIsActive(true);
       setState("listening");
+      recordVoiceBreadcrumb("activate.complete", {
+        audioContextState: audioContext.state,
+        sampleRate: audioContext.sampleRate,
+        nativeBackgroundCapable: nativeAvailability.backgroundCapable,
+      });
       publishAgentModeDiagnostic({
         scope: "voice-agent",
         event: "activate.complete",
@@ -487,6 +525,7 @@ export function VoiceAgent({
       });
     } catch (err) {
       console.error("[VoiceAgent] Mic error:", err);
+      recordVoiceBreadcrumb("activate.error", { message: err instanceof Error ? err.message : String(err) });
       publishAgentModeDiagnostic({
         scope: "voice-agent",
         event: "activate.error",
@@ -497,15 +536,17 @@ export function VoiceAgent({
         await requestWakeLock();
         setIsActive(true);
         setState("listening");
+        recordVoiceBreadcrumb("activate.native-fallback");
         setError("Native mic session active; browser recording is unavailable until native upload is enabled.");
       } else {
         setError("Microphone access denied. Please allow mic access and retry.");
       }
     }
-  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, requestWakeLock, sessionKey]);
+  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, recordVoiceBreadcrumb, requestWakeLock, sessionKey]);
 
   const deactivate = useCallback((options: { silence?: boolean } = {}) => {
     const sessionId = diagnosticSessionRef.current ?? undefined;
+    recordVoiceBreadcrumb("deactivate.start", { silence: Boolean(options.silence) });
     if (options.silence) {
       onMicMutedChange?.(true);
       onAgentMutedChange?.(true);
@@ -529,6 +570,7 @@ export function VoiceAgent({
 
     if (nativeSessionActiveRef.current) {
       void stopNativeVoiceSession().catch((error) => {
+        recordVoiceBreadcrumb("native-voice.stop.error", { message: error instanceof Error ? error.message : String(error) });
         publishAgentModeDiagnostic({
           scope: "voice-agent",
           event: "native-voice.stop.error",
@@ -596,13 +638,14 @@ export function VoiceAgent({
     setIsActive(false);
     setState("idle");
     setVolumeLevel(0);
+    recordVoiceBreadcrumb("deactivate.complete");
     publishAgentModeDiagnostic({
       scope: "voice-agent",
       event: "deactivate.complete",
       sessionId,
     });
     diagnosticSessionRef.current = null;
-  }, [isPlayingAudio, onAgentMutedChange, onInterrupt, onMicMutedChange, releaseWakeLock]);
+  }, [isPlayingAudio, onAgentMutedChange, onInterrupt, onMicMutedChange, recordVoiceBreadcrumb, releaseWakeLock]);
 
   useEffect(() => {
     deactivateRef.current = () => deactivate();
@@ -618,6 +661,7 @@ export function VoiceAgent({
     });
     if (nativeSessionActive) {
       void setNativeVoiceSessionMuted(isMicMuted).catch((error) => {
+        recordVoiceBreadcrumb("native-voice.mute.error", { message: error instanceof Error ? error.message : String(error) });
         publishAgentModeDiagnostic({
           scope: "voice-agent",
           event: "native-voice.mute.error",
@@ -635,7 +679,7 @@ export function VoiceAgent({
       silenceStartTimeRef.current = 0;
       setVolumeLevel(0);
     }
-  }, [isActive, isMicMuted, nativeSessionActive, stopRecording]);
+  }, [isActive, isMicMuted, nativeSessionActive, recordVoiceBreadcrumb, stopRecording]);
 
   useEffect(() => {
     if (!nativeSessionActive) return;
@@ -653,6 +697,10 @@ export function VoiceAgent({
 
       const diagnosticHandle = await addNativeVoiceSessionListener("voiceSessionDiagnostic", (event) => {
         if (disposed) return;
+        recordVoiceBreadcrumb(
+          typeof event.event === "string" ? `native.${event.event}` : "native.event",
+          event,
+        );
         publishAgentModeDiagnostic({
           scope: "native-voice-session",
           event: typeof event.event === "string" ? event.event : "native.event",
@@ -672,10 +720,12 @@ export function VoiceAgent({
           detail: event,
         });
         if (text) {
+          recordVoiceBreadcrumb("native.transcript.received", { characters: text.length });
           setError(null);
           setState("processing");
           onTranscript(text);
         } else if (typeof event.error === "string" && event.error) {
+          recordVoiceBreadcrumb("native.transcript.error", { error: event.error });
           setError(event.error);
           setState("listening");
         }
@@ -684,6 +734,7 @@ export function VoiceAgent({
     };
 
     void installListeners().catch((error) => {
+      recordVoiceBreadcrumb("native-voice.listener.error", { message: error instanceof Error ? error.message : String(error) });
       publishAgentModeDiagnostic({
         scope: "voice-agent",
         event: "native-voice.listener.error",
@@ -698,7 +749,7 @@ export function VoiceAgent({
         void handle.remove();
       }
     };
-  }, [isMicMuted, nativeSessionActive, onTranscript]);
+  }, [isMicMuted, nativeSessionActive, onTranscript, recordVoiceBreadcrumb]);
 
   // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
   useEffect(() => {

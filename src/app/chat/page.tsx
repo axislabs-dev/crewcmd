@@ -795,7 +795,6 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const agentScrollContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
   const ttsSessionRef = useRef<string>(createAgentModeSessionId("tts"));
@@ -1198,7 +1197,7 @@ export default function ChatPage() {
 
   // Check if user is near bottom of scroll container
   const isNearBottom = useCallback(() => {
-    const el = agentScrollContainerRef.current ?? scrollContainerRef.current;
+    const el = scrollContainerRef.current;
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
@@ -1208,13 +1207,13 @@ export default function ChatPage() {
 
   // Update wasAtBottom on scroll events (before React re-renders with new messages)
   useEffect(() => {
-    const els = [scrollContainerRef.current, agentScrollContainerRef.current].filter(Boolean) as HTMLDivElement[];
-    if (els.length === 0) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
     const trackPosition = () => {
       wasAtBottomRef.current = isNearBottom();
     };
-    els.forEach((el) => el.addEventListener("scroll", trackPosition, { passive: true }));
-    return () => els.forEach((el) => el.removeEventListener("scroll", trackPosition));
+    el.addEventListener("scroll", trackPosition, { passive: true });
+    return () => el.removeEventListener("scroll", trackPosition);
   }, [isNearBottom, voiceMode]);
 
   // Auto-scroll to bottom when new content arrives (if user was already at bottom)
@@ -1226,13 +1225,13 @@ export default function ChatPage() {
 
   // Track scroll position to show/hide scroll-to-bottom button
   useEffect(() => {
-    const els = [scrollContainerRef.current, agentScrollContainerRef.current].filter(Boolean) as HTMLDivElement[];
-    if (els.length === 0) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
     const handleScroll = () => {
       setShowScrollButton(!isNearBottom());
     };
-    els.forEach((el) => el.addEventListener("scroll", handleScroll, { passive: true }));
-    return () => els.forEach((el) => el.removeEventListener("scroll", handleScroll));
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
   }, [isNearBottom, voiceMode]);
 
   // Scroll to bottom on initial load / session switch / navigate back
@@ -1417,6 +1416,11 @@ export default function ChatPage() {
       setStreamingContent("");
       setExecutionProgress(null);
       setExecutionEvents([]);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      setIsPlayingAudio(false);
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
       // Update session selection (or clear it for regular agent mode)
@@ -3002,172 +3006,47 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Agent mode fullscreen overlay */}
+      {/* Voice surface: inline by default, immersive only when expanded. */}
       {voiceMode === "agent" && (
         <div
-          className="fixed inset-0 z-[90] overflow-hidden"
+          className={
+            agentOverlayMode === "immersive"
+              ? "fixed inset-0 z-[90] overflow-hidden"
+              : "shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pt-2 backdrop-blur-xl sm:px-4"
+          }
           style={{
             color: "var(--text-primary)",
-            background: "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))",
+            background:
+              agentOverlayMode === "immersive"
+                ? "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))"
+                : undefined,
           }}
         >
-          <div
-            className="absolute inset-0 opacity-60"
-            style={{
-              backgroundImage: [
-                "linear-gradient(var(--voice-overlay-grid) 1px, transparent 1px)",
-                "linear-gradient(90deg, var(--voice-overlay-grid-soft) 1px, transparent 1px)",
-              ].join(", "),
-              backgroundSize: "44px 44px",
-            }}
-          />
-          <div className="relative flex h-full flex-col">
-            <div className="shrink-0 px-4 pt-[max(var(--mobile-safe-top),1rem)] sm:px-6">
-              <div className="mx-auto flex max-w-5xl items-start justify-between gap-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{agentEmoji}</span>
-                    <div>
-                      <div className="text-[11px] uppercase tracking-[0.35em] text-[var(--text-tertiary)]">Agent Mode</div>
-                      <div className="truncate text-lg font-semibold" style={{ color: agentColor }}>
-                        {selectedAgent?.name || agentCallsign}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {agentOverlayMode === "immersive" ? (
-                    <button
-                      onClick={() => setAgentOverlayMode("transcript")}
-                      title="Return to transcript mode"
-                      aria-label="Return to transcript mode"
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5H5.25A.75.75 0 0 0 4.5 5.25V9m10.5-4.5h3.75a.75.75 0 0 1 .75.75V9M9 19.5H5.25a.75.75 0 0 1-.75-.75V15m10.5 4.5h3.75a.75.75 0 0 0 .75-.75V15M8.25 8.25l-3.75-3.75m15 0-3.75 3.75m-7.5 7.5-3.75 3.75m15 0-3.75-3.75" />
-                      </svg>
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            {agentOverlayMode === "transcript" ? (
-              <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6">
-                <div className="mx-auto max-w-4xl space-y-4 pb-3">
-                  {activeThread ? (
-                    <>
-                      <ChatMessage
-                        role={activeThread.parentMessage.role}
-                        content={activeThread.parentMessage.content}
-                        timestamp={activeThread.parentMessage.createdAt}
-                        metadata={activeThread.parentMessage.metadata}
-                      />
-                      <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
-                      {threadMessages.map((message) => (
-                        <ChatMessage
-                          key={message.id}
-                          role={message.role}
-                          content={message.content}
-                          timestamp={message.createdAt}
-                          metadata={message.metadata}
-                        />
-                      ))}
-                      {(isThreadLoading || threadProgress) && (
-                        <ExecutionProgressPanel
-                          progress={threadProgress}
-                          events={threadEvents}
-                          isLoading={isThreadLoading}
-                          hasStreamingContent={Boolean(threadStreamingContent)}
-                          agentColor={agentColor}
-                        />
-                      )}
-                      {threadStreamingContent && (
-                        <ChatMessage role="assistant" content={threadStreamingContent} isStreaming />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {visibleMessages.map((msg, i) => {
-                        const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
-                        const currDate = getDateKey(msg.createdAt);
-                        const showSeparator = currDate && currDate !== prevDate;
-                        return (
-                          <div key={msg.id}>
-                            {showSeparator && <DateSeparator date={msg.createdAt!} />}
-                            <ChatMessage
-                              role={msg.role}
-                              content={msg.content}
-                              timestamp={msg.createdAt}
-                              metadata={msg.metadata}
-                              onReplyInThread={() => openThreadForMessage(msg, i)}
-                              threadReplyCount={(messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || []).length}
-                            />
-                          </div>
-                        );
-                      })}
-                      {(isLoading || executionProgress) && (
-                        <ExecutionProgressPanel
-                          progress={executionProgress}
-                          events={executionEvents}
-                          isLoading={isLoading}
-                          hasStreamingContent={Boolean(streamingContent)}
-                          agentColor={agentColor}
-                        />
-                      )}
-                      {streamingContent && (
-                        <div>
-                          <ChatMessage
-                            role="assistant"
-                            content={streamingContent}
-                            isStreaming={true}
-                          />
-                          <button
-                            onClick={stopActiveRun}
-                            className="ml-11 mt-1 flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-secondary)]"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                              <rect x="3" y="3" width="10" height="10" rx="2" />
-                            </svg>
-                            Stop
-                          </button>
-                        </div>
-                      )}
-                      {isLoading && !executionProgress && !streamingContent && (
-                        <div className="flex justify-center py-4">
-                          <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow)]">
-                            <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70" />
-                            <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.15s]" />
-                            <span className="h-2 w-2 rounded-full animate-pulse bg-[var(--accent)]/70 [animation-delay:0.3s]" />
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {activeThread && isThreadLoading && !threadProgress && !threadStreamingContent && (
-                    <div className="flex justify-center py-4">
-                      <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow)]">
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]/70" />
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]/70 [animation-delay:0.15s]" />
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]/70 [animation-delay:0.3s]" />
-                      </div>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Scroll to bottom in agent mode */}
-                {showScrollButton && (
-                  <button
-                    onClick={scrollToBottom}
-                    className="sticky bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/92 px-4 py-2 text-xs text-[var(--text-secondary)] shadow-[var(--theme-shadow)] backdrop-blur-sm transition-all hover:border-[var(--accent-medium)] hover:text-[var(--text-primary)] animate-fade-in"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
-                    </svg>
-                    Scroll to bottom
-                  </button>
-                )}
+          {agentOverlayMode === "immersive" ? (
+            <div
+              className="absolute inset-0 opacity-60"
+              style={{
+                backgroundImage: [
+                  "linear-gradient(var(--voice-overlay-grid) 1px, transparent 1px)",
+                  "linear-gradient(90deg, var(--voice-overlay-grid-soft) 1px, transparent 1px)",
+                ].join(", "),
+                backgroundSize: "44px 44px",
+              }}
+            />
+          ) : null}
+          <div className={agentOverlayMode === "immersive" ? "relative flex h-full flex-col justify-center" : "relative"}>
+            {agentOverlayMode === "immersive" ? (
+              <div className="absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 sm:right-6">
+                <button
+                  onClick={() => setAgentOverlayMode("transcript")}
+                  title="Return to chat"
+                  aria-label="Return to chat"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5H5.25A.75.75 0 0 0 4.5 5.25V9m10.5-4.5h3.75a.75.75 0 0 1 .75.75V9M9 19.5H5.25a.75.75 0 0 1-.75-.75V15m10.5 4.5h3.75a.75.75 0 0 0 .75-.75V15M8.25 8.25l-3.75-3.75m15 0-3.75 3.75m-7.5 7.5-3.75 3.75m15 0-3.75-3.75" />
+                  </svg>
+                </button>
               </div>
             ) : null}
 
@@ -3175,7 +3054,7 @@ export default function ChatPage() {
               className={
                 agentOverlayMode === "immersive"
                   ? "flex flex-1 items-center px-4 pb-3 sm:px-6"
-                  : "shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4"
+                  : ""
               }
             >
               <div className={agentOverlayMode === "immersive" ? "mx-auto w-full max-w-none px-0 py-0" : "mx-auto max-w-3xl"}>
@@ -3221,32 +3100,6 @@ export default function ChatPage() {
                     </div>
                   ) : null}
                 </div>
-                {agentOverlayMode === "transcript" ? (
-                  <ChatComposer
-                    value={activeThread ? threadInput : input}
-                    onValueChange={activeThread ? setThreadInput : setInput}
-                    placeholder={activeThread ? "Reply in thread..." : isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
-                    pendingFiles={activeThread ? threadPendingFiles : pendingFiles}
-                    onAddFiles={activeThread ? addThreadFiles : addFiles}
-                    onRemoveFile={activeThread ? removeThreadFile : removeFile}
-                    onSend={(text) => activeThread ? void sendThreadMessage(text) : sendMessage(text)}
-                    onTranscript={(text) => activeThread ? void sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
-                    isLoading={activeThread ? isThreadLoading : isLoading}
-                    speakResponses={speakResponses}
-                    onToggleSpeak={() => {
-                      if (speakResponses) stopAllAudio();
-                      setSpeakResponses(!speakResponses);
-                    }}
-                    onEnterAgentMode={() => {
-                      setVoiceMode("off");
-                      setAgentOverlayMode("transcript");
-                      setAgentMicMuted(false);
-                      setAgentAudioMuted(false);
-                    }}
-                    agentButtonTitle="Exit agent mode"
-                    addMenuLabel={activeThread ? "Add to Thread" : "Add to Chat"}
-                  />
-                ) : null}
               </div>
             </div>
           </div>
@@ -3272,6 +3125,14 @@ export default function ChatPage() {
               setSpeakResponses(!speakResponses);
             }}
             onEnterAgentMode={() => {
+              if (voiceMode === "agent") {
+                stopAllAudio();
+                setVoiceMode("off");
+                setAgentOverlayMode("transcript");
+                setAgentMicMuted(false);
+                setAgentAudioMuted(false);
+                return;
+              }
               if (audioRef.current) {
                 audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
                 audioRef.current.play().catch(() => {});
@@ -3282,6 +3143,7 @@ export default function ChatPage() {
               setVoiceMode("agent");
               setSpeakResponses(true);
             }}
+            agentButtonTitle={voiceMode === "agent" ? "Exit voice mode" : "Enter agent mode (hands-free)"}
             isDragOver={isDragOver}
             onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
             onDragLeave={(event) => { event.preventDefault(); setIsDragOver(false); }}

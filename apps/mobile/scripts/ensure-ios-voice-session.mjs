@@ -58,7 +58,6 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     private var recordingStartedAt: TimeInterval?
     private var uploadInFlight = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
-    private var sessionBackgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var notificationObservers = [NSObjectProtocol]()
     private var lastAudioBufferAt: TimeInterval?
     private var audioWatchdog: DispatchSourceTimer?
@@ -116,11 +115,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
 
                 do {
+                    self.active = true
                     try self.configureAudioSession()
                     try self.startEngine()
                     self.startAudioWatchdog()
-                    self.beginSessionBackgroundTask()
-                    self.active = true
                     self.state = .listening
                     self.notifyDiagnostic("native.config.base-url", detail: self.baseUrlDetail())
                     self.notifyDiagnostic("native.engine.started", detail: self.audioSessionDetail())
@@ -128,6 +126,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                         call.resolve(self.statusPayload())
                     }
                 } catch {
+                    self.active = false
                     self.lastError = error.localizedDescription
                     self.state = .error
                     self.notifyDiagnostic("native.engine.error", detail: ["message": error.localizedDescription])
@@ -143,7 +142,6 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         captureQueue.async {
             self.stopAudioWatchdog()
             self.stopEngine()
-            self.endSessionBackgroundTask()
             self.active = false
             self.state = .idle
             self.resetRecording()
@@ -235,11 +233,11 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func handleAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard active, !micMuted else { return }
         guard let channelData = buffer.floatChannelData else { return }
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
         lastAudioBufferAt = Date().timeIntervalSince1970 * 1000
+        guard active, !micMuted else { return }
 
         let samples = channelData[0]
         var sum: Float = 0
@@ -495,7 +493,6 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 audioEngine.disconnectNodeOutput(keepaliveMixer)
                 try startEngine()
             }
-            beginSessionBackgroundTask()
             notifyDiagnostic("native.engine.recovered", detail: [
                 "reason": reason,
                 "forceRestart": forceRestart,
@@ -537,29 +534,6 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     private func stopAudioWatchdog() {
         audioWatchdog?.cancel()
         audioWatchdog = nil
-    }
-
-    private func beginSessionBackgroundTask() {
-        DispatchQueue.main.async {
-            if self.sessionBackgroundTask != .invalid { return }
-            self.sessionBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "CrewCmdVoiceSession") { [weak self] in
-                guard let self = self else { return }
-                self.captureQueue.async {
-                    self.notifyDiagnostic("native.session-background-task.expired", detail: self.audioSessionDetail())
-                    self.endSessionBackgroundTask()
-                }
-            }
-            self.notifyDiagnostic("native.session-background-task.begin", detail: ["started": self.sessionBackgroundTask != .invalid])
-        }
-    }
-
-    private func endSessionBackgroundTask() {
-        DispatchQueue.main.async {
-            guard self.sessionBackgroundTask != .invalid else { return }
-            UIApplication.shared.endBackgroundTask(self.sessionBackgroundTask)
-            self.sessionBackgroundTask = .invalid
-            self.notifyDiagnostic("native.session-background-task.end", detail: [:])
-        }
     }
 
     private func beginBackgroundTask() {

@@ -153,15 +153,26 @@ function compactValue(value: unknown, maxLength = 96): string | null {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
 }
 
-function findFirstString(value: unknown, keys: string[], seen = new Set<unknown>()): string | null {
+function looksLikeJson(text: string) {
+  const trimmed = text.trim();
+  return (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"));
+}
+
+function compactHumanValue(value: unknown, maxLength = 96): string | null {
+  const text = compactValue(value, maxLength);
+  if (!text || looksLikeJson(text)) return null;
+  return text;
+}
+
+function findFirstStringByKey(value: unknown, keys: string[], seen = new Set<unknown>()): string | null {
   if (value === undefined || value === null || seen.has(value)) return null;
-  if (typeof value === "string") return value.trim() || null;
   if (typeof value !== "object") return null;
   seen.add(value);
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findFirstString(item, keys, seen);
+      const found = findFirstStringByKey(item, keys, seen);
       if (found) return found;
     }
     return null;
@@ -174,7 +185,7 @@ function findFirstString(value: unknown, keys: string[], seen = new Set<unknown>
     if (typeof direct === "number" || typeof direct === "boolean") return String(direct);
   }
   for (const item of Object.values(record)) {
-    const found = findFirstString(item, keys, seen);
+    const found = findFirstStringByKey(item, keys, seen);
     if (found) return found;
   }
   return null;
@@ -192,8 +203,9 @@ function summarizeToolEvent(event: ExecutionProgressEvent) {
   const normalizedName = name.toLowerCase();
   const detail = parseToolDetail(event.activeTool?.detail);
   const detailRecord = asToolRecord(detail);
-  const command = findFirstString(detail, ["cmd", "command", "shellCommand", "shell_command"]);
-  const file = findFirstString(detail, [
+  const isOutput = event.event === "tool_completed" || event.activeTool?.detailKind === "output";
+  const command = isOutput ? null : findFirstStringByKey(detail, ["cmd", "command", "shellCommand", "shell_command"]);
+  const file = findFirstStringByKey(detail, [
     "file",
     "filepath",
     "filePath",
@@ -203,8 +215,8 @@ function summarizeToolEvent(event: ExecutionProgressEvent) {
     "targetFile",
     "cwd",
   ]);
-  const query = findFirstString(detail, ["query", "q", "pattern", "search", "term", "text"]);
-  const isOutput = event.event === "tool_completed";
+  const query = isOutput ? null : findFirstStringByKey(detail, ["query", "q", "pattern", "search", "term", "text"]);
+  const detailSummary = compactHumanValue(detailRecord?.summary ?? detailRecord?.message ?? detailRecord?.title ?? detail, 120);
 
   if (normalizedName.includes("exec") || command) {
     return {
@@ -236,7 +248,7 @@ function summarizeToolEvent(event: ExecutionProgressEvent) {
 
   return {
     title: `${isOutput ? "Completed" : "Calling"} ${name}`,
-    meta: compactValue(detailRecord?.summary ?? detailRecord?.message ?? detailRecord?.title ?? detail, 120),
+    meta: detailSummary,
   };
 }
 

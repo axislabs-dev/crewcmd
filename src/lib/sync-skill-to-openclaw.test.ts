@@ -38,14 +38,19 @@ vi.mock("node:fs/promises", () => ({
   unlink: vi.fn(async () => {}),
 }));
 
-vi.mock("node:os", () => ({
-  homedir: () => "/Users/testuser",
-}));
+vi.mock("node:os", () => {
+  const osMock = {
+    homedir: () => "/Users/testuser",
+  };
+  return {
+    ...osMock,
+    default: osMock,
+  };
+});
 
 // ─── DB mocks ───────────────────────────────────────────────────────
 
-vi.mock("@/db", async () => {
-  const { vi } = await import("vitest");
+vi.mock("@/db", () => {
   return {
     db: undefined,
     withRetry: (fn: () => Promise<unknown>) => fn(),

@@ -23,7 +23,7 @@ private enum CrewCmdVoiceState: String {
 }
 
 @objc(CrewCmdVoiceSessionPlugin)
-public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
+public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlayerDelegate {
     public let identifier = "CrewCmdVoiceSessionPlugin"
     public let jsName = "CrewCmdVoiceSession"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -31,6 +31,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "muteMic", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "playAudio", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stopAudio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise)
     ]
 
@@ -62,6 +64,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastAudioBufferAt: TimeInterval?
     private var audioWatchdog: DispatchSourceTimer?
     private var keepaliveGraphInstalled = false
+    private var audioPlayer: AVAudioPlayer?
+    private var audioPlaybackCall: CAPPluginCall?
+    private var audioPlaybackData: Data?
 
     private let silenceThreshold = 0.015
     private let speechStartMs = 200.0
@@ -141,6 +146,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func stop(_ call: CAPPluginCall) {
         captureQueue.async {
             self.stopAudioWatchdog()
+            DispatchQueue.main.async {
+                self.stopAudioPlayback(cancelPending: true)
+            }
             self.stopEngine()
             self.active = false
             self.state = .idle
@@ -170,6 +178,95 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(statusPayload())
     }
 
+    @objc func playAudio(_ call: CAPPluginCall) {
+        guard let dataBase64 = call.getString("dataBase64"),
+              let data = Data(base64Encoded: dataBase64) else {
+            call.reject("Invalid audio payload")
+            return
+        }
+
+        let contentType = call.getString("contentType") ?? "application/octet-stream"
+        let playbackRate = max(0.5, min(2.0, call.getDouble("playbackRate") ?? 1.0))
+
+        captureQueue.async {
+            do {
+                try self.configureAudioSession()
+                DispatchQueue.main.async {
+                    do {
+                        self.stopAudioPlayback(cancelPending: true)
+                        self.audioPlaybackData = data
+                        let player = try AVAudioPlayer(data: data)
+                        player.delegate = self
+                        player.enableRate = true
+                        player.rate = Float(playbackRate)
+                        player.prepareToPlay()
+                        self.audioPlayer = player
+                        self.audioPlaybackCall = call
+
+                        guard player.play() else {
+                            self.audioPlaybackCall = nil
+                            self.audioPlayer = nil
+                            self.audioPlaybackData = nil
+                            call.reject("Native audio playback did not start")
+                            return
+                        }
+
+                        self.notifyDiagnostic("native.tts.play.start", detail: [
+                            "bytes": data.count,
+                            "contentType": contentType,
+                            "duration": player.duration,
+                            "rate": playbackRate
+                        ])
+                    } catch {
+                        self.audioPlaybackCall = nil
+                        self.audioPlayer = nil
+                        self.audioPlaybackData = nil
+                        self.lastError = error.localizedDescription
+                        self.notifyDiagnostic("native.tts.play.error", detail: ["message": error.localizedDescription])
+                        call.reject(error.localizedDescription)
+                    }
+                }
+            } catch {
+                self.lastError = error.localizedDescription
+                self.notifyDiagnostic("native.tts.session.error", detail: ["message": error.localizedDescription])
+                DispatchQueue.main.async {
+                    call.reject(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    @objc func stopAudio(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.stopAudioPlayback(cancelPending: true)
+            self.notifyDiagnostic("native.tts.stop", detail: [:])
+            call.resolve(self.statusPayload())
+        }
+    }
+
+    public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        notifyDiagnostic("native.tts.play.finished", detail: [
+            "success": flag,
+            "duration": player.duration
+        ])
+        let call = audioPlaybackCall
+        audioPlaybackCall = nil
+        audioPlayer = nil
+        audioPlaybackData = nil
+        call?.resolve(statusPayload())
+    }
+
+    public func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        let message = error?.localizedDescription ?? "Native audio decode failed"
+        lastError = message
+        notifyDiagnostic("native.tts.decode.error", detail: ["message": message])
+        let call = audioPlaybackCall
+        audioPlaybackCall = nil
+        audioPlayer = nil
+        audioPlaybackData = nil
+        call?.reject(message)
+    }
+
     private func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(
@@ -179,6 +276,22 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         )
         try session.setActive(true)
         notifyDiagnostic("native.audio-session.configured", detail: audioSessionDetail())
+    }
+
+    private func stopAudioPlayback(cancelPending: Bool) {
+        let wasPlaying = audioPlayer?.isPlaying ?? false
+        audioPlayer?.stop()
+        audioPlayer = nil
+        audioPlaybackData = nil
+
+        if cancelPending {
+            audioPlaybackCall?.reject("Native audio playback stopped")
+        }
+        audioPlaybackCall = nil
+
+        if wasPlaying {
+            notifyDiagnostic("native.tts.play.stopped", detail: [:])
+        }
     }
 
     private func startEngine() throws {
@@ -717,6 +830,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             "currentTurnId": currentSessionId ?? "",
             "lastError": lastError ?? NSNull(),
             "engineRunning": audioEngine.isRunning,
+            "audioPlaying": audioPlayer?.isPlaying ?? false,
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull(),
             "applicationState": applicationStateName(UIApplication.shared.applicationState)
         ]
@@ -749,7 +863,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
 const metadata = {
   pluginName: "CrewCmdVoiceSession",
   swiftFile: path.join("ios", "App", "App", pluginFilename),
-  methods: ["isAvailable", "start", "stop", "muteMic", "status"],
+  methods: ["isAvailable", "start", "stop", "muteMic", "playAudio", "stopAudio", "status"],
   events: ["voiceLevel", "voiceSessionDiagnostic", "voiceTranscript"],
   phase: "native-engine-transcription-upload",
 };

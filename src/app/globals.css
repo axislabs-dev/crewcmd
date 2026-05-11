@@ -15,7 +15,7 @@
   --color-status-idle: #b9835f;
   --color-status-offline: #7f8696;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains), "JetBrains Mono", monospace;
+  --font-mono: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
 }
 :root,[data-theme="light"] {
   --bg-primary: #f4f1eb; --bg-secondary: #ede8df; --bg-tertiary: #e3ddd2;

@@ -1,22 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Manrope, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { AppShell } from "@/components/app-shell";
 import "@xyflow/react/dist/style.css";
 import "./globals.css";
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "CrewCmd | Agent Crew Orchestration",
@@ -38,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <Script
           id="theme-init"

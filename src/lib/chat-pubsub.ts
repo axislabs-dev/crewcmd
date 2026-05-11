@@ -10,6 +10,7 @@ export interface ChatMessageEvent {
   sessionId: string;
   agentId: string;
   companyId: string;
+  sessionKey?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
   metadata?: Record<string, unknown> | null;

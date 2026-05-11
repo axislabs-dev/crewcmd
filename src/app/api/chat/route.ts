@@ -4,7 +4,7 @@ import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatRuns, chatSessions } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
@@ -74,11 +74,28 @@ async function resolveSessionId(
 ): Promise<string> {
   const agentLower = agentId.toLowerCase();
 
+  if (gatewaySessionKey) {
+    const existingByGatewayKey = await withRetry(() =>
+      db!.select().from(chatSessions)
+        .where(and(
+          eq(chatSessions.gatewaySessionKey, gatewaySessionKey),
+          eq(chatSessions.companyId, companyId)
+        ))
+        .orderBy(desc(chatSessions.updatedAt))
+        .limit(1)
+    );
+
+    if (existingByGatewayKey.length > 0) {
+      return existingByGatewayKey[0].id;
+    }
+  }
+
   const existing = await withRetry(() =>
     db!.select().from(chatSessions)
       .where(and(
         eq(chatSessions.agentId, agentLower),
-        eq(chatSessions.companyId, companyId)
+        eq(chatSessions.companyId, companyId),
+        isNull(chatSessions.gatewaySessionKey)
       ))
       .orderBy(desc(chatSessions.updatedAt))
       .limit(1)
@@ -600,6 +617,7 @@ async function persistAndPublish(
   content: string,
   metadata?: Record<string, unknown> | null,
   interrupted?: boolean,
+  gatewaySessionKey?: string | null,
 ) {
   const [message] = await withRetry(() =>
     db!.insert(chatMessages).values({
@@ -622,6 +640,7 @@ async function persistAndPublish(
     sessionId,
     agentId: agentId.toLowerCase(),
     companyId,
+    sessionKey: gatewaySessionKey || null,
     role,
     content,
     metadata: metadata || null,
@@ -717,6 +736,8 @@ export async function POST(request: NextRequest) {
           "user",
           lastUserMessage.content,
           body.metadata || null,
+          false,
+          sessionKey,
         );
         userMessageId = userMsg.id;
         if (currentUser) {
@@ -1040,12 +1061,12 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    const deferToolCompletionUntilAssistantText = (reason: string) => {
+    const deferCompletionUntilAssistantText = (reason: string, markToolActivity = false) => {
       deferredToolCompletion = true;
-      hasToolActivity = true;
+      if (markToolActivity) hasToolActivity = true;
       publishAgentModeDiagnostic({
         scope: "api-chat",
-        event: "stream.finish.defer-tool-assistant",
+        event: "stream.finish.defer-assistant",
         sessionId: diagnosticSessionId,
         detail: {
           activeRunId,
@@ -1076,7 +1097,7 @@ export async function POST(request: NextRequest) {
       });
       await recoverMissingAssistantText();
       if (!interrupted && progressEvent === "run_completed" && hasToolActivity && !fullAssistantText) {
-        deferToolCompletionUntilAssistantText("tool-completion-without-assistant");
+        deferCompletionUntilAssistantText("tool-completion-without-assistant", true);
         return;
       }
       clearInactivityTimeout();
@@ -1125,6 +1146,7 @@ export async function POST(request: NextRequest) {
           content,
           null,
           interrupted,
+          sessionKey,
         );
         assistantMessageId = msg.id;
         // Send assistant message ID to client as a meta event
@@ -1268,18 +1290,27 @@ export async function POST(request: NextRequest) {
         if (finalText && !streamAssistantSnapshot(finalText)) {
           fullAssistantText = finalText;
         }
-        if (toolOnlyFinal || (!finalText && hasToolActivity && !fullAssistantText)) {
+        if (!finalText && !fullAssistantText) {
           publishAgentModeDiagnostic({
             scope: "api-chat",
-            event: toolOnlyFinal ? "chat-final.tool-only" : "chat-final.empty-after-tool",
+            event: toolOnlyFinal
+              ? "chat-final.tool-only"
+              : hasToolActivity
+                ? "chat-final.empty-after-tool"
+                : "chat-final.empty",
             sessionId: diagnosticSessionId,
             detail: {
               activeRunId,
               elapsedMs: Date.now() - requestStartedAt,
             },
           });
-          deferToolCompletionUntilAssistantText(
-            toolOnlyFinal ? "tool-only-chat-final" : "empty-chat-final-after-tool"
+          deferCompletionUntilAssistantText(
+            toolOnlyFinal
+              ? "tool-only-chat-final"
+              : hasToolActivity
+                ? "empty-chat-final-after-tool"
+                : "empty-chat-final",
+            toolOnlyFinal,
           );
           return;
         }

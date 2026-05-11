@@ -39,7 +39,7 @@ export function ChatEventProvider() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "message" && data.id && data.agentId) {
-            addMessage({
+            const message = {
               id: data.id,
               sessionId: data.sessionId,
               agentId: data.agentId,
@@ -48,7 +48,18 @@ export function ChatEventProvider() {
               metadata: data.metadata,
               createdAt: data.createdAt,
               interrupted: data.interrupted,
-            });
+            };
+            addMessage(message);
+            if (
+              typeof data.sessionKey === "string" &&
+              data.sessionKey.trim() &&
+              data.sessionKey.toLowerCase() !== data.agentId.toLowerCase()
+            ) {
+              addMessage({
+                ...message,
+                agentId: data.sessionKey,
+              });
+            }
             return;
           }
 

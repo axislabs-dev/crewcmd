@@ -40,7 +40,11 @@ export async function GET(request: NextRequest) {
           const sinceDate = new Date(since);
           // Get all sessions for this company
           const sessions = await withRetry(() =>
-            db!.select({ id: chatSessions.id, agentId: chatSessions.agentId })
+            db!.select({
+              id: chatSessions.id,
+              agentId: chatSessions.agentId,
+              gatewaySessionKey: chatSessions.gatewaySessionKey,
+            })
               .from(chatSessions)
               .where(eq(chatSessions.companyId, companyId))
           );
@@ -80,6 +84,7 @@ export async function GET(request: NextRequest) {
                   sessionId: session.id,
                   agentId: session.agentId,
                   companyId,
+                  sessionKey: session.gatewaySessionKey,
                   role: m.role,
                   content: m.content,
                   metadata: m.metadata,

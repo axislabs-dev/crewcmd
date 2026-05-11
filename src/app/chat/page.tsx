@@ -3099,44 +3099,35 @@ export default function ChatPage() {
                       </div>
                     </div>
                   </div>
-                  {agentOverlayMode === "transcript" ? (
-                    <div className="mt-2 text-sm text-[var(--text-secondary)]">
-                      Live voice chat with visible transcript and replies.
-                    </div>
-                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setSpeakResponses(true);
-                      setAgentPocketLocked(true);
-                    }}
-                    title="Pocket lock"
-                    aria-label="Pocket lock"
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() =>
-                      setAgentOverlayMode((mode) => (mode === "transcript" ? "immersive" : "transcript"))
-                    }
-                    title={agentOverlayMode === "transcript" ? "Enter fullscreen visual mode" : "Return to transcript mode"}
-                    aria-label={agentOverlayMode === "transcript" ? "Enter fullscreen visual mode" : "Return to transcript mode"}
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                  >
-                    {agentOverlayMode === "transcript" ? (
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9V5.25A1.5 1.5 0 0 1 5.25 3.75H9m6 0h3.75A1.5 1.5 0 0 1 20.25 5.25V9m0 6v3.75a1.5 1.5 0 0 1-1.5 1.5H15m-6 0H5.25a1.5 1.5 0 0 1-1.5-1.5V15" />
-                      </svg>
-                    ) : (
+                  {agentOverlayMode === "immersive" ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setSpeakResponses(true);
+                          setAgentPocketLocked(true);
+                        }}
+                        title="Pocket lock"
+                        aria-label="Pocket lock"
+                        className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setAgentOverlayMode("transcript")}
+                        title="Return to transcript mode"
+                        aria-label="Return to transcript mode"
+                        className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                      >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5H5.25A.75.75 0 0 0 4.5 5.25V9m10.5-4.5h3.75a.75.75 0 0 1 .75.75V9M9 19.5H5.25a.75.75 0 0 1-.75-.75V15m10.5 4.5h3.75a.75.75 0 0 0 .75-.75V15M8.25 8.25l-3.75-3.75m15 0-3.75 3.75m-7.5 7.5-3.75 3.75m15 0-3.75-3.75" />
                       </svg>
-                    )}
-                  </button>
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     onClick={() => {
                       setVoiceMode("off");
@@ -3156,35 +3147,37 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className={`px-4 pb-3 sm:px-6 ${agentOverlayMode === "immersive" ? "flex-1 flex items-center" : "shrink-0"}`}>
-              <div className={`mx-auto rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/85 px-4 py-3 shadow-[var(--theme-shadow-lg)] backdrop-blur-xl sm:px-6 ${agentOverlayMode === "immersive" ? "w-full max-w-none border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none" : "max-w-5xl"}`}>
-                <div className="flex flex-col items-center gap-2">
-                  <VoiceAgent
-                    onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
-                    isPlayingAudio={isPlayingAudio}
-                    onInterrupt={interruptAudio}
-                    isLoading={activeThread ? isThreadLoading : isLoading}
-                    accentColor={agentColor}
-                    autoActivate
-                    immersive={agentOverlayMode === "immersive"}
-                    isMicMuted={agentMicMuted}
-                    isAgentMuted={agentAudioMuted}
-                    onMicMutedChange={setAgentMicMuted}
-                    onAgentMutedChange={handleAgentAudioMutedChange}
-                    agent={selectedAgent?.callsign}
-                    gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
-                    companyId={company?.id}
-                    sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-                      ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
-                      : gatewaySessionKeyForAgent(selectedAgent)}
-                  />
+            {agentOverlayMode === "immersive" ? (
+              <div className="flex flex-1 items-center px-4 pb-3 sm:px-6">
+                <div className="mx-auto w-full max-w-none px-0 py-0">
+                  <div className="flex flex-col items-center gap-2">
+                    <VoiceAgent
+                      onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
+                      isPlayingAudio={isPlayingAudio}
+                      onInterrupt={interruptAudio}
+                      isLoading={activeThread ? isThreadLoading : isLoading}
+                      accentColor={agentColor}
+                      autoActivate
+                      immersive
+                      isMicMuted={agentMicMuted}
+                      isAgentMuted={agentAudioMuted}
+                      onMicMutedChange={setAgentMicMuted}
+                      onAgentMutedChange={handleAgentAudioMutedChange}
+                      agent={selectedAgent?.callsign}
+                      gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
+                      companyId={company?.id}
+                      sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+                        : gatewaySessionKeyForAgent(selectedAgent)}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
 
             {agentOverlayMode === "transcript" ? (
-              <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:px-6">
-                <div className="mx-auto max-w-4xl space-y-4 pb-8">
+              <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6">
+                <div className="mx-auto max-w-4xl space-y-4 pb-3">
                   {activeThread ? (
                     <>
                       <ChatMessage
@@ -3298,6 +3291,77 @@ export default function ChatPage() {
                     Scroll to bottom
                   </button>
                 )}
+              </div>
+            ) : null}
+
+            {agentOverlayMode === "transcript" ? (
+              <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4">
+                <div className="mx-auto max-w-3xl">
+                  <div className="relative mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
+                    <div className="absolute right-2 top-2 flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setSpeakResponses(true);
+                          setAgentPocketLocked(true);
+                        }}
+                        title="Pocket lock"
+                        aria-label="Pocket lock"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.25a4.5 4.5 0 0 0-9 0v3.25m-.75 0h10.5A1.75 1.75 0 0 1 19 12.25v6A1.75 1.75 0 0 1 17.25 20H6.75A1.75 1.75 0 0 1 5 18.25v-6a1.75 1.75 0 0 1 1.75-1.75Z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setAgentOverlayMode("immersive")}
+                        title="Enter fullscreen visual mode"
+                        aria-label="Enter fullscreen visual mode"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9V5.25A1.5 1.5 0 0 1 5.25 3.75H9m6 0h3.75A1.5 1.5 0 0 1 20.25 5.25V9m0 6v3.75a1.5 1.5 0 0 1-1.5 1.5H15m-6 0H5.25a1.5 1.5 0 0 1-1.5-1.5V15" />
+                        </svg>
+                      </button>
+                    </div>
+                    <VoiceAgent
+                      onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
+                      isPlayingAudio={isPlayingAudio}
+                      onInterrupt={interruptAudio}
+                      isLoading={activeThread ? isThreadLoading : isLoading}
+                      accentColor={agentColor}
+                      autoActivate
+                      compact
+                      isMicMuted={agentMicMuted}
+                      isAgentMuted={agentAudioMuted}
+                      onMicMutedChange={setAgentMicMuted}
+                      onAgentMutedChange={handleAgentAudioMutedChange}
+                      agent={selectedAgent?.callsign}
+                      gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
+                      companyId={company?.id}
+                      sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+                        : gatewaySessionKeyForAgent(selectedAgent)}
+                    />
+                  </div>
+                  <ChatComposer
+                    value={activeThread ? threadInput : input}
+                    onValueChange={activeThread ? setThreadInput : setInput}
+                    placeholder={activeThread ? "Reply in thread..." : isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
+                    pendingFiles={activeThread ? threadPendingFiles : pendingFiles}
+                    onAddFiles={activeThread ? addThreadFiles : addFiles}
+                    onRemoveFile={activeThread ? removeThreadFile : removeFile}
+                    onSend={(text) => activeThread ? void sendThreadMessage(text) : sendMessage(text)}
+                    onTranscript={(text) => activeThread ? void sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
+                    isLoading={activeThread ? isThreadLoading : isLoading}
+                    speakResponses={speakResponses}
+                    onToggleSpeak={() => {
+                      if (speakResponses) stopAllAudio();
+                      setSpeakResponses(!speakResponses);
+                    }}
+                    onEnterAgentMode={() => setAgentOverlayMode("immersive")}
+                    addMenuLabel={activeThread ? "Add to Thread" : "Add to Chat"}
+                  />
+                </div>
               </div>
             ) : null}
 

@@ -371,6 +371,8 @@ export function VoiceAgent({
   }, []);
 
   const activate = useCallback(async () => {
+    onMicMutedChange?.(false);
+    onAgentMutedChange?.(false);
     setError(null);
     const sessionId = createAgentModeSessionId("voice-agent");
     diagnosticSessionRef.current = sessionId;
@@ -398,7 +400,7 @@ export function VoiceAgent({
       try {
         const nativeSession = await startNativeVoiceSession({
           voiceSessionId: sessionId,
-          muted: isMicMuted,
+          muted: false,
           agent,
           gatewayAgent,
           companyId,
@@ -499,10 +501,15 @@ export function VoiceAgent({
         setError("Microphone access denied. Please allow mic access and retry.");
       }
     }
-  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, requestWakeLock, sessionKey]);
+  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, requestWakeLock, sessionKey]);
 
   const deactivate = useCallback(() => {
     const sessionId = diagnosticSessionRef.current ?? undefined;
+    onMicMutedChange?.(true);
+    onAgentMutedChange?.(true);
+    if (isPlayingAudio) {
+      onInterrupt();
+    }
     publishAgentModeDiagnostic({
       scope: "voice-agent",
       event: "deactivate.start",
@@ -592,7 +599,7 @@ export function VoiceAgent({
       sessionId,
     });
     diagnosticSessionRef.current = null;
-  }, [releaseWakeLock]);
+  }, [isPlayingAudio, onAgentMutedChange, onInterrupt, onMicMutedChange, releaseWakeLock]);
 
   // Lock screen orientation while voice agent is active (prevents rotation issues)
   useOrientationLock(isActive);
@@ -1103,7 +1110,7 @@ export function VoiceAgent({
           >
             {stateLabel[displayState]}
           </span>
-          {isActive && (
+          {isActive && !compact && (
             <div className="flex items-center gap-3">
               <button
                 type="button"

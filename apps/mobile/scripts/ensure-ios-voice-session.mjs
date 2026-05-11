@@ -76,8 +76,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var cachedApplicationState: UIApplication.State = .active
     private var playbackSuppressionUntil: TimeInterval = 0
 
-    private let silenceThreshold = 0.006
-    private let speechStartMs = 80.0
+    private let silenceThreshold = 0.009
+    private let speechStartMs = 140.0
     private let silenceEndMs = 900.0
     private let minRecordingMs = 300.0
     private let maxRecordingMs = 20000.0
@@ -299,12 +299,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     }
 
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        suppressRecordingForPlayback(tailMs: 1000)
+        suppressRecordingForPlayback(tailMs: 2000)
         notifyDiagnostic("native.tts.speech.started", detail: ["characters": utterance.speechString.count])
     }
 
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        suppressRecordingForPlayback(tailMs: 1200)
+        suppressRecordingForPlayback(tailMs: 2500)
         notifyDiagnostic("native.tts.speech.finished", detail: ["characters": utterance.speechString.count])
         let call = speechCall
         speechCall = nil
@@ -344,11 +344,21 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     }
 
     private func preferredSpeechVoice() -> AVSpeechSynthesisVoice? {
-        let preferredLanguages = ["en-AU", "en-US", "en-GB"]
         let voices = AVSpeechSynthesisVoice.speechVoices()
+        let preferredVoiceNames = ["Matilda", "Ava", "Zoe", "Samantha", "Karen", "Daniel", "Moira", "Serena", "Siri"]
+        for preferredName in preferredVoiceNames {
+            let candidates = voices
+                .filter { isNaturalSpeechVoice($0) && $0.name.localizedCaseInsensitiveContains(preferredName) }
+                .sorted { $0.quality.rawValue > $1.quality.rawValue }
+            if let voice = candidates.first {
+                return voice
+            }
+        }
+
+        let preferredLanguages = ["en-AU", "en-US", "en-GB"]
         for language in preferredLanguages {
             let candidates = voices
-                .filter { $0.language == language && !$0.identifier.lowercased().contains("compact") }
+                .filter { $0.language == language && isNaturalSpeechVoice($0) }
                 .sorted { $0.quality.rawValue > $1.quality.rawValue }
             if let voice = candidates.first {
                 return voice
@@ -358,6 +368,13 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         return AVSpeechSynthesisVoice(language: "en-AU")
             ?? AVSpeechSynthesisVoice(language: "en-US")
             ?? AVSpeechSynthesisVoice(language: "en-GB")
+    }
+
+    private func isNaturalSpeechVoice(_ voice: AVSpeechSynthesisVoice) -> Bool {
+        let identifier = voice.identifier.lowercased()
+        let name = voice.name.lowercased()
+        let blockedTerms = ["compact", "eloquence", "eddy", "flo", "grandma", "grandpa", "reed", "rocko", "sandy", "shelley", "super-compact", "novelty"]
+        return !blockedTerms.contains { identifier.contains($0) || name.contains($0) }
     }
 
     private func suppressRecordingForPlayback(tailMs: Double) {

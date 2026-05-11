@@ -31,8 +31,8 @@ describe("iOS native voice-session generator", () => {
   });
 
   it("uses a native VAD threshold suitable for iPhone microphone levels", () => {
-    expect(source).toContain("private let silenceThreshold = 0.006");
-    expect(source).toContain("private let speechStartMs = 80.0");
+    expect(source).toContain("private let silenceThreshold = 0.009");
+    expect(source).toContain("private let speechStartMs = 140.0");
     expect(source).toContain("private let silenceEndMs = 900.0");
     expect(source).toContain("private let minRecordingMs = 300.0");
   });
@@ -44,21 +44,24 @@ describe("iOS native voice-session generator", () => {
     );
 
     expect(source).toContain("private var playbackSuppressionUntil: TimeInterval = 0");
-    expect(source).toContain("suppressRecordingForPlayback(tailMs: 1000)");
-    expect(source).toContain("suppressRecordingForPlayback(tailMs: 1200)");
+    expect(source).toContain("suppressRecordingForPlayback(tailMs: 2000)");
+    expect(source).toContain("suppressRecordingForPlayback(tailMs: 2500)");
     expect(bufferHandler).toContain("guard now >= playbackSuppressionUntil else");
     expect(bufferHandler).toContain("resetRecording()");
   });
 
-  it("prefers higher quality iOS speech voices over compact voices", () => {
+  it("prefers natural iOS speech voices over compact and novelty voices", () => {
     const voiceSelector = source.slice(
       source.indexOf("private func preferredSpeechVoice"),
       source.indexOf("private func suppressRecordingForPlayback")
     );
 
     expect(source).toContain("utterance.voice = self.preferredSpeechVoice()");
+    expect(voiceSelector).toContain('["Matilda", "Ava", "Zoe", "Samantha", "Karen", "Daniel", "Moira", "Serena", "Siri"]');
     expect(voiceSelector).toContain('["en-AU", "en-US", "en-GB"]');
-    expect(voiceSelector).toContain('!$0.identifier.lowercased().contains("compact")');
+    expect(voiceSelector).toContain("isNaturalSpeechVoice($0)");
+    expect(voiceSelector).toContain('"eloquence"');
+    expect(voiceSelector).toContain('"compact"');
     expect(voiceSelector).toContain("$0.quality.rawValue > $1.quality.rawValue");
   });
 

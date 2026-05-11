@@ -105,6 +105,7 @@ export function VoiceAgent({
   const discardRecordingRef = useRef(false);
   const nativeVoiceSessionIdRef = useRef<string | null>(null);
   const nativeSessionActiveRef = useRef(false);
+  const deactivateRef = useRef<() => void>(() => {});
 
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
@@ -603,6 +604,10 @@ export function VoiceAgent({
     diagnosticSessionRef.current = null;
   }, [isPlayingAudio, onAgentMutedChange, onInterrupt, onMicMutedChange, releaseWakeLock]);
 
+  useEffect(() => {
+    deactivateRef.current = () => deactivate();
+  }, [deactivate]);
+
   // Lock screen orientation while voice agent is active (prevents rotation issues)
   useOrientationLock(isActive);
 
@@ -820,8 +825,8 @@ export function VoiceAgent({
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => deactivate();
-  }, [deactivate]);
+    return () => deactivateRef.current();
+  }, []);
 
   const stateLabel: Record<AgentState, string> = {
     idle: "ACTIVATE AGENT",
@@ -861,12 +866,12 @@ export function VoiceAgent({
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
   const usesOrbitalVisual = immersive || compact;
   const particleCount = immersive ? 36 : compact ? 18 : 0;
-  const visualVolume = Math.min(1, volumeLevel * 0.45);
+  const visualVolume = Math.min(1, volumeLevel * 0.65);
   const motionLevel =
     state === "speaking"
       ? Math.min(0.82, 0.24 + visualVolume * 0.78)
       : state === "listening"
-        ? Math.min(0.42, visualVolume)
+        ? Math.min(0.58, visualVolume)
         : state === "processing"
           ? Math.min(0.34, 0.18 + visualVolume * 0.32)
           : 0;

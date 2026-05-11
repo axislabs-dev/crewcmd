@@ -66,6 +66,7 @@ type NativeVoiceSessionPlugin = {
 type CapacitorWindow = Window & {
   Capacitor?: {
     getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
     registerPlugin?: (pluginName: string) => NativeVoiceSessionPlugin;
     Plugins?: {
       CrewCmdVoiceSession?: NativeVoiceSessionPlugin;
@@ -74,6 +75,15 @@ type CapacitorWindow = Window & {
 };
 
 let registeredNativeVoiceSessionPlugin: NativeVoiceSessionPlugin | null | undefined;
+
+function isNativeCapacitorShell() {
+  if (typeof window === "undefined") return false;
+  const capacitor = (window as CapacitorWindow).Capacitor;
+  if (!capacitor) return false;
+  if (capacitor.isNativePlatform?.()) return true;
+  const platform = capacitor.getPlatform?.();
+  return platform === "ios" || platform === "android";
+}
 
 function getNativeVoicePluginDebugDetail() {
   const capacitor = typeof window !== "undefined" ? (window as CapacitorWindow).Capacitor : undefined;
@@ -133,30 +143,48 @@ export async function getNativeVoiceSessionAvailability(): Promise<NativeVoiceSe
 }
 
 
-function resolveNativeApiBaseUrl(explicitBaseUrl?: string) {
-  const candidate = explicitBaseUrl
-    || process.env.NEXT_PUBLIC_CREWCMD_NATIVE_API_BASE_URL
-    || process.env.NEXT_PUBLIC_APP_URL
-    || (typeof window !== "undefined" ? window.location.origin : "");
+function isLocalhostUrl(url: URL) {
+  return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+}
 
-  try {
-    const url = new URL(candidate);
-    if (url.protocol === "http:" || url.protocol === "https:") {
+function resolveNativeApiBaseUrl(explicitBaseUrl?: string) {
+  const candidates = [
+    explicitBaseUrl,
+    process.env.NEXT_PUBLIC_CREWCMD_NATIVE_API_BASE_URL,
+    typeof window !== "undefined" ? window.location.origin : "",
+    process.env.NEXT_PUBLIC_APP_URL,
+  ];
+  const nativeShell = isNativeCapacitorShell();
+  let rejectedLocalhost: string | null = null;
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        continue;
+      }
+      if (nativeShell && isLocalhostUrl(url)) {
+        rejectedLocalhost = url.origin;
+        continue;
+      }
       return url.origin;
+    } catch {
+      // Try the next source before reporting a base URL diagnostic.
     }
-  } catch {
-    // Fall through to diagnostic below.
   }
 
   publishAgentModeDiagnostic({
     scope: "native-voice-session",
     event: "base-url.unsupported",
     detail: {
-      candidate,
+      candidates,
+      nativeShell,
+      rejectedLocalhost,
       windowOrigin: typeof window !== "undefined" ? window.location.origin : null,
     },
   });
-  return candidate;
+  return "";
 }
 
 async function createNativeVoiceUploadToken() {

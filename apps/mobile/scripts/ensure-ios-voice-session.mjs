@@ -75,10 +75,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var speechCall: CAPPluginCall?
     private var cachedApplicationState: UIApplication.State = .active
 
-    private let silenceThreshold = 0.015
-    private let speechStartMs = 200.0
-    private let silenceEndMs = 1600.0
-    private let minRecordingMs = 500.0
+    private let silenceThreshold = 0.006
+    private let speechStartMs = 80.0
+    private let silenceEndMs = 900.0
+    private let minRecordingMs = 300.0
     private let maxRecordingMs = 20000.0
 
     public override func load() {
@@ -615,6 +615,26 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         ) { [weak self] _ in
             self?.captureQueue.async {
                 self?.recoverAudioEngine(reason: "media-services-reset")
+            }
+        })
+        notificationObservers.append(center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.cachedApplicationState = UIApplication.shared.applicationState
+            self?.captureQueue.async {
+                self?.notifyDiagnostic("native.app.active", detail: self?.audioSessionDetail() ?? [:])
+            }
+        })
+        notificationObservers.append(center.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.cachedApplicationState = UIApplication.shared.applicationState
+            self?.captureQueue.async {
+                self?.notifyDiagnostic("native.app.inactive", detail: self?.audioSessionDetail() ?? [:])
             }
         })
         notificationObservers.append(center.addObserver(

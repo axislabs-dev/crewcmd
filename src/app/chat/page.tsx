@@ -1619,10 +1619,6 @@ export default function ChatPage() {
     recordTtsBreadcrumb("stop-filler-audio");
     if (!isNativeCapacitorApp()) {
       window.speechSynthesis?.cancel();
-    } else {
-      void stopNativeVoiceAudio().catch((error) => {
-        recordTtsBreadcrumb("native-audio.stop-filler.error", { message: error instanceof Error ? error.message : String(error) });
-      });
     }
     if (audioRef.current) {
       audioRef.current.pause();
@@ -1768,7 +1764,6 @@ export default function ChatPage() {
           return;
         }
 
-        if (kind === "response") markFirstAudioStarted("native");
         const status = await playNativeVoiceAudio({
           dataBase64,
           contentType: blob.type || undefined,
@@ -1781,6 +1776,7 @@ export default function ChatPage() {
           return;
         }
 
+        if (kind === "response") markFirstAudioStarted("native");
         recordTtsBreadcrumb("native-audio.play.complete", { kind, status });
         setIsPlayingAudio(false);
         activeAudioKindRef.current = null;
@@ -1981,7 +1977,6 @@ export default function ChatPage() {
         recordTtsBreadcrumb("queue.native-blob.ready", { bytes: blob.size, type: blob.type || null });
         const dataBase64 = await blobToBase64(blob);
         recordTtsBreadcrumb("queue.native-audio.play.start", { bytes: blob.size, type: blob.type || null });
-        markFirstAudioStarted("native");
         const status = await playNativeVoiceAudio({
           dataBase64,
           contentType: blob.type || undefined,
@@ -1996,6 +1991,7 @@ export default function ChatPage() {
           return;
         }
 
+        markFirstAudioStarted("native");
         recordTtsBreadcrumb("queue.native-audio.play.complete", { status });
         isSpeakingQueueRef.current = false;
         if (ttsQueueRef.current.length > 0) {

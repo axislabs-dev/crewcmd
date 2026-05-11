@@ -604,6 +604,48 @@ function buildDelegatedAgentMessage(params: {
   ].join("\n");
 }
 
+function buildThreadContextMessage(params: {
+  message: string;
+  threadContext: unknown;
+}) {
+  const context = asRecord(params.threadContext);
+  if (!context) return params.message;
+
+  const parentSessionKey = asString(context.parentSessionKey);
+  const threadSessionKey = asString(context.threadSessionKey);
+  const parentMessage = asRecord(context.parentMessage);
+  const parentRole = firstString(parentMessage?.role) ?? "message";
+  const parentContent = firstString(parentMessage?.content);
+  const contextMessages = Array.isArray(context.contextMessages)
+    ? context.contextMessages
+      .map((item) => {
+        const message = asRecord(item);
+        const role = firstString(message?.role);
+        const content = firstString(message?.content);
+        return role && content ? `${role}: ${content}` : null;
+      })
+      .filter((value): value is string => Boolean(value))
+      .slice(-10)
+    : [];
+
+  if (!parentContent && contextMessages.length === 0) return params.message;
+
+  return [
+    "CrewCMD threaded reply.",
+    "",
+    parentSessionKey ? `Parent session: ${parentSessionKey}` : null,
+    threadSessionKey ? `Thread session: ${threadSessionKey}` : null,
+    "",
+    "This turn is in a one-level thread branched from the parent conversation. Answer in the context of the parent message and the nearby prior context. Do not assume later parent-chat messages are part of this thread unless the user includes them.",
+    "",
+    parentContent ? `Parent ${parentRole} message:\n${parentContent}` : null,
+    contextMessages.length > 0 ? `Nearby prior context:\n${contextMessages.join("\n\n")}` : null,
+    "",
+    "User thread reply:",
+    params.message,
+  ].filter(Boolean).join("\n");
+}
+
 /**
  * Persist a message to the DB and publish to the event bus.
  * Returns the DB record.
@@ -666,6 +708,7 @@ export async function POST(request: NextRequest) {
       agentMode: bodyAgentMode,
       clientVisibility: bodyClientVisibility,
       notifyOnCompletion: bodyNotifyOnCompletion,
+      threadContext: bodyThreadContext,
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -698,12 +741,16 @@ export async function POST(request: NextRequest) {
     const activeHistorySessionKeys = Array.from(
       new Map(allowedEventSessions.map((value) => [value.toLowerCase(), value])).values()
     );
-    const outboundMessage = buildDelegatedAgentMessage({
+    const threadedMessage = buildThreadContextMessage({
       message: lastUserMessage.content,
+      threadContext: bodyThreadContext,
+    });
+    const outboundMessage = buildDelegatedAgentMessage({
+      message: threadedMessage,
       targetAgent,
     });
     const scopedThinkingLevel = bodyAgentMode === true ? AGENT_MODE_THINKING_LEVEL : undefined;
-    const currentUserContents = [lastUserMessage.content, outboundMessage];
+    const currentUserContents = [lastUserMessage.content, threadedMessage, outboundMessage];
     const previousAssistantContents = messages
       .slice(0, messages.lastIndexOf(lastUserMessage))
       .filter((message: { role?: string }) => message.role === "assistant")

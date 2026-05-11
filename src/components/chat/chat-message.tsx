@@ -207,6 +207,7 @@ interface ChatMessageProps {
   metadata?: { attachments?: Attachment[] } | null;
   onReplyInThread?: () => void;
   threadReplyCount?: number;
+  threadReplies?: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
 }
 
 /** Day separator shown between messages on different dates */
@@ -308,6 +309,71 @@ function formatTime(timestamp?: string | null): string | null {
   }
 }
 
+function ThreadAvatar({ role }: { role: "user" | "assistant" }) {
+  const isUser = role === "user";
+
+  return (
+    <span
+      className={`flex h-5 w-5 items-center justify-center rounded-md border text-[8px] font-bold shadow-sm ${
+        isUser
+          ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
+          : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+      }`}
+      aria-hidden="true"
+    >
+      {isUser ? "YOU" : "AI"}
+    </span>
+  );
+}
+
+function ThreadReplyIndicator({
+  replies,
+  fallbackCount,
+  isUser,
+  onOpen,
+}: {
+  replies: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
+  fallbackCount: number;
+  isUser: boolean;
+  onOpen: () => void;
+}) {
+  const replyCount = replies.length || fallbackCount;
+  if (replyCount <= 0) return null;
+
+  const displayReplies = replies.slice(-3);
+  const lastReplyTime = formatTime(replies.at(-1)?.createdAt);
+  const label = `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`;
+
+  return (
+    <button
+      onClick={onOpen}
+      className={`mt-1.5 flex max-w-full items-center gap-2 rounded-lg px-1 py-1 text-left text-[11px] font-medium text-[var(--text-tertiary)] transition hover:bg-white/5 hover:text-[var(--text-primary)] ${
+        isUser ? "ml-auto flex-row-reverse text-right" : ""
+      }`}
+      aria-label={`Open thread with ${label}`}
+    >
+      {displayReplies.length > 0 && (
+        <span className={`flex shrink-0 items-center ${isUser ? "flex-row-reverse" : ""}`}>
+          {displayReplies.map((reply, index) => (
+            <span
+              key={reply.id}
+              className={index > 0 ? (isUser ? "-mr-1.5" : "-ml-1.5") : ""}
+            >
+              <ThreadAvatar role={reply.role} />
+            </span>
+          ))}
+        </span>
+      )}
+      <span className="min-w-0 truncate">
+        <span className="font-semibold text-[var(--accent)]">{label}</span>
+        {lastReplyTime && (
+          <span className="ml-2 font-normal text-[var(--text-tertiary)]">Last reply {lastReplyTime}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 export function ChatMessage({
   role,
   content,
@@ -316,6 +382,7 @@ export function ChatMessage({
   metadata,
   onReplyInThread,
   threadReplyCount,
+  threadReplies = [],
 }: ChatMessageProps) {
   const isUser = role === "user";
   const attachments = metadata?.attachments;
@@ -436,13 +503,13 @@ export function ChatMessage({
             {formatTime(timestamp)}
           </span>
         )}
-        {onReplyInThread && typeof threadReplyCount === "number" && threadReplyCount > 0 && (
-          <button
-            onClick={onReplyInThread}
-            className={`mt-1 block text-[10px] font-medium text-[var(--accent)] transition hover:underline ${isUser ? "ml-auto text-right" : "text-left"}`}
-          >
-            {threadReplyCount} {threadReplyCount === 1 ? "reply" : "replies"}
-          </button>
+        {onReplyInThread && (
+          <ThreadReplyIndicator
+            replies={threadReplies}
+            fallbackCount={threadReplyCount ?? 0}
+            isUser={isUser}
+            onOpen={onReplyInThread}
+          />
         )}
       </div>
     </div>

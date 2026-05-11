@@ -3133,6 +3133,13 @@ export default function ChatPage() {
             const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
+            const threadReplies = (messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || [])
+              .filter((reply) => reply.role === "user" || reply.role === "assistant")
+              .map((reply) => ({
+                id: reply.id,
+                role: reply.role as "user" | "assistant",
+                createdAt: reply.createdAt,
+              }));
             return (
               <div key={msg.id}>
                 {showSeparator && <DateSeparator date={msg.createdAt!} />}
@@ -3142,7 +3149,8 @@ export default function ChatPage() {
                   timestamp={msg.createdAt}
                   metadata={msg.metadata}
                   onReplyInThread={() => openThreadForMessage(msg, i)}
-                  threadReplyCount={(messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || []).length}
+                  threadReplyCount={threadReplies.length}
+                  threadReplies={threadReplies}
                 />
               </div>
             );

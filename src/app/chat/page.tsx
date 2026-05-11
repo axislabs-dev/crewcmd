@@ -446,7 +446,10 @@ function getNativeCapacitor() {
 
 function isNativeCapacitorApp() {
   const capacitor = getNativeCapacitor();
-  return Boolean(capacitor?.isNativePlatform?.());
+  if (!capacitor) return false;
+  if (capacitor.isNativePlatform?.()) return true;
+  const platform = capacitor.getPlatform?.();
+  return platform === "ios" || platform === "android";
 }
 
 function blobToBase64(blob: Blob) {
@@ -477,7 +480,8 @@ function getMobileDeviceId() {
 
 async function registerMobilePushDevice(companyId: string) {
   const capacitor = getNativeCapacitor();
-  if (!capacitor?.isNativePlatform?.()) return;
+  if (!capacitor) return;
+  if (!isNativeCapacitorApp()) return;
   const push = capacitor.Plugins?.PushNotifications;
   if (!push || mobilePushRegistrationStarted) return;
   mobilePushRegistrationStarted = true;

@@ -503,12 +503,14 @@ export function VoiceAgent({
     }
   }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, requestWakeLock, sessionKey]);
 
-  const deactivate = useCallback(() => {
+  const deactivate = useCallback((options: { silence?: boolean } = {}) => {
     const sessionId = diagnosticSessionRef.current ?? undefined;
-    onMicMutedChange?.(true);
-    onAgentMutedChange?.(true);
-    if (isPlayingAudio) {
-      onInterrupt();
+    if (options.silence) {
+      onMicMutedChange?.(true);
+      onAgentMutedChange?.(true);
+      if (isPlayingAudio) {
+        onInterrupt();
+      }
     }
     publishAgentModeDiagnostic({
       scope: "voice-agent",
@@ -859,13 +861,14 @@ export function VoiceAgent({
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
   const usesOrbitalVisual = immersive || compact;
   const particleCount = immersive ? 36 : compact ? 18 : 0;
+  const visualVolume = Math.min(1, volumeLevel * 0.45);
   const motionLevel =
     state === "speaking"
-      ? Math.min(1, 0.35 + volumeLevel * 1.25)
+      ? Math.min(0.82, 0.24 + visualVolume * 0.78)
       : state === "listening"
-        ? volumeLevel
+        ? Math.min(0.42, visualVolume)
         : state === "processing"
-          ? Math.min(1, 0.22 + volumeLevel * 0.45)
+          ? Math.min(0.34, 0.18 + visualVolume * 0.32)
           : 0;
   const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 138 + motionLevel * 38 : 170 + motionLevel * 90;
   const orbScale = immersive
@@ -893,7 +896,7 @@ export function VoiceAgent({
       )}
 
       <button
-        onClick={isActive ? deactivate : activate}
+        onClick={isActive ? () => deactivate({ silence: true }) : activate}
         className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${
           immersive
             ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]"
@@ -904,7 +907,7 @@ export function VoiceAgent({
         style={
           {
             "--voice-accent-rgb": activeRgb,
-            "--voice-volume": `${volumeLevel}`,
+            "--voice-volume": `${visualVolume}`,
             "--voice-motion": `${motionLevel}`,
           } as CSSProperties
         }
@@ -960,7 +963,7 @@ export function VoiceAgent({
             height: `${haloSize}px`,
             background:
               state === "listening"
-                ? `radial-gradient(circle, rgba(${listeningRgb}, ${0.11 + volumeLevel * 0.16}) 0%, transparent 70%)`
+                ? `radial-gradient(circle, rgba(${listeningRgb}, ${0.1 + visualVolume * 0.1}) 0%, transparent 70%)`
                 : state === "speaking"
                   ? `radial-gradient(circle, rgba(${speakingRgb}, ${0.14 + motionLevel * 0.22}) 0%, transparent 70%)`
                 : state === "processing"
@@ -984,9 +987,9 @@ export function VoiceAgent({
           style={
             state === "listening"
               ? {
-                  borderColor: `rgba(${listeningRgb}, ${0.48 + volumeLevel * 0.2})`,
+                  borderColor: `rgba(${listeningRgb}, ${0.46 + visualVolume * 0.12})`,
                   background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), var(--voice-shell-bg-strong) 72%)`,
-                  boxShadow: `0 0 ${24 + volumeLevel * 34}px rgba(${listeningRgb}, ${0.2 + volumeLevel * 0.28})`,
+                  boxShadow: `0 0 ${22 + visualVolume * 18}px rgba(${listeningRgb}, ${0.18 + visualVolume * 0.16})`,
                   transform: `scale(${orbScale})`,
                 }
               : state === "speaking"

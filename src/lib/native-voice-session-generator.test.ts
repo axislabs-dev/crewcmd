@@ -37,6 +37,31 @@ describe("iOS native voice-session generator", () => {
     expect(source).toContain("private let minRecordingMs = 300.0");
   });
 
+  it("suppresses VAD recording while native playback is speaking", () => {
+    const bufferHandler = source.slice(
+      source.indexOf("private func handleAudioBuffer"),
+      source.indexOf("private func finishRecording")
+    );
+
+    expect(source).toContain("private var playbackSuppressionUntil: TimeInterval = 0");
+    expect(source).toContain("suppressRecordingForPlayback(tailMs: 1000)");
+    expect(source).toContain("suppressRecordingForPlayback(tailMs: 1200)");
+    expect(bufferHandler).toContain("guard now >= playbackSuppressionUntil else");
+    expect(bufferHandler).toContain("resetRecording()");
+  });
+
+  it("prefers higher quality iOS speech voices over compact voices", () => {
+    const voiceSelector = source.slice(
+      source.indexOf("private func preferredSpeechVoice"),
+      source.indexOf("private func suppressRecordingForPlayback")
+    );
+
+    expect(source).toContain("utterance.voice = self.preferredSpeechVoice()");
+    expect(voiceSelector).toContain('["en-AU", "en-US", "en-GB"]');
+    expect(voiceSelector).toContain('!$0.identifier.lowercased().contains("compact")');
+    expect(voiceSelector).toContain("$0.quality.rawValue > $1.quality.rawValue");
+  });
+
   it("uploads foreground native recordings for transcription", () => {
     const finishRecording = source.slice(
       source.indexOf("private func finishRecording"),

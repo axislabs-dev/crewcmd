@@ -439,6 +439,11 @@ function getNativeCapacitor() {
   return (window as Window & { Capacitor?: NativeCapacitor }).Capacitor ?? null;
 }
 
+function isNativeCapacitorApp() {
+  const capacitor = getNativeCapacitor();
+  return Boolean(capacitor?.isNativePlatform?.());
+}
+
 function getMobileDeviceId() {
   const key = "crewcmd.mobile.device-id";
   const existing = window.localStorage.getItem(key);
@@ -1454,16 +1459,16 @@ export default function ChatPage() {
     window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
   }, [selectedSessionKey]);
 
-  const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
+  const ttsModRef = useRef<"server" | "browser" | "disabled" | "unknown">("unknown");
 
   // Probe TTS availability on mount
   useEffect(() => {
     fetch("/api/tts")
       .then((res) => {
-        ttsModRef.current = res.ok ? "server" : "browser";
+        ttsModRef.current = res.ok ? "server" : isNativeCapacitorApp() ? "disabled" : "browser";
       })
       .catch(() => {
-        ttsModRef.current = "browser";
+        ttsModRef.current = isNativeCapacitorApp() ? "disabled" : "browser";
       });
   }, []);
 
@@ -1528,7 +1533,9 @@ export default function ChatPage() {
 
   // Stop all audio playback (server TTS, browser TTS, queued sentences)
   const stopAllAudio = useCallback(() => {
-    window.speechSynthesis?.cancel();
+    if (!isNativeCapacitorApp()) {
+      window.speechSynthesis?.cancel();
+    }
     ttsQueueRef.current = [];
     isSpeakingQueueRef.current = false;
     activeAudioKindRef.current = null;
@@ -1544,7 +1551,9 @@ export default function ChatPage() {
   const stopFillerAudio = useCallback(() => {
     fillerAudioTokenRef.current++;
     if (activeAudioKindRef.current !== "filler") return;
-    window.speechSynthesis?.cancel();
+    if (!isNativeCapacitorApp()) {
+      window.speechSynthesis?.cancel();
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -1576,6 +1585,11 @@ export default function ChatPage() {
   }, []);
 
   const playBrowserTTS = useCallback((text: string, kind: "filler" | "response" = "filler", token?: number) => {
+    if (isNativeCapacitorApp()) {
+      activeAudioKindRef.current = null;
+      setIsPlayingAudio(false);
+      return;
+    }
     if (!("speechSynthesis" in window)) {
       setIsPlayingAudio(false);
       return;
@@ -1623,6 +1637,12 @@ export default function ChatPage() {
       setIsPlayingAudio(true);
       activeAudioKindRef.current = kind;
 
+      if (ttsModRef.current === "disabled") {
+        setIsPlayingAudio(false);
+        activeAudioKindRef.current = null;
+        return;
+      }
+
       // If we already know server TTS is unavailable, go straight to browser
       if (ttsModRef.current === "browser") {
         playBrowserTTS(text, kind, token);
@@ -1636,10 +1656,17 @@ export default function ChatPage() {
       });
 
       if (response.status === 503) {
-        // Server has no TTS backend, switch to browser mode
-        console.log("[TTS] Server unavailable, using browser speechSynthesis");
-        ttsModRef.current = "browser";
-        playBrowserTTS(text, kind, token);
+        if (isNativeCapacitorApp()) {
+          console.log("[TTS] Server unavailable; skipping browser speechSynthesis in native WebView");
+          ttsModRef.current = "disabled";
+          setIsPlayingAudio(false);
+          activeAudioKindRef.current = null;
+        } else {
+          // Server has no TTS backend, switch to browser mode
+          console.log("[TTS] Server unavailable, using browser speechSynthesis");
+          ttsModRef.current = "browser";
+          playBrowserTTS(text, kind, token);
+        }
         return;
       }
 
@@ -1683,7 +1710,12 @@ export default function ChatPage() {
     } catch (error) {
       console.error("[TTS] Error:", error);
       revokeAudioObjectUrl(audioObjectUrlRef.current, "play-exception");
-      // Network error — try browser fallback
+      if (isNativeCapacitorApp()) {
+        setIsPlayingAudio(false);
+        activeAudioKindRef.current = null;
+        return;
+      }
+      // Network error — try browser fallback on regular web only.
       playBrowserTTS(text, kind, token);
     }
   }, [assignAudioObjectUrl, markFirstAudioStarted, playBrowserTTS, revokeAudioObjectUrl]);
@@ -1719,6 +1751,13 @@ export default function ChatPage() {
       isSpeakingQueueRef.current = false;
       return;
     }
+    if (ttsModRef.current === "disabled") {
+      ttsQueueRef.current = [];
+      isSpeakingQueueRef.current = false;
+      activeAudioKindRef.current = null;
+      setIsPlayingAudio(false);
+      return;
+    }
     stopFillerAudio();
     isSpeakingQueueRef.current = true;
     activeAudioKindRef.current = "response";
@@ -1731,14 +1770,17 @@ export default function ChatPage() {
     }
 
     try {
+      const browserSpeechAllowed =
+        !isNativeCapacitorApp() &&
+        "speechSynthesis" in window;
       const useBrowserForFastStart =
         !hasStartedResponseAudioRef.current &&
-        "speechSynthesis" in window;
+        browserSpeechAllowed;
 
-      if (ttsModRef.current === "browser" || useBrowserForFastStart) {
+      if (browserSpeechAllowed && (ttsModRef.current === "browser" || useBrowserForFastStart)) {
         hasStartedResponseAudioRef.current = true;
         // Browser TTS with queue continuation
-        if ("speechSynthesis" in window) {
+        if (browserSpeechAllowed) {
           let browserSpeechStarted = false;
           let browserSpeechSettled = false;
           const continueQueue = () => {
@@ -1809,6 +1851,9 @@ export default function ChatPage() {
         });
 
         if (!response.ok) {
+          if (response.status === 503 && isNativeCapacitorApp()) {
+            ttsModRef.current = "disabled";
+          }
           isSpeakingQueueRef.current = false;
           activeAudioKindRef.current = null;
           setIsPlayingAudio(false);

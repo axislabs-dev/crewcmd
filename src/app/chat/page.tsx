@@ -3021,7 +3021,7 @@ export default function ChatPage() {
               backgroundSize: "44px 44px",
             }}
           />
-          <div className={`relative flex h-full flex-col ${agentOverlayMode === "immersive" ? "justify-center" : ""}`}>
+          <div className="relative flex h-full flex-col">
             <div className="shrink-0 px-4 pt-[max(var(--mobile-safe-top),1rem)] sm:px-6">
               <div className="mx-auto flex max-w-5xl items-start justify-between gap-4 py-3">
                 <div className="min-w-0">
@@ -3051,34 +3051,6 @@ export default function ChatPage() {
                 </div>
               </div>
             </div>
-
-            {agentOverlayMode === "immersive" ? (
-              <div className="flex flex-1 items-center px-4 pb-3 sm:px-6">
-                <div className="mx-auto w-full max-w-none px-0 py-0">
-                  <div className="flex flex-col items-center gap-2">
-                    <VoiceAgent
-                      onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
-                      isPlayingAudio={isPlayingAudio}
-                      onInterrupt={interruptAudio}
-                      isLoading={activeThread ? isThreadLoading : isLoading}
-                      accentColor={agentColor}
-                      autoActivate
-                      immersive
-                      isMicMuted={agentMicMuted}
-                      isAgentMuted={agentAudioMuted}
-                      onMicMutedChange={setAgentMicMuted}
-                      onAgentMutedChange={handleAgentAudioMutedChange}
-                      agent={selectedAgent?.callsign}
-                      gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
-                      companyId={company?.id}
-                      sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-                        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
-                        : gatewaySessionKeyForAgent(selectedAgent)}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : null}
 
             {agentOverlayMode === "transcript" ? (
               <div ref={agentScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6">
@@ -3199,10 +3171,42 @@ export default function ChatPage() {
               </div>
             ) : null}
 
-            {agentOverlayMode === "transcript" ? (
-              <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4">
-                <div className="mx-auto max-w-3xl">
-                  <div className="relative mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
+            <div
+              className={
+                agentOverlayMode === "immersive"
+                  ? "flex flex-1 items-center px-4 pb-3 sm:px-6"
+                  : "shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4"
+              }
+            >
+              <div className={agentOverlayMode === "immersive" ? "mx-auto w-full max-w-none px-0 py-0" : "mx-auto max-w-3xl"}>
+                <div
+                  className={
+                    agentOverlayMode === "immersive"
+                      ? "flex flex-col items-center gap-2"
+                      : "relative mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl"
+                  }
+                >
+                  <VoiceAgent
+                    onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
+                    isPlayingAudio={isPlayingAudio}
+                    onInterrupt={interruptAudio}
+                    isLoading={activeThread ? isThreadLoading : isLoading}
+                    accentColor={agentColor}
+                    autoActivate
+                    immersive={agentOverlayMode === "immersive"}
+                    compact={agentOverlayMode === "transcript"}
+                    isMicMuted={agentMicMuted}
+                    isAgentMuted={agentAudioMuted}
+                    onMicMutedChange={setAgentMicMuted}
+                    onAgentMutedChange={handleAgentAudioMutedChange}
+                    agent={selectedAgent?.callsign}
+                    gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
+                    companyId={company?.id}
+                    sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                      ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+                      : gatewaySessionKeyForAgent(selectedAgent)}
+                  />
+                  {agentOverlayMode === "transcript" ? (
                     <div className="absolute right-2 top-2 flex items-center gap-1">
                       <button
                         onClick={() => setAgentOverlayMode("immersive")}
@@ -3215,26 +3219,9 @@ export default function ChatPage() {
                         </svg>
                       </button>
                     </div>
-                    <VoiceAgent
-                      onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
-                      isPlayingAudio={isPlayingAudio}
-                      onInterrupt={interruptAudio}
-                      isLoading={activeThread ? isThreadLoading : isLoading}
-                      accentColor={agentColor}
-                      autoActivate
-                      compact
-                      isMicMuted={agentMicMuted}
-                      isAgentMuted={agentAudioMuted}
-                      onMicMutedChange={setAgentMicMuted}
-                      onAgentMutedChange={handleAgentAudioMutedChange}
-                      agent={selectedAgent?.callsign}
-                      gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
-                      companyId={company?.id}
-                      sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-                        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
-                        : gatewaySessionKeyForAgent(selectedAgent)}
-                    />
-                  </div>
+                  ) : null}
+                </div>
+                {agentOverlayMode === "transcript" ? (
                   <ChatComposer
                     value={activeThread ? threadInput : input}
                     onValueChange={activeThread ? setThreadInput : setInput}
@@ -3259,9 +3246,9 @@ export default function ChatPage() {
                     agentButtonTitle="Exit agent mode"
                     addMenuLabel={activeThread ? "Add to Thread" : "Add to Chat"}
                   />
-                </div>
+                ) : null}
               </div>
-            ) : null}
+            </div>
           </div>
         </div>
       )}

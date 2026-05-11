@@ -267,6 +267,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         }
 
         let playbackRate = max(0.5, min(2.0, call.getDouble("playbackRate") ?? 1.0))
+        let voiceId = call.getString("voiceId")
+        let voiceName = call.getString("voiceName")
+        let language = call.getString("language")
 
         captureQueue.async {
             do {
@@ -279,7 +282,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                     utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(playbackRate)
                     utterance.pitchMultiplier = 1.0
                     utterance.volume = 1.0
-                    utterance.voice = self.preferredSpeechVoice()
+                    utterance.voice = self.preferredSpeechVoice(voiceId: voiceId, voiceName: voiceName, language: language)
 
                     self.speechCall = call
                     self.notifyDiagnostic("native.tts.speech.queued", detail: [
@@ -344,9 +347,40 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         call?.reject(message)
     }
 
-    private func preferredSpeechVoice() -> AVSpeechSynthesisVoice? {
+    private func preferredSpeechVoice(voiceId: String? = nil, voiceName: String? = nil, language: String? = nil) -> AVSpeechSynthesisVoice? {
         let voices = AVSpeechSynthesisVoice.speechVoices()
-        let preferredVoiceNames = ["Matilda", "Ava", "Zoe", "Samantha", "Karen", "Daniel", "Moira", "Serena", "Siri"]
+
+        if let voiceId = voiceId, !voiceId.isEmpty {
+            if let exact = voices.first(where: { $0.identifier == voiceId }) {
+                return exact
+            }
+            if let byName = voices.first(where: { $0.name == voiceId }) {
+                return byName
+            }
+        }
+
+        if let voiceName = voiceName, !voiceName.isEmpty {
+            let candidates = voices
+                .filter { isNaturalSpeechVoice($0) && $0.name.localizedCaseInsensitiveContains(voiceName) }
+                .sorted { $0.quality.rawValue > $1.quality.rawValue }
+            if let voice = candidates.first {
+                return voice
+            }
+            if let anyByName = voices.first(where: { $0.name.localizedCaseInsensitiveContains(voiceName) }) {
+                return anyByName
+            }
+        }
+
+        if let language = language, !language.isEmpty {
+            let candidates = voices
+                .filter { $0.language == language && isNaturalSpeechVoice($0) }
+                .sorted { $0.quality.rawValue > $1.quality.rawValue }
+            if let voice = candidates.first {
+                return voice
+            }
+        }
+
+        let preferredVoiceNames = ["Daniel", "Matilda", "Ava", "Zoe", "Samantha", "Karen", "Moira", "Serena", "Siri"]
         for preferredName in preferredVoiceNames {
             let candidates = voices
                 .filter { isNaturalSpeechVoice($0) && $0.name.localizedCaseInsensitiveContains(preferredName) }

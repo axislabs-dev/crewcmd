@@ -437,23 +437,25 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         }
 
         let input = audioEngine.inputNode
-        let format = input.outputFormat(forBus: 0)
+        let inputFormat = input.inputFormat(forBus: 0)
+        let outputFormat = input.outputFormat(forBus: 0)
+        let format = inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 ? inputFormat : outputFormat
         recordingSampleRate = format.sampleRate
         recordingChannels = Int(format.channelCount)
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.captureQueue.async {
                 self?.handleAudioBuffer(buffer)
             }
         }
 
-        installKeepaliveInputGraph(input: input)
+        installKeepaliveInputGraph(input: input, format: format)
         lastAudioBufferAt = Date().timeIntervalSince1970 * 1000
         audioEngine.prepare()
         try audioEngine.start()
     }
 
-    private func installKeepaliveInputGraph(input: AVAudioInputNode) {
+    private func installKeepaliveInputGraph(input: AVAudioInputNode, format: AVAudioFormat) {
         if !keepaliveGraphInstalled {
             audioEngine.attach(keepaliveMixer)
             keepaliveMixer.outputVolume = 0
@@ -462,7 +464,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
         audioEngine.disconnectNodeOutput(input)
         audioEngine.disconnectNodeOutput(keepaliveMixer)
-        audioEngine.connect(input, to: keepaliveMixer, format: nil)
+        audioEngine.connect(input, to: keepaliveMixer, format: format)
         audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: nil)
         audioEngine.mainMixerNode.outputVolume = 0
     }
@@ -743,8 +745,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "applicationState": currentApplicationStateName(),
             "engineRunning": audioEngine.isRunning
         ])
-        if active && !audioEngine.isRunning {
-            recoverAudioEngine(reason: "route-change")
+        if active {
+            recoverAudioEngine(reason: "route-change", forceRestart: true)
         }
     }
 

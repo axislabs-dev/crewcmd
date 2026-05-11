@@ -30,18 +30,26 @@ describe("iOS native voice-session generator", () => {
     );
   });
 
-  it("uses the delivered input buffer format after route sample-rate changes", () => {
+  it("uses the current hardware input format after route sample-rate changes", () => {
     const startEngine = source.slice(
       source.indexOf("private func startEngine"),
       source.indexOf("private func stopEngine")
+    );
+    const routeChangeHandler = source.slice(
+      source.indexOf("private func handleAudioRouteChange"),
+      source.indexOf("private func recoverAudioEngine")
     );
     const bufferHandler = source.slice(
       source.indexOf("private func handleAudioBuffer"),
       source.indexOf("private func finishRecording")
     );
 
-    expect(startEngine).toContain("input.installTap(onBus: 0, bufferSize: 1024, format: nil)");
-    expect(startEngine).toContain("audioEngine.connect(input, to: keepaliveMixer, format: nil)");
+    expect(startEngine).toContain("let inputFormat = input.inputFormat(forBus: 0)");
+    expect(startEngine).toContain("let format = inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 ? inputFormat : outputFormat");
+    expect(startEngine).toContain("input.installTap(onBus: 0, bufferSize: 1024, format: format)");
+    expect(startEngine).toContain("installKeepaliveInputGraph(input: input, format: format)");
+    expect(startEngine).toContain("audioEngine.connect(input, to: keepaliveMixer, format: format)");
+    expect(routeChangeHandler).toContain('recoverAudioEngine(reason: "route-change", forceRestart: true)');
     expect(bufferHandler).toContain("recordingSampleRate = buffer.format.sampleRate");
     expect(bufferHandler).toContain("recordingChannels = Int(buffer.format.channelCount)");
   });

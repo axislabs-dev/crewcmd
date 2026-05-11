@@ -1929,7 +1929,11 @@ export default function ChatPage() {
       const browserSpeechAllowed =
         !isNativeCapacitorApp() &&
         "speechSynthesis" in window;
+      const usesExplicitServerVoice =
+        resolvedVoiceSettings.provider === "openai" ||
+        resolvedVoiceSettings.provider === "elevenlabs";
       const useBrowserForFastStart =
+        !usesExplicitServerVoice &&
         !hasStartedResponseAudioRef.current &&
         browserSpeechAllowed &&
         !resolvedVoiceSettings.preferNative &&

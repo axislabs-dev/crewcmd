@@ -5,6 +5,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { text } = body;
+    const voice = normalizeAgentVoiceSettings(body.voice);
 
     if (!text || typeof text !== "string") {
       return Response.json(
@@ -52,13 +54,18 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Try OpenAI TTS (best quality)
-    if (OPENAI_API_KEY) {
-      const result = await tryOpenAITTS(text);
+    if (OPENAI_API_KEY && (voice.provider === "auto" || voice.provider === "openai" || !voice.provider)) {
+      const result = await tryOpenAITTS(text, voice);
+      if (result) return result;
+    }
+
+    if (process.env.ELEVENLABS_API_KEY && voice.provider === "elevenlabs" && voice.voiceId) {
+      const result = await tryElevenLabsTTS(text, voice);
       if (result) return result;
     }
 
     // 2. Try local TTS CLI
-    const localResult = await tryLocalTTS(text);
+    const localResult = await tryLocalTTS(text, voice);
     if (localResult) return localResult;
 
     // 3. No backend — tell frontend to use browser speechSynthesis
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
 /**
  * Try OpenAI TTS API.
  */
-async function tryOpenAITTS(text: string): Promise<Response | null> {
+async function tryOpenAITTS(text: string, voice: AgentVoiceSettings): Promise<Response | null> {
   try {
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
@@ -84,8 +91,9 @@ async function tryOpenAITTS(text: string): Promise<Response | null> {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "tts-1",
-        voice: "onyx",
+        model: voice.model || "tts-1",
+        voice: voice.voiceId || "onyx",
+        speed: clampSpeed(voice.speed),
         input: text,
       }),
     });
@@ -106,6 +114,54 @@ async function tryOpenAITTS(text: string): Promise<Response | null> {
     console.error("[api/tts] OpenAI TTS failed:", err);
     return null;
   }
+}
+
+/**
+ * Try ElevenLabs TTS API when an agent explicitly selects an ElevenLabs voice.
+ */
+async function tryElevenLabsTTS(text: string, voice: AgentVoiceSettings): Promise<Response | null> {
+  try {
+    const baseUrl = process.env.ELEVENLABS_BASE_URL || "https://api.elevenlabs.io/v1";
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/text-to-speech/${encodeURIComponent(voice.voiceId || "")}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+        "xi-api-key": process.env.ELEVENLABS_API_KEY || "",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: voice.model || "eleven_multilingual_v2",
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0,
+          use_speaker_boost: true,
+          speed: clampSpeed(voice.speed),
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[api/tts] ElevenLabs error:", response.status);
+      return null;
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    return new Response(audioBuffer, {
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (err) {
+    console.error("[api/tts] ElevenLabs TTS failed:", err);
+    return null;
+  }
+}
+
+function clampSpeed(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(4, Math.max(0.25, value)) : 1;
 }
 
 interface TTSBinInfo {
@@ -159,7 +215,7 @@ let ttsBinCache: TTSBinInfo | null | undefined = undefined;
  * Try local TTS CLI.
  * macOS `say` outputs AIFF; espeak/piper output WAV.
  */
-async function tryLocalTTS(text: string): Promise<Response | null> {
+async function tryLocalTTS(text: string, voice?: AgentVoiceSettings): Promise<Response | null> {
   const bin = await findLocalTTSBin();
   if (!bin) return null;
 
@@ -196,7 +252,7 @@ async function tryLocalTTS(text: string): Promise<Response | null> {
       case "say":
         // macOS: -o outputs to file, --data-format=LEI16@44100 forces 44.1kHz WAV
         // -r 195 slightly slower for natural pacing; uses system default voice (works on any Mac)
-        cmd = `'${bin.path}' -r 195 --data-format=LEI16@44100 -o '${tempPath}' '${safeText}'`;
+        cmd = `'${bin.path}' -r ${Math.round(195 * clampSpeed(voice?.speed))} ${voice?.provider === "say" && voice.voiceId ? `-v '${voice.voiceId.replace(/'/g, "'\\''")}' ` : ""}--data-format=LEI16@44100 -o '${tempPath}' '${safeText}'`;
         break;
       case "piper":
         // piper reads from stdin

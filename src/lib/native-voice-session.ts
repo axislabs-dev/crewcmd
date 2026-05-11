@@ -47,6 +47,9 @@ export type NativeVoiceAudioPlaybackOptions = {
 export type NativeVoiceSpeechOptions = {
   text: string;
   playbackRate?: number;
+  voiceId?: string;
+  voiceName?: string;
+  language?: string;
 };
 
 type NativePluginHandle = { remove: () => Promise<void> };

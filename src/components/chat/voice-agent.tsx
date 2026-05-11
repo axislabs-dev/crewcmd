@@ -18,6 +18,7 @@ import {
 import {
   addNativeVoiceSessionListener,
   getNativeVoiceSessionAvailability,
+  getNativeVoiceSessionStatus,
   setNativeVoiceSessionMuted,
   startNativeVoiceSession,
   stopNativeVoiceSession,
@@ -764,16 +765,21 @@ export function VoiceAgent({
   }, [isActive, isMicMuted, nativeSessionActive, recordVoiceBreadcrumb, stopRecording]);
 
   useEffect(() => {
-    if (!nativeSessionActive) return;
-
     let disposed = false;
     const handles: Array<{ remove: () => Promise<void> }> = [];
 
     const installListeners = async () => {
       const levelHandle = await addNativeVoiceSessionListener("voiceLevel", (event) => {
-        if (disposed || !nativeSessionActive || isMicMuted || streamRef.current) return;
+        if (disposed || !nativeSessionActiveRef.current || isMicMuted || streamRef.current) return;
         const level = typeof event.level === "number" ? event.level : 0;
         setVolumeLevel(Math.max(0, Math.min(1, level)));
+        if (level > 0.02) {
+          recordVoiceBreadcrumb("native.level.active", {
+            level,
+            rms: typeof event.rms === "number" ? event.rms : undefined,
+            threshold: typeof event.threshold === "number" ? event.threshold : undefined,
+          });
+        }
       });
       if (levelHandle) handles.push(levelHandle);
 
@@ -831,7 +837,44 @@ export function VoiceAgent({
         void handle.remove();
       }
     };
-  }, [isMicMuted, nativeSessionActive, onTranscript, recordVoiceBreadcrumb]);
+  }, [isMicMuted, onTranscript, recordVoiceBreadcrumb]);
+
+  useEffect(() => {
+    if (!nativeSessionActive) return;
+
+    let disposed = false;
+    const interval = window.setInterval(() => {
+      void getNativeVoiceSessionStatus()
+        .then((status) => {
+          if (disposed || !status) return;
+          nativeSessionActiveRef.current = Boolean(status.active);
+          if (status.state === "recording") {
+            setState("listening");
+          } else if (status.state === "transcribing") {
+            setState("processing");
+          } else if (status.state === "error" && status.lastError) {
+            setError(status.lastError);
+          }
+          publishAgentModeDiagnostic({
+            scope: "native-voice-session",
+            event: "status.poll",
+            sessionId: nativeVoiceSessionIdRef.current ?? diagnosticSessionRef.current ?? undefined,
+            detail: status,
+          });
+        })
+        .catch((error) => {
+          if (disposed) return;
+          recordVoiceBreadcrumb("native.status.error", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }, 3000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [nativeSessionActive, recordVoiceBreadcrumb]);
 
   // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
   useEffect(() => {

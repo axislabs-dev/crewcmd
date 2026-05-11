@@ -93,7 +93,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func start(_ call: CAPPluginCall) {
         let sessionId = call.getString("voiceSessionId") ?? UUID().uuidString
         currentSessionId = sessionId
-        baseUrl = call.getString("baseUrl")
+        baseUrl = normalizedBaseUrl(call.getString("baseUrl"))
         uploadToken = call.getString("uploadToken")
         agent = call.getString("agent")
         gatewayAgent = call.getString("gatewayAgent")
@@ -122,6 +122,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                     self.beginSessionBackgroundTask()
                     self.active = true
                     self.state = .listening
+                    self.notifyDiagnostic("native.config.base-url", detail: self.baseUrlDetail())
                     self.notifyDiagnostic("native.engine.started", detail: self.audioSessionDetail())
                     DispatchQueue.main.async {
                         call.resolve(self.statusPayload())
@@ -336,11 +337,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func uploadWav(samples: [Int16], sampleRate: Double) {
-        guard let baseUrl = baseUrl, let uploadToken = uploadToken, let url = URL(string: baseUrl + "/api/stt") else {
+        guard let uploadToken = uploadToken, let url = apiUrl(path: "/api/stt") else {
             uploadInFlight = false
             endBackgroundTask()
             lastError = "Native voice upload is not configured"
             state = active ? .listening : .idle
+            notifyDiagnostic("native.upload.not-configured", detail: baseUrlDetail())
             notifyTranscript(text: nil, provider: nil, error: lastError)
             return
         }
@@ -597,8 +599,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func sendChatMessage(_ text: String) {
-        guard let baseUrl = baseUrl, let uploadToken = uploadToken, let url = URL(string: baseUrl + "/api/chat") else {
-            notifyDiagnostic("native.chat.skipped", detail: ["reason": "chat upload is not configured"])
+        guard let uploadToken = uploadToken, let url = apiUrl(path: "/api/chat") else {
+            notifyDiagnostic("native.chat.skipped", detail: ["reason": "chat upload is not configured", "baseUrl": baseUrl ?? NSNull()])
             return
         }
 
@@ -634,6 +636,47 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         } catch {
             notifyDiagnostic("native.chat.encode-error", detail: ["message": error.localizedDescription])
         }
+    }
+
+
+    private func normalizedBaseUrl(_ rawBaseUrl: String?) -> String? {
+        guard let rawBaseUrl = rawBaseUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !rawBaseUrl.isEmpty else {
+            return nil
+        }
+        guard let components = URLComponents(string: rawBaseUrl),
+              let scheme = components.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              let host = components.host else {
+            return rawBaseUrl
+        }
+        var normalized = URLComponents()
+        normalized.scheme = scheme
+        normalized.host = host
+        normalized.port = components.port
+        return normalized.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? rawBaseUrl
+    }
+
+    private func apiUrl(path: String) -> URL? {
+        guard let baseUrl = baseUrl,
+              let components = URLComponents(string: baseUrl),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return URL(string: baseUrl + path)
+    }
+
+    private func baseUrlDetail() -> [String: Any] {
+        guard let baseUrl = baseUrl, !baseUrl.isEmpty else {
+            return ["configured": false, "usable": false]
+        }
+        let scheme = URLComponents(string: baseUrl)?.scheme?.lowercased() ?? ""
+        return [
+            "configured": true,
+            "scheme": scheme,
+            "usable": scheme == "http" || scheme == "https",
+            "baseUrl": baseUrl
+        ]
     }
 
     private func multipartBody(boundary: String, wavData: Data) -> Data {

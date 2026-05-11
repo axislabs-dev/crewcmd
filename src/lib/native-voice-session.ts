@@ -44,6 +44,11 @@ export type NativeVoiceAudioPlaybackOptions = {
   playbackRate?: number;
 };
 
+export type NativeVoiceSpeechOptions = {
+  text: string;
+  playbackRate?: number;
+};
+
 type NativePluginHandle = { remove: () => Promise<void> };
 
 type NativeVoiceSessionPlugin = {
@@ -52,6 +57,7 @@ type NativeVoiceSessionPlugin = {
   stop?: () => Promise<NativeVoiceSessionStatus>;
   muteMic?: (options: { muted: boolean }) => Promise<NativeVoiceSessionStatus>;
   playAudio?: (options: NativeVoiceAudioPlaybackOptions) => Promise<NativeVoiceSessionStatus>;
+  speakText?: (options: NativeVoiceSpeechOptions) => Promise<NativeVoiceSessionStatus>;
   stopAudio?: () => Promise<NativeVoiceSessionStatus>;
   status?: () => Promise<NativeVoiceSessionStatus>;
   addListener?: (eventName: string, listenerFunc: (event: Record<string, unknown>) => void) => Promise<NativePluginHandle>;
@@ -167,6 +173,12 @@ export async function playNativeVoiceAudio(options: NativeVoiceAudioPlaybackOpti
   const plugin = getNativeVoiceSessionPlugin();
   if (!plugin?.playAudio) return null;
   return plugin.playAudio(options);
+}
+
+export async function speakNativeVoiceText(options: NativeVoiceSpeechOptions) {
+  const plugin = getNativeVoiceSessionPlugin();
+  if (!plugin?.speakText) return null;
+  return plugin.speakText(options);
 }
 
 export async function stopNativeVoiceAudio() {

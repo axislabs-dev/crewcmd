@@ -80,8 +80,12 @@ describe("iOS native voice-session generator", () => {
       source.indexOf("private func suppressRecordingForPlayback")
     );
 
-    expect(source).toContain("utterance.voice = self.preferredSpeechVoice()");
-    expect(voiceSelector).toContain('["Matilda", "Ava", "Zoe", "Samantha", "Karen", "Daniel", "Moira", "Serena", "Siri"]');
+    expect(source).toContain("utterance.voice = self.preferredSpeechVoice(voiceId: voiceId, voiceName: voiceName, language: language)");
+    expect(voiceSelector).toContain("if let exact = voices.first(where: { $0.identifier == voiceId && !isBlockedSpeechVoice($0) })");
+    expect(voiceSelector).not.toContain("if let anyByName = voices.first(where: { $0.name.localizedCaseInsensitiveContains(voiceName) })");
+    expect(voiceSelector).toContain('["Daniel", "Matilda", "Ava", "Zoe", "Samantha", "Karen", "Moira", "Serena", "Siri"]');
+    expect(voiceSelector).toContain('identifier.contains("albert") || name.contains("albert")');
+    expect(voiceSelector).toContain(".first { !isBlockedSpeechVoice($0) }");
     expect(voiceSelector).toContain('["en-AU", "en-US", "en-GB"]');
     expect(voiceSelector).toContain("isNaturalSpeechVoice($0)");
     expect(voiceSelector).toContain('"eloquence"');

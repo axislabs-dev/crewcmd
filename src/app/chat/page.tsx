@@ -737,6 +737,48 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
   }
 }
 
+async function loadThreadHistoriesForParent(parentSessionKey: string, companyId?: string | null): Promise<void> {
+  if (!companyId) return;
+  try {
+    const params = new URLSearchParams({
+      companyId,
+      threadParentSessionKey: parentSessionKey,
+      limit: "200",
+    });
+    const res = await fetch(`/api/chat/messages?${params.toString()}`);
+    if (!res.ok) return;
+    const { threads } = await res.json() as {
+      threads?: Array<{
+        sessionKey?: string | null;
+        messages?: Array<{
+          id: string;
+          role: "user" | "assistant" | "system";
+          content: string;
+          createdAt: string;
+          metadata?: Record<string, unknown> | null;
+        }>;
+      }>;
+    };
+    for (const thread of threads ?? []) {
+      if (!thread.sessionKey || !thread.messages?.length) continue;
+      const sessionKey = thread.sessionKey.toLowerCase();
+      useChatStore.getState().loadSession(
+        sessionKey,
+        thread.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
+          id: m.id,
+          agentId: sessionKey,
+          role: m.role,
+          content: m.content,
+          createdAt: m.createdAt,
+          metadata: m.metadata ?? null,
+        }))
+      );
+    }
+  } catch {
+    // Thread reply summaries are best-effort; opening a thread still loads it directly.
+  }
+}
+
 /** Load message preview from the gateway session API (for session browser) */
 async function loadSessionPreviewIntoStore(sessionKey: string) {
   try {
@@ -1120,12 +1162,14 @@ export default function ChatPage() {
 
   // Load messages from Zustand store; on first load for an agent, hydrate from gateway history
   const loadedAgentsRef = useRef(new Set<string>());
+  const loadedThreadParentsRef = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
     const agentId = selectedAgent?.callsign || activeSessionKey;
+    const activeKey = activeSessionKey.toLowerCase();
 
     // Read whatever the store already has (from SSE)
-    const storeMessages = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
+    const storeMessages = useChatStore.getState().messagesByAgent[activeKey] || [];
     if (storeMessages.length > 0 && !cancelled) {
       setMessages(storeMessages.map((m) => ({
         id: m.id,
@@ -1158,12 +1202,12 @@ export default function ChatPage() {
           if (loaded?.execution) applyExecutionSnapshot(loaded.execution);
         });
       }
-    } else if (!loadedAgentsRef.current.has(activeSessionKey.toLowerCase())) {
+    } else if (!loadedAgentsRef.current.has(activeKey)) {
       // Otherwise load standard thread history
-      loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
+      loadedAgentsRef.current.add(activeKey);
       loadThreadHistoryIntoStore(agentId, company?.id).then((result) => {
         if (cancelled) return;
-        const updated = useChatStore.getState().messagesByAgent[activeSessionKey.toLowerCase()] || [];
+        const updated = useChatStore.getState().messagesByAgent[activeKey] || [];
         setMessages(updated.map((m) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
@@ -1173,6 +1217,12 @@ export default function ChatPage() {
         })));
         if (result?.execution) applyExecutionSnapshot(result.execution);
       });
+    }
+
+    const threadParentLoadKey = company?.id ? `${company.id}:${activeKey}` : null;
+    if (threadParentLoadKey && !loadedThreadParentsRef.current.has(threadParentLoadKey)) {
+      loadedThreadParentsRef.current.add(threadParentLoadKey);
+      void loadThreadHistoriesForParent(activeSessionKey, company?.id);
     }
 
     // Mark as read
@@ -2908,6 +2958,7 @@ export default function ChatPage() {
       }
       setThreadStreamingContent("");
     } finally {
+      void loadCrewCmdSessionHistoryByKey(thread.sessionKey, company?.id);
       setIsThreadLoading(false);
     }
   }, [activeThread, company?.id, delegatedViaAgent, isThreadLoading, selectedAgent, threadInput, threadMessages, threadPendingFiles]);

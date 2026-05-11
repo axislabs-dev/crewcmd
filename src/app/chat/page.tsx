@@ -25,6 +25,7 @@ import { useActiveChatRunStore } from "@/lib/chat-active-run-store";
 import { useWorkspace } from "@/components/company-context";
 import { CompanySwitcher } from "@/components/company-switcher";
 import {
+  playNativeVoiceAudio,
   speakNativeVoiceText,
   stopNativeVoiceAudio,
 } from "@/lib/native-voice-session";
@@ -470,6 +471,22 @@ function isNativeCapacitorApp() {
   if (capacitor.isNativePlatform?.()) return true;
   const platform = capacitor.getPlatform?.();
   return platform === "ios" || platform === "android";
+}
+
+function shouldUseNativeSpeech(voice: AgentVoiceSettings) {
+  return voice.provider === "browser" || voice.provider === "say" || voice.preferNative === true;
+}
+
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.includes(",") ? result.split(",", 2)[1] : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read audio blob"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function getMobileDeviceId() {
@@ -1543,7 +1560,7 @@ export default function ChatPage() {
   // Probe TTS availability on mount
   useEffect(() => {
     if (isNativeCapacitorApp()) {
-      ttsModRef.current = "native";
+      ttsModRef.current = "server";
       recordTtsBreadcrumb("availability.native-speech", { selectedMode: ttsModRef.current });
       return;
     }
@@ -1753,7 +1770,7 @@ export default function ChatPage() {
         return;
       }
 
-      if (ttsModRef.current === "native" || isNativeCapacitorApp()) {
+      if (isNativeCapacitorApp() && (shouldUseNativeSpeech(resolvedVoiceSettings) || (ttsModRef.current === "native" && resolvedVoiceSettings.provider === "auto"))) {
         if (kind === "filler" && token !== fillerAudioTokenRef.current) {
           recordTtsBreadcrumb("native-speech.stale-filler", { characters: text.length });
           return;
@@ -1797,10 +1814,21 @@ export default function ChatPage() {
       if (response.status === 503) {
         recordTtsBreadcrumb("server.fetch.unavailable", { kind, status: response.status });
         if (isNativeCapacitorApp()) {
-          console.log("[TTS] Server unavailable; skipping browser speechSynthesis in native WebView");
-          ttsModRef.current = "disabled";
-          setIsPlayingAudio(false);
-          activeAudioKindRef.current = null;
+          ttsModRef.current = resolvedVoiceSettings.provider === "auto" ? "native" : "disabled";
+          if (resolvedVoiceSettings.provider === "auto") {
+            await speakNativeVoiceText({
+              text,
+              playbackRate: resolvedVoiceSettings.speed ?? (kind === "response" ? 1.15 : 1),
+              voiceId: resolvedVoiceSettings.voiceId,
+              voiceName: resolvedVoiceSettings.voiceName,
+            });
+            setIsPlayingAudio(false);
+            activeAudioKindRef.current = null;
+          } else {
+            console.log("[TTS] Server unavailable; no native fallback for explicit server voice");
+            setIsPlayingAudio(false);
+            activeAudioKindRef.current = null;
+          }
         } else {
           // Server has no TTS backend, switch to browser mode
           console.log("[TTS] Server unavailable, using browser speechSynthesis");
@@ -1819,6 +1847,20 @@ export default function ChatPage() {
 
       const blob = await response.blob();
       recordTtsBreadcrumb("server.blob.ready", { kind, bytes: blob.size, type: blob.type || null });
+      if (isNativeCapacitorApp()) {
+        const dataBase64 = await blobToBase64(blob);
+        const status = await playNativeVoiceAudio({
+          dataBase64,
+          contentType: blob.type || response.headers.get("Content-Type") || "audio/mpeg",
+          playbackRate: resolvedVoiceSettings.speed ?? (kind === "response" ? 1.15 : 1),
+        });
+        if (kind === "response") markFirstAudioStarted("native");
+        recordTtsBreadcrumb("native-audio.play.complete", { kind, status });
+        setIsPlayingAudio(false);
+        activeAudioKindRef.current = null;
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       publishAgentModeDiagnostic({
         scope: "chat-tts",
@@ -2013,7 +2055,7 @@ export default function ChatPage() {
 
       // Check if we have a prefetched audio for this exact sentence
       hasStartedResponseAudioRef.current = true;
-      if (ttsModRef.current === "native" || isNativeCapacitorApp()) {
+      if (isNativeCapacitorApp() && (shouldUseNativeSpeech(resolvedVoiceSettings) || (ttsModRef.current === "native" && resolvedVoiceSettings.provider === "auto"))) {
         revokePrefetchedAudio("native-queue-play");
         recordTtsBreadcrumb("queue.native-speech.play.start", { characters: next.length });
         const status = await speakNativeVoiceText({
@@ -2058,7 +2100,25 @@ export default function ChatPage() {
         if (!response.ok) {
           recordTtsBreadcrumb("queue.fetch.error", { status: response.status });
           if (response.status === 503 && isNativeCapacitorApp()) {
-            ttsModRef.current = "disabled";
+            ttsModRef.current = resolvedVoiceSettings.provider === "auto" ? "native" : "disabled";
+            if (resolvedVoiceSettings.provider === "auto") {
+              const status = await speakNativeVoiceText({
+                text: next,
+                playbackRate: resolvedVoiceSettings.speed ?? 1.15,
+                voiceId: resolvedVoiceSettings.voiceId,
+                voiceName: resolvedVoiceSettings.voiceName,
+              });
+              markFirstAudioStarted("native");
+              recordTtsBreadcrumb("queue.native-speech.fallback.complete", { status });
+              isSpeakingQueueRef.current = false;
+              activeAudioKindRef.current = null;
+              if (ttsQueueRef.current.length > 0) {
+                speakNextInQueue();
+              } else {
+                setIsPlayingAudio(false);
+              }
+              return;
+            }
           }
           isSpeakingQueueRef.current = false;
           activeAudioKindRef.current = null;
@@ -2068,6 +2128,24 @@ export default function ChatPage() {
 
         const blob = await response.blob();
         recordTtsBreadcrumb("queue.blob.ready", { bytes: blob.size, type: blob.type || null });
+        if (isNativeCapacitorApp()) {
+          const status = await playNativeVoiceAudio({
+            dataBase64: await blobToBase64(blob),
+            contentType: blob.type || response.headers.get("Content-Type") || "audio/mpeg",
+            playbackRate: resolvedVoiceSettings.speed ?? 1.15,
+          });
+          markFirstAudioStarted("native");
+          recordTtsBreadcrumb("queue.native-audio.play.complete", { status });
+          isSpeakingQueueRef.current = false;
+          if (ttsQueueRef.current.length > 0) {
+            speakNextInQueue();
+          } else {
+            activeAudioKindRef.current = null;
+            setIsPlayingAudio(false);
+          }
+          return;
+        }
+
         url = URL.createObjectURL(blob);
         publishAgentModeDiagnostic({
           scope: "chat-tts",

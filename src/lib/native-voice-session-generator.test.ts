@@ -30,6 +30,22 @@ describe("iOS native voice-session generator", () => {
     );
   });
 
+  it("uses the delivered input buffer format after route sample-rate changes", () => {
+    const startEngine = source.slice(
+      source.indexOf("private func startEngine"),
+      source.indexOf("private func stopEngine")
+    );
+    const bufferHandler = source.slice(
+      source.indexOf("private func handleAudioBuffer"),
+      source.indexOf("private func finishRecording")
+    );
+
+    expect(startEngine).toContain("input.installTap(onBus: 0, bufferSize: 1024, format: nil)");
+    expect(startEngine).toContain("audioEngine.connect(input, to: keepaliveMixer, format: nil)");
+    expect(bufferHandler).toContain("recordingSampleRate = buffer.format.sampleRate");
+    expect(bufferHandler).toContain("recordingChannels = Int(buffer.format.channelCount)");
+  });
+
   it("uses a native VAD threshold suitable for iPhone microphone levels", () => {
     expect(source).toContain("private let silenceThreshold = 0.009");
     expect(source).toContain("private let speechStartMs = 140.0");

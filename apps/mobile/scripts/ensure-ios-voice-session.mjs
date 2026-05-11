@@ -441,19 +441,19 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         recordingSampleRate = format.sampleRate
         recordingChannels = Int(format.channelCount)
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             self?.captureQueue.async {
                 self?.handleAudioBuffer(buffer)
             }
         }
 
-        installKeepaliveInputGraph(input: input, format: format)
+        installKeepaliveInputGraph(input: input)
         lastAudioBufferAt = Date().timeIntervalSince1970 * 1000
         audioEngine.prepare()
         try audioEngine.start()
     }
 
-    private func installKeepaliveInputGraph(input: AVAudioInputNode, format: AVAudioFormat) {
+    private func installKeepaliveInputGraph(input: AVAudioInputNode) {
         if !keepaliveGraphInstalled {
             audioEngine.attach(keepaliveMixer)
             keepaliveMixer.outputVolume = 0
@@ -462,8 +462,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
         audioEngine.disconnectNodeOutput(input)
         audioEngine.disconnectNodeOutput(keepaliveMixer)
-        audioEngine.connect(input, to: keepaliveMixer, format: format)
-        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: format)
+        audioEngine.connect(input, to: keepaliveMixer, format: nil)
+        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: nil)
         audioEngine.mainMixerNode.outputVolume = 0
     }
 
@@ -486,6 +486,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         guard let channelData = buffer.floatChannelData else { return }
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
+        recordingSampleRate = buffer.format.sampleRate
+        recordingChannels = Int(buffer.format.channelCount)
         lastAudioBufferAt = Date().timeIntervalSince1970 * 1000
         guard active, !micMuted else { return }
 

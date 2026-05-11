@@ -267,6 +267,12 @@ function ChatComposer({
 
         <textarea
           value={value}
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          enterKeyHint="send"
+          inputMode="text"
+          spellCheck={false}
           onChange={(event) => {
             onValueChange(event.target.value);
             setShowAddMenu(false);

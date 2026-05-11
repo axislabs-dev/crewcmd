@@ -100,6 +100,13 @@ const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
 const VOICE_FAST_START_MIN_CHARS = 48;
 const VOICE_FAST_START_MAX_CHARS = 110;
 
+function isCapacitorNativeShell() {
+  if (typeof window === "undefined") return false;
+  const maybeCapacitor = (window as Window & { Capacitor?: { getPlatform?: () => string } }).Capacitor;
+  const platform = maybeCapacitor?.getPlatform?.();
+  return platform === "ios" || platform === "android";
+}
+
 function useFileObjectUrl(file: File) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -1456,14 +1463,16 @@ export default function ChatPage() {
 
   const ttsModRef = useRef<"server" | "browser" | "unknown">("unknown");
 
-  // Probe TTS availability on mount
+  // Probe TTS availability on mount. Browser speechSynthesis is intentionally
+  // not a fallback inside Capacitor because WKWebView TTS has crashed WebContent.
   useEffect(() => {
+    const browserFallbackAllowed = !isCapacitorNativeShell();
     fetch("/api/tts")
       .then((res) => {
-        ttsModRef.current = res.ok ? "server" : "browser";
+        ttsModRef.current = res.ok ? "server" : browserFallbackAllowed ? "browser" : "unknown";
       })
       .catch(() => {
-        ttsModRef.current = "browser";
+        ttsModRef.current = browserFallbackAllowed ? "browser" : "unknown";
       });
   }, []);
 
@@ -1528,7 +1537,9 @@ export default function ChatPage() {
 
   // Stop all audio playback (server TTS, browser TTS, queued sentences)
   const stopAllAudio = useCallback(() => {
-    window.speechSynthesis?.cancel();
+    if (!isCapacitorNativeShell()) {
+      window.speechSynthesis?.cancel();
+    }
     ttsQueueRef.current = [];
     isSpeakingQueueRef.current = false;
     activeAudioKindRef.current = null;
@@ -1544,7 +1555,9 @@ export default function ChatPage() {
   const stopFillerAudio = useCallback(() => {
     fillerAudioTokenRef.current++;
     if (activeAudioKindRef.current !== "filler") return;
-    window.speechSynthesis?.cancel();
+    if (!isCapacitorNativeShell()) {
+      window.speechSynthesis?.cancel();
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -1576,6 +1589,18 @@ export default function ChatPage() {
   }, []);
 
   const playBrowserTTS = useCallback((text: string, kind: "filler" | "response" = "filler", token?: number) => {
+    if (isCapacitorNativeShell()) {
+      publishAgentModeDiagnostic({
+        scope: "chat-tts",
+        event: "browser-tts.disabled-native",
+        sessionId: ttsSessionRef.current,
+        detail: { kind, textLength: text.length },
+      });
+      activeAudioKindRef.current = null;
+      setIsPlayingAudio(false);
+      return;
+    }
+
     if (!("speechSynthesis" in window)) {
       setIsPlayingAudio(false);
       return;
@@ -1623,8 +1648,22 @@ export default function ChatPage() {
       setIsPlayingAudio(true);
       activeAudioKindRef.current = kind;
 
-      // If we already know server TTS is unavailable, go straight to browser
+      const disableBrowserTTS = isCapacitorNativeShell();
+
+      // If we already know server TTS is unavailable, go straight to browser on web only.
+      // WKWebView speechSynthesis has crashed the WebContent process during long Agent Mode runs.
       if (ttsModRef.current === "browser") {
+        if (disableBrowserTTS) {
+          publishAgentModeDiagnostic({
+            scope: "chat-tts",
+            event: "server-unavailable.native-browser-fallback-disabled",
+            sessionId: ttsSessionRef.current,
+            detail: { kind, textLength: text.length },
+          });
+          activeAudioKindRef.current = null;
+          setIsPlayingAudio(false);
+          return;
+        }
         playBrowserTTS(text, kind, token);
         return;
       }
@@ -1636,9 +1675,23 @@ export default function ChatPage() {
       });
 
       if (response.status === 503) {
-        // Server has no TTS backend, switch to browser mode
-        console.log("[TTS] Server unavailable, using browser speechSynthesis");
+        // Server has no TTS backend. Browser fallback remains OK for desktop web,
+        // but is disabled in Capacitor because WKWebView speechSynthesis can crash
+        // the WebContent process during long hands-free Agent Mode sessions.
+        if (disableBrowserTTS) {
+          console.warn("[TTS] Server unavailable; browser speechSynthesis disabled in native shell");
+          publishAgentModeDiagnostic({
+            scope: "chat-tts",
+            event: "server-unavailable.native-browser-fallback-disabled",
+            sessionId: ttsSessionRef.current,
+            detail: { kind, textLength: text.length },
+          });
+          activeAudioKindRef.current = null;
+          setIsPlayingAudio(false);
+          return;
+        }
         ttsModRef.current = "browser";
+        console.log("[TTS] Server unavailable, using browser speechSynthesis");
         playBrowserTTS(text, kind, token);
         return;
       }
@@ -1683,7 +1736,18 @@ export default function ChatPage() {
     } catch (error) {
       console.error("[TTS] Error:", error);
       revokeAudioObjectUrl(audioObjectUrlRef.current, "play-exception");
-      // Network error — try browser fallback
+      // Network error — try browser fallback on web only.
+      if (isCapacitorNativeShell()) {
+        publishAgentModeDiagnostic({
+          scope: "chat-tts",
+          event: "network-error.native-browser-fallback-disabled",
+          sessionId: ttsSessionRef.current,
+          detail: { kind, textLength: text.length },
+        });
+        activeAudioKindRef.current = null;
+        setIsPlayingAudio(false);
+        return;
+      }
       playBrowserTTS(text, kind, token);
     }
   }, [assignAudioObjectUrl, markFirstAudioStarted, playBrowserTTS, revokeAudioObjectUrl]);
@@ -1731,11 +1795,13 @@ export default function ChatPage() {
     }
 
     try {
+      const disableBrowserTTS = isCapacitorNativeShell();
       const useBrowserForFastStart =
+        !disableBrowserTTS &&
         !hasStartedResponseAudioRef.current &&
         "speechSynthesis" in window;
 
-      if (ttsModRef.current === "browser" || useBrowserForFastStart) {
+      if (!disableBrowserTTS && (ttsModRef.current === "browser" || useBrowserForFastStart)) {
         hasStartedResponseAudioRef.current = true;
         // Browser TTS with queue continuation
         if ("speechSynthesis" in window) {
@@ -1809,6 +1875,14 @@ export default function ChatPage() {
         });
 
         if (!response.ok) {
+          if (disableBrowserTTS && response.status === 503) {
+            publishAgentModeDiagnostic({
+              scope: "chat-tts",
+              event: "server-unavailable.native-browser-fallback-disabled",
+              sessionId: ttsSessionRef.current,
+              detail: { kind: "response", textLength: next.length, source: "queue" },
+            });
+          }
           isSpeakingQueueRef.current = false;
           activeAudioKindRef.current = null;
           setIsPlayingAudio(false);

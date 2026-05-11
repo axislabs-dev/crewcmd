@@ -921,15 +921,13 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
       </Section>
 
       {/* ── VOICE IDENTITY ── */}
-      <Section title="Voice Identity" defaultOpen>
+      <Section title="Voice" defaultOpen>
         <div className="space-y-3">
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-[var(--text-primary)]"><VoiceSummary value={values.voiceSettings} /></div>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  Persistent default for this agent. Chat and immersive mode can temporarily override it per session.
-                </p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">Default for this agent.</p>
               </div>
               <button
                 type="button"
@@ -940,10 +938,6 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
               </button>
             </div>
           </div>
-          <label className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] p-3 text-sm text-[var(--text-secondary)]">
-            <span>Enable spoken responses for this agent</span>
-            <Toggle checked={values.voiceSettings.enabled !== false} onChange={(enabled) => onChange({ voiceSettings: { ...values.voiceSettings, enabled } })} />
-          </label>
           <VoiceSelectModal
             open={voiceModalOpen}
             title="Agent default voice"

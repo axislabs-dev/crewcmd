@@ -3386,9 +3386,9 @@ export default function ChatPage() {
 
       <VoiceSelectModal
         open={voicePickerOpen}
-        title="Session voice override"
+        title="Voice"
         value={resolvedVoiceSettings}
-        helperText="Applies to this chat or immersive agent session only. Agent defaults stay unchanged. Star favorites for fast access."
+        helperText="Applies to this chat only. Go to Team > Agent to change the agent default."
         onClose={() => setVoicePickerOpen(false)}
         onSelect={(voiceSettings) => {
           setSessionVoiceOverride(voiceSettings);

@@ -84,7 +84,7 @@ function ensureAppDelegateAudioSession() {
             try session.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers]
             )
             try session.setActive(true)
         } catch {
@@ -126,7 +126,7 @@ fs.writeFileSync(
       audioSession: {
         category: "playAndRecord",
         mode: "voiceChat",
-        options: ["allowBluetooth", "allowBluetoothA2DP", "defaultToSpeaker"],
+        options: ["allowBluetooth", "allowBluetoothA2DP", "defaultToSpeaker", "mixWithOthers"],
       },
       applied: {
         infoPlist: infoPlistUpdated,

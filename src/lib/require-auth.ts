@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
+import { hasHeartbeatSecret, matchesHeartbeatBearerToken } from "@/lib/heartbeat-secret";
 
 /**
  * Require authentication for API mutation endpoints.
@@ -9,15 +9,9 @@ import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
  */
 export async function requireAuth(req: NextRequest): Promise<NextResponse | null> {
   // 1. Check Bearer token
-  const expectedToken = await getHeartbeatSecret();
-  if (expectedToken) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const providedToken = authHeader.slice(7);
-      if (providedToken === expectedToken.trim()) {
-        return null; // authorized
-      }
-    }
+  const hasConfiguredSecret = await hasHeartbeatSecret();
+  if (hasConfiguredSecret && await matchesHeartbeatBearerToken(req.headers.get("authorization"))) {
+    return null; // authorized
   }
 
   // 2. Check NextAuth session
@@ -27,7 +21,7 @@ export async function requireAuth(req: NextRequest): Promise<NextResponse | null
   }
 
   return NextResponse.json(
-    { error: "Unauthorized", debug: { hasBearerToken: !!expectedToken } },
+    { error: "Unauthorized", debug: { hasBearerToken: hasConfiguredSecret } },
     { status: 401 }
   );
 }

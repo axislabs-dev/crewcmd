@@ -5,7 +5,7 @@ import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-m
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
-import { VoiceSelectModal, VoiceSummary } from "@/components/voice-select-modal";
+import { VoiceSelectModal } from "@/components/voice-select-modal";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
 import {
   ExecutionProgressPanel,
@@ -171,6 +171,17 @@ const PendingFilePreview = memo(function PendingFilePreview({
   );
 });
 
+function VoicePersonIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 7.5a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 20.25a7.5 7.5 0 0 1 15 0" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5c1 .8 1.5 1.9 1.5 3s-.5 2.2-1.5 3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 5.25c1.5 1.35 2.25 3.15 2.25 5.25s-.75 3.9-2.25 5.25" />
+    </svg>
+  );
+}
+
 function ChatComposer({
   value,
   onValueChange,
@@ -183,9 +194,6 @@ function ChatComposer({
   isLoading,
   speakResponses,
   onToggleSpeak,
-  onOpenVoicePicker,
-  voiceSettings,
-  hasVoiceOverride = false,
   onEnterAgentMode,
   agentButtonTitle = "Enter agent mode (hands-free)",
   addMenuLabel = "Add to Chat",
@@ -205,9 +213,6 @@ function ChatComposer({
   isLoading: boolean;
   speakResponses: boolean;
   onToggleSpeak: () => void;
-  onOpenVoicePicker: () => void;
-  voiceSettings: AgentVoiceSettings;
-  hasVoiceOverride?: boolean;
   onEnterAgentMode: () => void;
   agentButtonTitle?: string;
   addMenuLabel?: string;
@@ -348,18 +353,6 @@ function ChatComposer({
               )}
             </button>
 
-            <button
-              onClick={onOpenVoicePicker}
-              title={hasVoiceOverride ? "Session voice override active" : "Choose voice"}
-              className={`flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] transition-all ${
-                hasVoiceOverride
-                  ? "bg-[#00f0ff]/12 text-[#00f0ff]"
-                  : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              <span>Voice</span>
-              <span className="hidden max-w-[120px] truncate sm:inline"><VoiceSummary value={voiceSettings} /></span>
-            </button>
           </div>
 
           <div className="flex items-center gap-1">
@@ -1936,7 +1929,11 @@ export default function ChatPage() {
       const browserSpeechAllowed =
         !isNativeCapacitorApp() &&
         "speechSynthesis" in window;
+      const usesExplicitServerVoice =
+        resolvedVoiceSettings.provider === "openai" ||
+        resolvedVoiceSettings.provider === "elevenlabs";
       const useBrowserForFastStart =
+        !usesExplicitServerVoice &&
         !hasStartedResponseAudioRef.current &&
         browserSpeechAllowed &&
         !resolvedVoiceSettings.preferNative &&
@@ -3114,9 +3111,6 @@ export default function ChatPage() {
                   if (speakResponses) stopAllAudio();
                   setSpeakResponses(!speakResponses);
                 }}
-                onOpenVoicePicker={() => setVoicePickerOpen(true)}
-                voiceSettings={resolvedVoiceSettings}
-                hasVoiceOverride={Boolean(sessionVoiceOverride)}
                 onEnterAgentMode={() => {
                   if (!isNativeCapacitorApp() && audioRef.current) {
                     audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
@@ -3303,9 +3297,9 @@ export default function ChatPage() {
                   onClick={() => setVoicePickerOpen(true)}
                   title="Choose voice"
                   aria-label="Choose voice"
-                  className={`flex h-10 items-center justify-center rounded-full border px-3 text-xs shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
                 >
-                  Voice
+                  <VoicePersonIcon />
                 </button>
                 <button
                   onClick={() => setAgentOverlayMode("transcript")}
@@ -3361,9 +3355,9 @@ export default function ChatPage() {
                         onClick={() => setVoicePickerOpen(true)}
                         title="Choose voice"
                         aria-label="Choose voice"
-                        className={`flex h-8 items-center justify-center rounded-full border px-2 text-[10px] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
                       >
-                        Voice
+                        <VoicePersonIcon className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => setAgentOverlayMode("immersive")}
@@ -3386,9 +3380,9 @@ export default function ChatPage() {
 
       <VoiceSelectModal
         open={voicePickerOpen}
-        title="Session voice override"
+        title="Voice"
         value={resolvedVoiceSettings}
-        helperText="Applies to this chat or immersive agent session only. Agent defaults stay unchanged. Star favorites for fast access."
+        helperText="Applies to this chat only. Go to Team > Agent to change the agent default."
         onClose={() => setVoicePickerOpen(false)}
         onSelect={(voiceSettings) => {
           setSessionVoiceOverride(voiceSettings);
@@ -3414,9 +3408,6 @@ export default function ChatPage() {
               if (speakResponses) stopAllAudio();
               setSpeakResponses(!speakResponses);
             }}
-            onOpenVoicePicker={() => setVoicePickerOpen(true)}
-            voiceSettings={resolvedVoiceSettings}
-            hasVoiceOverride={Boolean(sessionVoiceOverride)}
             onEnterAgentMode={() => {
               if (voiceMode === "agent") {
                 stopAllAudio();

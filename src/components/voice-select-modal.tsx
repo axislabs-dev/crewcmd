@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_AGENT_VOICE_SETTINGS,
   TTS_PROVIDER_OPTIONS,
@@ -20,7 +20,6 @@ type VoiceSelectModalProps = {
   value?: AgentVoiceSettings | null;
   onClose: () => void;
   onSelect: (settings: AgentVoiceSettings) => void;
-  allowDisable?: boolean;
   helperText?: string;
 };
 
@@ -68,7 +67,6 @@ export function VoiceSelectModal({
   value,
   onClose,
   onSelect,
-  allowDisable = true,
   helperText,
 }: VoiceSelectModalProps) {
   const current = normalizeAgentVoiceSettings(value ?? DEFAULT_AGENT_VOICE_SETTINGS);
@@ -80,7 +78,8 @@ export function VoiceSelectModal({
   const [favorites, setFavorites] = useState<string[]>([]);
   const [speed, setSpeed] = useState(current.speed ?? 1);
   const [preferNative, setPreferNative] = useState(current.preferNative ?? false);
-  const [previewingKey, setPreviewingKey] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewState, setPreviewState] = useState<{ key: string; status: "loading" | "playing" } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -125,17 +124,35 @@ export function VoiceSelectModal({
     writeFavorites(next);
   };
 
+  const stopSample = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+      if (previewAudioRef.current.src.startsWith("blob:")) URL.revokeObjectURL(previewAudioRef.current.src);
+      previewAudioRef.current = null;
+    }
+    setPreviewState(null);
+  };
+
   const playSample = async (voice: TtsVoiceOption) => {
     const key = voiceKey(voice);
+    if (previewState?.key === key) {
+      stopSample();
+      return;
+    }
     const sampleText = `Hi, I’m ${voice.name}. This is how I’ll sound in CrewCMD.`;
-    setPreviewingKey(key);
+    stopSample();
+    setPreviewState({ key, status: "loading" });
     try {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-
       if (voice.previewUrl) {
-        await new Audio(voice.previewUrl).play();
+        const audio = new Audio(voice.previewUrl);
+        previewAudioRef.current = audio;
+        audio.onplay = () => setPreviewState({ key, status: "playing" });
+        audio.onended = stopSample;
+        await audio.play();
         return;
       }
 
@@ -146,6 +163,9 @@ export function VoiceSelectModal({
           .getVoices()
           .find((candidate) => candidate.voiceURI === voice.id || candidate.name === voice.id || candidate.name === voice.name);
         if (browserVoice) utterance.voice = browserVoice;
+        utterance.onstart = () => setPreviewState({ key, status: "playing" });
+        utterance.onend = stopSample;
+        utterance.onerror = stopSample;
         window.speechSynthesis.speak(utterance);
         return;
       }
@@ -160,13 +180,14 @@ export function VoiceSelectModal({
       });
       if (!response.ok) throw new Error(`Preview failed: ${response.status}`);
       const audio = new Audio(URL.createObjectURL(await response.blob()));
+      previewAudioRef.current = audio;
       audio.playbackRate = speed;
-      audio.onended = () => URL.revokeObjectURL(audio.src);
+      audio.onplay = () => setPreviewState({ key, status: "playing" });
+      audio.onended = stopSample;
       await audio.play();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to play voice sample");
-    } finally {
-      window.setTimeout(() => setPreviewingKey((currentKey) => currentKey === key ? null : currentKey), 900);
+      stopSample();
     }
   };
 
@@ -175,17 +196,17 @@ export function VoiceSelectModal({
   const selectedKey = current.provider && current.voiceId ? `${current.provider}:${current.voiceId}` : "";
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div
-        className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-2xl"
+        className="flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-2xl sm:max-h-[86vh]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-[var(--border-subtle)] p-5">
+        <div className="border-b border-[var(--border-subtle)] p-4 sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {helperText ?? "Search cloud, local, and device voices. Favorites stay on this browser for fast session overrides."}
+                {helperText ?? "Pick how this agent sounds."}
               </p>
             </div>
             <button type="button" onClick={onClose} className="text-xl text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
@@ -194,7 +215,7 @@ export function VoiceSelectModal({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by name, locale, provider, style…"
+              placeholder="Search voices"
               className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[#00f0ff]/50"
               autoFocus
             />
@@ -215,9 +236,9 @@ export function VoiceSelectModal({
               ))}
             </div>
           </div>
-          <div className="mt-4 grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3 md:grid-cols-2">
+          <div className="mt-3 grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3 md:grid-cols-2">
             <label className="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]">
-              <span>Prefer native/device voice when available</span>
+              <span>Native</span>
               <input type="checkbox" checked={preferNative} onChange={(event) => setPreferNative(event.target.checked)} />
             </label>
             <label className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
@@ -238,6 +259,7 @@ export function VoiceSelectModal({
               const key = voiceKey(voice);
               const selected = key === selectedKey;
               const favorite = favorites.includes(key);
+              const sampleState = previewState?.key === key ? previewState.status : null;
               return (
                 <div
                   key={key}
@@ -266,19 +288,20 @@ export function VoiceSelectModal({
                     <button
                       type="button"
                       onClick={(event) => { event.stopPropagation(); toggleFavorite(voice); }}
-                      className={`rounded-full px-2 py-0.5 text-sm ${favorite ? "text-amber-300" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}
+                      className={`rounded-full px-2 py-0.5 text-xl leading-none ${favorite ? "text-amber-300" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}
                       aria-label={favorite ? "Remove favorite" : "Add favorite"}
                     >
                       ★
                     </button>
                   </div>
-                  {voice.description && <p className="mt-2 line-clamp-2 text-xs text-[var(--text-secondary)]">{voice.description}</p>}
+                  {voice.description && <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">{voice.description}</p>}
                   <button
                     type="button"
                     onClick={(event) => { event.stopPropagation(); playSample(voice); }}
-                    className="mt-3 rounded-lg border border-[var(--border-subtle)] px-2 py-1 text-xs text-[var(--text-secondary)] transition hover:border-[#00f0ff]/40 hover:text-[#00f0ff]"
+                    className="mt-3 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)] transition hover:border-[#00f0ff]/40 hover:text-[#00f0ff]"
+                    aria-label={sampleState ? "Stop sample" : "Play sample"}
                   >
-                    {previewingKey === key ? "Playing…" : "Play sample"}
+                    {sampleState === "loading" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : sampleState === "playing" ? "■" : "▶"}
                   </button>
                 </div>
               );
@@ -286,16 +309,7 @@ export function VoiceSelectModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] p-4">
-          {allowDisable ? (
-            <button
-              type="button"
-              onClick={() => onSelect({ ...current, enabled: false, speed, preferNative })}
-              className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            >
-              Disable voice for this scope
-            </button>
-          ) : <span />}
+        <div className="flex justify-end border-t border-[var(--border-subtle)] p-4">
           <button type="button" onClick={onClose} className="rounded-lg bg-[var(--bg-surface-hover)] px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]">
             Done
           </button>

@@ -1698,8 +1698,13 @@ export default function ChatPage() {
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const selectedVoice = resolvedVoiceSettings.voiceId && (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative)
-      ? voices.find((v) => v.voiceURI === resolvedVoiceSettings.voiceId || v.name === resolvedVoiceSettings.voiceId)
+    const selectedVoice = (resolvedVoiceSettings.voiceId || resolvedVoiceSettings.voiceName) &&
+      (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" || resolvedVoiceSettings.preferNative)
+      ? voices.find((v) =>
+          v.voiceURI === resolvedVoiceSettings.voiceId ||
+          v.name === resolvedVoiceSettings.voiceId ||
+          v.name === resolvedVoiceSettings.voiceName
+        )
       : null;
     const preferred = selectedVoice || voices.find(
       (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
@@ -1966,8 +1971,13 @@ export default function ChatPage() {
           const utterance = new SpeechSynthesisUtterance(next);
           utterance.rate = resolvedVoiceSettings.speed ?? 1.15;
           const voices = window.speechSynthesis.getVoices();
-          const selectedVoice = resolvedVoiceSettings.voiceId && (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative)
-            ? voices.find((v) => v.voiceURI === resolvedVoiceSettings.voiceId || v.name === resolvedVoiceSettings.voiceId)
+          const selectedVoice = (resolvedVoiceSettings.voiceId || resolvedVoiceSettings.voiceName) &&
+            (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" || resolvedVoiceSettings.preferNative)
+            ? voices.find((v) =>
+                v.voiceURI === resolvedVoiceSettings.voiceId ||
+                v.name === resolvedVoiceSettings.voiceId ||
+                v.name === resolvedVoiceSettings.voiceName
+              )
             : null;
           const preferred = selectedVoice || voices.find(
             (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
@@ -3064,6 +3074,7 @@ export default function ChatPage() {
                   content={activeThread.parentMessage.content}
                   timestamp={activeThread.parentMessage.createdAt}
                   metadata={activeThread.parentMessage.metadata}
+                  voiceSettings={resolvedVoiceSettings}
                 />
                 <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
                 {threadMessages.length === 0 && !threadStreamingContent && !isThreadLoading && (
@@ -3078,6 +3089,7 @@ export default function ChatPage() {
                     content={message.content}
                     timestamp={message.createdAt}
                     metadata={message.metadata}
+                    voiceSettings={resolvedVoiceSettings}
                   />
                 ))}
                 {(isThreadLoading || threadProgress) && (
@@ -3090,7 +3102,12 @@ export default function ChatPage() {
                   />
                 )}
                 {threadStreamingContent && (
-                  <ChatMessage role="assistant" content={threadStreamingContent} isStreaming />
+                  <ChatMessage
+                    role="assistant"
+                    content={threadStreamingContent}
+                    isStreaming
+                    voiceSettings={resolvedVoiceSettings}
+                  />
                 )}
               </div>
             </div>
@@ -3181,6 +3198,7 @@ export default function ChatPage() {
                   onReplyInThread={() => openThreadForMessage(msg, i)}
                   threadReplyCount={threadReplies.length}
                   threadReplies={threadReplies}
+                  voiceSettings={resolvedVoiceSettings}
                 />
               </div>
             );
@@ -3204,6 +3222,7 @@ export default function ChatPage() {
                 role="assistant"
                 content={streamingContent}
                 isStreaming={true}
+                voiceSettings={resolvedVoiceSettings}
               />
               <button
                 onClick={stopActiveRun}

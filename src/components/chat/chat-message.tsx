@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TaskCard, CreateTaskCard, extractTaskCards } from "./task-card";
+import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
 
 /** Strip markdown syntax to produce plain text for TTS */
 function stripMarkdown(md: string): string {
@@ -68,16 +69,22 @@ function MessageActions({
   showSpeak,
   mobileVisible,
   onReplyInThread,
+  voiceSettings,
 }: {
   content: string;
   showSpeak: boolean;
   mobileVisible: boolean;
   onReplyInThread?: () => void;
+  voiceSettings?: AgentVoiceSettings | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsModRef = useRef<"server" | "browser">("server");
+  const resolvedVoiceSettings = useMemo(
+    () => normalizeAgentVoiceSettings(voiceSettings ?? DEFAULT_AGENT_VOICE_SETTINGS),
+    [voiceSettings]
+  );
 
   const handleCopy = useCallback(async () => {
     try {
@@ -116,15 +123,16 @@ function MessageActions({
     }
 
     const text = stripMarkdown(content);
+    if (resolvedVoiceSettings.enabled === false || !text) return;
     setSpeaking(true);
 
-    // Try server TTS first (same as main chat)
-    if (ttsModRef.current === "server") {
+    // Try server TTS first unless the selected voice explicitly uses browser speech.
+    if (ttsModRef.current === "server" && resolvedVoiceSettings.provider !== "browser" && !resolvedVoiceSettings.preferNative) {
       try {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, voice: resolvedVoiceSettings }),
         });
 
         if (res.status === 503) {
@@ -148,15 +156,22 @@ function MessageActions({
     if (!("speechSynthesis" in window)) { setSpeaking(false); return; }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.15;
+    utterance.rate = resolvedVoiceSettings.speed ?? 1.15;
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /samantha|karen|daniel/i.test(v.name))
+    const selectedVoice = resolvedVoiceSettings.voiceId || resolvedVoiceSettings.voiceName
+      ? voices.find((v) =>
+          v.voiceURI === resolvedVoiceSettings.voiceId ||
+          v.name === resolvedVoiceSettings.voiceId ||
+          v.name === resolvedVoiceSettings.voiceName
+        )
+      : null;
+    const preferred = selectedVoice || voices.find((v) => /samantha|karen|daniel/i.test(v.name))
       || voices.find((v) => v.lang.startsWith("en") && v.localService);
     if (preferred) utterance.voice = preferred;
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     window.speechSynthesis.speak(utterance);
-  }, [content, speaking, stopSpeaking]);
+  }, [content, resolvedVoiceSettings, speaking, stopSpeaking]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -208,6 +223,7 @@ interface ChatMessageProps {
   onReplyInThread?: () => void;
   threadReplyCount?: number;
   threadReplies?: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
+  voiceSettings?: AgentVoiceSettings | null;
 }
 
 /** Day separator shown between messages on different dates */
@@ -383,6 +399,7 @@ export function ChatMessage({
   onReplyInThread,
   threadReplyCount,
   threadReplies = [],
+  voiceSettings,
 }: ChatMessageProps) {
   const isUser = role === "user";
   const attachments = metadata?.attachments;
@@ -434,6 +451,7 @@ export function ChatMessage({
           showSpeak={!isUser}
           mobileVisible={showActions}
           onReplyInThread={onReplyInThread}
+          voiceSettings={voiceSettings}
         />
         <div
           className={`relative overflow-hidden text-[13px] leading-relaxed ${

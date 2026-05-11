@@ -74,6 +74,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private let speechSynthesizer = AVSpeechSynthesizer()
     private var speechCall: CAPPluginCall?
     private var cachedApplicationState: UIApplication.State = .active
+    private var playbackSuppressionUntil: TimeInterval = 0
 
     private let silenceThreshold = 0.006
     private let speechStartMs = 80.0
@@ -277,7 +278,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                     utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(playbackRate)
                     utterance.pitchMultiplier = 1.0
                     utterance.volume = 1.0
-                    utterance.voice = AVSpeechSynthesisVoice(language: "en-US") ?? AVSpeechSynthesisVoice(language: "en-GB")
+                    utterance.voice = self.preferredSpeechVoice()
 
                     self.speechCall = call
                     self.notifyDiagnostic("native.tts.speech.queued", detail: [
@@ -298,10 +299,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     }
 
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        suppressRecordingForPlayback(tailMs: 1000)
         notifyDiagnostic("native.tts.speech.started", detail: ["characters": utterance.speechString.count])
     }
 
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        suppressRecordingForPlayback(tailMs: 1200)
         notifyDiagnostic("native.tts.speech.finished", detail: ["characters": utterance.speechString.count])
         let call = speechCall
         speechCall = nil
@@ -309,6 +312,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     }
 
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        suppressRecordingForPlayback(tailMs: 500)
         notifyDiagnostic("native.tts.speech.cancelled", detail: ["characters": utterance.speechString.count])
         let call = speechCall
         speechCall = nil
@@ -316,6 +320,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     }
 
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        suppressRecordingForPlayback(tailMs: 700)
         notifyDiagnostic("native.tts.play.finished", detail: [
             "success": flag,
             "duration": player.duration
@@ -336,6 +341,34 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         audioPlayer = nil
         audioPlaybackData = nil
         call?.reject(message)
+    }
+
+    private func preferredSpeechVoice() -> AVSpeechSynthesisVoice? {
+        let preferredLanguages = ["en-AU", "en-US", "en-GB"]
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+        for language in preferredLanguages {
+            let candidates = voices
+                .filter { $0.language == language && !$0.identifier.lowercased().contains("compact") }
+                .sorted { $0.quality.rawValue > $1.quality.rawValue }
+            if let voice = candidates.first {
+                return voice
+            }
+        }
+
+        return AVSpeechSynthesisVoice(language: "en-AU")
+            ?? AVSpeechSynthesisVoice(language: "en-US")
+            ?? AVSpeechSynthesisVoice(language: "en-GB")
+    }
+
+    private func suppressRecordingForPlayback(tailMs: Double) {
+        captureQueue.async {
+            let now = Date().timeIntervalSince1970 * 1000
+            self.playbackSuppressionUntil = max(self.playbackSuppressionUntil, now + tailMs)
+            self.resetRecording()
+            if self.active {
+                self.state = .listening
+            }
+        }
     }
 
     private func configureAudioSession() throws {
@@ -467,6 +500,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         }
 
         guard !uploadInFlight else { return }
+        guard now >= playbackSuppressionUntil else {
+            resetRecording()
+            return
+        }
 
         if Double(rms) >= silenceThreshold {
             silenceStartedAt = nil

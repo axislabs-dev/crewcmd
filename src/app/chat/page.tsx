@@ -1763,7 +1763,7 @@ export default function ChatPage() {
         const status = await speakNativeVoiceText({
           text,
           playbackRate: resolvedVoiceSettings.speed ?? (kind === "response" ? 1.15 : 1),
-          voiceId: resolvedVoiceSettings.preferNative || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" ? resolvedVoiceSettings.voiceId : undefined,
+          voiceId: resolvedVoiceSettings.voiceId,
           voiceName: resolvedVoiceSettings.voiceName,
         });
         if (!status) {
@@ -2019,7 +2019,7 @@ export default function ChatPage() {
         const status = await speakNativeVoiceText({
           text: next,
           playbackRate: resolvedVoiceSettings.speed ?? 1.15,
-          voiceId: resolvedVoiceSettings.preferNative || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" ? resolvedVoiceSettings.voiceId : undefined,
+          voiceId: resolvedVoiceSettings.voiceId,
           voiceName: resolvedVoiceSettings.voiceName,
         });
 

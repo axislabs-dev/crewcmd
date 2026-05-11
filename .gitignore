@@ -60,4 +60,12 @@ certificates.pglite/
 /apps/mobile/web/.generated
 /apps/mobile/org.mobile.local.json
 /apps/mobile/android
-/apps/mobile/ios
+
+# iOS mobile apps — track Swift source + Xcode project, ignore build artifacts
+/apps/mobile/ios/**/*.xcuserstate
+/apps/mobile/ios/**/xcuserdata/
+/apps/mobile/ios/**/DerivedData/
+/apps/mobile/ios/**/Pods
+/apps/mobile/ios/**/build/
+/apps/mobile/ios/**/*.ipa
+/apps/mobile/ios/**/*.applist

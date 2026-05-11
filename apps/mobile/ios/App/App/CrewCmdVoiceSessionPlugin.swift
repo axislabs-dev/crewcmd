@@ -62,10 +62,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var cachedApplicationState: UIApplication.State = .active
     private var playbackSuppressionUntil: TimeInterval = 0
 
-    private let silenceThreshold = 0.009
-    private let speechStartMs = 140.0
-    private let silenceEndMs = 900.0
-    private let minRecordingMs = 300.0
+    private let silenceThreshold = 0.005
+    private let speechStartMs = 100.0
+    private let silenceEndMs = 700.0
+    private let minRecordingMs = 250.0
     private let maxRecordingMs = 20000.0
 
     public override func load() {
@@ -252,9 +252,6 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         }
 
         let playbackRate = max(0.5, min(2.0, call.getDouble("playbackRate") ?? 1.0))
-        let voiceId = call.getString("voiceId")
-        let voiceName = call.getString("voiceName")
-        let language = call.getString("language")
 
         captureQueue.async {
             do {
@@ -267,7 +264,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                     utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(playbackRate)
                     utterance.pitchMultiplier = 1.0
                     utterance.volume = 1.0
-                    utterance.voice = self.preferredSpeechVoice(voiceId: voiceId, voiceName: voiceName, language: language)
+                    utterance.voice = self.preferredSpeechVoice()
 
                     self.speechCall = call
                     self.notifyDiagnostic("native.tts.speech.queued", detail: [
@@ -332,47 +329,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         call?.reject(message)
     }
 
-    private func preferredSpeechVoice(voiceId: String? = nil, voiceName: String? = nil, language: String? = nil) -> AVSpeechSynthesisVoice? {
+    private func preferredSpeechVoice() -> AVSpeechSynthesisVoice? {
         let voices = AVSpeechSynthesisVoice.speechVoices()
-
-        // 1. If the JS layer sent an explicit voiceId, try to match it directly
-        if let voiceId = voiceId, !voiceId.isEmpty {
-            // First try exact identifier match (e.g. "com.apple.voice.compact.en-US.Samantha")
-            if let exact = voices.first(where: { $0.identifier == voiceId }) {
-                return exact
-            }
-            // Fall back to name match (e.g. "Samantha", "Alex", "Albert")
-            if let byName = voices.first(where: { $0.name == voiceId }) {
-                return byName
-            }
-        }
-
-        // 2. If the JS layer sent a voiceName, try to find a natural voice that contains it
-        if let voiceName = voiceName, !voiceName.isEmpty {
-            let candidates = voices
-                .filter { isNaturalSpeechVoice($0) && $0.name.localizedCaseInsensitiveContains(voiceName) }
-                .sorted { $0.quality.rawValue > $1.quality.rawValue }
-            if let voice = candidates.first {
-                return voice
-            }
-            // Loose fallback: any voice with that name (even if not "natural")
-            if let anyByName = voices.first(where: { $0.name.localizedCaseInsensitiveContains(voiceName) }) {
-                return anyByName
-            }
-        }
-
-        // 3. If a language hint was provided, prefer voices for that language
-        if let language = language, !language.isEmpty {
-            let candidates = voices
-                .filter { $0.language == language && isNaturalSpeechVoice($0) }
-                .sorted { $0.quality.rawValue > $1.quality.rawValue }
-            if let voice = candidates.first {
-                return voice
-            }
-        }
-
-        // 4. Fall back to the original preferred-voice-names list
-        let preferredVoiceNames = ["Samantha"]
+        let preferredVoiceNames = ["Matilda", "Ava", "Zoe", "Samantha", "Karen", "Daniel", "Moira", "Serena", "Siri"]
         for preferredName in preferredVoiceNames {
             let candidates = voices
                 .filter { isNaturalSpeechVoice($0) && $0.name.localizedCaseInsensitiveContains(preferredName) }
@@ -422,6 +381,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             mode: .voiceChat,
             options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers]
         )
+        try session.setPreferredSampleRate(16_000)
+        try session.setPreferredIOBufferDuration(0.02)
         try session.setActive(true)
         notifyDiagnostic("native.audio-session.configured", detail: audioSessionDetail())
     }
@@ -492,7 +453,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         audioEngine.disconnectNodeOutput(input)
         audioEngine.disconnectNodeOutput(keepaliveMixer)
         audioEngine.connect(input, to: keepaliveMixer, format: format)
-        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: nil)
+        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: format)
         audioEngine.mainMixerNode.outputVolume = 0
     }
 
@@ -540,6 +501,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             notifyListeners("voiceLevel", data: [
                 "voiceSessionId": currentSessionId ?? "",
                 "level": normalized,
+                "rms": Double(rms),
+                "threshold": silenceThreshold,
                 "audioSessionActive": self.active,
                 "backgroundCapable": true,
                 "applicationState": self.currentApplicationStateName(),
@@ -819,9 +782,19 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 self.notifyDiagnostic("native.audio-watchdog.recover", detail: [
                     "engineRunning": self.audioEngine.isRunning,
                     "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
+                    "lastLevel": self.lastLevel,
+                    "threshold": self.silenceThreshold,
                     "applicationState": self.currentApplicationStateName()
                 ])
                 self.recoverAudioEngine(reason: "audio-watchdog", forceRestart: true)
+            } else if self.state == .listening {
+                self.notifyDiagnostic("native.audio-watchdog.listening", detail: [
+                    "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
+                    "lastLevel": self.lastLevel,
+                    "threshold": self.silenceThreshold,
+                    "engineRunning": self.audioEngine.isRunning,
+                    "applicationState": self.currentApplicationStateName()
+                ])
             }
         }
         audioWatchdog = timer

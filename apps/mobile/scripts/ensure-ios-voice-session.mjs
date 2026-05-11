@@ -35,6 +35,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     private let audioEngine = AVAudioEngine()
+    private let keepaliveMixer = AVAudioMixerNode()
     private let captureQueue = DispatchQueue(label: "dev.crewcmd.voice-session.capture")
     private var state: CrewCmdVoiceState = .idle
     private var active = false
@@ -60,6 +61,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
     private var sessionBackgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var notificationObservers = [NSObjectProtocol]()
     private var lastAudioBufferAt: TimeInterval?
+    private var audioWatchdog: DispatchSourceTimer?
+    private var keepaliveGraphInstalled = false
 
     private let silenceThreshold = 0.015
     private let speechStartMs = 200.0
@@ -115,6 +118,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 do {
                     try self.configureAudioSession()
                     try self.startEngine()
+                    self.startAudioWatchdog()
                     self.beginSessionBackgroundTask()
                     self.active = true
                     self.state = .listening
@@ -136,6 +140,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func stop(_ call: CAPPluginCall) {
         captureQueue.async {
+            self.stopAudioWatchdog()
             self.stopEngine()
             self.endSessionBackgroundTask()
             self.active = false
@@ -193,8 +198,24 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
+        installKeepaliveInputGraph(input: input, format: format)
+        lastAudioBufferAt = Date().timeIntervalSince1970 * 1000
         audioEngine.prepare()
         try audioEngine.start()
+    }
+
+    private func installKeepaliveInputGraph(input: AVAudioInputNode, format: AVAudioFormat) {
+        if !keepaliveGraphInstalled {
+            audioEngine.attach(keepaliveMixer)
+            keepaliveMixer.outputVolume = 0
+            keepaliveGraphInstalled = true
+        }
+
+        audioEngine.disconnectNodeOutput(input)
+        audioEngine.disconnectNodeOutput(keepaliveMixer)
+        audioEngine.connect(input, to: keepaliveMixer, format: format)
+        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: format)
+        audioEngine.mainMixerNode.outputVolume = 0
     }
 
     private func stopEngine() {
@@ -202,6 +223,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             audioEngine.stop()
         }
         audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.disconnectNodeOutput(audioEngine.inputNode)
+        audioEngine.disconnectNodeOutput(keepaliveMixer)
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         } catch {
@@ -411,7 +434,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         ) { [weak self] _ in
             self?.captureQueue.async {
                 self?.notifyDiagnostic("native.app.background", detail: self?.audioSessionDetail() ?? [:])
-                self?.recoverAudioEngine(reason: "app-backgrounded")
+                self?.recoverAudioEngine(reason: "app-backgrounded", forceRestart: true)
             }
         })
         notificationObservers.append(center.addObserver(
@@ -438,7 +461,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 "shouldResume": options.contains(.shouldResume),
                 "applicationState": applicationStateName(UIApplication.shared.applicationState)
             ])
-            recoverAudioEngine(reason: "interruption-ended")
+            recoverAudioEngine(reason: "interruption-ended", forceRestart: true)
         @unknown default:
             notifyDiagnostic("native.audio-session.interruption.unknown", detail: audioSessionDetail())
         }
@@ -457,16 +480,23 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    private func recoverAudioEngine(reason: String) {
+    private func recoverAudioEngine(reason: String, forceRestart: Bool = false) {
         guard active else { return }
         do {
             try configureAudioSession()
-            if !audioEngine.isRunning {
+            if forceRestart || !audioEngine.isRunning {
+                if audioEngine.isRunning {
+                    audioEngine.stop()
+                }
+                audioEngine.inputNode.removeTap(onBus: 0)
+                audioEngine.disconnectNodeOutput(audioEngine.inputNode)
+                audioEngine.disconnectNodeOutput(keepaliveMixer)
                 try startEngine()
             }
             beginSessionBackgroundTask()
             notifyDiagnostic("native.engine.recovered", detail: [
                 "reason": reason,
+                "forceRestart": forceRestart,
                 "engineRunning": audioEngine.isRunning,
                 "applicationState": applicationStateName(UIApplication.shared.applicationState)
             ])
@@ -478,6 +508,33 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin {
                 "message": error.localizedDescription
             ])
         }
+    }
+
+    private func startAudioWatchdog() {
+        stopAudioWatchdog()
+        let timer = DispatchSource.makeTimerSource(queue: captureQueue)
+        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.active else { return }
+            let now = Date().timeIntervalSince1970 * 1000
+            let lastBuffer = self.lastAudioBufferAt ?? 0
+            let staleAudio = now - lastBuffer > 6000
+            if !self.audioEngine.isRunning || (UIApplication.shared.applicationState != .active && staleAudio) {
+                self.notifyDiagnostic("native.audio-watchdog.recover", detail: [
+                    "engineRunning": self.audioEngine.isRunning,
+                    "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
+                    "applicationState": self.applicationStateName(UIApplication.shared.applicationState)
+                ])
+                self.recoverAudioEngine(reason: "audio-watchdog", forceRestart: true)
+            }
+        }
+        audioWatchdog = timer
+        timer.resume()
+    }
+
+    private func stopAudioWatchdog() {
+        audioWatchdog?.cancel()
+        audioWatchdog = nil
     }
 
     private func beginSessionBackgroundTask() {

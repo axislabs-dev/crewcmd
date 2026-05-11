@@ -76,6 +76,16 @@ function isNativeCapacitorShell() {
   return platform === "ios" || platform === "android";
 }
 
+async function isServerSttAvailable() {
+  try {
+    const response = await fetch("/api/stt", { signal: AbortSignal.timeout(5000) });
+    const data = await response.json().catch(() => null);
+    return response.ok && data?.available === true;
+  } catch {
+    return false;
+  }
+}
+
 export function VoiceAgent({
   onTranscript,
   isPlayingAudio,
@@ -506,6 +516,21 @@ export function VoiceAgent({
           nativeAvailability,
         },
       });
+      return;
+    }
+
+    const serverSttAvailable = await isServerSttAvailable();
+    recordVoiceBreadcrumb("stt.availability", { available: serverSttAvailable });
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "stt.availability",
+      sessionId,
+      detail: { available: serverSttAvailable },
+    });
+    if (!serverSttAvailable) {
+      setError("Speech server unavailable. Configure OpenAI or local Whisper before using agent voice mode.");
+      setIsActive(false);
+      setState("idle");
       return;
     }
 

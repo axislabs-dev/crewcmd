@@ -59,11 +59,12 @@ export function VoiceRecorder({ onTranscript, isDisabled }: VoiceRecorderProps) 
     const hasBrowserSpeech = !!getBrowserSpeechRecognition();
     setIsSupported(hasMediaRecorder || hasBrowserSpeech);
 
+    setSttMode(hasBrowserSpeech ? "browser" : "server");
+
     fetch("/api/stt", { signal: AbortSignal.timeout(5000) })
-      .then((res) => {
-        if (res.status === 503) {
-          setSttMode("browser");
-        } else if (res.ok) {
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.available) {
           setSttMode("server");
         } else {
           setSttMode(hasBrowserSpeech ? "browser" : "server");

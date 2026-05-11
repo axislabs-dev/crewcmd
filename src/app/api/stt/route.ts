@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ available: true, provider: "openai" });
   }
 
-  return Response.json({ available: false, fallback: "browser" }, { status: 503 });
+  return Response.json({ available: false, fallback: "browser" });
 }
 
 export async function POST(request: NextRequest) {

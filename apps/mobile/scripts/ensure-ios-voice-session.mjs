@@ -10,6 +10,7 @@ const pluginPath = path.join(iosAppDir, pluginFilename);
 const bridgeFilename = "CrewCmdBridgeViewController.swift";
 const bridgePath = path.join(iosAppDir, bridgeFilename);
 const storyboardPath = path.join(iosAppDir, "Base.lproj", "Main.storyboard");
+const infoPlistPath = path.join(iosAppDir, "Info.plist");
 const generatedDir = path.join(appDir, process.env.CREWCMD_MOBILE_OUTPUT_DIR || ".generated");
 
 const PLUGIN_SOURCE = String.raw`import Foundation

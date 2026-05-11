@@ -75,7 +75,8 @@ const {
   distribution,
   server,
   deepLinks,
-  managedConfig
+  managedConfig,
+  push
 } = manifest;
 
 if (!app || typeof app !== "object") fail("app section is required");
@@ -129,5 +130,22 @@ ensureString(deepLinks.host, "deepLinks.host");
 ensureBoolean(managedConfig.allowManualServerOverride, "managedConfig.allowManualServerOverride");
 ensureRegex(managedConfig.supportEmail, "managedConfig.supportEmail", /^[^\s@]+@[^\s@]+\.[^\s@]+$/);
 ensureString(managedConfig.environmentLabel, "managedConfig.environmentLabel");
+
+if (push !== undefined) {
+  if (!push || typeof push !== "object") fail("push section must be an object");
+  ensureBoolean(push.enabled, "push.enabled");
+  if (push.ios !== undefined) {
+    if (!push.ios || typeof push.ios !== "object") fail("push.ios section must be an object");
+    if (push.ios.apnsEnvironment !== undefined && !["sandbox", "production"].includes(push.ios.apnsEnvironment)) {
+      fail("push.ios.apnsEnvironment must be sandbox or production");
+    }
+  }
+  if (push.android !== undefined) {
+    if (!push.android || typeof push.android !== "object") fail("push.android section must be an object");
+    if (push.android.firebaseProjectId !== undefined) {
+      ensureString(push.android.firebaseProjectId, "push.android.firebaseProjectId");
+    }
+  }
+}
 
 console.log(`Valid mobile branding manifest: ${manifestPath}`);

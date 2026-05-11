@@ -77,8 +77,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var cachedApplicationState: UIApplication.State = .active
     private var playbackSuppressionUntil: TimeInterval = 0
 
-    private let silenceThreshold = 0.0025
-    private let speechStartMs = 80.0
+    private let silenceThreshold = 0.005
+    private let speechStartMs = 100.0
     private let silenceEndMs = 700.0
     private let minRecordingMs = 250.0
     private let maxRecordingMs = 20000.0

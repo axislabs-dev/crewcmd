@@ -5,6 +5,7 @@ import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-m
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
+import { VoiceSelectModal, VoiceSummary } from "@/components/voice-select-modal";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
 import {
   ExecutionProgressPanel,
@@ -32,6 +33,7 @@ import {
   publishAgentModeDiagnostic,
   recordVoiceCrashBreadcrumb,
 } from "@/lib/agent-mode-diagnostics";
+import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -181,6 +183,9 @@ function ChatComposer({
   isLoading,
   speakResponses,
   onToggleSpeak,
+  onOpenVoicePicker,
+  voiceSettings,
+  hasVoiceOverride = false,
   onEnterAgentMode,
   agentButtonTitle = "Enter agent mode (hands-free)",
   addMenuLabel = "Add to Chat",
@@ -200,6 +205,9 @@ function ChatComposer({
   isLoading: boolean;
   speakResponses: boolean;
   onToggleSpeak: () => void;
+  onOpenVoicePicker: () => void;
+  voiceSettings: AgentVoiceSettings;
+  hasVoiceOverride?: boolean;
   onEnterAgentMode: () => void;
   agentButtonTitle?: string;
   addMenuLabel?: string;
@@ -338,6 +346,19 @@ function ChatComposer({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
                 </svg>
               )}
+            </button>
+
+            <button
+              onClick={onOpenVoicePicker}
+              title={hasVoiceOverride ? "Session voice override active" : "Choose voice"}
+              className={`flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] transition-all ${
+                hasVoiceOverride
+                  ? "bg-[#00f0ff]/12 text-[#00f0ff]"
+                  : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              <span>Voice</span>
+              <span className="hidden max-w-[120px] truncate sm:inline"><VoiceSummary value={voiceSettings} /></span>
             </button>
           </div>
 
@@ -796,6 +817,8 @@ export default function ChatPage() {
   const [speakResponses, setSpeakResponses] = useState(false);
   const [agentMicMuted, setAgentMicMuted] = useState(false);
   const [agentAudioMuted, setAgentAudioMuted] = useState(false);
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
+  const [sessionVoiceOverride, setSessionVoiceOverride] = useState<AgentVoiceSettings | null>(null);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -886,6 +909,18 @@ export default function ChatPage() {
     () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
     [selectedSessionKey, selectedAgent]
   );
+  const agentDefaultVoice = useMemo(
+    () => normalizeAgentVoiceSettings(selectedAgent?.runtimeConfig?.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
+    [selectedAgent?.runtimeConfig]
+  );
+  const resolvedVoiceSettings = useMemo(
+    () => normalizeAgentVoiceSettings(sessionVoiceOverride ?? agentDefaultVoice),
+    [agentDefaultVoice, sessionVoiceOverride]
+  );
+
+  useEffect(() => {
+    setSessionVoiceOverride(null);
+  }, [activeSessionKey]);
   const ttsBreadcrumbContextRef = useRef({
     mode: voiceMode,
     agent: selectedAgent?.callsign ?? null,
@@ -1666,12 +1701,14 @@ export default function ChatPage() {
 
     activeAudioKindRef.current = kind;
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
+    utterance.rate = resolvedVoiceSettings.speed ?? 1.0;
     utterance.pitch = 1.0;
 
-    // Try to pick a decent voice (prefer English, non-robotic)
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(
+    const selectedVoice = resolvedVoiceSettings.voiceId && (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative)
+      ? voices.find((v) => v.voiceURI === resolvedVoiceSettings.voiceId || v.name === resolvedVoiceSettings.voiceId)
+      : null;
+    const preferred = selectedVoice || voices.find(
       (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
     ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
     if (preferred) utterance.voice = preferred;
@@ -1691,7 +1728,7 @@ export default function ChatPage() {
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [markFirstAudioStarted]);
+  }, [markFirstAudioStarted, resolvedVoiceSettings]);
 
   const playTTS = useCallback(async (
     text: string,
@@ -1700,7 +1737,14 @@ export default function ChatPage() {
     const kind = options.kind ?? "filler";
     const token = kind === "filler" ? fillerAudioTokenRef.current : undefined;
     try {
-      recordTtsBreadcrumb("play.start", { kind, characters: text.length });
+      if (resolvedVoiceSettings.enabled === false) {
+        recordTtsBreadcrumb("play.voice-disabled", { kind });
+        setIsPlayingAudio(false);
+        activeAudioKindRef.current = null;
+        return;
+      }
+
+      recordTtsBreadcrumb("play.start", { kind, characters: text.length, voiceProvider: resolvedVoiceSettings.provider, voiceId: resolvedVoiceSettings.voiceId });
       setIsPlayingAudio(true);
       activeAudioKindRef.current = kind;
 
@@ -1720,7 +1764,9 @@ export default function ChatPage() {
         recordTtsBreadcrumb("native-speech.play.start", { kind, characters: text.length });
         const status = await speakNativeVoiceText({
           text,
-          playbackRate: kind === "response" ? 1.15 : 1,
+          playbackRate: resolvedVoiceSettings.speed ?? (kind === "response" ? 1.15 : 1),
+          voiceId: resolvedVoiceSettings.preferNative || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" ? resolvedVoiceSettings.voiceId : undefined,
+          voiceName: resolvedVoiceSettings.voiceName,
         });
         if (!status) {
           recordTtsBreadcrumb("native-speech.unavailable", { kind });
@@ -1736,8 +1782,8 @@ export default function ChatPage() {
         return;
       }
 
-      // If we already know server TTS is unavailable, go straight to browser
-      if (ttsModRef.current === "browser") {
+      // If server TTS is unavailable, or this session prefers a device/browser voice, go straight to browser speech.
+      if (ttsModRef.current === "browser" || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative) {
         recordTtsBreadcrumb("play.browser-fallback", { kind });
         playBrowserTTS(text, kind, token);
         return;
@@ -1747,7 +1793,7 @@ export default function ChatPage() {
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice: resolvedVoiceSettings }),
       });
 
       if (response.status === 503) {
@@ -1823,15 +1869,16 @@ export default function ChatPage() {
       // Network error — try browser fallback on regular web only.
       playBrowserTTS(text, kind, token);
     }
-  }, [assignAudioObjectUrl, markFirstAudioStarted, playBrowserTTS, recordTtsBreadcrumb, revokeAudioObjectUrl]);
+  }, [assignAudioObjectUrl, markFirstAudioStarted, playBrowserTTS, recordTtsBreadcrumb, resolvedVoiceSettings, revokeAudioObjectUrl]);
 
   const prefetchTTS = useCallback(async (text: string) => {
     if (isNativeCapacitorApp()) return;
     try {
+      if (resolvedVoiceSettings.enabled === false || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative) return;
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice: resolvedVoiceSettings }),
       });
       if (!response.ok) return;
       const blob = await response.blob();
@@ -1847,11 +1894,19 @@ export default function ChatPage() {
     } catch {
       // Prefetch is best-effort
     }
-  }, [revokePrefetchedAudio]);
+  }, [resolvedVoiceSettings, revokePrefetchedAudio]);
 
   // Sentence-level TTS: speak each sentence as it completes during streaming
   const speakNextInQueue = useCallback(async () => {
     if (isSpeakingQueueRef.current) return;
+    if (resolvedVoiceSettings.enabled === false) {
+      recordTtsBreadcrumb("queue.voice-disabled");
+      ttsQueueRef.current = [];
+      isSpeakingQueueRef.current = false;
+      activeAudioKindRef.current = null;
+      setIsPlayingAudio(false);
+      return;
+    }
     const next = ttsQueueRef.current.shift();
     if (!next) {
       isSpeakingQueueRef.current = false;
@@ -1883,9 +1938,11 @@ export default function ChatPage() {
         "speechSynthesis" in window;
       const useBrowserForFastStart =
         !hasStartedResponseAudioRef.current &&
-        browserSpeechAllowed;
+        browserSpeechAllowed &&
+        !resolvedVoiceSettings.preferNative &&
+        resolvedVoiceSettings.provider !== "browser";
 
-      if (browserSpeechAllowed && (ttsModRef.current === "browser" || useBrowserForFastStart)) {
+      if (browserSpeechAllowed && (ttsModRef.current === "browser" || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative || useBrowserForFastStart)) {
         hasStartedResponseAudioRef.current = true;
         // Browser TTS with queue continuation
         if (browserSpeechAllowed) {
@@ -1910,9 +1967,12 @@ export default function ChatPage() {
             speakNextInQueue();
           };
           const utterance = new SpeechSynthesisUtterance(next);
-          utterance.rate = 1.15;
+          utterance.rate = resolvedVoiceSettings.speed ?? 1.15;
           const voices = window.speechSynthesis.getVoices();
-          const preferred = voices.find(
+          const selectedVoice = resolvedVoiceSettings.voiceId && (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative)
+            ? voices.find((v) => v.voiceURI === resolvedVoiceSettings.voiceId || v.name === resolvedVoiceSettings.voiceId)
+            : null;
+          const preferred = selectedVoice || voices.find(
             (v) => v.lang.startsWith("en") && (v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Google") || v.name.includes("Neural"))
           ) || voices.find((v) => v.lang.startsWith("en") && v.localService);
           if (preferred) utterance.voice = preferred;
@@ -1951,7 +2011,9 @@ export default function ChatPage() {
         recordTtsBreadcrumb("queue.native-speech.play.start", { characters: next.length });
         const status = await speakNativeVoiceText({
           text: next,
-          playbackRate: 1.15,
+          playbackRate: resolvedVoiceSettings.speed ?? 1.15,
+          voiceId: resolvedVoiceSettings.preferNative || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" ? resolvedVoiceSettings.voiceId : undefined,
+          voiceName: resolvedVoiceSettings.voiceName,
         });
 
         if (!status) {
@@ -1983,7 +2045,7 @@ export default function ChatPage() {
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: next }),
+          body: JSON.stringify({ text: next, voice: resolvedVoiceSettings }),
         });
 
         if (!response.ok) {
@@ -2012,7 +2074,7 @@ export default function ChatPage() {
         recordTtsBreadcrumb("queue.webview-audio.play.start");
         assignAudioObjectUrl(url, "queue-play");
         audioRef.current.src = url;
-        audioRef.current.playbackRate = 1.15;
+        audioRef.current.playbackRate = resolvedVoiceSettings.speed ?? 1.15;
         audioRef.current.onended = () => {
           recordTtsBreadcrumb("queue.webview-audio.play.ended");
           revokeAudioObjectUrl(url, "queue-ended");
@@ -2050,7 +2112,7 @@ export default function ChatPage() {
       activeAudioKindRef.current = null;
       setIsPlayingAudio(false);
     }
-  }, [assignAudioObjectUrl, markFirstAudioStarted, prefetchTTS, recordTtsBreadcrumb, revokeAudioObjectUrl, revokePrefetchedAudio, stopFillerAudio]);
+  }, [assignAudioObjectUrl, markFirstAudioStarted, prefetchTTS, recordTtsBreadcrumb, resolvedVoiceSettings, revokeAudioObjectUrl, revokePrefetchedAudio, stopFillerAudio]);
 
   /** Queue a sentence for TTS and start speaking if idle */
   const queueSentenceForTTS = useCallback(
@@ -3052,6 +3114,9 @@ export default function ChatPage() {
                   if (speakResponses) stopAllAudio();
                   setSpeakResponses(!speakResponses);
                 }}
+                onOpenVoicePicker={() => setVoicePickerOpen(true)}
+                voiceSettings={resolvedVoiceSettings}
+                hasVoiceOverride={Boolean(sessionVoiceOverride)}
                 onEnterAgentMode={() => {
                   if (!isNativeCapacitorApp() && audioRef.current) {
                     audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
@@ -3233,7 +3298,15 @@ export default function ChatPage() {
           ) : null}
           <div className={agentOverlayMode === "immersive" ? "relative flex h-full flex-col justify-center" : "relative"}>
             {agentOverlayMode === "immersive" ? (
-              <div className="absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 sm:right-6">
+              <div className="absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 flex gap-2 sm:right-6">
+                <button
+                  onClick={() => setVoicePickerOpen(true)}
+                  title="Choose voice"
+                  aria-label="Choose voice"
+                  className={`flex h-10 items-center justify-center rounded-full border px-3 text-xs shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+                >
+                  Voice
+                </button>
                 <button
                   onClick={() => setAgentOverlayMode("transcript")}
                   title="Return to chat"
@@ -3285,6 +3358,14 @@ export default function ChatPage() {
                   {agentOverlayMode === "transcript" ? (
                     <div className="absolute right-2 top-2 flex items-center gap-1">
                       <button
+                        onClick={() => setVoicePickerOpen(true)}
+                        title="Choose voice"
+                        aria-label="Choose voice"
+                        className={`flex h-8 items-center justify-center rounded-full border px-2 text-[10px] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+                      >
+                        Voice
+                      </button>
+                      <button
                         onClick={() => setAgentOverlayMode("immersive")}
                         title="Enter fullscreen visual mode"
                         aria-label="Enter fullscreen visual mode"
@@ -3302,6 +3383,18 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+
+      <VoiceSelectModal
+        open={voicePickerOpen}
+        title="Session voice override"
+        value={resolvedVoiceSettings}
+        helperText="Applies to this chat or immersive agent session only. Agent defaults stay unchanged. Star favorites for fast access."
+        onClose={() => setVoicePickerOpen(false)}
+        onSelect={(voiceSettings) => {
+          setSessionVoiceOverride(voiceSettings);
+          setVoicePickerOpen(false);
+        }}
+      />
 
       {/* Input area — Claude-style layout */}
       <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 transition-opacity ${isPaused ? "opacity-60" : ""}`}>
@@ -3321,6 +3414,9 @@ export default function ChatPage() {
               if (speakResponses) stopAllAudio();
               setSpeakResponses(!speakResponses);
             }}
+            onOpenVoicePicker={() => setVoicePickerOpen(true)}
+            voiceSettings={resolvedVoiceSettings}
+            hasVoiceOverride={Boolean(sessionVoiceOverride)}
             onEnterAgentMode={() => {
               if (voiceMode === "agent") {
                 stopAllAudio();

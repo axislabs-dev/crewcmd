@@ -115,6 +115,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) if (field in body) updates[field] = body[field];
 
+    if (
+      "runtimeConfig" in body &&
+      body.runtimeConfig &&
+      typeof body.runtimeConfig === "object" &&
+      !Array.isArray(body.runtimeConfig)
+    ) {
+      updates.runtimeConfig = {
+        ...((agent.runtimeConfig ?? {}) as Record<string, unknown>),
+        ...(body.runtimeConfig as Record<string, unknown>),
+      };
+    }
+
     if ("visibility" in body) {
       updates.visibility = normalizeVisibilityForCreation({ ownerType: agent.ownerType, requestedVisibility: body.visibility });
     }

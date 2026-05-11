@@ -22,6 +22,7 @@ export interface Agent {
   soulContent: string | null;
   adapterType: string;
   adapterConfig: Record<string, unknown>;
+  runtimeConfig?: Record<string, unknown>;
   role: string;
   model: string | null;
   workspacePath: string | null;

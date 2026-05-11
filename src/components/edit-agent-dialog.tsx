@@ -10,6 +10,7 @@ import {
   HTTP_ADAPTERS,
   OPENROUTER_ADAPTERS,
 } from "./agent-config-fields";
+import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings } from "@/lib/tts-voices";
 
 interface EditAgentDialogProps {
   callsign: string;
@@ -88,6 +89,7 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
           openrouterApiKey: "",
           openrouterBaseUrl: OPENROUTER_ADAPTERS.includes(agent.adapterType) ? (adapterConfig.baseUrl as string) ?? "" : "",
           skillIds: [],
+          voiceSettings: normalizeAgentVoiceSettings(runtimeConfig.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
         });
 
         // Fetch skills for this agent
@@ -155,6 +157,10 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
         if (values.openrouterBaseUrl) adapterConfig.baseUrl = values.openrouterBaseUrl;
       }
 
+      const runtimeConfig: Record<string, unknown> = {
+        voice: values.voiceSettings,
+      };
+
       const res = await fetch(`/api/agents/${callsign}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -166,6 +172,7 @@ export function EditAgentDialog({ callsign, companyId, onSaved, onClose, onDelet
           color: values.color || "#00f0ff",
           adapterType: values.adapterType,
           adapterConfig,
+          runtimeConfig,
           provider: values.provider || null,
           role: values.role,
           model: values.model.trim() || null,

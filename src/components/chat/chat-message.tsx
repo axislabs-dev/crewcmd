@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TaskCard, CreateTaskCard, extractTaskCards } from "./task-card";
 
@@ -219,6 +219,16 @@ export function getDateKey(timestamp?: string | null): string | null {
   }
 }
 
+const markdownComponents: Components = {
+  a({ children, ...props }) {
+    return (
+      <a {...props} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  },
+};
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -339,13 +349,13 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
                 ) : seg.type === "action_create_task" ? (
                   <CreateTaskCard key={i} suggestion={seg.suggestion} />
                 ) : (
-                  <ReactMarkdown key={i} remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={markdownComponents}>
                     {(seg as { type: "text"; content: string }).content}
                   </ReactMarkdown>
                 )
               )
             ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {content}
               </ReactMarkdown>
             )}
@@ -363,6 +373,8 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
                   key={i}
                   href={att.url}
                   download={att.filename}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)]/30 hover:text-[var(--accent)]"
                 >
                   <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

@@ -23,7 +23,7 @@ private enum CrewCmdVoiceState: String {
 }
 
 @objc(CrewCmdVoiceSessionPlugin)
-public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlayerDelegate {
+public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
     public let identifier = "CrewCmdVoiceSessionPlugin"
     public let jsName = "CrewCmdVoiceSession"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -32,6 +32,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "muteMic", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "playAudio", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "speakText", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopAudio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise)
     ]
@@ -67,6 +68,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var audioPlayer: AVAudioPlayer?
     private var audioPlaybackCall: CAPPluginCall?
     private var audioPlaybackData: Data?
+    private let speechSynthesizer = AVSpeechSynthesizer()
+    private var speechCall: CAPPluginCall?
 
     private let silenceThreshold = 0.015
     private let speechStartMs = 200.0
@@ -76,6 +79,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
     public override func load() {
         super.load()
+        speechSynthesizer.delegate = self
         installLifecycleObservers()
     }
 
@@ -148,6 +152,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             self.stopAudioWatchdog()
             DispatchQueue.main.async {
                 self.stopAudioPlayback(cancelPending: true)
+                self.stopSpeechPlayback(cancelPending: true)
             }
             self.stopEngine()
             self.active = false
@@ -239,9 +244,68 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     @objc func stopAudio(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             self.stopAudioPlayback(cancelPending: true)
+            self.stopSpeechPlayback(cancelPending: true)
             self.notifyDiagnostic("native.tts.stop", detail: [:])
             call.resolve(self.statusPayload())
         }
+    }
+
+    @objc func speakText(_ call: CAPPluginCall) {
+        guard let text = call.getString("text")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            call.reject("Text is required")
+            return
+        }
+
+        let playbackRate = max(0.5, min(2.0, call.getDouble("playbackRate") ?? 1.0))
+
+        captureQueue.async {
+            do {
+                try self.configureAudioSession()
+                DispatchQueue.main.async {
+                    self.stopAudioPlayback(cancelPending: true)
+                    self.stopSpeechPlayback(cancelPending: true)
+
+                    let utterance = AVSpeechUtterance(string: text)
+                    utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(playbackRate)
+                    utterance.pitchMultiplier = 1.0
+                    utterance.volume = 1.0
+                    utterance.voice = AVSpeechSynthesisVoice(language: "en-US") ?? AVSpeechSynthesisVoice(language: "en-GB")
+
+                    self.speechCall = call
+                    self.notifyDiagnostic("native.tts.speech.queued", detail: [
+                        "characters": text.count,
+                        "rate": playbackRate,
+                        "voice": utterance.voice?.identifier ?? "system"
+                    ])
+                    self.speechSynthesizer.speak(utterance)
+                }
+            } catch {
+                self.lastError = error.localizedDescription
+                self.notifyDiagnostic("native.tts.speech.session-error", detail: ["message": error.localizedDescription])
+                DispatchQueue.main.async {
+                    call.reject(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        notifyDiagnostic("native.tts.speech.started", detail: ["characters": utterance.speechString.count])
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        notifyDiagnostic("native.tts.speech.finished", detail: ["characters": utterance.speechString.count])
+        let call = speechCall
+        speechCall = nil
+        call?.resolve(statusPayload())
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        notifyDiagnostic("native.tts.speech.cancelled", detail: ["characters": utterance.speechString.count])
+        let call = speechCall
+        speechCall = nil
+        call?.reject("Native speech playback cancelled")
     }
 
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -291,6 +355,22 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
         if wasPlaying {
             notifyDiagnostic("native.tts.play.stopped", detail: [:])
+        }
+    }
+
+    private func stopSpeechPlayback(cancelPending: Bool) {
+        let wasSpeaking = speechSynthesizer.isSpeaking
+        if wasSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
+
+        if cancelPending {
+            speechCall?.reject("Native speech playback stopped")
+        }
+        speechCall = nil
+
+        if wasSpeaking {
+            notifyDiagnostic("native.tts.speech.stopped", detail: [:])
         }
     }
 
@@ -831,6 +911,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "lastError": lastError ?? NSNull(),
             "engineRunning": audioEngine.isRunning,
             "audioPlaying": audioPlayer?.isPlaying ?? false,
+            "speechSpeaking": speechSynthesizer.isSpeaking,
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull(),
             "applicationState": applicationStateName(UIApplication.shared.applicationState)
         ]
@@ -863,7 +944,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 const metadata = {
   pluginName: "CrewCmdVoiceSession",
   swiftFile: path.join("ios", "App", "App", pluginFilename),
-  methods: ["isAvailable", "start", "stop", "muteMic", "playAudio", "stopAudio", "status"],
+  methods: ["isAvailable", "start", "stop", "muteMic", "playAudio", "speakText", "stopAudio", "status"],
   events: ["voiceLevel", "voiceSessionDiagnostic", "voiceTranscript"],
   phase: "native-engine-transcription-upload",
 };

@@ -73,6 +73,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var audioPlaybackData: Data?
     private let speechSynthesizer = AVSpeechSynthesizer()
     private var speechCall: CAPPluginCall?
+    private var cachedApplicationState: UIApplication.State = .active
 
     private let silenceThreshold = 0.015
     private let speechStartMs = 200.0
@@ -82,6 +83,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
     public override func load() {
         super.load()
+        DispatchQueue.main.async { [weak self] in
+            self?.cachedApplicationState = UIApplication.shared.applicationState
+        }
         speechSynthesizer.delegate = self
         installLifecycleObservers()
     }
@@ -457,7 +461,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 "level": normalized,
                 "audioSessionActive": self.active,
                 "backgroundCapable": true,
-                "applicationState": self.applicationStateName(UIApplication.shared.applicationState),
+                "applicationState": self.currentApplicationStateName(),
                 "engineRunning": self.audioEngine.isRunning
             ])
         }
@@ -497,17 +501,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             resetRecording()
             return
         }
-        let appState = UIApplication.shared.applicationState
-        guard appState != .active else {
-            notifyDiagnostic("native.recording.foreground-discarded", detail: [
-                "durationMs": recordingMs,
-                "samples": recordingSamples.count,
-                "applicationState": applicationStateName(appState)
-            ])
-            resetRecording()
-            state = active ? .listening : .idle
-            return
-        }
+        let appState = cachedApplicationState
         let samples = recordingSamples
         let sampleRate = recordingSampleRate
         resetRecording()
@@ -626,8 +620,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         notificationObservers.append(center.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
             object: nil,
-            queue: nil
+            queue: .main
         ) { [weak self] _ in
+            self?.cachedApplicationState = UIApplication.shared.applicationState
             self?.captureQueue.async {
                 self?.notifyDiagnostic("native.app.background", detail: self?.audioSessionDetail() ?? [:])
                 self?.recoverAudioEngine(reason: "app-backgrounded", forceRestart: true)
@@ -636,8 +631,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         notificationObservers.append(center.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil,
-            queue: nil
+            queue: .main
         ) { [weak self] _ in
+            self?.cachedApplicationState = UIApplication.shared.applicationState
             self?.captureQueue.async {
                 self?.notifyDiagnostic("native.app.foreground", detail: self?.audioSessionDetail() ?? [:])
             }
@@ -655,7 +651,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
             notifyDiagnostic("native.audio-session.interruption.ended", detail: [
                 "shouldResume": options.contains(.shouldResume),
-                "applicationState": applicationStateName(UIApplication.shared.applicationState)
+                "applicationState": currentApplicationStateName()
             ])
             recoverAudioEngine(reason: "interruption-ended", forceRestart: true)
         @unknown default:
@@ -668,7 +664,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue)
         notifyDiagnostic("native.audio-session.route-change", detail: [
             "reason": reason.map { String($0.rawValue) } ?? "unknown",
-            "applicationState": applicationStateName(UIApplication.shared.applicationState),
+            "applicationState": currentApplicationStateName(),
             "engineRunning": audioEngine.isRunning
         ])
         if active && !audioEngine.isRunning {
@@ -693,7 +689,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 "reason": reason,
                 "forceRestart": forceRestart,
                 "engineRunning": audioEngine.isRunning,
-                "applicationState": applicationStateName(UIApplication.shared.applicationState)
+                "applicationState": currentApplicationStateName()
             ])
         } catch {
             lastError = error.localizedDescription
@@ -714,11 +710,11 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             let now = Date().timeIntervalSince1970 * 1000
             let lastBuffer = self.lastAudioBufferAt ?? 0
             let staleAudio = now - lastBuffer > 6000
-            if !self.audioEngine.isRunning || (UIApplication.shared.applicationState != .active && staleAudio) {
+            if !self.audioEngine.isRunning || (self.cachedApplicationState != .active && staleAudio) {
                 self.notifyDiagnostic("native.audio-watchdog.recover", detail: [
                     "engineRunning": self.audioEngine.isRunning,
                     "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
-                    "applicationState": self.applicationStateName(UIApplication.shared.applicationState)
+                    "applicationState": self.currentApplicationStateName()
                 ])
                 self.recoverAudioEngine(reason: "audio-watchdog", forceRestart: true)
             }
@@ -766,6 +762,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         @unknown default:
             return "unknown"
         }
+    }
+
+    private func currentApplicationStateName() -> String {
+        applicationStateName(cachedApplicationState)
     }
 
     private func sendChatMessage(_ text: String) {
@@ -916,7 +916,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "audioPlaying": audioPlayer?.isPlaying ?? false,
             "speechSpeaking": speechSynthesizer.isSpeaking,
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull(),
-            "applicationState": applicationStateName(UIApplication.shared.applicationState)
+            "applicationState": currentApplicationStateName()
         ]
     }
 
@@ -928,7 +928,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "sampleRate": session.sampleRate,
             "inputAvailable": session.isInputAvailable,
             "engineRunning": audioEngine.isRunning,
-            "applicationState": applicationStateName(UIApplication.shared.applicationState),
+            "applicationState": currentApplicationStateName(),
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull()
         ]
     }

@@ -30,6 +30,33 @@ describe("iOS native voice-session generator", () => {
     );
   });
 
+  it("uploads foreground native recordings for transcription", () => {
+    const finishRecording = source.slice(
+      source.indexOf("private func finishRecording"),
+      source.indexOf("private func resetRecording")
+    );
+
+    expect(finishRecording).not.toContain("native.recording.foreground-discarded");
+    expect(finishRecording).not.toContain("guard appState != .active");
+    expect(finishRecording).toContain("uploadWav(samples: samples, sampleRate: sampleRate)");
+  });
+
+  it("does not read UIKit application state from capture handlers", () => {
+    const captureSections = [
+      source.slice(source.indexOf("private func handleAudioSessionInterruption"), source.indexOf("private func handleAudioRouteChange")),
+      source.slice(source.indexOf("private func handleAudioRouteChange"), source.indexOf("private func recoverAudioEngine")),
+      source.slice(source.indexOf("private func recoverAudioEngine"), source.indexOf("private func startAudioWatchdog")),
+      source.slice(source.indexOf("private func startAudioWatchdog"), source.indexOf("private func stopAudioWatchdog")),
+      source.slice(source.indexOf("private func statusPayload"), source.indexOf("private func audioSessionDetail")),
+      source.slice(source.indexOf("private func audioSessionDetail"), source.indexOf("private func notifyDiagnostic")),
+    ];
+
+    for (const section of captureSections) {
+      expect(section).not.toContain("UIApplication.shared.applicationState");
+      expect(section).toContain("currentApplicationStateName()");
+    }
+  });
+
   it("registers the generated plugin with the Capacitor iOS bridge", () => {
     expect(source).toContain("CrewCmdBridgeViewController");
     expect(source).toContain("bridge?.registerPluginInstance(CrewCmdVoiceSessionPlugin())");

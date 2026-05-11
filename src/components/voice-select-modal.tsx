@@ -27,6 +27,16 @@ function voiceKey(voice: Pick<TtsVoiceOption, "provider" | "id">) {
   return `${voice.provider}:${voice.id}`;
 }
 
+function uniqueVoices(voices: TtsVoiceOption[]) {
+  const seen = new Set<string>();
+  return voices.filter((voice) => {
+    const key = voiceKey(voice);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function readFavorites() {
   if (typeof window === "undefined") return [] as string[];
   try {
@@ -102,7 +112,7 @@ export function VoiceSelectModal({
         const browserVoices = (provider === "all" || provider === "browser" || provider === "favorites")
           ? listBrowserVoices().filter((voice) => matchesQuery(voice, query))
           : [];
-        setVoices([...serverVoices, ...browserVoices]);
+        setVoices(uniqueVoices([...serverVoices, ...browserVoices]));
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Unable to load voices");

@@ -62,6 +62,20 @@ const BARGEIN_START_MS = 600; // ms of sustained loud sound to interrupt TTS
 const SILENCE_END_MS = 2000; // ms of silence to stop recording (2s for natural pauses)
 const MIN_RECORDING_MS = 500; // minimum recording length to send
 
+function isNativeCapacitorShell() {
+  if (typeof window === "undefined") return false;
+  const capacitor = (window as Window & {
+    Capacitor?: {
+      getPlatform?: () => string;
+      isNativePlatform?: () => boolean;
+    };
+  }).Capacitor;
+  if (!capacitor) return false;
+  if (capacitor.isNativePlatform?.()) return true;
+  const platform = capacitor.getPlatform?.();
+  return platform === "ios" || platform === "android";
+}
+
 export function VoiceAgent({
   onTranscript,
   isPlayingAudio,
@@ -467,6 +481,29 @@ export function VoiceAgent({
         detail: {
           reason: "skip-web-audio-for-native-session",
           nativeBackgroundCapable: nativeAvailability.backgroundCapable,
+        },
+      });
+      return;
+    }
+
+    if (isNativeCapacitorShell()) {
+      const message = nativeAvailability.available
+        ? "Native voice session did not become active."
+        : "Native voice plugin is unavailable in this build.";
+      setError(message);
+      setIsActive(false);
+      setState("idle");
+      recordVoiceBreadcrumb("activate.native-unavailable", {
+        reason: "refuse-web-audio-fallback-in-native-shell",
+        nativeAvailability,
+      });
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.native-unavailable",
+        sessionId,
+        detail: {
+          reason: "refuse-web-audio-fallback-in-native-shell",
+          nativeAvailability,
         },
       });
       return;

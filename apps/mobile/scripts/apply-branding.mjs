@@ -31,6 +31,7 @@ const iconDarkSourcePath = resolveOptionalBrandingAsset("iconDarkPath", iconSour
 const splashSourcePath = path.resolve(path.dirname(manifestPath), manifest.branding.splashPath);
 const defaultBaseUrl = parseDefaultBaseUrl(manifest.server.defaultBaseUrl);
 const allowedNavigationHost = defaultBaseUrl.hostname;
+const pushConfig = normalizePushConfig(manifest.push);
 
 function writeJsonFile(targetPath, value) {
   fs.writeFileSync(targetPath, `${JSON.stringify(value, null, 2)}\n`);
@@ -73,6 +74,24 @@ function copyWebBrandAsset(sourcePath, outputName) {
   fs.copyFileSync(sourcePath, outputPath);
 
   return `./.generated/branding/${outputFile}`;
+}
+
+function normalizePushConfig(value) {
+  if (!value || typeof value !== "object") {
+    return { enabled: false };
+  }
+
+  return {
+    enabled: value.enabled === true,
+    ios: {
+      apnsEnvironment: value.ios?.apnsEnvironment === "sandbox" ? "sandbox" : "production",
+    },
+    android: {
+      firebaseProjectId: typeof value.android?.firebaseProjectId === "string"
+        ? value.android.firebaseProjectId
+        : null,
+    },
+  };
 }
 
 async function writeIosAppIcons() {
@@ -199,6 +218,7 @@ const runtimeConfig = {
   server: manifest.server,
   deepLinks: manifest.deepLinks,
   managedConfig: manifest.managedConfig,
+  push: pushConfig,
   generatedAt: new Date().toISOString()
 };
 
@@ -221,7 +241,14 @@ const capacitorConfig = {
       launchAutoHide: true,
       backgroundColor: manifest.branding.primaryColor,
       showSpinner: false
-    }
+    },
+    ...(pushConfig.enabled
+      ? {
+          PushNotifications: {
+            presentationOptions: ["badge", "sound", "alert"],
+          },
+        }
+      : {}),
   }
 };
 
@@ -239,15 +266,32 @@ Default server URL: ${manifest.server.defaultBaseUrl}
 Bootstrap mode: ${manifest.server.bootstrapMode}
 Manual server override allowed: ${manifest.managedConfig.allowManualServerOverride ? "yes" : "no"}
 Tailscale required: ${manifest.server.tailscaleRequired ? "yes" : "no"}
+Push notifications: ${pushConfig.enabled ? "enabled" : "disabled"}
 
 ## iOS
 
 Team / owner: ${manifest.distribution.ios.teamName}
 Distribution note: ${manifest.distribution.ios.distributionNote}
+${pushConfig.enabled ? `APNs environment: ${pushConfig.ios.apnsEnvironment}
+Server env:
+- CREWCMD_PUSH_ENABLED=true
+- CREWCMD_PUSH_APNS_BUNDLE_ID=${manifest.app.iosBundleId}
+- CREWCMD_PUSH_APNS_ENV=${pushConfig.ios.apnsEnvironment}
+- CREWCMD_PUSH_APNS_TEAM_ID=<Apple Developer Team ID>
+- CREWCMD_PUSH_APNS_KEY_ID=<APNs auth key ID>
+- CREWCMD_PUSH_APNS_PRIVATE_KEY=<APNs auth private key>
+Native requirement: enable the Push Notifications capability on the signed iOS target.
+` : ""}
 
 ## Android
 
 Distribution note: ${manifest.distribution.android.distributionNote}
+${pushConfig.enabled ? `Firebase project ID: ${pushConfig.android.firebaseProjectId || "<set in Firebase>"}
+Server env:
+- CREWCMD_PUSH_ENABLED=true
+- CREWCMD_PUSH_FCM_SERVICE_ACCOUNT_JSON=<Firebase service account JSON>
+Native requirement: add google-services.json for ${manifest.app.androidApplicationId} before building.
+` : ""}
 `;
 
 fs.writeFileSync(path.join(generatedDir, "distribution-summary.md"), nativeMetadata);

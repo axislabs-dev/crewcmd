@@ -108,16 +108,16 @@ export function getNativeVoiceSessionPlugin(): NativeVoiceSessionPlugin | null {
     return plugin;
   }
 
-  if (registeredNativeVoiceSessionPlugin !== undefined) {
+  if (registeredNativeVoiceSessionPlugin) {
     return registeredNativeVoiceSessionPlugin;
   }
 
   const platform = capacitor?.getPlatform?.() ?? "web";
-  registeredNativeVoiceSessionPlugin =
-    platform !== "web" && typeof capacitor?.registerPlugin === "function"
-      ? capacitor.registerPlugin("CrewCmdVoiceSession")
-      : null;
+  if (platform === "web" || typeof capacitor?.registerPlugin !== "function") {
+    return null;
+  }
 
+  registeredNativeVoiceSessionPlugin = capacitor.registerPlugin("CrewCmdVoiceSession");
   return registeredNativeVoiceSessionPlugin;
 }
 
@@ -217,6 +217,12 @@ export async function startNativeVoiceSession(options: NativeVoiceSessionStartOp
     detail: status,
   });
   return { voiceSessionId, status };
+}
+
+export async function getNativeVoiceSessionStatus() {
+  const plugin = getNativeVoiceSessionPlugin();
+  if (!plugin?.status) return null;
+  return plugin.status();
 }
 
 export async function stopNativeVoiceSession() {

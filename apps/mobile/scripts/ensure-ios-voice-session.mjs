@@ -76,10 +76,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var cachedApplicationState: UIApplication.State = .active
     private var playbackSuppressionUntil: TimeInterval = 0
 
-    private let silenceThreshold = 0.009
-    private let speechStartMs = 140.0
-    private let silenceEndMs = 900.0
-    private let minRecordingMs = 300.0
+    private let silenceThreshold = 0.0025
+    private let speechStartMs = 80.0
+    private let silenceEndMs = 700.0
+    private let minRecordingMs = 250.0
     private let maxRecordingMs = 20000.0
 
     public override func load() {
@@ -395,6 +395,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             mode: .voiceChat,
             options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers]
         )
+        try session.setPreferredSampleRate(16_000)
+        try session.setPreferredIOBufferDuration(0.02)
         try session.setActive(true)
         notifyDiagnostic("native.audio-session.configured", detail: audioSessionDetail())
     }
@@ -465,7 +467,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         audioEngine.disconnectNodeOutput(input)
         audioEngine.disconnectNodeOutput(keepaliveMixer)
         audioEngine.connect(input, to: keepaliveMixer, format: format)
-        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: nil)
+        audioEngine.connect(keepaliveMixer, to: audioEngine.mainMixerNode, format: format)
         audioEngine.mainMixerNode.outputVolume = 0
     }
 
@@ -513,6 +515,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             notifyListeners("voiceLevel", data: [
                 "voiceSessionId": currentSessionId ?? "",
                 "level": normalized,
+                "rms": Double(rms),
+                "threshold": silenceThreshold,
                 "audioSessionActive": self.active,
                 "backgroundCapable": true,
                 "applicationState": self.currentApplicationStateName(),
@@ -792,9 +796,19 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 self.notifyDiagnostic("native.audio-watchdog.recover", detail: [
                     "engineRunning": self.audioEngine.isRunning,
                     "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
+                    "lastLevel": self.lastLevel,
+                    "threshold": self.silenceThreshold,
                     "applicationState": self.currentApplicationStateName()
                 ])
                 self.recoverAudioEngine(reason: "audio-watchdog", forceRestart: true)
+            } else if self.state == .listening {
+                self.notifyDiagnostic("native.audio-watchdog.listening", detail: [
+                    "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
+                    "lastLevel": self.lastLevel,
+                    "threshold": self.silenceThreshold,
+                    "engineRunning": self.audioEngine.isRunning,
+                    "applicationState": self.currentApplicationStateName()
+                ])
             }
         }
         audioWatchdog = timer
@@ -1096,6 +1110,24 @@ function ensureNativeSources() {
   return true;
 }
 
+function ensureInfoPlistMicrophoneUsage() {
+  if (!fs.existsSync(infoPlistPath)) {
+    return false;
+  }
+
+  let plist = fs.readFileSync(infoPlistPath, "utf8");
+  if (plist.includes("<key>NSMicrophoneUsageDescription</key>")) {
+    return true;
+  }
+
+  plist = plist.replace(
+    /<\/dict>/,
+    "	<key>NSMicrophoneUsageDescription</key>\n	<string>CrewCmd uses the microphone for hands-free agent voice mode.</string>\n</dict>",
+  );
+  fs.writeFileSync(infoPlistPath, plist);
+  return plist.includes("<key>NSMicrophoneUsageDescription</key>");
+}
+
 function ensureStoryboardBridgeController() {
   if (!fs.existsSync(storyboardPath)) {
     return false;
@@ -1118,6 +1150,7 @@ function ensureStoryboardBridgeController() {
 const sourceApplied = ensureNativeSources();
 const projectApplied = sourceApplied ? ensureProjectFile() : false;
 const storyboardApplied = sourceApplied ? ensureStoryboardBridgeController() : false;
+const microphoneUsageApplied = sourceApplied ? ensureInfoPlistMicrophoneUsage() : false;
 
 fs.mkdirSync(generatedDir, { recursive: true });
 fs.writeFileSync(
@@ -1129,6 +1162,7 @@ fs.writeFileSync(
         swiftSource: sourceApplied,
         xcodeProject: projectApplied,
         storyboard: storyboardApplied,
+        microphoneUsageDescription: microphoneUsageApplied,
       },
     },
     null,
@@ -1136,7 +1170,7 @@ fs.writeFileSync(
   )}\n`,
 );
 
-if (sourceApplied && projectApplied && storyboardApplied) {
+if (sourceApplied && projectApplied && storyboardApplied && microphoneUsageApplied) {
   console.log("Ensured iOS CrewCmdVoiceSession native plugin.");
 } else if (sourceApplied) {
   console.log("Wrote iOS CrewCmdVoiceSession plugin source; Xcode project was not found or not patched.");

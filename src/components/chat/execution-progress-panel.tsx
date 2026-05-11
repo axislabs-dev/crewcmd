@@ -90,9 +90,11 @@ function labelFromProgress(progress: ExecutionProgressEvent | null, phase: Execu
 
 function toolTitle(event: ExecutionProgressEvent) {
   const name = event.activeTool?.name ?? "tool";
-  if (event.event === "tool_started") return `Tool call - ${name}`;
-  if (event.event === "tool_completed") return `Tool output - ${name}`;
-  return `Tool update - ${name}`;
+  const summary = summarizeToolEvent(event);
+  if (summary.title) return summary.title;
+  if (event.event === "tool_started") return `Calling ${name}`;
+  if (event.event === "tool_completed") return `Completed ${name}`;
+  return `Updated ${name}`;
 }
 
 function toolTone(event: ExecutionProgressEvent) {
@@ -117,9 +119,137 @@ function detailLabel(kind: "input" | "output" | "status" | undefined) {
   return "Details";
 }
 
+function parseToolDetail(detail: string | undefined): unknown {
+  if (!detail) return null;
+  try {
+    return JSON.parse(detail);
+  } catch {
+    return detail;
+  }
+}
+
+function asToolRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function compactValue(value: unknown, maxLength = 96): string | null {
+  if (value === undefined || value === null) return null;
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else if (typeof value === "number" || typeof value === "boolean") {
+    text = String(value);
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+  }
+
+  text = text.replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
+}
+
+function findFirstString(value: unknown, keys: string[], seen = new Set<unknown>()): string | null {
+  if (value === undefined || value === null || seen.has(value)) return null;
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value !== "object") return null;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFirstString(item, keys, seen);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const direct = record[key];
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+    if (typeof direct === "number" || typeof direct === "boolean") return String(direct);
+  }
+  for (const item of Object.values(record)) {
+    const found = findFirstString(item, keys, seen);
+    if (found) return found;
+  }
+  return null;
+}
+
+function fileLabel(path: string) {
+  const normalized = path.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 3) return normalized;
+  return `.../${parts.slice(-3).join("/")}`;
+}
+
+function summarizeToolEvent(event: ExecutionProgressEvent) {
+  const name = event.activeTool?.name ?? "tool";
+  const normalizedName = name.toLowerCase();
+  const detail = parseToolDetail(event.activeTool?.detail);
+  const detailRecord = asToolRecord(detail);
+  const command = findFirstString(detail, ["cmd", "command", "shellCommand", "shell_command"]);
+  const file = findFirstString(detail, [
+    "file",
+    "filepath",
+    "filePath",
+    "filename",
+    "path",
+    "target_file",
+    "targetFile",
+    "cwd",
+  ]);
+  const query = findFirstString(detail, ["query", "q", "pattern", "search", "term", "text"]);
+  const isOutput = event.event === "tool_completed";
+
+  if (normalizedName.includes("exec") || command) {
+    return {
+      title: `${isOutput ? "Exec finished" : "Exec"}${command ? `: ${compactValue(command, 120)}` : ""}`,
+      meta: file ? `in ${fileLabel(file)}` : null,
+    };
+  }
+
+  if (normalizedName.includes("read")) {
+    return {
+      title: `${isOutput ? "Read finished" : "Read"}${file ? `: ${fileLabel(file)}` : ""}`,
+      meta: query && query !== file ? compactValue(query) : null,
+    };
+  }
+
+  if (normalizedName.includes("edit") || normalizedName.includes("patch") || normalizedName.includes("write")) {
+    return {
+      title: `${isOutput ? "Edit finished" : "Edit"}${file ? `: ${fileLabel(file)}` : ""}`,
+      meta: command ? compactValue(command, 120) : null,
+    };
+  }
+
+  if (normalizedName.includes("search") || query) {
+    return {
+      title: `${isOutput ? "Search finished" : "Search"}${query ? `: ${compactValue(query, 120)}` : ""}`,
+      meta: file ? `in ${fileLabel(file)}` : null,
+    };
+  }
+
+  return {
+    title: `${isOutput ? "Completed" : "Calling"} ${name}`,
+    meta: compactValue(detailRecord?.summary ?? detailRecord?.message ?? detailRecord?.title ?? detail, 120),
+  };
+}
+
+function toolStatusDetail(event: ExecutionProgressEvent | null) {
+  if (!event?.activeTool) return "";
+  const summary = summarizeToolEvent(event);
+  return [summary.title, summary.meta].filter(Boolean).join(" - ");
+}
+
 function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; agentColor: string }) {
   const tone = toolTone(event);
   const detail = event.activeTool?.detail;
+  const summary = summarizeToolEvent(event);
   const markerColor =
     tone === "error" ? "rgb(248 113 113)" :
     tone === "done" ? "rgb(74 222 128)" :
@@ -132,8 +262,15 @@ function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; ag
           className={`h-2 w-2 shrink-0 rounded-full ${tone === "running" ? "animate-pulse" : ""}`}
           style={{ backgroundColor: markerColor }}
         />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]">
-          {toolTitle(event)}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-medium text-[var(--text-primary)]">
+            {toolTitle(event)}
+          </span>
+          {summary.meta && (
+            <span className="block truncate text-[10px] text-[var(--text-tertiary)]">
+              {summary.meta}
+            </span>
+          )}
         </span>
         <span className="hidden max-w-[16rem] truncate font-mono text-[10px] text-[var(--text-tertiary)] sm:block">
           {toolMeta(event)}
@@ -251,7 +388,7 @@ export function ExecutionProgressPanel({
   const label = labelFromProgress(progress, phase);
   const auditEvents = events.filter((event) => event.activeTool || event.checkpoint);
   const statusDetail =
-    phase === "tool" ? progress?.activeTool?.detail :
+    phase === "tool" ? toolStatusDetail(progress) :
     phase === "error" ? progress?.error :
     "";
   const hasStatusDetail = Boolean(statusDetail);

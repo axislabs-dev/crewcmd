@@ -850,7 +850,8 @@ export function VoiceAgent({
           ? speakingColor
           : "var(--text-tertiary)";
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
-  const particleCount = immersive ? 36 : 0;
+  const usesOrbitalVisual = immersive || compact;
+  const particleCount = immersive ? 36 : compact ? 18 : 0;
   const motionLevel =
     state === "speaking"
       ? Math.min(1, 0.35 + volumeLevel * 1.25)
@@ -859,7 +860,7 @@ export function VoiceAgent({
         : state === "processing"
           ? Math.min(1, 0.22 + volumeLevel * 0.45)
           : 0;
-  const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 92 + motionLevel * 28 : 170 + motionLevel * 90;
+  const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 138 + motionLevel * 38 : 170 + motionLevel * 90;
   const orbScale = immersive
     ? 1.22 + motionLevel * (state === "speaking" ? 0.06 : 0.045)
     : 1 + motionLevel * 0.06;
@@ -890,7 +891,7 @@ export function VoiceAgent({
           immersive
             ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]"
             : compact
-              ? "h-[5.75rem] w-[5.75rem]"
+              ? "h-[10rem] w-[10rem]"
               : "h-[10rem] w-[10rem] sm:h-[12rem] sm:w-[12rem]"
         }`}
         style={
@@ -901,7 +902,7 @@ export function VoiceAgent({
           } as CSSProperties
         }
       >
-        {immersive ? (
+        {usesOrbitalVisual ? (
           <>
             <div className="voice-agent-aura voice-agent-aura-outer" />
             <div className="voice-agent-aura voice-agent-aura-inner" />
@@ -940,10 +941,10 @@ export function VoiceAgent({
           }}
         />
 
-        <div className={`voice-agent-ring voice-agent-ring-outer ${immersive ? "voice-agent-ring-immersive" : ""}`} />
-        <div className={`voice-agent-ring voice-agent-ring-middle ${immersive ? "voice-agent-ring-immersive" : ""}`} />
-        <div className={`voice-agent-ring voice-agent-ring-inner ${immersive ? "voice-agent-ring-immersive" : ""}`} />
-        <div className={`voice-agent-grid ${immersive ? "voice-agent-grid-immersive" : ""}`} />
+        <div className={`voice-agent-ring voice-agent-ring-outer ${usesOrbitalVisual ? "voice-agent-ring-immersive" : ""}`} />
+        <div className={`voice-agent-ring voice-agent-ring-middle ${usesOrbitalVisual ? "voice-agent-ring-immersive" : ""}`} />
+        <div className={`voice-agent-ring voice-agent-ring-inner ${usesOrbitalVisual ? "voice-agent-ring-immersive" : ""}`} />
+        <div className={`voice-agent-grid ${usesOrbitalVisual ? "voice-agent-grid-immersive" : ""}`} />
 
         <div
           className={`absolute rounded-full transition-all duration-500 ${isActive ? "opacity-100" : "opacity-0"}`}
@@ -963,7 +964,7 @@ export function VoiceAgent({
 
         <div
           className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${
-            immersive ? "h-56 w-56 sm:h-72 sm:w-72" : compact ? "h-14 w-14" : "h-20 w-20 sm:h-24 sm:w-24"
+            immersive ? "h-56 w-56 sm:h-72 sm:w-72" : compact ? "h-24 w-24" : "h-20 w-20 sm:h-24 sm:w-24"
           } ${
             state === "idle"
               ? "cursor-pointer border-[var(--border-medium)]"
@@ -1000,7 +1001,7 @@ export function VoiceAgent({
                     }
           }
         >
-          {immersive ? (
+          {usesOrbitalVisual ? (
             <div className="voice-agent-orbital-core">
               <div className="voice-agent-core-grid" />
               <div className="voice-agent-core-lattice" />

@@ -47,6 +47,14 @@ function SpeakerIcon({ className }: { className?: string }) {
   );
 }
 
+function ReplyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75H8.25A2.25 2.25 0 0 0 6 12v.75A2.25 2.25 0 0 0 8.25 15h4.5L18 19.5V12a2.25 2.25 0 0 0-2.25-2.25h-.375M8.625 9.75A2.25 2.25 0 0 1 10.875 7.5h2.25a2.25 2.25 0 0 1 2.25 2.25M8.625 9.75h6.75" />
+    </svg>
+  );
+}
+
 function StopIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -55,7 +63,17 @@ function StopIcon({ className }: { className?: string }) {
   );
 }
 
-function MessageActions({ content, showSpeak, mobileVisible }: { content: string; showSpeak: boolean; mobileVisible: boolean }) {
+function MessageActions({
+  content,
+  showSpeak,
+  mobileVisible,
+  onReplyInThread,
+}: {
+  content: string;
+  showSpeak: boolean;
+  mobileVisible: boolean;
+  onReplyInThread?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -160,6 +178,11 @@ function MessageActions({ content, showSpeak, mobileVisible }: { content: string
       <button onClick={handleCopy} aria-label="Copy message" className={btnClass}>
         {copied ? <CheckIcon className="h-4 w-4 text-green-400" /> : <CopyIcon className="h-4 w-4" />}
       </button>
+      {onReplyInThread && (
+        <button onClick={onReplyInThread} aria-label="Reply in thread" className={btnClass}>
+          <ReplyIcon className="h-4 w-4" />
+        </button>
+      )}
       {showSpeak && (
         <button onClick={handleSpeak} aria-label="Read message aloud" className={btnClass}>
           {speaking ? <StopIcon className="h-4 w-4 text-[var(--accent)]" /> : <SpeakerIcon className="h-4 w-4" />}
@@ -182,6 +205,8 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   timestamp?: string | null;
   metadata?: { attachments?: Attachment[] } | null;
+  onReplyInThread?: () => void;
+  threadReplyCount?: number;
 }
 
 /** Day separator shown between messages on different dates */
@@ -283,7 +308,15 @@ function formatTime(timestamp?: string | null): string | null {
   }
 }
 
-export function ChatMessage({ role, content, isStreaming, timestamp, metadata }: ChatMessageProps) {
+export function ChatMessage({
+  role,
+  content,
+  isStreaming,
+  timestamp,
+  metadata,
+  onReplyInThread,
+  threadReplyCount,
+}: ChatMessageProps) {
   const isUser = role === "user";
   const attachments = metadata?.attachments;
   const [showActions, setShowActions] = useState(false);
@@ -329,7 +362,12 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
         className={`group relative ${messageWidthClass}`}
         onTouchEnd={() => setShowActions((v) => !v)}
       >
-        <MessageActions content={content} showSpeak={!isUser} mobileVisible={showActions} />
+        <MessageActions
+          content={content}
+          showSpeak={!isUser}
+          mobileVisible={showActions}
+          onReplyInThread={onReplyInThread}
+        />
         <div
           className={`relative overflow-hidden text-[13px] leading-relaxed ${
             isUser
@@ -397,6 +435,14 @@ export function ChatMessage({ role, content, isStreaming, timestamp, metadata }:
           <span className={`mt-1 block text-[10px] text-[var(--text-tertiary)] ${isUser ? "text-right" : "text-left"}`}>
             {formatTime(timestamp)}
           </span>
+        )}
+        {onReplyInThread && typeof threadReplyCount === "number" && threadReplyCount > 0 && (
+          <button
+            onClick={onReplyInThread}
+            className={`mt-1 block text-[10px] font-medium text-[var(--accent)] transition hover:underline ${isUser ? "ml-auto text-right" : "text-left"}`}
+          >
+            {threadReplyCount} {threadReplyCount === 1 ? "reply" : "replies"}
+          </button>
         )}
       </div>
     </div>

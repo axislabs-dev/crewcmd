@@ -59,6 +59,13 @@ interface Message {
   metadata?: { attachments?: Attachment[] } | null;
 }
 
+type ActiveThread = {
+  sessionKey: string;
+  parentSessionKey: string;
+  parentMessage: Message;
+  contextMessages: Message[];
+};
+
 type ChatExecutionSnapshot = {
   progress?: ExecutionProgressEvent | null;
   events?: ExecutionProgressEvent[];
@@ -75,6 +82,11 @@ function hasRenderableMessageContent(message: Pick<Message, "content" | "metadat
 
 function executionStorageKey(sessionKey: string) {
   return `${CHAT_EXECUTION_STORAGE_PREFIX}${sessionKey.toLowerCase()}`;
+}
+
+function threadSessionKey(parentSessionKey: string, parentMessageId: string) {
+  const safeId = parentMessageId.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return `${parentSessionKey}:thread:${safeId || "message"}`;
 }
 
 type VoiceMode = "off" | "agent";
@@ -320,6 +332,16 @@ function selectedSessionBelongsToAgent(
   return key === agent || key.startsWith(`${agent}:`);
 }
 
+function chatMessageFromStore(message: ChatStoreMessage): Message {
+  return {
+    id: message.id,
+    role: message.role as "user" | "assistant",
+    content: message.content,
+    createdAt: message.createdAt,
+    metadata: message.metadata,
+  };
+}
+
 function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
   if (runtimeRef === "main") return "main";
@@ -492,6 +514,13 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgressEvent | null>(null);
   const [executionEvents, setExecutionEvents] = useState<ExecutionProgressEvent[]>([]);
+  const [activeThread, setActiveThread] = useState<ActiveThread | null>(null);
+  const [threadMessages, setThreadMessages] = useState<Message[]>([]);
+  const [threadInput, setThreadInput] = useState("");
+  const [isThreadLoading, setIsThreadLoading] = useState(false);
+  const [threadStreamingContent, setThreadStreamingContent] = useState("");
+  const [threadProgress, setThreadProgress] = useState<ExecutionProgressEvent | null>(null);
+  const [threadEvents, setThreadEvents] = useState<ExecutionProgressEvent[]>([]);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -506,6 +535,7 @@ export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const unreadCounts = useChatStore((s) => s.unreadByAgent);
+  const messagesByStoreKey = useChatStore((s) => s.messagesByAgent);
   const [isPaused, setIsPaused] = useState(false);
   const [stopWords, setStopWords] = useState<string[]>([
     "stop", "pause", "shut up", "be quiet", "hold on", "wait", "enough", "stop talking",
@@ -730,14 +760,20 @@ export default function ChatPage() {
 
     const handleProgress = (customEvent: Event) => {
       const detail = (customEvent as CustomEvent).detail as (ExecutionProgressEvent & { sessionKey?: string; agentId?: string }) | undefined;
-      if (!detail?.event || !matchesActiveSession(detail)) return;
+      if (!detail?.event) return;
+      if (activeThread && detail.sessionKey?.toLowerCase() === activeThread.sessionKey.toLowerCase()) {
+        setThreadProgress(detail);
+        setThreadEvents((events) => [...events, detail].slice(-40));
+        return;
+      }
+      if (!matchesActiveSession(detail)) return;
       setExecutionProgress(detail);
       setExecutionEvents((events) => [...events, detail].slice(-40));
     };
 
     window.addEventListener("crewcmd:chat-progress", handleProgress);
     return () => window.removeEventListener("crewcmd:chat-progress", handleProgress);
-  }, [activeSessionKey]);
+  }, [activeSessionKey, activeThread]);
 
   // Server-side /api/chat persists partial content on client disconnect.
 
@@ -886,15 +922,54 @@ export default function ChatPage() {
     if (!loaded) return false;
 
     const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
-    setMessages(updated.map((m) => ({
-      id: m.id,
-      role: m.role as "user" | "assistant",
-      content: m.content,
-      createdAt: m.createdAt,
-      metadata: m.metadata,
-    })));
+    setMessages(updated.map(chatMessageFromStore));
     return true;
   }, []);
+
+  const openThreadForMessage = useCallback((message: Message, index: number) => {
+    const parentSessionKey = activeSessionKey;
+    const sessionKey = threadSessionKey(parentSessionKey, message.id);
+    const renderableMessages = messages.filter(hasRenderableMessageContent);
+    const contextMessages = renderableMessages.slice(Math.max(0, index - 8), index + 1);
+
+    setActiveThread({
+      sessionKey,
+      parentSessionKey,
+      parentMessage: message,
+      contextMessages,
+    });
+    setThreadProgress(null);
+    setThreadEvents([]);
+    setThreadStreamingContent("");
+
+    const existing = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
+    setThreadMessages(existing.map(chatMessageFromStore));
+    if (existing.length === 0) {
+      void loadCrewCmdSessionHistoryByKey(sessionKey, company?.id).then(() => {
+        const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
+        setThreadMessages(updated.map(chatMessageFromStore));
+      });
+    }
+  }, [activeSessionKey, company?.id, messages]);
+
+  const closeThread = useCallback(() => {
+    setActiveThread(null);
+    setThreadInput("");
+    setThreadMessages([]);
+    setThreadStreamingContent("");
+    setThreadProgress(null);
+    setThreadEvents([]);
+  }, []);
+
+  useEffect(() => {
+    if (!activeThread) return;
+    const key = activeThread.sessionKey.toLowerCase();
+    const unsub = useChatStore.subscribe((state) => {
+      const storeMessages = state.messagesByAgent[key] || [];
+      setThreadMessages(storeMessages.map(chatMessageFromStore));
+    });
+    return unsub;
+  }, [activeThread]);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
@@ -2195,6 +2270,169 @@ export default function ChatPage() {
     [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview]
   );
 
+  const sendThreadMessage = useCallback(async () => {
+    const thread = activeThread;
+    const trimmed = threadInput.trim();
+    if (!thread || !trimmed || isThreadLoading) return;
+
+    const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    const userMsg: Message = {
+      id: optimisticId,
+      role: "user",
+      content: trimmed,
+      createdAt: new Date().toISOString(),
+      metadata: null,
+    };
+    setThreadMessages((prev) => [...prev, userMsg]);
+    setThreadInput("");
+    setIsThreadLoading(true);
+    setThreadStreamingContent("");
+    const startedProgress = {
+      event: "run_started",
+      at: new Date().toISOString(),
+      elapsedMs: 0,
+    };
+    setThreadProgress(startedProgress);
+    setThreadEvents([startedProgress]);
+
+    let fullContent = "";
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            ...thread.contextMessages.map((message) => ({ role: message.role, content: message.content })),
+            ...threadMessages.map((message) => ({ role: message.role, content: message.content })),
+            { role: "user", content: trimmed },
+          ],
+          agent: selectedAgent?.callsign,
+          gatewayAgent: delegatedViaAgent?.callsign ?? selectedAgent?.callsign,
+          targetAgent: delegatedViaAgent && selectedAgent
+            ? {
+                callsign: selectedAgent.callsign,
+                name: selectedAgent.name,
+                title: selectedAgent.title,
+                runtimeRef: selectedAgent.runtimeRef,
+              }
+            : undefined,
+          companyId: company?.id,
+          metadata: null,
+          sessionKey: thread.sessionKey,
+          clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
+          notifyOnCompletion: true,
+          threadContext: {
+            parentSessionKey: thread.parentSessionKey,
+            threadSessionKey: thread.sessionKey,
+            parentMessage: {
+              role: thread.parentMessage.role,
+              content: thread.parentMessage.content,
+              id: thread.parentMessage.id,
+              createdAt: thread.parentMessage.createdAt,
+            },
+            contextMessages: thread.contextMessages.map((message) => ({
+              role: message.role,
+              content: message.content,
+              id: message.id,
+              createdAt: message.createdAt,
+            })),
+          },
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No reader");
+
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      const handleSseData = (data: string) => {
+        if (data === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
+            setThreadProgress(parsed);
+            setThreadEvents((events) => [...events, parsed].slice(-40));
+            useActiveChatRunStore.getState().applyProgressEvent(parsed);
+            return;
+          }
+          if (parsed.type === "meta" && parsed.role === "user") {
+            setThreadMessages((prev) =>
+              prev.map((message) => message.id === optimisticId ? { ...message, id: parsed.messageId } : message)
+            );
+            return;
+          }
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullContent += delta;
+            setThreadStreamingContent(fullContent);
+          }
+        } catch {
+          // Ignore malformed frames.
+        }
+      };
+
+      const handleSseFrame = (frame: string) => {
+        const dataLines = frame
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6));
+        if (dataLines.length > 0) handleSseData(dataLines.join("\n"));
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        const frames = sseBuffer.split("\n\n");
+        sseBuffer = frames.pop() ?? "";
+        for (const frame of frames) handleSseFrame(frame);
+      }
+      if (sseBuffer.trim()) handleSseFrame(sseBuffer);
+
+      if (fullContent.trim()) {
+        const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
+        setThreadMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: enrichedContent,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+      setThreadStreamingContent("");
+      const completedProgress = {
+        event: "run_completed",
+        at: new Date().toISOString(),
+      };
+      setThreadProgress(completedProgress);
+      setThreadEvents((events) => [...events, completedProgress].slice(-40));
+    } catch (error) {
+      const errorProgress = {
+        event: "run_error",
+        at: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Connection error.",
+      };
+      setThreadProgress(errorProgress);
+      setThreadEvents((events) => [...events, errorProgress].slice(-40));
+      if (fullContent.trim()) {
+        setThreadMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `${fullContent}\n\n_(connection interrupted)_`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+      setThreadStreamingContent("");
+    } finally {
+      setIsThreadLoading(false);
+    }
+  }, [activeThread, company?.id, delegatedViaAgent, isThreadLoading, selectedAgent, threadInput, threadMessages]);
+
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -2327,6 +2565,94 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {activeThread && (
+        <div className="fixed inset-0 z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:bg-black/10">
+          <section className="flex h-full w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[420px]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Thread</div>
+                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{selectedAgent?.callsign ?? "Agent"}</div>
+              </div>
+              <button
+                onClick={closeThread}
+                className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-2 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                aria-label="Close thread"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-4 py-3">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Parent message</div>
+              <div className="line-clamp-4 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--text-secondary)]">
+                {activeThread.parentMessage.content}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <div className="space-y-4">
+                {threadMessages.length === 0 && !threadStreamingContent && !isThreadLoading && (
+                  <div className="py-10 text-center text-[12px] text-[var(--text-tertiary)]">
+                    Reply to branch this conversation from the selected message.
+                  </div>
+                )}
+                {threadMessages.map((message) => (
+                  <ChatMessage
+                    key={message.id}
+                    role={message.role}
+                    content={message.content}
+                    timestamp={message.createdAt}
+                    metadata={message.metadata}
+                  />
+                ))}
+                {(isThreadLoading || threadProgress) && (
+                  <ExecutionProgressPanel
+                    progress={threadProgress}
+                    events={threadEvents}
+                    isLoading={isThreadLoading}
+                    hasStreamingContent={Boolean(threadStreamingContent)}
+                    agentColor={agentColor}
+                  />
+                )}
+                {threadStreamingContent && (
+                  <ChatMessage role="assistant" content={threadStreamingContent} isStreaming />
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 border-t border-[var(--border-subtle)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <div className="rounded-[var(--radius-panel)] border border-[var(--border-medium)] bg-[var(--bg-surface)]">
+                <textarea
+                  value={threadInput}
+                  onChange={(event) => setThreadInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void sendThreadMessage();
+                    }
+                  }}
+                  placeholder="Reply in thread..."
+                  rows={2}
+                  disabled={isThreadLoading}
+                  className="max-h-32 min-h-[56px] w-full resize-none bg-transparent px-3 py-3 text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] disabled:opacity-60"
+                />
+                <div className="flex justify-end px-2 pb-2">
+                  <button
+                    onClick={() => void sendThreadMessage()}
+                    disabled={!threadInput.trim() || isThreadLoading}
+                    className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
@@ -2365,7 +2691,14 @@ export default function ChatPage() {
             return (
               <div key={msg.id}>
                 {showSeparator && <DateSeparator date={msg.createdAt!} />}
-                <ChatMessage role={msg.role} content={msg.content} timestamp={msg.createdAt} metadata={msg.metadata} />
+                <ChatMessage
+                  role={msg.role}
+                  content={msg.content}
+                  timestamp={msg.createdAt}
+                  metadata={msg.metadata}
+                  onReplyInThread={() => openThreadForMessage(msg, i)}
+                  threadReplyCount={(messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || []).length}
+                />
               </div>
             );
           })}
@@ -2571,7 +2904,14 @@ export default function ChatPage() {
                     return (
                       <div key={msg.id}>
                         {showSeparator && <DateSeparator date={msg.createdAt!} />}
-                        <ChatMessage role={msg.role} content={msg.content} timestamp={msg.createdAt} metadata={msg.metadata} />
+                        <ChatMessage
+                          role={msg.role}
+                          content={msg.content}
+                          timestamp={msg.createdAt}
+                          metadata={msg.metadata}
+                          onReplyInThread={() => openThreadForMessage(msg, i)}
+                          threadReplyCount={(messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || []).length}
+                        />
                       </div>
                     );
                   })}

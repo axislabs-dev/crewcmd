@@ -75,6 +75,8 @@ export function TaskCard({ task }: { task: TaskCardData }) {
 
       <a
         href={`/tasks?id=${task.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
         className="block font-semibold text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
       >
         {task.shortId ? `#${task.shortId} ` : ""}
@@ -91,6 +93,8 @@ export function TaskCard({ task }: { task: TaskCardData }) {
         <span className="font-mono opacity-60">{task.id.slice(0, 8)}</span>
         <a
           href={`/tasks?id=${task.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="ml-auto text-[var(--accent)] hover:underline"
         >
           View on board →

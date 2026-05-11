@@ -441,7 +441,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
       {/* Panel */}
       <div
         ref={panelRef}
-        className="relative flex h-full w-full flex-col bg-[var(--bg-primary)] shadow-2xl transition-transform duration-250 ease-out sm:w-[480px]"
+        className="relative flex h-[100dvh] w-full flex-col bg-[var(--bg-primary)] shadow-2xl transition-transform duration-250 ease-out sm:w-[480px]"
         style={{ transform: visible ? "translateX(0)" : "translateX(100%)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -449,7 +449,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
         <div className="h-0.5 flex-shrink-0" style={{ backgroundColor: agentColor }} />
 
         {/* ─── Header ─────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 border-b border-[var(--border-subtle)] px-5 py-4">
+        <div className="flex-shrink-0 border-b border-[var(--border-subtle)] px-5 pb-4 pt-[calc(var(--mobile-safe-top)+1rem)] lg:pt-4">
           {loadingAgent ? (
             <div className="flex items-center gap-3">
               <Skeleton className="h-12 w-12 rounded-xl" />
@@ -487,7 +487,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               {/* Close button */}
               <button
                 onClick={handleClose}
-                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-secondary)]"
                 aria-label="Close panel"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -541,7 +541,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
         </div>
 
         {/* ─── Tab Content ────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
           {activeTab === "summary" && (
             <SummaryTab
               agent={agent}

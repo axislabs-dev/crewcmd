@@ -81,6 +81,33 @@ export async function getNativeVoiceSessionAvailability(): Promise<NativeVoiceSe
   }
 }
 
+
+function resolveNativeApiBaseUrl(explicitBaseUrl?: string) {
+  const candidate = explicitBaseUrl
+    || process.env.NEXT_PUBLIC_CREWCMD_NATIVE_API_BASE_URL
+    || process.env.NEXT_PUBLIC_APP_URL
+    || (typeof window !== "undefined" ? window.location.origin : "");
+
+  try {
+    const url = new URL(candidate);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.origin;
+    }
+  } catch {
+    // Fall through to diagnostic below.
+  }
+
+  publishAgentModeDiagnostic({
+    scope: "native-voice-session",
+    event: "base-url.unsupported",
+    detail: {
+      candidate,
+      windowOrigin: typeof window !== "undefined" ? window.location.origin : null,
+    },
+  });
+  return candidate;
+}
+
 async function createNativeVoiceUploadToken() {
   const response = await fetch("/api/mobile/voice-session/token", { method: "POST" });
   if (!response.ok) {
@@ -98,7 +125,7 @@ export async function startNativeVoiceSession(options: NativeVoiceSessionStartOp
   const status = await plugin.start({
     ...options,
     voiceSessionId,
-    baseUrl: options.baseUrl ?? window.location.origin,
+    baseUrl: resolveNativeApiBaseUrl(options.baseUrl),
     uploadToken: options.uploadToken ?? token?.token,
   });
   publishAgentModeDiagnostic({

@@ -30,6 +30,13 @@ describe("iOS native voice-session generator", () => {
     );
   });
 
+  it("uses a native VAD threshold suitable for iPhone microphone levels", () => {
+    expect(source).toContain("private let silenceThreshold = 0.006");
+    expect(source).toContain("private let speechStartMs = 80.0");
+    expect(source).toContain("private let silenceEndMs = 900.0");
+    expect(source).toContain("private let minRecordingMs = 300.0");
+  });
+
   it("uploads foreground native recordings for transcription", () => {
     const finishRecording = source.slice(
       source.indexOf("private func finishRecording"),
@@ -55,6 +62,13 @@ describe("iOS native voice-session generator", () => {
       expect(section).not.toContain("UIApplication.shared.applicationState");
       expect(section).toContain("currentApplicationStateName()");
     }
+  });
+
+  it("keeps cached app state current across active and inactive lifecycle events", () => {
+    expect(source).toContain("UIApplication.didBecomeActiveNotification");
+    expect(source).toContain("UIApplication.willResignActiveNotification");
+    expect(source).toContain('notifyDiagnostic("native.app.active"');
+    expect(source).toContain('notifyDiagnostic("native.app.inactive"');
   });
 
   it("registers the generated plugin with the Capacitor iOS bridge", () => {

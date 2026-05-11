@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
+import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
 import { exec } from "node:child_process";
 import { writeFile, unlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,7 +40,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = await requireAuth(request);
+  const bearerToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const authError = isValidVoiceUploadToken(bearerToken) ? null : await requireAuth(request);
   if (authError) return authError;
 
   try {

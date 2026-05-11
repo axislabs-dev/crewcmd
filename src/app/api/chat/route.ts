@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
+import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatRuns, chatSessions } from "@/db/schema";
@@ -651,7 +652,8 @@ async function persistAndPublish(
 }
 
 export async function POST(request: NextRequest) {
-  const authError = await requireAuth(request);
+  const bearerToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const authError = isValidVoiceUploadToken(bearerToken) ? null : await requireAuth(request);
   if (authError) return authError;
 
   try {

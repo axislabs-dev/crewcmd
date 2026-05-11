@@ -2550,6 +2550,12 @@ export default function ChatPage() {
                     isAgentMuted={agentAudioMuted}
                     onMicMutedChange={setAgentMicMuted}
                     onAgentMutedChange={handleAgentAudioMutedChange}
+                    agent={selectedAgent?.callsign}
+                    gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
+                    companyId={company?.id}
+                    sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                      ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+                      : gatewaySessionKeyForAgent(selectedAgent)}
                   />
                 </div>
               </div>

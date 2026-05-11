@@ -26,6 +26,16 @@ export type NativeVoiceSessionStartOptions = {
   agentCallsign?: string;
   uploadToken?: string;
   muted?: boolean;
+  agent?: string;
+  gatewayAgent?: string;
+  companyId?: string;
+};
+
+export type NativeVoiceTranscriptEvent = {
+  voiceSessionId?: string;
+  text?: string;
+  provider?: string;
+  error?: string;
 };
 
 type NativePluginHandle = { remove: () => Promise<void> };
@@ -71,12 +81,26 @@ export async function getNativeVoiceSessionAvailability(): Promise<NativeVoiceSe
   }
 }
 
+async function createNativeVoiceUploadToken() {
+  const response = await fetch("/api/mobile/voice-session/token", { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Unable to create native voice upload token: ${response.status}`);
+  }
+  return (await response.json()) as { token: string; expiresAt: number };
+}
+
 export async function startNativeVoiceSession(options: NativeVoiceSessionStartOptions = {}) {
   const plugin = getNativeVoiceSessionPlugin();
   if (!plugin?.start) return null;
 
   const voiceSessionId = options.voiceSessionId ?? createAgentModeSessionId("native-voice");
-  const status = await plugin.start({ ...options, voiceSessionId });
+  const token = options.uploadToken ? null : await createNativeVoiceUploadToken();
+  const status = await plugin.start({
+    ...options,
+    voiceSessionId,
+    baseUrl: options.baseUrl ?? window.location.origin,
+    uploadToken: options.uploadToken ?? token?.token,
+  });
   publishAgentModeDiagnostic({
     scope: "native-voice-session",
     event: "start.complete",
@@ -105,7 +129,7 @@ export async function setNativeVoiceSessionMuted(muted: boolean) {
 }
 
 export async function addNativeVoiceSessionListener(
-  eventName: "voiceLevel" | "voiceSessionDiagnostic",
+  eventName: "voiceLevel" | "voiceSessionDiagnostic" | "voiceTranscript",
   listener: (event: Record<string, unknown>) => void,
 ) {
   const plugin = getNativeVoiceSessionPlugin();

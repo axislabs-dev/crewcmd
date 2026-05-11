@@ -36,6 +36,10 @@ interface VoiceAgentProps {
   isAgentMuted?: boolean;
   onMicMutedChange?: (muted: boolean) => void;
   onAgentMutedChange?: (muted: boolean) => void;
+  agent?: string;
+  gatewayAgent?: string;
+  companyId?: string;
+  sessionKey?: string;
 }
 
 function hexToRgb(hex: string): string {
@@ -68,6 +72,10 @@ export function VoiceAgent({
   isAgentMuted = false,
   onMicMutedChange,
   onAgentMutedChange,
+  agent,
+  gatewayAgent,
+  companyId,
+  sessionKey,
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -389,6 +397,10 @@ export function VoiceAgent({
         const nativeSession = await startNativeVoiceSession({
           voiceSessionId: sessionId,
           muted: isMicMuted,
+          agent,
+          gatewayAgent,
+          companyId,
+          sessionKey,
         });
         nativeVoiceSessionIdRef.current = nativeSession?.voiceSessionId ?? sessionId;
         nativeSessionActiveRef.current = Boolean(nativeSession?.status.active);
@@ -485,7 +497,7 @@ export function VoiceAgent({
         setError("Microphone access denied. Please allow mic access and retry.");
       }
     }
-  }, [isAgentMuted, isMicMuted, isPlayingAudio, requestWakeLock]);
+  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, requestWakeLock, sessionKey]);
 
   const deactivate = useCallback(() => {
     const sessionId = diagnosticSessionRef.current ?? undefined;
@@ -633,6 +645,26 @@ export function VoiceAgent({
         });
       });
       if (diagnosticHandle) handles.push(diagnosticHandle);
+
+      const transcriptHandle = await addNativeVoiceSessionListener("voiceTranscript", (event) => {
+        if (disposed) return;
+        const text = typeof event.text === "string" ? event.text.trim() : "";
+        publishAgentModeDiagnostic({
+          scope: "native-voice-session",
+          event: text ? "native.transcript.received" : "native.transcript.empty",
+          sessionId: nativeVoiceSessionIdRef.current ?? diagnosticSessionRef.current ?? undefined,
+          detail: event,
+        });
+        if (text) {
+          setError(null);
+          setState("processing");
+          onTranscript(text);
+        } else if (typeof event.error === "string" && event.error) {
+          setError(event.error);
+          setState("listening");
+        }
+      });
+      if (transcriptHandle) handles.push(transcriptHandle);
     };
 
     void installListeners().catch((error) => {
@@ -650,7 +682,7 @@ export function VoiceAgent({
         void handle.remove();
       }
     };
-  }, [isMicMuted, nativeSessionActive]);
+  }, [isMicMuted, nativeSessionActive, onTranscript]);
 
   // Re-acquire wake lock when page becomes visible (iOS releases on tab switch)
   useEffect(() => {

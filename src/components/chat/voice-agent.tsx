@@ -452,6 +452,26 @@ export function VoiceAgent({
       }
     }
 
+    if (nativeSessionActiveRef.current) {
+      await requestWakeLock();
+      setIsActive(true);
+      setState("listening");
+      recordVoiceBreadcrumb("activate.native-only", {
+        reason: "skip-web-audio-for-native-session",
+        nativeBackgroundCapable: nativeAvailability.backgroundCapable,
+      });
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.native-only",
+        sessionId,
+        detail: {
+          reason: "skip-web-audio-for-native-session",
+          nativeBackgroundCapable: nativeAvailability.backgroundCapable,
+        },
+      });
+      return;
+    }
+
     // mediaDevices requires a secure context (HTTPS or localhost). On native iOS,
     // the CrewCmdVoiceSession plugin can still prove native background capture even
     // when WebView recording is unavailable, but transcription remains web-backed

@@ -652,71 +652,8 @@ function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
   return a.id === b.id || a.callsign.toLowerCase() === b.callsign.toLowerCase();
 }
 
-/** Load persisted CrewCmd message history, falling back to gateway history if no session exists. */
-async function loadThreadHistoryIntoStore(agentId: string, companyId?: string | null): Promise<ChatHistoryLoadResult> {
-  try {
-    if (companyId) {
-      const params = new URLSearchParams({
-        agentId,
-        companyId,
-        limit: "200",
-      });
-      const res = await fetch(`/api/chat/messages?${params.toString()}`);
-      if (res.ok) {
-        const { messages, sessionId, execution } = await res.json() as {
-          sessionId: string | null;
-          execution?: ChatExecutionSnapshot;
-          messages: {
-            id: string;
-            role: "user" | "assistant" | "system";
-            content: string;
-            createdAt: string;
-            metadata?: Record<string, unknown> | null;
-          }[];
-        };
-
-        if (sessionId) {
-          useChatStore.getState().loadSession(
-            agentId.toLowerCase(),
-            messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
-              id: m.id,
-              agentId: agentId.toLowerCase(),
-              role: m.role,
-              content: m.content,
-              createdAt: m.createdAt,
-              metadata: m.metadata ?? null,
-            }))
-          );
-          return { sessionId, execution: execution ?? null };
-        }
-      }
-    }
-
-    const res = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(agentId)}&limit=200`);
-    if (!res.ok) return null;
-
-    const { messages } = await res.json() as {
-      messages: { id: string; role: "user" | "assistant"; content: string }[];
-    };
-    if (!messages?.length) return null;
-
-    const baseTime = Date.now();
-    useChatStore.getState().loadSession(
-      agentId,
-      messages.map((m, index) => ({
-        id: `${agentId.toLowerCase()}-history-${index}-${m.id}`,
-        agentId: agentId.toLowerCase(),
-        role: m.role,
-        content: m.content,
-        createdAt: new Date(baseTime + index).toISOString(),
-        metadata: null,
-      }))
-    );
-    return null;
-  } catch {
-    // History unavailable
-    return null;
-  }
+function isMessageThreadSessionKey(sessionKey: string | null | undefined) {
+  return Boolean(sessionKey?.toLowerCase().includes(":thread:"));
 }
 
 async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: string | null): Promise<ChatHistoryLoadResult> {
@@ -1137,7 +1074,7 @@ export default function ChatPage() {
 
         if (restoredAgent) {
           setSelectedAgent(restoredAgent);
-          if (preferredSessionKey) {
+          if (preferredSessionKey && !isMessageThreadSessionKey(preferredSessionKey)) {
             selectSession(preferredSessionKey);
           }
           return;
@@ -1182,7 +1119,6 @@ export default function ChatPage() {
   const loadedThreadParentsRef = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
-    const agentId = selectedAgent?.callsign || activeSessionKey;
     const activeKey = activeSessionKey.toLowerCase();
 
     // Read whatever the store already has (from SSE)
@@ -1222,7 +1158,8 @@ export default function ChatPage() {
     } else if (!loadedAgentsRef.current.has(activeKey)) {
       // Otherwise load standard thread history
       loadedAgentsRef.current.add(activeKey);
-      loadThreadHistoryIntoStore(agentId, company?.id).then((result) => {
+      loadCrewCmdSessionHistoryByKey(activeSessionKey, company?.id).then(async (result) => {
+        const loaded = result ?? (await loadSessionPreviewIntoStore(activeSessionKey).then((ok) => ok ? null : null));
         if (cancelled) return;
         const updated = useChatStore.getState().messagesByAgent[activeKey] || [];
         setMessages(updated.map((m) => ({
@@ -1232,7 +1169,7 @@ export default function ChatPage() {
           createdAt: m.createdAt,
           metadata: m.metadata,
         })));
-        if (result?.execution) applyExecutionSnapshot(result.execution);
+        if (loaded?.execution) applyExecutionSnapshot(loaded.execution);
       });
     }
 

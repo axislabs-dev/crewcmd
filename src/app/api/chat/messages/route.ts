@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions } from "@/db/schema";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 import { buildChatExecutionSnapshot, loadChatExecutionEvents } from "@/lib/chat-session-events";
 
@@ -94,18 +94,34 @@ export async function GET(request: NextRequest) {
     }
 
     if (!resolvedSessionId && agentId && companyId) {
+      const agentLower = agentId.toLowerCase();
       const sessions = await withRetry(() =>
         db!.select().from(chatSessions)
-          .where(and(eq(chatSessions.agentId, agentId.toLowerCase()), eq(chatSessions.companyId, companyId)))
+          .where(and(eq(chatSessions.gatewaySessionKey, agentLower), eq(chatSessions.companyId, companyId)))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
       );
 
-      if (sessions.length === 0) {
-        return Response.json({ messages: [], sessionId: null, execution: { progress: null, events: [] } });
+      if (sessions.length > 0) {
+        resolvedSessionId = sessions[0].id;
       }
+    }
 
-      resolvedSessionId = sessions[0].id;
+    if (!resolvedSessionId && agentId && companyId) {
+      const sessions = await withRetry(() =>
+        db!.select().from(chatSessions)
+          .where(and(
+            eq(chatSessions.agentId, agentId.toLowerCase()),
+            eq(chatSessions.companyId, companyId),
+            isNull(chatSessions.gatewaySessionKey)
+          ))
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(1)
+      );
+
+      if (sessions.length > 0) {
+        resolvedSessionId = sessions[0].id;
+      }
     }
 
     if (!resolvedSessionId) {

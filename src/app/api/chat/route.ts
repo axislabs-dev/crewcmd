@@ -88,30 +88,21 @@ async function resolveSessionId(
     if (existingByGatewayKey.length > 0) {
       return existingByGatewayKey[0].id;
     }
-  }
+  } else {
+    const existing = await withRetry(() =>
+      db!.select().from(chatSessions)
+        .where(and(
+          eq(chatSessions.agentId, agentLower),
+          eq(chatSessions.companyId, companyId),
+          isNull(chatSessions.gatewaySessionKey)
+        ))
+        .orderBy(desc(chatSessions.updatedAt))
+        .limit(1)
+    );
 
-  const existing = await withRetry(() =>
-    db!.select().from(chatSessions)
-      .where(and(
-        eq(chatSessions.agentId, agentLower),
-        eq(chatSessions.companyId, companyId),
-        isNull(chatSessions.gatewaySessionKey)
-      ))
-      .orderBy(desc(chatSessions.updatedAt))
-      .limit(1)
-  );
-
-  if (existing.length > 0) {
-    const session = existing[0];
-    // Link gateway session key if not already set
-    if (gatewaySessionKey && !session.gatewaySessionKey) {
-      await withRetry(() =>
-        db!.update(chatSessions)
-          .set({ gatewaySessionKey })
-          .where(eq(chatSessions.id, session.id))
-      );
+    if (existing.length > 0) {
+      return existing[0].id;
     }
-    return session.id;
   }
 
   const [newSession] = await withRetry(() =>

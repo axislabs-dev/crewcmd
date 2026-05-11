@@ -29,4 +29,11 @@ describe("iOS native voice-session generator", () => {
       bufferHandler.indexOf("guard active, !micMuted else { return }")
     );
   });
+
+  it("registers the generated plugin with the Capacitor iOS bridge", () => {
+    expect(source).toContain("CrewCmdBridgeViewController");
+    expect(source).toContain("bridge?.registerPluginInstance(CrewCmdVoiceSessionPlugin())");
+    expect(source).toContain("Main.storyboard");
+    expect(source).toContain('customClass="CrewCmdBridgeViewController"');
+  });
 });

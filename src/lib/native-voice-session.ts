@@ -66,21 +66,58 @@ type NativeVoiceSessionPlugin = {
 type CapacitorWindow = Window & {
   Capacitor?: {
     getPlatform?: () => string;
+    registerPlugin?: (pluginName: string) => NativeVoiceSessionPlugin;
     Plugins?: {
       CrewCmdVoiceSession?: NativeVoiceSessionPlugin;
     };
   };
 };
 
+let registeredNativeVoiceSessionPlugin: NativeVoiceSessionPlugin | null | undefined;
+
+function getNativeVoicePluginDebugDetail() {
+  const capacitor = typeof window !== "undefined" ? (window as CapacitorWindow).Capacitor : undefined;
+  return {
+    platform: capacitor?.getPlatform?.() ?? "unknown",
+    hasCapacitor: Boolean(capacitor),
+    hasRegisterPlugin: typeof capacitor?.registerPlugin === "function",
+    pluginKeys: Object.keys(capacitor?.Plugins ?? {}),
+  };
+}
+
 export function getNativeVoiceSessionPlugin(): NativeVoiceSessionPlugin | null {
   if (typeof window === "undefined") return null;
-  return (window as CapacitorWindow).Capacitor?.Plugins?.CrewCmdVoiceSession ?? null;
+
+  const capacitor = (window as CapacitorWindow).Capacitor;
+  const plugin = capacitor?.Plugins?.CrewCmdVoiceSession;
+  if (plugin) {
+    registeredNativeVoiceSessionPlugin = plugin;
+    return plugin;
+  }
+
+  if (registeredNativeVoiceSessionPlugin !== undefined) {
+    return registeredNativeVoiceSessionPlugin;
+  }
+
+  const platform = capacitor?.getPlatform?.() ?? "web";
+  registeredNativeVoiceSessionPlugin =
+    platform !== "web" && typeof capacitor?.registerPlugin === "function"
+      ? capacitor.registerPlugin("CrewCmdVoiceSession")
+      : null;
+
+  return registeredNativeVoiceSessionPlugin;
 }
 
 export async function getNativeVoiceSessionAvailability(): Promise<NativeVoiceSessionAvailability> {
   const plugin = getNativeVoiceSessionPlugin();
   if (!plugin?.isAvailable) {
-    return { available: false, platform: "web", backgroundCapable: false };
+    const detail = getNativeVoicePluginDebugDetail();
+    publishAgentModeDiagnostic({
+      scope: "native-voice-session",
+      event: "plugin.unavailable",
+      detail,
+    });
+    return { available: false, platform: detail.platform, backgroundCapable: false };
   }
 
   try {

@@ -7,6 +7,9 @@ const iosAppDir = path.join(iosProjectDir, "App");
 const projectPath = path.join(iosProjectDir, "App.xcodeproj", "project.pbxproj");
 const pluginFilename = "CrewCmdVoiceSessionPlugin.swift";
 const pluginPath = path.join(iosAppDir, pluginFilename);
+const bridgeFilename = "CrewCmdBridgeViewController.swift";
+const bridgePath = path.join(iosAppDir, bridgeFilename);
+const storyboardPath = path.join(iosAppDir, "Base.lproj", "Main.storyboard");
 const generatedDir = path.join(appDir, process.env.CREWCMD_MOBILE_OUTPUT_DIR || ".generated");
 
 const PLUGIN_SOURCE = String.raw`import Foundation
@@ -941,13 +944,57 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 }
 `;
 
+const BRIDGE_SOURCE = String.raw`import Capacitor
+import UIKit
+
+class CrewCmdBridgeViewController: CAPBridgeViewController {
+    override open func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        bridge?.registerPluginInstance(CrewCmdVoiceSessionPlugin())
+    }
+}
+`;
+
 const metadata = {
   pluginName: "CrewCmdVoiceSession",
   swiftFile: path.join("ios", "App", "App", pluginFilename),
+  bridgeFile: path.join("ios", "App", "App", bridgeFilename),
   methods: ["isAvailable", "start", "stop", "muteMic", "playAudio", "speakText", "stopAudio", "status"],
   events: ["voiceLevel", "voiceSessionDiagnostic", "voiceTranscript"],
   phase: "native-engine-transcription-upload",
 };
+
+function addSwiftSourceToProject(project, filename, fileRefId, buildFileId) {
+  if (hasSwiftSourceInProject(project, filename)) {
+    return project;
+  }
+  project = project.replace(
+    "/* Begin PBXBuildFile section */\n",
+    `/* Begin PBXBuildFile section */\n\t\t${buildFileId} /* ${filename} in Sources */ = {isa = PBXBuildFile; fileRef = ${fileRefId} /* ${filename} */; };\n`,
+  );
+  project = project.replace(
+    "/* Begin PBXFileReference section */\n",
+    `/* Begin PBXFileReference section */\n\t\t${fileRefId} /* ${filename} */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ${filename}; sourceTree = "<group>"; };\n`,
+  );
+  project = project.replace(
+    /(\t\t\t\t504EC3071FED79650016851F \/\* AppDelegate\.swift \*\/,[\n\r]+)/,
+    `$1\t\t\t\t${fileRefId} /* ${filename} */,\n`,
+  );
+  project = project.replace(
+    /(\t\t\t\t504EC3081FED79650016851F \/\* AppDelegate\.swift in Sources \*\/,[\n\r]+)/,
+    `$1\t\t\t\t${buildFileId} /* ${filename} in Sources */,\n`,
+  );
+  return project;
+}
+
+function hasSwiftSourceInProject(project, filename) {
+  return (
+    project.includes(`/* ${filename} */ = {isa = PBXFileReference`) &&
+    project.includes(`/* ${filename} in Sources */ = {isa = PBXBuildFile`) &&
+    project.includes(`/* ${filename} */,`) &&
+    project.includes(`/* ${filename} in Sources */,`)
+  );
+}
 
 function ensureProjectFile() {
   if (!fs.existsSync(projectPath)) {
@@ -955,44 +1002,44 @@ function ensureProjectFile() {
   }
 
   let project = fs.readFileSync(projectPath, "utf8");
-  if (project.includes(`${pluginFilename} in Sources`)) {
-    return true;
-  }
-
-  const fileRefId = "CCVS000000000000000001";
-  const buildFileId = "CCVS000000000000000002";
-
-  project = project.replace(
-    "/* Begin PBXBuildFile section */\n",
-    `/* Begin PBXBuildFile section */\n\t\t${buildFileId} /* ${pluginFilename} in Sources */ = {isa = PBXBuildFile; fileRef = ${fileRefId} /* ${pluginFilename} */; };\n`,
-  );
-  project = project.replace(
-    "/* Begin PBXFileReference section */\n",
-    `/* Begin PBXFileReference section */\n\t\t${fileRefId} /* ${pluginFilename} */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ${pluginFilename}; sourceTree = "<group>"; };\n`,
-  );
-  project = project.replace(
-    /(\t\t\t\t504EC3071FED79650016851F \/\* AppDelegate\.swift \*\/,[\n\r]+)/,
-    `$1\t\t\t\t${fileRefId} /* ${pluginFilename} */,\n`,
-  );
-  project = project.replace(
-    /(\t\t\t\t504EC3081FED79650016851F \/\* AppDelegate\.swift in Sources \*\/,[\n\r]+)/,
-    `$1\t\t\t\t${buildFileId} /* ${pluginFilename} in Sources */,\n`,
-  );
+  project = addSwiftSourceToProject(project, pluginFilename, "CCVS000000000000000001", "CCVS000000000000000002");
+  project = addSwiftSourceToProject(project, bridgeFilename, "CCVB000000000000000001", "CCVB000000000000000002");
 
   fs.writeFileSync(projectPath, project);
-  return true;
+  return hasSwiftSourceInProject(project, pluginFilename) && hasSwiftSourceInProject(project, bridgeFilename);
 }
 
-function ensurePluginSource() {
+function ensureNativeSources() {
   if (!fs.existsSync(iosAppDir)) {
     return false;
   }
   fs.writeFileSync(pluginPath, PLUGIN_SOURCE);
+  fs.writeFileSync(bridgePath, BRIDGE_SOURCE);
   return true;
 }
 
-const sourceApplied = ensurePluginSource();
+function ensureStoryboardBridgeController() {
+  if (!fs.existsSync(storyboardPath)) {
+    return false;
+  }
+
+  let storyboard = fs.readFileSync(storyboardPath, "utf8");
+  if (storyboard.includes('customClass="CrewCmdBridgeViewController"')) {
+    return true;
+  }
+
+  storyboard = storyboard.replace(
+    /customClass="CAPBridgeViewController"(?: customModule="[^"]+")?/,
+    'customClass="CrewCmdBridgeViewController" customModule="App"',
+  );
+
+  fs.writeFileSync(storyboardPath, storyboard);
+  return storyboard.includes('customClass="CrewCmdBridgeViewController"');
+}
+
+const sourceApplied = ensureNativeSources();
 const projectApplied = sourceApplied ? ensureProjectFile() : false;
+const storyboardApplied = sourceApplied ? ensureStoryboardBridgeController() : false;
 
 fs.mkdirSync(generatedDir, { recursive: true });
 fs.writeFileSync(
@@ -1003,6 +1050,7 @@ fs.writeFileSync(
       applied: {
         swiftSource: sourceApplied,
         xcodeProject: projectApplied,
+        storyboard: storyboardApplied,
       },
     },
     null,
@@ -1010,7 +1058,7 @@ fs.writeFileSync(
   )}\n`,
 );
 
-if (sourceApplied && projectApplied) {
+if (sourceApplied && projectApplied && storyboardApplied) {
   console.log("Ensured iOS CrewCmdVoiceSession native plugin.");
 } else if (sourceApplied) {
   console.log("Wrote iOS CrewCmdVoiceSession plugin source; Xcode project was not found or not patched.");

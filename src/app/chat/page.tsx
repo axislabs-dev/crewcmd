@@ -2790,6 +2790,11 @@ export default function ChatPage() {
       }
 
       const metadata = attachments.length > 0 ? { attachments } : null;
+      const requestSessionKey = delegatedViaAgent
+        ? gatewaySessionKeyForAgent(delegatedViaAgent)
+        : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+        : gatewaySessionKeyForAgent(selectedAgent);
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const optimisticId = `optimistic-${crypto.randomUUID()}`;
@@ -2800,6 +2805,14 @@ export default function ChatPage() {
         createdAt: new Date().toISOString(),
         metadata,
       };
+      useChatStore.getState().addMessage({
+        id: optimisticId,
+        agentId: requestSessionKey,
+        role: "user",
+        content: userMsg.content,
+        metadata,
+        createdAt: userMsg.createdAt ?? new Date().toISOString(),
+      });
       setMessages((prev) =>
         options.queuedMessageId
           ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
@@ -2849,12 +2862,6 @@ export default function ChatPage() {
           .map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: messageContent },
       ];
-
-      const requestSessionKey = delegatedViaAgent
-        ? gatewaySessionKeyForAgent(delegatedViaAgent)
-        : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
-        : gatewaySessionKeyForAgent(selectedAgent);
 
       useActiveChatRunStore.getState().beginRun({ sessionKey: requestSessionKey });
 
@@ -2938,9 +2945,17 @@ export default function ChatPage() {
 
             if (parsed.type === "meta" && parsed.role === "user") {
               // Replace optimistic user message with server-confirmed one
+              useChatStore.getState().replaceOptimisticMessage(requestSessionKey, optimisticId, {
+                id: parsed.messageId,
+                agentId: requestSessionKey,
+                role: "user",
+                content: userMsg.content,
+                metadata,
+                createdAt: userMsg.createdAt ?? new Date().toISOString(),
+              });
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id.startsWith("optimistic-") && m.role === "user"
+                  m.id === optimisticId
                     ? { ...m, id: parsed.messageId }
                     : m
                 )
@@ -3011,12 +3026,20 @@ export default function ChatPage() {
         if (fullContent.trim()) {
           // Parse task references and inject inline card markers
           const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
+          const assistantId = crypto.randomUUID();
           const assistantMsg: Message = {
-            id: crypto.randomUUID(),
+            id: assistantId,
             role: "assistant",
             content: enrichedContent,
             createdAt: new Date().toISOString(),
           };
+          useChatStore.getState().addMessage({
+            id: assistantId,
+            agentId: requestSessionKey,
+            role: "assistant",
+            content: enrichedContent,
+            createdAt: assistantMsg.createdAt ?? new Date().toISOString(),
+          });
           setMessages((prev) => [...prev, assistantMsg]);
         }
         // Assistant message persisted server-side in /api/chat route

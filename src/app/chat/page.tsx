@@ -2,8 +2,8 @@
 
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
-import type { Attachment, ChatIdentityDetails } from "@/components/chat/chat-message";
+import { ChatIdentityProfilePanel, ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
+import type { Attachment, ChatIdentityDetails, ChatIdentityProfile } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { ChatThreadDrawer } from "@/components/chat/thread-drawer";
@@ -1022,6 +1022,7 @@ export default function ChatPage() {
   const [serverThreadSummaries, setServerThreadSummaries] = useState<Record<string, ThreadReplySummary>>({});
   const [pins, setPins] = useState<ChatPin[]>([]);
   const [savedByMessageId, setSavedByMessageId] = useState<Record<string, SavedItem>>({});
+  const [activeIdentityProfile, setActiveIdentityProfile] = useState<ChatIdentityProfile | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1779,6 +1780,7 @@ export default function ChatPage() {
     model: selectedAgent?.model,
     runtimeRef: selectedAgent?.runtimeRef ?? selectedAgent?.runtimeId ?? selectedAgent?.adapterType,
     workspacePath: selectedAgent?.workspacePath,
+    command: selectedAgent?.callsign ? `/${selectedAgent.callsign.toLowerCase()}` : null,
     profileHref: selectedAgent?.callsign ? `/agents/${selectedAgent.callsign.toLowerCase()}` : "/agents",
   }), [selectedAgent]);
 
@@ -3875,6 +3877,13 @@ export default function ChatPage() {
         />
       )}
 
+      {activeIdentityProfile && (
+        <ChatIdentityProfilePanel
+          profile={activeIdentityProfile}
+          onClose={() => setActiveIdentityProfile(null)}
+        />
+      )}
+
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
@@ -3925,6 +3934,7 @@ export default function ChatPage() {
                   authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
                   authorEmoji={msg.role === "assistant" ? agentEmoji : null}
                   identityDetails={msg.role === "user" ? userIdentityDetails : assistantIdentityDetails}
+                  onOpenIdentity={setActiveIdentityProfile}
                   onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
                   onTogglePin={canPersistMessageAction ? () => void togglePin(msg) : undefined}
                   onToggleSaved={canPersistMessageAction ? () => void toggleSaved(msg) : undefined}
@@ -3960,6 +3970,7 @@ export default function ChatPage() {
                 authorAvatarUrl={assistantAvatarUrl}
                 authorEmoji={agentEmoji}
                 identityDetails={assistantIdentityDetails}
+                onOpenIdentity={setActiveIdentityProfile}
                 voiceSettings={resolvedVoiceSettings}
               />
               <button

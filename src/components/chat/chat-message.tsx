@@ -267,6 +267,15 @@ export interface ChatIdentityDetails {
   runtimeRef?: string | null;
   workspacePath?: string | null;
   profileHref?: string | null;
+  command?: string | null;
+}
+
+export interface ChatIdentityProfile {
+  displayName: string;
+  avatarUrl?: string | null;
+  emoji?: string | null;
+  isUser: boolean;
+  details?: ChatIdentityDetails | null;
 }
 
 interface ChatMessageProps {
@@ -279,6 +288,7 @@ interface ChatMessageProps {
   authorAvatarUrl?: string | null;
   authorEmoji?: string | null;
   identityDetails?: ChatIdentityDetails | null;
+  onOpenIdentity?: (profile: ChatIdentityProfile) => void;
   onReplyInThread?: () => void;
   onTogglePin?: () => void;
   onToggleSaved?: () => void;
@@ -407,16 +417,19 @@ function MessageAvatar({
   avatarUrl?: string | null;
   emoji?: string | null;
   isUser: boolean;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
   const fallback = emoji || getInitials(name) || (isUser ? "U" : "A");
   const fallbackClass = emoji ? "text-lg" : "font-mono text-[10px] font-bold";
+  const interactiveClass = onClick ? "cursor-pointer hover:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/40" : "cursor-default";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border transition hover:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 ${
+      onTouchEnd={(event) => event.stopPropagation()}
+      disabled={!onClick}
+      className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border transition focus:outline-none ${interactiveClass} ${
         isUser
           ? "rounded-full border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
           : "rounded-lg border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
@@ -444,97 +457,119 @@ function IdentityLine({ label, value }: { label: string; value?: string | null }
   );
 }
 
-function IdentityPopover({
-  open,
-  details,
-  displayName,
-  avatarUrl,
-  emoji,
-  isUser,
+export function ChatIdentityProfilePanel({
+  profile,
   onClose,
 }: {
-  open: boolean;
-  details?: ChatIdentityDetails | null;
-  displayName: string;
-  avatarUrl?: string | null;
-  emoji?: string | null;
-  isUser: boolean;
+  profile: ChatIdentityProfile;
   onClose: () => void;
 }) {
-  if (!open) return null;
-
+  const { displayName, avatarUrl, emoji, isUser, details } = profile;
   const type = details?.type ?? (isUser ? "person" : "agent");
   const fallback = emoji || getInitials(displayName) || (isUser ? "U" : "A");
-  const fallbackClass = emoji ? "text-xl" : "font-mono text-[11px] font-bold";
+  const fallbackClass = emoji ? "text-3xl" : "font-mono text-lg font-bold";
   const defaultStatus = isUser ? "Person" : "AI agent";
+  const about = details?.currentTask || details?.title || (isUser ? "Workspace member in this chat." : "AI agent available in this chat.");
 
   return (
     <div
-      className="absolute left-0 top-11 z-30 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-3 shadow-2xl"
+      className="fixed inset-0 z-[85] bg-black/30 backdrop-blur-[2px] sm:bg-transparent sm:backdrop-blur-0"
       role="dialog"
       aria-label={`${displayName} identity card`}
-      onClick={(event) => event.stopPropagation()}
+      aria-modal="true"
+      onClick={onClose}
     >
-      <div className="flex items-start gap-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden border ${
-            isUser
-              ? "rounded-full border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
-              : "rounded-lg border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)]"
-          }`}
-        >
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <span className={fallbackClass}>{fallback}</span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{displayName}</div>
-              <div className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
-                {details?.title || defaultStatus}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--text-tertiary)] transition hover:bg-white/5 hover:text-[var(--text-primary)]"
-              aria-label="Close identity card"
+      <section
+        className="absolute inset-x-0 bottom-0 flex h-[calc(100dvh-var(--mobile-safe-top))] flex-col overflow-hidden rounded-t-[28px] border-t border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[0_-24px_80px_rgba(0,0,0,0.22)] sm:inset-y-0 sm:left-auto sm:right-0 sm:h-auto sm:w-[380px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[var(--theme-shadow-lg)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4 pb-4 pt-[max(var(--mobile-safe-top),1rem)] sm:px-5 sm:py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+            aria-label="Close profile"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="min-w-0 px-3 text-center text-base font-semibold text-[var(--text-primary)]">
+            {type === "agent" ? "App profile" : "Profile"}
+          </div>
+          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="flex items-center gap-4 px-5 py-6">
+            <div
+              className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden border ${
+                isUser
+                  ? "rounded-full border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
+                  : "rounded-2xl border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+              }`}
             >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-              </svg>
-            </button>
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className={fallbackClass}>{fallback}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-semibold leading-tight text-[var(--text-primary)]">{displayName}</h2>
+              <p className="mt-1 text-sm leading-snug text-[var(--text-secondary)]">{details?.title || defaultStatus}</p>
+            </div>
+          </div>
+
+          <section className="border-y border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-5 py-5">
+            <h3 className="text-sm font-semibold text-[var(--text-secondary)]">About {displayName}</h3>
+            <p className="mt-4 text-[15px] leading-relaxed text-[var(--text-secondary)]">{about}</p>
+          </section>
+
+          {details?.command && (
+            <section className="border-b border-[var(--border-subtle)] px-5 py-5">
+              <h3 className="text-sm font-semibold text-[var(--text-secondary)]">Commands</h3>
+              <div className="mt-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-surface-hover)] text-xl font-semibold text-[var(--text-primary)]">/</div>
+                <div className="min-w-0">
+                  <div className="font-mono text-[15px] text-[var(--text-primary)]">{details.command}</div>
+                  <div className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">Send a message to {displayName}</div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="border-b border-[var(--border-subtle)] px-5 py-5">
+            <div className="space-y-2.5">
+              <IdentityLine label="Type" value={type === "agent" ? "AI agent" : "Person"} />
+              <IdentityLine label="Status" value={details?.status} />
+              <IdentityLine label="Task" value={details?.currentTask} />
+              <IdentityLine label="Model" value={details?.model} />
+              <IdentityLine label="Runtime" value={details?.runtimeRef} />
+              <IdentityLine label="Workspace" value={details?.workspacePath} />
+            </div>
+          </section>
+
+          {details?.profileHref && (
+            <div className="px-5 py-5">
+              <a
+                href={details.profileHref}
+                className="flex w-full items-center justify-center rounded-lg border border-[var(--border-medium)] px-4 py-3 text-sm font-semibold text-[var(--text-secondary)] transition hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
+              >
+                {type === "agent" ? "Go to agent" : "View profile"}
+              </a>
+            </div>
+          )}
+
+          <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-[13px] text-[var(--text-tertiary)]">
+            {type === "agent" ? `${displayName} is available in this workspace.` : `${displayName} is in this workspace.`}
           </div>
         </div>
-      </div>
-
-      <div className="mt-3 space-y-1.5 border-t border-[var(--border-subtle)] pt-3">
-        <IdentityLine label="Type" value={type === "agent" ? "AI agent" : "Person"} />
-        <IdentityLine label="Status" value={details?.status} />
-        <IdentityLine label="Task" value={details?.currentTask} />
-        <IdentityLine label="Model" value={details?.model} />
-        <IdentityLine label="Runtime" value={details?.runtimeRef} />
-        <IdentityLine label="Workspace" value={details?.workspacePath} />
-      </div>
-
-      {details?.profileHref && (
-        <div className="mt-3 flex justify-end border-t border-[var(--border-subtle)] pt-3">
-          <a
-            href={details.profileHref}
-            className="rounded-md border border-[var(--border-medium)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
-          >
-            View details
-          </a>
-        </div>
-      )}
+      </section>
     </div>
   );
 }
-
 function ThreadAvatar({ role }: { role: "user" | "assistant" }) {
   const isUser = role === "user";
 
@@ -610,6 +645,7 @@ export function ChatMessage({
   authorAvatarUrl,
   authorEmoji,
   identityDetails,
+  onOpenIdentity,
   onReplyInThread,
   onTogglePin,
   onToggleSaved,
@@ -624,9 +660,17 @@ export function ChatMessage({
   const displayTime = formatTime(timestamp);
   const attachments = metadata?.attachments;
   const [showActions, setShowActions] = useState(false);
-  const [showIdentity, setShowIdentity] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const messageWidthClass = "max-w-[min(100%,58rem)]";
+  const openIdentity = onOpenIdentity
+    ? () => onOpenIdentity({
+        displayName,
+        avatarUrl: authorAvatarUrl,
+        emoji: !isUser ? authorEmoji : null,
+        isUser,
+        details: identityDetails,
+      })
+    : undefined;
 
   // Mobile: hide actions when tapping outside the bubble
   useEffect(() => {
@@ -651,7 +695,7 @@ export function ChatMessage({
         avatarUrl={authorAvatarUrl}
         emoji={!isUser ? authorEmoji : null}
         isUser={isUser}
-        onClick={() => setShowIdentity((v) => !v)}
+        onClick={openIdentity}
       />
 
       <div
@@ -662,11 +706,15 @@ export function ChatMessage({
         <div className="mb-1 flex min-w-0 items-baseline gap-2">
           <button
             type="button"
+            onTouchEnd={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
-              setShowIdentity((v) => !v);
+              openIdentity?.();
             }}
-            className="truncate text-left text-[13px] font-semibold leading-none text-[var(--text-primary)] transition hover:text-[var(--accent)] focus:outline-none focus:text-[var(--accent)]"
+            disabled={!openIdentity}
+            className={`truncate text-left text-[13px] font-semibold leading-none text-[var(--text-primary)] transition focus:outline-none ${
+              openIdentity ? "hover:text-[var(--accent)] focus:text-[var(--accent)]" : "cursor-default"
+            }`}
             aria-label={`Open ${displayName} identity card`}
           >
             {displayName}
@@ -677,15 +725,6 @@ export function ChatMessage({
             </span>
           )}
         </div>
-        <IdentityPopover
-          open={showIdentity}
-          details={identityDetails}
-          displayName={displayName}
-          avatarUrl={authorAvatarUrl}
-          emoji={!isUser ? authorEmoji : null}
-          isUser={isUser}
-          onClose={() => setShowIdentity(false)}
-        />
         <MessageActions
           content={content}
           showSpeak={!isUser}

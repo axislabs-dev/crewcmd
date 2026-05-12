@@ -60,6 +60,7 @@ function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTas
 
 interface Message {
   id: string;
+  threadParentId?: string;
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
@@ -137,7 +138,6 @@ function stablePreviewMessageId(params: {
   sessionKey: string;
   role: "user" | "assistant";
   content: string;
-  index: number;
   createdAt?: string | null;
 }) {
   const normalizedContent = params.content.trim().replace(/\s+/g, " ");
@@ -145,10 +145,13 @@ function stablePreviewMessageId(params: {
     params.sessionKey.toLowerCase(),
     params.role,
     params.createdAt ?? "",
-    String(params.index),
     normalizedContent,
   ].join("\n");
   return `${params.sessionKey.toLowerCase()}:preview:${stableHash(basis)}`;
+}
+
+function uniquePreviewMessageId(stableId: string, index: number) {
+  return `${stableId}:item:${index}`;
 }
 
 function executionStorageKey(sessionKey: string) {
@@ -158,6 +161,10 @@ function executionStorageKey(sessionKey: string) {
 function threadSessionKey(parentSessionKey: string, parentMessageId: string) {
   const safeId = parentMessageId.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
   return `${parentSessionKey}:thread:${safeId || "message"}`;
+}
+
+function threadParentIdForMessage(message: Pick<Message, "id" | "threadParentId">) {
+  return message.threadParentId ?? message.id;
 }
 
 function threadSessionSuffix(parentSessionKey: string, sessionKey: string) {
@@ -699,8 +706,12 @@ function selectedSessionBelongsToAgent(
 }
 
 function chatMessageFromStore(message: ChatStoreMessage): Message {
+  const threadParentId = typeof message.metadata?.threadParentId === "string"
+    ? message.metadata.threadParentId
+    : undefined;
   return {
     id: message.id,
+    threadParentId,
     role: message.role as "user" | "assistant",
     content: message.content,
     createdAt: message.createdAt,
@@ -852,13 +863,14 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
       const role = m.role === "user" ? "user" : "assistant";
       const content = displayContentFromGatewayPreview(rawContent, sessionKey);
       const createdAt = m.createdAt ?? new Date().toISOString();
+      const stableId = m.id ?? stablePreviewMessageId({ sessionKey, role, content, createdAt: m.createdAt ?? null });
       return {
-        id: m.id ?? stablePreviewMessageId({ sessionKey, role, content, index, createdAt: m.createdAt ?? null }),
+        id: m.id ?? uniquePreviewMessageId(stableId, index),
         agentId: sessionKey.toLowerCase(),
         role,
         content,
         createdAt,
-        metadata: null,
+        metadata: stableId === m.id ? null : { threadParentId: stableId },
       };
     }).filter((m) => m.content);
 
@@ -1386,14 +1398,15 @@ export default function ChatPage() {
 
   const openThreadForMessage = useCallback((message: Message, index: number, existingSessionKey?: string) => {
     const parentSessionKey = activeSessionKey;
-    const sessionKey = existingSessionKey ?? threadSessionKey(parentSessionKey, message.id);
+    const parentMessageId = threadParentIdForMessage(message);
+    const sessionKey = existingSessionKey ?? threadSessionKey(parentSessionKey, parentMessageId);
     const renderableMessages = messages.filter(hasRenderableMessageContent);
     const contextMessages = renderableMessages.slice(Math.max(0, index - 8), index + 1);
     setThreadParentLinks((prev) => ({
       ...prev,
       [sessionKey.toLowerCase()]: {
         parentSessionKey,
-        parentMessageId: message.id,
+        parentMessageId,
       },
     }));
 
@@ -3171,13 +3184,13 @@ export default function ChatPage() {
             parentMessage: {
               role: thread.parentMessage.role,
               content: thread.parentMessage.content,
-              id: thread.parentMessage.id,
+              id: threadParentIdForMessage(thread.parentMessage),
               createdAt: thread.parentMessage.createdAt,
             },
             contextMessages: thread.contextMessages.map((message) => ({
               role: message.role,
               content: message.content,
-              id: message.id,
+              id: threadParentIdForMessage(message),
               createdAt: message.createdAt,
             })),
           },
@@ -3595,7 +3608,7 @@ export default function ChatPage() {
             const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
-            const threadSummary = threadReplySummaries[`id:${msg.id}`];
+            const threadSummary = threadReplySummaries[`id:${threadParentIdForMessage(msg)}`];
             const threadReplies = threadSummary?.replies ?? [];
             return (
               <div key={msg.id}>

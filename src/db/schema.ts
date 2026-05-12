@@ -913,6 +913,26 @@ export const chatSessions = pgTable("chat_sessions", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const chatThreads = pgTable("chat_threads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" })
+    .notNull(),
+  parentSessionId: uuid("parent_session_id")
+    .references((): AnyPgColumn => chatSessions.id, { onDelete: "cascade" }),
+  parentSessionKey: text("parent_session_key").notNull(),
+  parentMessageId: text("parent_message_id").notNull(),
+  parentMessageFingerprint: text("parent_message_fingerprint"),
+  threadSessionId: uuid("thread_session_id")
+    .references((): AnyPgColumn => chatSessions.id, { onDelete: "cascade" }),
+  threadSessionKey: text("thread_session_key").notNull(),
+  agentId: text("agent_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  threadSessionUnique: unique().on(table.companyId, table.threadSessionKey),
+}));
+
 export const chatMessageRoleEnum = pgEnum("chat_message_role", [
   "user",
   "assistant",

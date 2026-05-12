@@ -94,6 +94,20 @@ type ChatHistoryLoadResult = {
   execution: ChatExecutionSnapshot;
 } | null;
 
+type QueuedChatMessage = {
+  id: string;
+  text: string;
+  files: File[];
+  options: { forceVoiceResponse?: boolean };
+};
+
+type QueuedThreadMessage = {
+  id: string;
+  thread: ActiveThread;
+  text: string;
+  files: File[];
+};
+
 function hasRenderableMessageContent(message: Pick<Message, "content" | "metadata">) {
   return Boolean(message.content.trim() || message.metadata?.attachments?.length);
 }
@@ -144,7 +158,6 @@ const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
 const CHAT_EXECUTION_STORAGE_PREFIX = "crewcmd.chat.execution.";
 const VOICE_ACK_DELAY_MS = 5000;
 const VOICE_CHECKIN_DELAY_MS = 30000;
-const VOICE_BUSY_REPLY_COOLDOWN_MS = 12000;
 const VOICE_FAST_START_MIN_CHARS = 48;
 const VOICE_FAST_START_MAX_CHARS = 110;
 
@@ -407,14 +420,9 @@ function ChatComposer({
             {value.trim() || pendingFiles.length > 0 ? (
               <button
                 onClick={() => onSend(value)}
-                disabled={isLoading}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-20"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90"
                 title="Send message"
-                style={
-                  !isLoading
-                    ? { boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }
-                    : undefined
-                }
+                style={{ boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }}
               >
                 <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
@@ -900,6 +908,10 @@ export default function ChatPage() {
   const loadingStartRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeChatRunIdRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
+  const isThreadLoadingRef = useRef(false);
+  const queuedMainMessagesRef = useRef<QueuedChatMessage[]>([]);
+  const queuedThreadMessagesRef = useRef<QueuedThreadMessage[]>([]);
   const activeAudioKindRef = useRef<"filler" | "response" | null>(null);
   const fillerAudioTokenRef = useRef(0);
   const firstDeltaSeenRef = useRef(false);
@@ -917,6 +929,14 @@ export default function ChatPage() {
   // Track in-flight streaming so we can persist on unmount (navigation away)
   const streamingContentRef = useRef("");
   const streamingAgentRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    isThreadLoadingRef.current = isThreadLoading;
+  }, [isThreadLoading]);
 
   // Sentence-level TTS queue for agent mode
   const ttsQueueRef = useRef<string[]>([]);
@@ -981,6 +1001,55 @@ export default function ChatPage() {
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
+
+  const setMainLoading = useCallback((next: boolean) => {
+    isLoadingRef.current = next;
+    setIsLoading(next);
+  }, []);
+
+  const setThreadLoading = useCallback((next: boolean) => {
+    isThreadLoadingRef.current = next;
+    setIsThreadLoading(next);
+  }, []);
+
+  const enqueueMainMessage = useCallback((text: string, files: File[], options: { forceVoiceResponse?: boolean }) => {
+    const id = `queued-${crypto.randomUUID()}`;
+    queuedMainMessagesRef.current.push({ id, text, files, options });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id,
+        role: "user",
+        content: text.trim() || "(attachments)",
+        createdAt: new Date().toISOString(),
+        metadata: files.length > 0 ? { attachments: [] } : null,
+      },
+    ]);
+    wasAtBottomRef.current = true;
+    setInput("");
+    setPendingFiles([]);
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    });
+  }, []);
+
+  const enqueueThreadMessage = useCallback((thread: ActiveThread, text: string, files: File[]) => {
+    const id = `queued-${crypto.randomUUID()}`;
+    queuedThreadMessagesRef.current.push({ id, thread, text, files });
+    setThreadMessages((prev) => [
+      ...prev,
+      {
+        id,
+        role: "user",
+        content: text.trim() || "(attachments)",
+        createdAt: new Date().toISOString(),
+        metadata: files.length > 0 ? { attachments: [] } : null,
+      },
+    ]);
+    setThreadInput("");
+    setThreadPendingFiles([]);
+    requestAnimationFrame(() => scrollThreadToBottom("smooth"));
+  }, [scrollThreadToBottom]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !activeThread) return;
@@ -1652,7 +1721,8 @@ export default function ChatPage() {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      setIsLoading(false);
+      queuedMainMessagesRef.current = [];
+      setMainLoading(false);
       setStreamingContent("");
       setExecutionProgress(null);
       setExecutionEvents([]);
@@ -1670,7 +1740,7 @@ export default function ChatPage() {
       }
       setSelectedAgent(agent);
     },
-    [selectedAgent, selectedSessionKey, selectSession]
+    [selectedAgent, selectedSessionKey, selectSession, setMainLoading]
   );
 
   useEffect(() => {
@@ -2354,9 +2424,6 @@ export default function ChatPage() {
     [speakNextInQueue]
   );
 
-  // Patterns that indicate the user is checking if we heard them
-  const busyPatterns = /\b(did you hear|are you there|hello|hey|still there|you there|can you hear|listening)\b/i;
-
   const ACCEPTED_TYPES = "image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv";
 
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -2387,26 +2454,24 @@ export default function ChatPage() {
   }
 
   const sendMessage = useCallback(
-    async (text: string, options: { forceVoiceResponse?: boolean } = {}) => {
+    async (
+      text: string,
+      options: {
+        forceVoiceResponse?: boolean;
+        fromQueue?: boolean;
+        queuedMessageId?: string;
+        files?: File[];
+      } = {}
+    ) => {
       const trimmed = text.trim();
-      const hasFiles = pendingFiles.length > 0;
+      const filesForMessage = options.files ?? pendingFiles;
+      const hasFiles = filesForMessage.length > 0;
       if (!trimmed && !hasFiles) return;
 
-      // Agent mode: if loading and user speaks, give a reassurance instead of blocking
-      if (isLoading && voiceMode === "agent") {
-        const now = Date.now();
-        if (now - lastBusyReplyAtRef.current < VOICE_BUSY_REPLY_COOLDOWN_MS) {
-          return;
-        }
-        lastBusyReplyAtRef.current = now;
-        if (busyPatterns.test(trimmed)) {
-          playTTS("Yes, I heard you. Still working on it.", { kind: "filler" });
-        } else {
-          playTTS("I am still thinking about the last message.", { kind: "filler" });
-        }
+      if (isLoadingRef.current && !options.fromQueue) {
+        enqueueMainMessage(trimmed, filesForMessage, options);
         return;
       }
-      if (isLoading) return;
 
       // --- Wake word detection: check if user is addressing a specific agent ---
       const lowerTrimmed = trimmed.toLowerCase();
@@ -2496,7 +2561,7 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, userMsg]);
         wasAtBottomRef.current = true;
         setInput("");
-        setIsLoading(true);
+        setMainLoading(true);
         const startedProgress = {
           event: "run_started",
           at: new Date().toISOString(),
@@ -2566,7 +2631,7 @@ export default function ChatPage() {
             },
           ]);
         }
-        setIsLoading(false);
+        setMainLoading(false);
         setExecutionProgress((current) =>
           current?.event === "run_error"
             ? current
@@ -2575,20 +2640,31 @@ export default function ChatPage() {
                 at: new Date().toISOString(),
               }
         );
+        const nextQueued = queuedMainMessagesRef.current.shift();
+        if (nextQueued) {
+          window.setTimeout(() => {
+            void sendMessage(nextQueued.text, {
+              ...nextQueued.options,
+              fromQueue: true,
+              queuedMessageId: nextQueued.id,
+              files: nextQueued.files,
+            });
+          }, 0);
+        }
         return;
       }
 
       // Upload pending files
       let attachments: Attachment[] = [];
-      const filesToUpload = [...pendingFiles];
-      setPendingFiles([]);
+      const filesToUpload = [...filesForMessage];
+      if (!options.fromQueue) setPendingFiles([]);
 
       if (filesToUpload.length > 0) {
         try {
           attachments = await Promise.all(filesToUpload.map(uploadFile));
         } catch (err) {
           console.error("[chat] File upload failed:", err);
-          setPendingFiles(filesToUpload); // restore on failure
+          if (!options.fromQueue) setPendingFiles(filesToUpload); // restore on failure
           return;
         }
       }
@@ -2607,14 +2683,19 @@ export default function ChatPage() {
       const metadata = attachments.length > 0 ? { attachments } : null;
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
       const userMsg: Message = {
-        id: `optimistic-${crypto.randomUUID()}`,
+        id: optimisticId,
         role: "user",
         content: trimmed || "(attachments)",
         createdAt: new Date().toISOString(),
         metadata,
       };
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) =>
+        options.queuedMessageId
+          ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
+          : [...prev, userMsg]
+      );
       // Always scroll to bottom when user sends a message
       wasAtBottomRef.current = true;
       requestAnimationFrame(() => {
@@ -2622,7 +2703,7 @@ export default function ChatPage() {
       });
       // User message persisted server-side in /api/chat route
       setInput("");
-      setIsLoading(true);
+      setMainLoading(true);
       const startedProgress = {
         event: "run_started",
         at: new Date().toISOString(),
@@ -2654,7 +2735,9 @@ export default function ChatPage() {
         ...(shouldSpeakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
-        ...visibleMessages.map((m) => ({ role: m.role, content: m.content })),
+        ...visibleMessages
+          .filter((m) => !m.id.startsWith("queued-"))
+          .map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: messageContent },
       ];
 
@@ -2934,27 +3017,47 @@ export default function ChatPage() {
 
       abortControllerRef.current = null;
       activeChatRunIdRef.current = null;
-      setIsLoading(false);
+      setMainLoading(false);
+      const nextQueued = queuedMainMessagesRef.current.shift();
+      if (nextQueued) {
+        window.setTimeout(() => {
+          void sendMessage(nextQueued.text, {
+            ...nextQueued.options,
+            fromQueue: true,
+            queuedMessageId: nextQueued.id,
+            files: nextQueued.files,
+          });
+        }, 0);
+      }
     },
-    [isLoading, voiceMode, visibleMessages, playTTS, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeSessionKey, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
   );
 
-  const sendThreadMessage = useCallback(async (overrideContent?: string) => {
-    const thread = activeThread;
+  const sendThreadMessage = useCallback(async (
+    overrideContent?: string,
+    options: { fromQueue?: boolean; queuedMessageId?: string; thread?: ActiveThread; files?: File[] } = {}
+  ) => {
+    const thread = options.thread ?? activeThread;
     const trimmed = (overrideContent ?? threadInput).trim();
-    const hasFiles = threadPendingFiles.length > 0;
-    if (!thread || (!trimmed && !hasFiles) || isThreadLoading) return;
+    const filesForMessage = options.files ?? threadPendingFiles;
+    const hasFiles = filesForMessage.length > 0;
+    if (!thread || (!trimmed && !hasFiles)) return;
+
+    if (isThreadLoadingRef.current && !options.fromQueue) {
+      enqueueThreadMessage(thread, trimmed, filesForMessage);
+      return;
+    }
 
     let attachments: Attachment[] = [];
-    const filesToUpload = [...threadPendingFiles];
-    setThreadPendingFiles([]);
+    const filesToUpload = [...filesForMessage];
+    if (!options.fromQueue) setThreadPendingFiles([]);
 
     if (filesToUpload.length > 0) {
       try {
         attachments = await Promise.all(filesToUpload.map(uploadFile));
       } catch (err) {
         console.error("[chat] Thread file upload failed:", err);
-        setThreadPendingFiles(filesToUpload);
+        if (!options.fromQueue) setThreadPendingFiles(filesToUpload);
         return;
       }
     }
@@ -2979,9 +3082,13 @@ export default function ChatPage() {
       createdAt: new Date().toISOString(),
       metadata,
     };
-    setThreadMessages((prev) => [...prev, userMsg]);
+    setThreadMessages((prev) =>
+      options.queuedMessageId
+        ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
+        : [...prev, userMsg]
+    );
     setThreadInput("");
-    setIsThreadLoading(true);
+    setThreadLoading(true);
     setThreadStreamingContent("");
     const startedProgress = {
       event: "run_started",
@@ -2999,7 +3106,9 @@ export default function ChatPage() {
         body: JSON.stringify({
           messages: [
             ...thread.contextMessages.map((message) => ({ role: message.role, content: message.content })),
-            ...threadMessages.map((message) => ({ role: message.role, content: message.content })),
+            ...threadMessages
+              .filter((message) => !message.id.startsWith("queued-"))
+              .map((message) => ({ role: message.role, content: message.content })),
             { role: "user", content: messageContent },
           ],
           agent: selectedAgent?.callsign,
@@ -3126,9 +3235,20 @@ export default function ChatPage() {
       setThreadStreamingContent("");
     } finally {
       void loadCrewCmdSessionHistoryByKey(thread.sessionKey, company?.id);
-      setIsThreadLoading(false);
+      setThreadLoading(false);
+      const nextQueued = queuedThreadMessagesRef.current.shift();
+      if (nextQueued) {
+        window.setTimeout(() => {
+          void sendThreadMessage(nextQueued.text, {
+            fromQueue: true,
+            queuedMessageId: nextQueued.id,
+            thread: nextQueued.thread,
+            files: nextQueued.files,
+          });
+        }, 0);
+      }
     }
-  }, [activeThread, company?.id, delegatedViaAgent, isThreadLoading, selectedAgent, threadInput, threadMessages, threadPendingFiles]);
+  }, [activeThread, company?.id, delegatedViaAgent, enqueueThreadMessage, selectedAgent, setThreadLoading, threadInput, threadMessages, threadPendingFiles]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {

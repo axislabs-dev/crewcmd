@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
           threadParentSessionId: chatSessions.threadParentSessionId,
           threadParentSessionKey: chatSessions.threadParentSessionKey,
           threadParentMessageId: chatSessions.threadParentMessageId,
-          threadParentMessageFingerprint: chatSessions.threadParentMessageFingerprint,
         }).from(chatSessions)
           .where(and(
             eq(chatSessions.companyId, companyId),
@@ -61,7 +60,6 @@ export async function GET(request: NextRequest) {
           threadParentSessionId: chatSessions.threadParentSessionId,
           threadParentSessionKey: chatSessions.threadParentSessionKey,
           threadParentMessageId: chatSessions.threadParentMessageId,
-          threadParentMessageFingerprint: chatSessions.threadParentMessageFingerprint,
         }).from(chatSessions)
           .where(and(
             eq(chatSessions.companyId, companyId),
@@ -91,7 +89,6 @@ export async function GET(request: NextRequest) {
               parentSessionId: session.threadParentSessionId,
               parentSessionKey: session.threadParentSessionKey ?? threadParentSessionKey,
               parentMessageId: session.threadParentMessageId,
-              parentMessageFingerprint: session.threadParentMessageFingerprint,
               messages: messages.map((m) => ({
                 id: m.id,
                 role: m.role,

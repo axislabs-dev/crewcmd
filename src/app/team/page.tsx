@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import Link from "next/link";
 import { NewAgentDialog } from "@/components/new-agent-dialog";
-import { EditAgentDialog } from "@/components/edit-agent-dialog";
 import { AgentProfilePanel } from "@/components/agent-profile-panel";
 import { TaskDialog } from "@/components/task-dialog";
 import { AgentRuntimeBadge } from "@/components/agent-runtime-badge";
@@ -414,7 +413,6 @@ export default function TeamPage() {
   // Dialogs
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [newAgentParent, setNewAgentParent] = useState<string | null>(null);
-  const [editingCallsign, setEditingCallsign] = useState<string | null>(null);
   const [profileCallsign, setProfileCallsign] = useState<string | null>(null);
   const [taskAgent, setTaskAgent] = useState<Agent | null>(null);
 
@@ -724,21 +722,16 @@ export default function TeamPage() {
       {profileCallsign && (
         <AgentProfilePanel
           callsign={profileCallsign}
-          onClose={() => setProfileCallsign(null)}
-          onEdit={(cs) => {
-            setProfileCallsign(null);
-            setEditingCallsign(cs);
-          }}
-        />
-      )}
-
-      {editingCallsign && (
-        <EditAgentDialog
-          callsign={editingCallsign}
           companyId={getCompanyId()}
-          onSaved={() => { setEditingCallsign(null); refresh(); }}
-          onClose={() => setEditingCallsign(null)}
-          onDelete={() => { setEditingCallsign(null); refresh(); }}
+          onClose={() => setProfileCallsign(null)}
+          onSaved={(nextCallsign) => {
+            if (nextCallsign) setProfileCallsign(nextCallsign);
+            refresh();
+          }}
+          onDelete={() => {
+            setProfileCallsign(null);
+            refresh();
+          }}
         />
       )}
 

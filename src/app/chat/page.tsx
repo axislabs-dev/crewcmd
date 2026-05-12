@@ -2,6 +2,7 @@
 
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment, ChatIdentityDetails } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
@@ -132,6 +133,8 @@ type ChatPin = {
   role: "user" | "assistant";
   content: string;
   messageCreatedAt?: string;
+  agentId?: string;
+  gatewaySessionKey?: string | null;
 };
 
 type SavedItem = {
@@ -968,6 +971,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
 
 export default function ChatPage() {
   const { data: session } = useSession();
+  const router = useRouter();
   const { workspace, company } = useWorkspace();
   const chatCompanyId = company?.id ?? null;
   const chatWorkspaceId = workspace?.id ?? null;
@@ -1022,8 +1026,13 @@ export default function ChatPage() {
   const [serverThreadSummaries, setServerThreadSummaries] = useState<Record<string, ThreadReplySummary>>({});
   const [pins, setPins] = useState<ChatPin[]>([]);
   const [savedByMessageId, setSavedByMessageId] = useState<Record<string, SavedItem>>({});
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [urlAgentCallsign, setUrlAgentCallsign] = useState<string | null>(null);
+  const [urlSessionKey, setUrlSessionKey] = useState<string | null>(null);
+  const [urlMessageId, setUrlMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pendingMessageScrollRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const threadScrollContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -1374,6 +1383,20 @@ export default function ChatPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const applyLocationSearch = () => {
+      const params = new URLSearchParams(window.location.search);
+      setUrlAgentCallsign(params.get("agent")?.toLowerCase() ?? null);
+      setUrlSessionKey(params.get("sessionKey"));
+      setUrlMessageId(params.get("messageId"));
+    };
+    applyLocationSearch();
+    window.addEventListener("popstate", applyLocationSearch);
+    return () => window.removeEventListener("popstate", applyLocationSearch);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const storedAgent = window.localStorage.getItem(CHAT_AGENT_STORAGE_KEY);
     const storedSession = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
 
@@ -1399,24 +1422,26 @@ export default function ChatPage() {
           return;
         }
 
-        const restoredAgent = preferredAgentCallsign
+        const targetAgentCallsign = urlAgentCallsign ?? preferredAgentCallsign;
+        const targetSessionKey = urlSessionKey ?? preferredSessionKey;
+        const restoredAgent = targetAgentCallsign
           ? fetched.find(
-              (agent) => agent.callsign.toLowerCase() === preferredAgentCallsign
+              (agent) => agent.callsign.toLowerCase() === targetAgentCallsign
             ) ?? null
           : null;
         const defaultAgent = findDefaultAgent(fetched);
 
         if (restoredAgent) {
           setSelectedAgent(restoredAgent);
-          if (preferredSessionKey && !isMessageThreadSessionKey(preferredSessionKey)) {
-            selectSession(preferredSessionKey);
+          if (targetSessionKey && (urlSessionKey || !isMessageThreadSessionKey(targetSessionKey))) {
+            selectSession(targetSessionKey);
           }
           return;
         }
 
         if (defaultAgent) {
           setSelectedAgent(defaultAgent);
-          if (preferredSessionKey) {
+          if (targetSessionKey) {
             selectSession(null);
           }
         }
@@ -1425,7 +1450,7 @@ export default function ChatPage() {
       }
     }
     fetchAgents();
-  }, [preferredAgentCallsign, preferredSessionKey, selectSession, workspace?.id]);
+  }, [preferredAgentCallsign, preferredSessionKey, selectSession, urlAgentCallsign, urlSessionKey, workspace?.id]);
 
   // Load configurable stop words from system settings
   useEffect(() => {
@@ -1546,6 +1571,11 @@ export default function ChatPage() {
       .map((message) => message.id);
     void loadSavedMessages(messageIds);
   }, [messages, loadSavedMessages]);
+
+  useEffect(() => {
+    if (!urlMessageId) return;
+    pendingMessageScrollRef.current = urlMessageId;
+  }, [urlMessageId]);
 
   const refreshSessionPreview = useCallback(async (sessionKey: string) => {
     const loaded = await loadSessionPreviewIntoStore(sessionKey);
@@ -1801,6 +1831,27 @@ export default function ChatPage() {
     ),
     [messages]
   );
+
+  const scrollToMessage = useCallback((messageId: string) => {
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById(`chat-message-${messageId}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedMessageId(messageId);
+      window.setTimeout(() => {
+        setHighlightedMessageId((current) => (current === messageId ? null : current));
+      }, 2200);
+      pendingMessageScrollRef.current = null;
+    });
+  }, []);
+
+  useEffect(() => {
+    const messageId = pendingMessageScrollRef.current;
+    if (!messageId) return;
+    if (!visibleMessages.some((message) => message.id === messageId)) return;
+    scrollToMessage(messageId);
+  }, [scrollToMessage, visibleMessages]);
+
   const visibleThreadMessages = useMemo(
     () => uniqueMessagesById(threadMessages),
     [threadMessages]
@@ -3632,6 +3683,37 @@ export default function ChatPage() {
     }
   }, [chatCompanyId, chatWorkspaceId, loadPins, pins]);
 
+  const buildChatMessageUrl = useCallback((params: {
+    agentId?: string | null;
+    sessionKey?: string | null;
+    messageId: string;
+  }) => {
+    const query = new URLSearchParams();
+    const agent = params.agentId || selectedAgent?.callsign || null;
+    const sessionKey = params.sessionKey || activeSessionKey;
+    if (agent) query.set("agent", agent.toLowerCase());
+    if (sessionKey) query.set("sessionKey", sessionKey);
+    query.set("messageId", params.messageId);
+    return `/chat?${query.toString()}`;
+  }, [activeSessionKey, selectedAgent?.callsign]);
+
+  const navigateToMessage = useCallback((params: {
+    agentId?: string | null;
+    sessionKey?: string | null;
+    messageId: string;
+  }) => {
+    pendingMessageScrollRef.current = params.messageId;
+    const agent = params.agentId || selectedAgent?.callsign || null;
+    const sessionKey = params.sessionKey || activeSessionKey;
+    setUrlAgentCallsign(agent?.toLowerCase() ?? null);
+    setUrlSessionKey(sessionKey);
+    setUrlMessageId(params.messageId);
+    if (visibleMessages.some((message) => message.id === params.messageId)) {
+      scrollToMessage(params.messageId);
+    }
+    router.push(buildChatMessageUrl(params));
+  }, [buildChatMessageUrl, router, scrollToMessage, visibleMessages]);
+
   const toggleSaved = useCallback(async (message: Message) => {
     if (!isUuid(message.id)) return;
     if (!chatCompanyId && !chatWorkspaceId) return;
@@ -3659,6 +3741,10 @@ export default function ChatPage() {
           sourceId: message.id,
           status: "in_progress",
           title: messagePreview(message.content, 80),
+          metadata: {
+            agentCallsign: selectedAgent?.callsign ?? null,
+            sessionKey: activeSessionKey,
+          },
         }),
       });
       if (res.ok) {
@@ -3670,7 +3756,7 @@ export default function ChatPage() {
     } catch {
       // Leave the current saved state unchanged when persistence fails.
     }
-  }, [chatCompanyId, chatWorkspaceId, savedByMessageId]);
+  }, [activeSessionKey, chatCompanyId, chatWorkspaceId, savedByMessageId, selectedAgent?.callsign]);
 
   const clearChat = async () => {
     setMessages([]);
@@ -3703,7 +3789,7 @@ export default function ChatPage() {
   };
 
   const pinnedMessageIds = new Set(pins.map((pin) => pin.messageId));
-  const latestPin = pins.at(-1);
+  const visiblePins = pins.slice(0, 3);
 
   return (
     <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
@@ -3773,18 +3859,26 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {latestPin && (
+      {visiblePins.length > 0 && (
         <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-3 py-2 backdrop-blur-xl sm:px-4 lg:px-6">
-          <div className="mx-auto flex max-w-3xl items-start gap-2 text-[12px] text-[var(--text-secondary)]">
+          <div className="mx-auto flex max-w-3xl gap-2 text-[12px] text-[var(--text-secondary)]">
             <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">Pin</span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-[var(--text-primary)]">{pins.length} pinned</span>
-                <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
-                  {latestPin.role === "user" ? "You" : selectedAgent?.callsign ?? "AI"}
-                </span>
-              </div>
-              <p className="truncate text-[var(--text-tertiary)]">{messagePreview(latestPin.content)}</p>
+            <div className="grid min-w-0 flex-1 gap-1">
+              {visiblePins.map((pin) => (
+                <button
+                  key={pin.id}
+                  type="button"
+                  onClick={() => navigateToMessage({
+                    agentId: pin.agentId,
+                    sessionKey: pin.gatewaySessionKey ?? activeSessionKey,
+                    messageId: pin.messageId,
+                  })}
+                  className="min-w-0 rounded-md px-2 py-1 text-left transition hover:bg-[var(--bg-surface-hover)]"
+                >
+                  <span className="mr-2 font-semibold text-[var(--text-primary)]">{pin.role === "user" ? "You" : selectedAgent?.callsign ?? "AI"}</span>
+                  <span className="text-[var(--text-tertiary)]">{messagePreview(pin.content)}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -3914,7 +4008,13 @@ export default function ChatPage() {
             const threadReplies = threadSummary?.replies ?? [];
             const canPersistMessageAction = isUuid(msg.id);
             return (
-              <div key={msg.id}>
+              <div
+                key={msg.id}
+                id={`chat-message-${msg.id}`}
+                className={`scroll-mt-24 rounded-2xl transition-shadow duration-500 ${
+                  highlightedMessageId === msg.id ? "shadow-[0_0_0_2px_var(--accent)]" : ""
+                }`}
+              >
                 {showSeparator && <DateSeparator date={msg.createdAt!} />}
                 <ChatMessage
                   role={msg.role}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db, withRetry } from "@/db";
 import { chatMessagePins, chatMessages, chatSessions } from "@/db/schema";
@@ -55,11 +55,15 @@ export async function GET(request: NextRequest) {
       content: chatMessages.content,
       messageCreatedAt: chatMessages.createdAt,
       metadata: chatMessages.metadata,
+      agentId: chatSessions.agentId,
+      gatewaySessionKey: chatSessions.gatewaySessionKey,
     })
       .from(chatMessagePins)
       .innerJoin(chatMessages, eq(chatMessagePins.messageId, chatMessages.id))
+      .innerJoin(chatSessions, eq(chatMessagePins.sessionId, chatSessions.id))
       .where(eq(chatMessagePins.sessionId, sessionId))
-      .orderBy(asc(chatMessagePins.createdAt))
+      .orderBy(desc(chatMessagePins.createdAt))
+      .limit(3)
   );
 
   return NextResponse.json({ pins });
@@ -111,6 +115,19 @@ export async function POST(request: NextRequest) {
       })
       .returning()
   );
+
+  const sessionPins = await withRetry(() =>
+    db!.select({ id: chatMessagePins.id }).from(chatMessagePins)
+      .where(eq(chatMessagePins.sessionId, message.sessionId))
+      .orderBy(asc(chatMessagePins.createdAt))
+  );
+  const overflowPinIds = sessionPins.slice(0, Math.max(0, sessionPins.length - 3)).map((row) => row.id);
+  if (overflowPinIds.length > 0) {
+    await withRetry(() =>
+      db!.delete(chatMessagePins)
+        .where(inArray(chatMessagePins.id, overflowPinIds))
+    );
+  }
 
   return NextResponse.json({ pin }, { status: 201 });
 }

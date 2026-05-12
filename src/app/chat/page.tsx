@@ -3263,6 +3263,15 @@ export default function ChatPage() {
     };
     setThreadProgress(startedProgress);
     setThreadEvents([startedProgress]);
+    const shouldSpeakThreadResponses = !agentAudioMuted && (
+      speakResponses ||
+      (voiceMode === "agent" && agentModeSessionKey === thread.sessionKey)
+    );
+    if (shouldSpeakThreadResponses) {
+      spokenSentencesRef.current = 0;
+      ttsQueueRef.current = [];
+      isSpeakingQueueRef.current = false;
+    }
 
     let fullContent = "";
     let assistantMessageId: string | null = null;
@@ -3318,6 +3327,7 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let sseBuffer = "";
+      let unspokenBuffer = "";
       const handleSseData = (data: string) => {
         if (data === "[DONE]") return;
         try {
@@ -3356,6 +3366,15 @@ export default function ChatPage() {
           if (delta) {
             fullContent += delta;
             setThreadStreamingContent(fullContent);
+            if (shouldSpeakThreadResponses) {
+              unspokenBuffer += delta;
+              const extracted = extractSpeakableSegments(unspokenBuffer);
+              unspokenBuffer = extracted.remaining;
+              for (const completeSentence of extracted.sentences) {
+                queueSentenceForTTS(completeSentence);
+                spokenSentencesRef.current++;
+              }
+            }
           }
         } catch {
           // Ignore malformed frames.
@@ -3379,6 +3398,10 @@ export default function ChatPage() {
         for (const frame of frames) handleSseFrame(frame);
       }
       if (sseBuffer.trim()) handleSseFrame(sseBuffer);
+
+      if (shouldSpeakThreadResponses && unspokenBuffer.trim()) {
+        queueSentenceForTTS(unspokenBuffer.trim());
+      }
 
       if (fullContent.trim()) {
         const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
@@ -3447,7 +3470,7 @@ export default function ChatPage() {
         }, 0);
       }
     }
-  }, [activeThread, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, selectedAgent, setThreadLoading, threadInput, threadMessages, threadPendingFiles]);
+  }, [activeThread, agentAudioMuted, agentModeSessionKey, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {

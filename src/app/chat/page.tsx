@@ -97,6 +97,20 @@ function hasRenderableMessageContent(message: Pick<Message, "content" | "metadat
   return Boolean(message.content.trim() || message.metadata?.attachments?.length);
 }
 
+function isThreadContextEnvelope(content: string) {
+  return /^\s*(?:user:\s*)?CrewCMD threaded reply\./i.test(content);
+}
+
+function extractUserThreadReply(content: string) {
+  const match = content.match(/\nUser thread reply:\n([\s\S]*)$/i);
+  return match?.[1]?.trim() || "";
+}
+
+function displayContentFromGatewayPreview(content: string, sessionKey: string) {
+  if (!isThreadContextEnvelope(content)) return content;
+  return isMessageThreadSessionKey(sessionKey) ? extractUserThreadReply(content) : "";
+}
+
 function executionStorageKey(sessionKey: string) {
   return `${CHAT_EXECUTION_STORAGE_PREFIX}${sessionKey.toLowerCase()}`;
 }
@@ -791,14 +805,17 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     if (!items.length) return false;
 
     const baseTime = Date.now();
-    const messages = items.map((m, index): ChatStoreMessage => ({
-      id: `${sessionKey}-history-${index}`,
-      agentId: sessionKey.toLowerCase(),
-      role: m.role === "user" ? "user" : "assistant",
-      content: m.text ?? m.content ?? "",
-      createdAt: new Date(baseTime + index).toISOString(),
-      metadata: null,
-    })).filter((m) => m.content);
+    const messages = items.map((m, index): ChatStoreMessage => {
+      const rawContent = m.text ?? m.content ?? "";
+      return {
+        id: `${sessionKey}-history-${index}`,
+        agentId: sessionKey.toLowerCase(),
+        role: m.role === "user" ? "user" : "assistant",
+        content: displayContentFromGatewayPreview(rawContent, sessionKey),
+        createdAt: new Date(baseTime + index).toISOString(),
+        metadata: null,
+      };
+    }).filter((m) => m.content);
 
     useChatStore.getState().loadSession(
       sessionKey.toLowerCase(),
@@ -1469,7 +1486,7 @@ export default function ChatPage() {
     [selectedAgent, defaultAgent]
   );
   const visibleMessages = useMemo(
-    () => messages.filter(hasRenderableMessageContent),
+    () => messages.filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content)),
     [messages]
   );
   const threadReplySummaries = useMemo(() => {

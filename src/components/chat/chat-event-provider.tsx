@@ -39,10 +39,13 @@ export function ChatEventProvider() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "message" && data.id && data.agentId) {
+            const sessionKey = typeof data.sessionKey === "string" && data.sessionKey.trim()
+              ? data.sessionKey.trim()
+              : null;
             const message = {
               id: data.id,
               sessionId: data.sessionId,
-              agentId: data.agentId,
+              agentId: sessionKey ?? data.agentId,
               role: data.role,
               content: data.content,
               metadata: data.metadata,
@@ -50,16 +53,6 @@ export function ChatEventProvider() {
               interrupted: data.interrupted,
             };
             addMessage(message);
-            if (
-              typeof data.sessionKey === "string" &&
-              data.sessionKey.trim() &&
-              data.sessionKey.toLowerCase() !== data.agentId.toLowerCase()
-            ) {
-              addMessage({
-                ...message,
-                agentId: data.sessionKey,
-              });
-            }
             return;
           }
 

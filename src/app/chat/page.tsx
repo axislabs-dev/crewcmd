@@ -84,6 +84,11 @@ type ThreadReplySummary = {
   replies: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
 };
 
+type ThreadHistoryLoadResult = {
+  links: Record<string, ThreadParentLink>;
+  summaries: Record<string, ThreadReplySummary>;
+};
+
 type ChatExecutionSnapshot = {
   progress?: ExecutionProgressEvent | null;
   events?: ExecutionProgressEvent[];
@@ -785,8 +790,8 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
 async function loadThreadHistoriesForParent(
   parentSessionKey: string,
   companyId?: string | null,
-): Promise<Record<string, ThreadParentLink>> {
-  if (!companyId) return {};
+): Promise<ThreadHistoryLoadResult> {
+  if (!companyId) return { links: {}, summaries: {} };
   try {
     const params = new URLSearchParams({
       companyId,
@@ -794,8 +799,8 @@ async function loadThreadHistoriesForParent(
       limit: "200",
     });
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
-    if (!res.ok) return {};
-    const { threads } = await res.json() as {
+    if (!res.ok) return { links: {}, summaries: {} };
+    const { threads, threadSummaries } = await res.json() as {
       threads?: Array<{
         sessionKey?: string | null;
         parentSessionKey?: string | null;
@@ -807,6 +812,10 @@ async function loadThreadHistoriesForParent(
           createdAt: string;
           metadata?: Record<string, unknown> | null;
         }>;
+      }>;
+      threadSummaries?: Record<string, {
+        sessionKey?: string | null;
+        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
       }>;
     };
     const links: Record<string, ThreadParentLink> = {};
@@ -831,10 +840,27 @@ async function loadThreadHistoriesForParent(
         }))
       );
     }
-    return links;
+    const summaries = Object.fromEntries(
+      Object.entries(threadSummaries ?? {}).flatMap(([parentMessageId, summary]) => {
+        if (!summary.sessionKey) return [];
+        const replies = (summary.replies ?? [])
+          .filter((reply) => reply.role === "user" || reply.role === "assistant")
+          .map((reply) => ({
+            id: reply.id,
+            role: reply.role as "user" | "assistant",
+            createdAt: reply.createdAt,
+          }));
+        if (replies.length === 0) return [];
+        return [[`id:${stableThreadLinkId(parentMessageId)}`, {
+          sessionKey: summary.sessionKey.toLowerCase(),
+          replies,
+        }]];
+      })
+    );
+    return { links, summaries };
   } catch {
     // Thread reply summaries are best-effort; opening a thread still loads it directly.
-    return {};
+    return { links: {}, summaries: {} };
   }
 }
 
@@ -938,6 +964,7 @@ export default function ChatPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number } | null>(null);
   const [threadParentLinks, setThreadParentLinks] = useState<Record<string, ThreadParentLink>>({});
+  const [serverThreadSummaries, setServerThreadSummaries] = useState<Record<string, ThreadReplySummary>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1380,9 +1407,12 @@ export default function ChatPage() {
     }
 
     if (company?.id) {
-      void loadThreadHistoriesForParent(activeSessionKey, company?.id).then((links) => {
-        if (cancelled || Object.keys(links).length === 0) return;
-        setThreadParentLinks((prev) => ({ ...prev, ...links }));
+      void loadThreadHistoriesForParent(activeSessionKey, company?.id).then(({ links, summaries }) => {
+        if (cancelled) return;
+        if (Object.keys(links).length > 0) {
+          setThreadParentLinks((prev) => ({ ...prev, ...links }));
+        }
+        setServerThreadSummaries(summaries);
       });
     }
 
@@ -1437,9 +1467,11 @@ export default function ChatPage() {
     const closingThread = activeThread;
     if (closingThread) {
       void loadCrewCmdSessionHistoryByKey(closingThread.sessionKey, company?.id);
-      void loadThreadHistoriesForParent(closingThread.parentSessionKey, company?.id).then((links) => {
-        if (Object.keys(links).length === 0) return;
-        setThreadParentLinks((prev) => ({ ...prev, ...links }));
+      void loadThreadHistoriesForParent(closingThread.parentSessionKey, company?.id).then(({ links, summaries }) => {
+        if (Object.keys(links).length > 0) {
+          setThreadParentLinks((prev) => ({ ...prev, ...links }));
+        }
+        setServerThreadSummaries(summaries);
       });
     }
     setActiveThread(null);
@@ -1623,7 +1655,7 @@ export default function ChatPage() {
   const threadReplySummaries = useMemo(() => {
     const activeKey = activeSessionKey.toLowerCase();
     const prefix = `${activeKey}:thread:`;
-    const summaries: Record<string, ThreadReplySummary> = {};
+    const summaries: Record<string, ThreadReplySummary> = { ...serverThreadSummaries };
 
     const assignSummary = (key: string | null | undefined, summary: ThreadReplySummary) => {
       if (!key) return;
@@ -1658,7 +1690,7 @@ export default function ChatPage() {
     }
 
     return summaries;
-  }, [activeSessionKey, messagesByStoreKey, threadParentLinks]);
+  }, [activeSessionKey, messagesByStoreKey, serverThreadSummaries, threadParentLinks]);
 
   useEffect(() => {
     if (!company?.id) return;

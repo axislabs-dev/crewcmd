@@ -78,7 +78,7 @@ describe("GET /api/chat/messages", () => {
   });
 
   it("returns messages for latest agent session", async () => {
-    const session = { id: "sess-neo", agentId: "neo", companyId: "co-1" };
+    const session = { id: "sess-runtime", agentId: "runtime-agent", companyId: "co-1" };
     mockSelect
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([session]) }) }),
@@ -90,21 +90,21 @@ describe("GET /api/chat/messages", () => {
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       });
 
-    const res = await GET(makeRequest("/api/chat/messages?agentId=Neo&companyId=co-1"));
+    const res = await GET(makeRequest("/api/chat/messages?agentId=RuntimeAgent&companyId=co-1"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.sessionId).toBe("sess-neo");
+    expect(body.sessionId).toBe("sess-runtime");
     expect(body.messages).toHaveLength(2);
   });
 
   it("returns thread summaries with durable parent linkage", async () => {
     const linkedThread = {
       id: "thread-1",
-      agentId: "neo",
-      gatewaySessionKey: "neo:thread:server-parent",
+      agentId: "runtime-agent",
+      gatewaySessionKey: "runtime-agent:thread:server-parent",
       threadParentSessionId: "parent-session-1",
-      threadParentSessionKey: "neo",
+      threadParentSessionKey: "runtime-agent",
       threadParentMessageId: "parent-message-1",
     };
     mockSelect
@@ -118,19 +118,27 @@ describe("GET /api/chat/messages", () => {
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
       });
 
-    const res = await GET(makeRequest("/api/chat/messages?companyId=co-1&threadParentSessionKey=neo"));
+    const res = await GET(makeRequest("/api/chat/messages?companyId=co-1&threadParentSessionKey=runtime-agent"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body.threads).toHaveLength(1);
     expect(body.threads[0]).toMatchObject({
       sessionId: "thread-1",
-      sessionKey: "neo:thread:server-parent",
+      sessionKey: "runtime-agent:thread:server-parent",
       parentSessionId: "parent-session-1",
-      parentSessionKey: "neo",
+      parentSessionKey: "runtime-agent",
       parentMessageId: "parent-message-1",
     });
     expect(body.threads[0].messages).toHaveLength(2);
+    expect(body.threadSummaries["parent-message-1"]).toMatchObject({
+      sessionKey: "runtime-agent:thread:server-parent",
+      replyCount: 2,
+      replies: [
+        { id: "m1", role: "user" },
+        { id: "m2", role: "assistant" },
+      ],
+    });
   });
 
   it("returns 401 when not authenticated", async () => {
@@ -187,7 +195,7 @@ describe("POST /api/chat/messages", () => {
     });
 
     // Session creation
-    const newSession = { id: "sess-new", agentId: "neo", companyId: "co-1" };
+    const newSession = { id: "sess-new", agentId: "runtime-agent", companyId: "co-1" };
     const createdMsg = { id: "m4", role: "user", content: "hi", createdAt: new Date() };
 
     // First insert = session, second insert = message
@@ -204,7 +212,7 @@ describe("POST /api/chat/messages", () => {
       makeRequest("/api/chat/messages", {
         method: "POST",
         body: JSON.stringify({
-          agentId: "Neo",
+          agentId: "RuntimeAgent",
           companyId: "co-1",
           role: "user",
           content: "hi",

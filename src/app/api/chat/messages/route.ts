@@ -5,11 +5,22 @@ import { eq, and, asc, desc, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 import { buildChatExecutionSnapshot, loadChatExecutionEvents } from "@/lib/chat-session-events";
 
+function stableThreadLinkId(id: string | null | undefined) {
+  return id?.replace(/(?::item:|-item-)\d+$/i, "") ?? null;
+}
+
+function threadSessionSuffix(parentSessionKey: string, sessionKey: string | null | undefined) {
+  if (!sessionKey) return null;
+  const prefix = `${parentSessionKey.toLowerCase()}:thread:`;
+  const lower = sessionKey.toLowerCase();
+  return lower.startsWith(prefix) ? lower.slice(prefix.length) : null;
+}
+
 /**
  * GET /api/chat/messages?sessionId=xxx&limit=100
- * GET /api/chat/messages?agentId=neo&companyId=xxx&limit=100
- * GET /api/chat/messages?companyId=xxx&sessionKey=neo:abc&limit=100
- * GET /api/chat/messages?companyId=xxx&threadParentSessionKey=neo:abc&limit=100
+ * GET /api/chat/messages?agentId=agent-callsign&companyId=xxx&limit=100
+ * GET /api/chat/messages?companyId=xxx&sessionKey=runtime-session-key&limit=100
+ * GET /api/chat/messages?companyId=xxx&threadParentSessionKey=runtime-session-key&limit=100
  *
  * Fetch messages for a chat session, oldest first.
  */
@@ -76,6 +87,9 @@ export async function GET(request: NextRequest) {
         Array.from(sessionsById.values())
           .filter((session) => session.gatewaySessionKey)
           .map(async (session) => {
+            const parentMessageId =
+              stableThreadLinkId(session.threadParentMessageId) ??
+              stableThreadLinkId(threadSessionSuffix(threadParentSessionKey, session.gatewaySessionKey));
             const messages = await withRetry(() =>
               db!.select().from(chatMessages)
                 .where(eq(chatMessages.sessionId, session.id))
@@ -88,7 +102,7 @@ export async function GET(request: NextRequest) {
               sessionKey: session.gatewaySessionKey,
               parentSessionId: session.threadParentSessionId,
               parentSessionKey: session.threadParentSessionKey ?? threadParentSessionKey,
-              parentMessageId: session.threadParentMessageId,
+              parentMessageId,
               messages: messages.map((m) => ({
                 id: m.id,
                 role: m.role,
@@ -100,7 +114,37 @@ export async function GET(request: NextRequest) {
           })
       );
 
-      return Response.json({ threads });
+      const threadSummaries: Record<string, {
+        sessionKey: string;
+        replyCount: number;
+        lastReplyAt: Date | string | null;
+        replies: Array<{ id: string; role: string; createdAt: Date | string }>;
+      }> = {};
+
+      for (const thread of threads) {
+        if (!thread.sessionKey || !thread.parentMessageId) continue;
+        const replies = thread.messages
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .map((message) => ({
+            id: message.id,
+            role: message.role,
+            createdAt: message.createdAt,
+          }));
+        if (replies.length === 0) continue;
+
+        const existing = threadSummaries[thread.parentMessageId];
+        const summary = {
+          sessionKey: thread.sessionKey,
+          replyCount: replies.length,
+          lastReplyAt: replies.at(-1)?.createdAt ?? null,
+          replies,
+        };
+        if (!existing || summary.replyCount >= existing.replyCount) {
+          threadSummaries[thread.parentMessageId] = summary;
+        }
+      }
+
+      return Response.json({ threads, threadSummaries });
     }
 
     let resolvedSessionId = sessionId;

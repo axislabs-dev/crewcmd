@@ -16,6 +16,34 @@ function threadSessionSuffix(parentSessionKey: string, sessionKey: string | null
   return lower.startsWith(prefix) ? lower.slice(prefix.length) : null;
 }
 
+type ThreadReplySummary = {
+  parentMessageId: string;
+  parentMessageKey: string;
+  sessionKey: string;
+  replyCount: number;
+  lastReplyAt: Date | string | null;
+  replies: Array<{ id: string; role: string; createdAt: Date | string }>;
+};
+
+function threadParentMessageKey(parentMessageId: string | null | undefined) {
+  const stableId = stableThreadLinkId(parentMessageId);
+  return stableId ? `id:${stableId}` : null;
+}
+
+function shouldReplaceThreadSummary(existing: ThreadReplySummary | undefined, candidate: ThreadReplySummary) {
+  if (!existing) return true;
+  const existingLastReplyAt = existing.lastReplyAt ? new Date(existing.lastReplyAt).getTime() : 0;
+  const candidateLastReplyAt = candidate.lastReplyAt ? new Date(candidate.lastReplyAt).getTime() : 0;
+
+  if (candidateLastReplyAt !== existingLastReplyAt) {
+    return candidateLastReplyAt > existingLastReplyAt;
+  }
+  if (candidate.replyCount !== existing.replyCount) {
+    return candidate.replyCount > existing.replyCount;
+  }
+  return candidate.sessionKey.localeCompare(existing.sessionKey) > 0;
+}
+
 /**
  * GET /api/chat/messages?sessionId=xxx&limit=100
  * GET /api/chat/messages?agentId=agent-callsign&companyId=xxx&limit=100
@@ -114,15 +142,12 @@ export async function GET(request: NextRequest) {
           })
       );
 
-      const threadSummaries: Record<string, {
-        sessionKey: string;
-        replyCount: number;
-        lastReplyAt: Date | string | null;
-        replies: Array<{ id: string; role: string; createdAt: Date | string }>;
-      }> = {};
+      const threadIndex: Record<string, ThreadReplySummary> = {};
 
       for (const thread of threads) {
         if (!thread.sessionKey || !thread.parentMessageId) continue;
+        const parentMessageKey = threadParentMessageKey(thread.parentMessageId);
+        if (!parentMessageKey) continue;
         const replies = thread.messages
           .filter((message) => message.role === "user" || message.role === "assistant")
           .map((message) => ({
@@ -132,19 +157,24 @@ export async function GET(request: NextRequest) {
           }));
         if (replies.length === 0) continue;
 
-        const existing = threadSummaries[thread.parentMessageId];
-        const summary = {
+        const summary: ThreadReplySummary = {
+          parentMessageId: stableThreadLinkId(thread.parentMessageId) ?? thread.parentMessageId,
+          parentMessageKey,
           sessionKey: thread.sessionKey,
           replyCount: replies.length,
           lastReplyAt: replies.at(-1)?.createdAt ?? null,
           replies,
         };
-        if (!existing || summary.replyCount >= existing.replyCount) {
-          threadSummaries[thread.parentMessageId] = summary;
+        if (shouldReplaceThreadSummary(threadIndex[parentMessageKey], summary)) {
+          threadIndex[parentMessageKey] = summary;
         }
       }
 
-      return Response.json({ threads, threadSummaries });
+      const threadSummaries = Object.fromEntries(
+        Object.values(threadIndex).map((summary) => [summary.parentMessageId, summary])
+      );
+
+      return Response.json({ threads, threadSummaries, threadIndex });
     }
 
     let resolvedSessionId = sessionId;

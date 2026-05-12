@@ -107,22 +107,34 @@ describe("GET /api/chat/messages", () => {
       threadParentSessionKey: "runtime-agent",
       threadParentMessageId: "parent-message-1",
     };
+    const newerLinkedThread = {
+      ...linkedThread,
+      id: "thread-2",
+      gatewaySessionKey: "runtime-agent:thread:server-parent-reopened",
+    };
+    const newerMessages = [
+      { id: "m3", role: "user", content: "follow up", createdAt: "2026-04-01T00:00:02Z", metadata: null },
+      { id: "m4", role: "assistant", content: "new answer", createdAt: "2026-04-01T00:00:03Z", metadata: null },
+    ];
     mockSelect
       .mockReturnValueOnce({
-        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread, newerLinkedThread]) }) }),
       })
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       })
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(newerMessages) }) }),
       });
 
     const res = await GET(makeRequest("/api/chat/messages?companyId=co-1&threadParentSessionKey=runtime-agent"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.threads).toHaveLength(1);
+    expect(body.threads).toHaveLength(2);
     expect(body.threads[0]).toMatchObject({
       sessionId: "thread-1",
       sessionKey: "runtime-agent:thread:server-parent",
@@ -132,12 +144,18 @@ describe("GET /api/chat/messages", () => {
     });
     expect(body.threads[0].messages).toHaveLength(2);
     expect(body.threadSummaries["parent-message-1"]).toMatchObject({
-      sessionKey: "runtime-agent:thread:server-parent",
+      parentMessageKey: "id:parent-message-1",
+      sessionKey: "runtime-agent:thread:server-parent-reopened",
       replyCount: 2,
       replies: [
-        { id: "m1", role: "user" },
-        { id: "m2", role: "assistant" },
+        { id: "m3", role: "user" },
+        { id: "m4", role: "assistant" },
       ],
+    });
+    expect(body.threadIndex["id:parent-message-1"]).toMatchObject({
+      parentMessageId: "parent-message-1",
+      sessionKey: "runtime-agent:thread:server-parent-reopened",
+      replyCount: 2,
     });
   });
 

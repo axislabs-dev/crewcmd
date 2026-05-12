@@ -801,7 +801,7 @@ async function loadThreadHistoriesForParent(
     });
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return { links: {}, summaries: {} };
-    const { threads, threadSummaries } = await res.json() as {
+    const { threads, threadSummaries, threadIndex } = await res.json() as {
       threads?: Array<{
         sessionKey?: string | null;
         parentSessionKey?: string | null;
@@ -815,6 +815,10 @@ async function loadThreadHistoriesForParent(
         }>;
       }>;
       threadSummaries?: Record<string, {
+        sessionKey?: string | null;
+        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
+      }>;
+      threadIndex?: Record<string, {
         sessionKey?: string | null;
         replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
       }>;
@@ -841,8 +845,11 @@ async function loadThreadHistoriesForParent(
         }))
       );
     }
+    const summaryEntries = Object.keys(threadIndex ?? {}).length > 0
+      ? Object.entries(threadIndex ?? {})
+      : Object.entries(threadSummaries ?? {}).map(([parentMessageId, summary]) => [`id:${stableThreadLinkId(parentMessageId)}`, summary] as const);
     const summaries = Object.fromEntries(
-      Object.entries(threadSummaries ?? {}).flatMap(([parentMessageId, summary]) => {
+      summaryEntries.flatMap(([parentMessageKey, summary]) => {
         if (!summary.sessionKey) return [];
         const replies = (summary.replies ?? [])
           .filter((reply) => reply.role === "user" || reply.role === "assistant")
@@ -852,7 +859,7 @@ async function loadThreadHistoriesForParent(
             createdAt: reply.createdAt,
           }));
         if (replies.length === 0) return [];
-        return [[`id:${stableThreadLinkId(parentMessageId)}`, {
+        return [[parentMessageKey, {
           sessionKey: summary.sessionKey.toLowerCase(),
           replies,
         }]];

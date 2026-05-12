@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
@@ -943,6 +944,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
 }
 
 export default function ChatPage() {
+  const { data: session } = useSession();
   const { workspace, company } = useWorkspace();
   const chatCompanyId = company?.id ?? null;
   const chatWorkspaceId = workspace?.id ?? null;
@@ -1681,6 +1683,10 @@ export default function ChatPage() {
   const agentColor = "var(--accent)";
   const agentIdentityColor = selectedAgent?.color || "var(--accent)";
   const agentAbbrev = agentCallsign.slice(0, 3).toUpperCase();
+  const userDisplayName = session?.user?.name || session?.user?.email || "You";
+  const userAvatarUrl = session?.user?.image ?? null;
+  const assistantDisplayName = selectedAgent?.callsign || selectedAgent?.name || "Agent";
+  const assistantAvatarUrl = selectedAgent?.avatarUrl ?? null;
 
   // Find parent agent for header display
   const parentAgent = useMemo(
@@ -3604,6 +3610,11 @@ export default function ChatPage() {
         <ChatThreadDrawer
           activeThread={activeThread}
           agentCallsign={selectedAgent?.callsign ?? "Agent"}
+          agentDisplayName={assistantDisplayName}
+          agentAvatarUrl={assistantAvatarUrl}
+          agentEmoji={agentEmoji}
+          userDisplayName={userDisplayName}
+          userAvatarUrl={userAvatarUrl}
           messages={visibleThreadMessages}
           streamingContent={threadStreamingContent}
           isLoading={isThreadLoading}
@@ -3725,6 +3736,9 @@ export default function ChatPage() {
                   content={msg.content}
                   timestamp={msg.createdAt}
                   metadata={msg.metadata}
+                  authorName={msg.role === "user" ? userDisplayName : assistantDisplayName}
+                  authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
+                  authorEmoji={msg.role === "assistant" ? agentEmoji : null}
                   onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
                   threadReplyCount={threadReplies.length}
                   threadReplies={threadReplies}
@@ -3752,6 +3766,9 @@ export default function ChatPage() {
                 role="assistant"
                 content={streamingContent}
                 isStreaming={true}
+                authorName={assistantDisplayName}
+                authorAvatarUrl={assistantAvatarUrl}
+                authorEmoji={agentEmoji}
                 voiceSettings={resolvedVoiceSettings}
               />
               <button

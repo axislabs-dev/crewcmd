@@ -220,6 +220,9 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   timestamp?: string | null;
   metadata?: { attachments?: Attachment[] } | null;
+  authorName?: string;
+  authorAvatarUrl?: string | null;
+  authorEmoji?: string | null;
   onReplyInThread?: () => void;
   threadReplyCount?: number;
   threadReplies?: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
@@ -325,6 +328,47 @@ function formatTime(timestamp?: string | null): string | null {
   }
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(/[\s_-]+/)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .slice(0, 2)
+    .join("");
+}
+
+function MessageAvatar({
+  name,
+  avatarUrl,
+  emoji,
+  isUser,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  emoji?: string | null;
+  isUser: boolean;
+}) {
+  const fallback = emoji || getInitials(name) || (isUser ? "U" : "A");
+  const fallbackClass = emoji ? "text-lg" : "font-mono text-[10px] font-bold";
+
+  return (
+    <div
+      className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border ${
+        isUser
+          ? "rounded-full border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
+          : "rounded-lg border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+      }`}
+      aria-hidden="true"
+    >
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className={fallbackClass}>{fallback}</span>
+      )}
+    </div>
+  );
+}
+
 function ThreadAvatar({ role }: { role: "user" | "assistant" }) {
   const isUser = role === "user";
 
@@ -396,18 +440,21 @@ export function ChatMessage({
   isStreaming,
   timestamp,
   metadata,
+  authorName,
+  authorAvatarUrl,
+  authorEmoji,
   onReplyInThread,
   threadReplyCount,
   threadReplies = [],
   voiceSettings,
 }: ChatMessageProps) {
   const isUser = role === "user";
+  const displayName = authorName?.trim() || (isUser ? "You" : "Agent");
+  const displayTime = formatTime(timestamp);
   const attachments = metadata?.attachments;
   const [showActions, setShowActions] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const messageWidthClass = isUser
-    ? "max-w-[72%] sm:max-w-[34rem]"
-    : "max-w-[88%] sm:max-w-[58rem]";
+  const messageWidthClass = "max-w-[min(100%,58rem)]";
 
   // Mobile: hide actions when tapping outside the bubble
   useEffect(() => {
@@ -426,26 +473,29 @@ export function ChatMessage({
   }, [showActions]);
 
   return (
-    <div
-      className={`flex items-start gap-3 animate-fade-in ${isUser ? "flex-row-reverse" : ""}`}
-    >
-      {/* Avatar */}
-      <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs ${
-          isUser
-            ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
-            : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
-        }`}
-      >
-        {isUser ? "YOU" : "AI"}
-      </div>
+    <div className="flex items-start gap-3 animate-fade-in">
+      <MessageAvatar
+        name={displayName}
+        avatarUrl={authorAvatarUrl}
+        emoji={!isUser ? authorEmoji : null}
+        isUser={isUser}
+      />
 
-      {/* Message bubble */}
       <div
         ref={bubbleRef}
-        className={`group relative ${messageWidthClass}`}
+        className={`group relative min-w-0 ${messageWidthClass}`}
         onTouchEnd={() => setShowActions((v) => !v)}
       >
+        <div className="mb-1 flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-[13px] font-semibold leading-none text-[var(--text-primary)]">
+            {displayName}
+          </span>
+          {displayTime && (
+            <span className="shrink-0 text-[11px] leading-none text-[var(--text-tertiary)]">
+              {displayTime}
+            </span>
+          )}
+        </div>
         <MessageActions
           content={content}
           showSpeak={!isUser}
@@ -456,7 +506,7 @@ export function ChatMessage({
         <div
           className={`relative overflow-hidden text-[13px] leading-relaxed ${
             isUser
-              ? "rounded-2xl rounded-tr-md border border-[var(--border-strong)] bg-[var(--bg-tertiary)] px-4 py-3 text-[var(--text-primary)] shadow-[0_10px_24px_rgba(0,0,0,0.10)]"
+              ? "rounded-xl border border-[var(--border-strong)] bg-[var(--bg-tertiary)] px-4 py-3 text-[var(--text-primary)] shadow-[0_10px_24px_rgba(0,0,0,0.10)]"
               : "rounded-xl border border-[var(--border-medium)] bg-[color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-surface-hover)_8%)] px-5 py-3.5 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(0,0,0,0.10)]"
           }`}
         >
@@ -515,17 +565,11 @@ export function ChatMessage({
           <span className="inline-block w-2 h-4 ml-1 bg-[var(--accent)]/70 animate-pulse rounded-sm" />
         )}
         </div>
-        {/* Timestamp */}
-        {timestamp && (
-          <span className={`mt-1 block text-[10px] text-[var(--text-tertiary)] ${isUser ? "text-right" : "text-left"}`}>
-            {formatTime(timestamp)}
-          </span>
-        )}
         {onReplyInThread && (
           <ThreadReplyIndicator
             replies={threadReplies}
             fallbackCount={threadReplyCount ?? 0}
-            isUser={isUser}
+            isUser={false}
             onOpen={onReplyInThread}
           />
         )}

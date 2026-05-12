@@ -10,6 +10,7 @@ import {
   serial,
   unique,
   numeric,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // ─── System Settings ──────────────────────────────────────────────────
@@ -903,6 +904,10 @@ export const chatSessions = pgTable("chat_sessions", {
   agentId: text("agent_id").notNull(), // callsign e.g. "neo", "sentinel"
   title: text("title"), // auto-generated or user-set
   gatewaySessionKey: text("gateway_session_key"), // optional link to OpenClaw gateway session
+  threadParentSessionId: uuid("thread_parent_session_id")
+    .references((): AnyPgColumn => chatSessions.id, { onDelete: "cascade" }),
+  threadParentSessionKey: text("thread_parent_session_key"),
+  threadParentMessageId: text("thread_parent_message_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

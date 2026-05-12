@@ -20,7 +20,7 @@ export interface AgentVoiceSettings {
 }
 
 export const TTS_PROVIDER_OPTIONS: Array<{ value: TtsProviderId | "auto"; label: string; description: string }> = [
-  { value: "auto", label: "Auto", description: "Use the best configured backend" },
+  { value: "auto", label: "Auto", description: "Use the best available device or configured backend voice" },
   { value: "openai", label: "OpenAI", description: "Cloud neural voices" },
   { value: "elevenlabs", label: "ElevenLabs", description: "Large voice library when configured" },
   { value: "say", label: "macOS say", description: "Local system voices" },
@@ -45,23 +45,34 @@ export const OPENAI_TTS_VOICES: TtsVoiceOption[] = [
 export const DEFAULT_AGENT_VOICE_SETTINGS: AgentVoiceSettings = {
   enabled: true,
   provider: "auto",
-  voiceId: "onyx",
-  voiceName: "Onyx",
-  model: "tts-1",
+  voiceId: "",
+  voiceName: "",
+  model: "",
   speed: 1,
-  preferNative: false,
+  preferNative: true,
 };
+
+function isLegacyAutoOpenAIDefault(record: Record<string, unknown>) {
+  return (
+    (record.provider === "auto" || record.provider === "" || record.provider === undefined) &&
+    record.voiceId === "onyx" &&
+    record.voiceName === "Onyx" &&
+    (record.model === "tts-1" || record.model === "" || record.model === undefined) &&
+    (record.preferNative === false || record.preferNative === undefined)
+  );
+}
 
 export function normalizeAgentVoiceSettings(value: unknown): AgentVoiceSettings {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_AGENT_VOICE_SETTINGS };
   const record = value as Record<string, unknown>;
+  if (isLegacyAutoOpenAIDefault(record)) return { ...DEFAULT_AGENT_VOICE_SETTINGS };
   return {
     enabled: typeof record.enabled === "boolean" ? record.enabled : DEFAULT_AGENT_VOICE_SETTINGS.enabled,
-    provider: typeof record.provider === "string" ? (record.provider as AgentVoiceSettings["provider"]) : "auto",
+    provider: typeof record.provider === "string" ? (record.provider as AgentVoiceSettings["provider"]) : DEFAULT_AGENT_VOICE_SETTINGS.provider,
     voiceId: typeof record.voiceId === "string" ? record.voiceId : "",
     voiceName: typeof record.voiceName === "string" ? record.voiceName : "",
     model: typeof record.model === "string" ? record.model : "",
     speed: typeof record.speed === "number" && Number.isFinite(record.speed) ? record.speed : 1,
-    preferNative: typeof record.preferNative === "boolean" ? record.preferNative : false,
+    preferNative: typeof record.preferNative === "boolean" ? record.preferNative : DEFAULT_AGENT_VOICE_SETTINGS.preferNative,
   };
 }

@@ -584,7 +584,7 @@ function isNativeCapacitorApp() {
 }
 
 function shouldUseNativeSpeech(voice: AgentVoiceSettings) {
-  return voice.provider === "browser" || voice.provider === "say" || voice.preferNative === true;
+  return voice.provider === "auto" || voice.provider === "browser" || voice.provider === "say" || voice.preferNative === true;
 }
 
 function blobToBase64(blob: Blob) {

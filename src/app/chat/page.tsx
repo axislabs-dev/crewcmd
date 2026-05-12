@@ -154,17 +154,21 @@ function uniquePreviewMessageId(stableId: string, index: number) {
   return `${stableId}:item:${index}`;
 }
 
+function stableThreadLinkId(id: string) {
+  return id.replace(/(?::item:|-item-)\d+$/i, "");
+}
+
 function executionStorageKey(sessionKey: string) {
   return `${CHAT_EXECUTION_STORAGE_PREFIX}${sessionKey.toLowerCase()}`;
 }
 
 function threadSessionKey(parentSessionKey: string, parentMessageId: string) {
-  const safeId = parentMessageId.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  const safeId = stableThreadLinkId(parentMessageId).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
   return `${parentSessionKey}:thread:${safeId || "message"}`;
 }
 
 function threadParentIdForMessage(message: Pick<Message, "id" | "threadParentId">) {
-  return message.threadParentId ?? message.id;
+  return stableThreadLinkId(message.threadParentId ?? message.id);
 }
 
 function threadSessionSuffix(parentSessionKey: string, sessionKey: string) {
@@ -812,7 +816,7 @@ async function loadThreadHistoriesForParent(
       if (thread.parentSessionKey && thread.parentMessageId) {
         links[sessionKey] = {
           parentSessionKey: thread.parentSessionKey,
-          parentMessageId: thread.parentMessageId,
+          parentMessageId: stableThreadLinkId(thread.parentMessageId),
         };
       }
       useChatStore.getState().loadSession(
@@ -863,14 +867,15 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
       const role = m.role === "user" ? "user" : "assistant";
       const content = displayContentFromGatewayPreview(rawContent, sessionKey);
       const createdAt = m.createdAt ?? new Date().toISOString();
-      const stableId = m.id ?? stablePreviewMessageId({ sessionKey, role, content, createdAt: m.createdAt ?? null });
+      const stableId = stableThreadLinkId(m.id ?? stablePreviewMessageId({ sessionKey, role, content, createdAt: m.createdAt ?? null }));
+      const messageId = m.id ?? uniquePreviewMessageId(stableId, index);
       return {
-        id: m.id ?? uniquePreviewMessageId(stableId, index),
+        id: messageId,
         agentId: sessionKey.toLowerCase(),
         role,
         content,
         createdAt,
-        metadata: stableId === m.id ? null : { threadParentId: stableId },
+        metadata: stableId === messageId ? null : { threadParentId: stableId },
       };
     }).filter((m) => m.content);
 
@@ -1648,7 +1653,8 @@ export default function ChatPage() {
         continue;
       }
 
-      assignSummary(`id:${threadSessionSuffix(activeKey, lowerStoreKey)}`, summary);
+      const legacyParentId = threadSessionSuffix(activeKey, lowerStoreKey);
+      assignSummary(legacyParentId ? `id:${stableThreadLinkId(legacyParentId)}` : null, summary);
     }
 
     return summaries;

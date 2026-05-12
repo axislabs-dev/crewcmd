@@ -458,6 +458,11 @@ export default function TeamPage() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  useEffect(() => {
+    const callsign = new URLSearchParams(window.location.search).get("agent");
+    if (callsign) setProfileCallsign(callsign);
+  }, []);
+
   const toggleCollapse = useCallback((callsign: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);

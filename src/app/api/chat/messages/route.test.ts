@@ -78,7 +78,15 @@ describe("GET /api/chat/messages", () => {
   });
 
   it("returns messages for latest agent session", async () => {
-    const session = { id: "sess-runtime", agentId: "runtime-agent", companyId: "co-1" };
+    const session = { id: "sess-runtime", agentId: "runtime-agent", companyId: "co-1", gatewaySessionKey: "runtime-agent" };
+    const linkedThread = {
+      id: "thread-1",
+      agentId: "runtime-agent",
+      gatewaySessionKey: "runtime-agent:thread:parent-message-1",
+      threadParentSessionId: "sess-runtime",
+      threadParentSessionKey: "runtime-agent",
+      threadParentMessageId: "parent-message-1",
+    };
     mockSelect
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([session]) }) }),
@@ -88,6 +96,15 @@ describe("GET /api/chat/messages", () => {
       })
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
       });
 
     const res = await GET(makeRequest("/api/chat/messages?agentId=RuntimeAgent&companyId=co-1"));
@@ -96,6 +113,10 @@ describe("GET /api/chat/messages", () => {
     expect(res.status).toBe(200);
     expect(body.sessionId).toBe("sess-runtime");
     expect(body.messages).toHaveLength(2);
+    expect(body.threadIndex["id:parent-message-1"]).toMatchObject({
+      sessionKey: "runtime-agent:thread:parent-message-1",
+      replyCount: 2,
+    });
   });
 
   it("returns thread summaries with durable parent linkage", async () => {

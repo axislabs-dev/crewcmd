@@ -18,9 +18,9 @@ function threadSessionSuffix(parentSessionKey: string, sessionKey: string | null
 
 /**
  * GET /api/chat/messages?sessionId=xxx&limit=100
- * GET /api/chat/messages?agentId=neo&companyId=xxx&limit=100
- * GET /api/chat/messages?companyId=xxx&sessionKey=neo:abc&limit=100
- * GET /api/chat/messages?companyId=xxx&threadParentSessionKey=neo:abc&limit=100
+ * GET /api/chat/messages?agentId=agent-callsign&companyId=xxx&limit=100
+ * GET /api/chat/messages?companyId=xxx&sessionKey=runtime-session-key&limit=100
+ * GET /api/chat/messages?companyId=xxx&threadParentSessionKey=runtime-session-key&limit=100
  *
  * Fetch messages for a chat session, oldest first.
  */

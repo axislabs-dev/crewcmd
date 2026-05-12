@@ -333,5 +333,6 @@ export function VoiceSummary({ value }: { value?: AgentVoiceSettings | null }) {
   const settings = normalizeAgentVoiceSettings(value ?? DEFAULT_AGENT_VOICE_SETTINGS);
   if (settings.enabled === false) return <span>Voice disabled</span>;
   const provider = TTS_PROVIDER_OPTIONS.find((item) => item.value === settings.provider)?.label ?? settings.provider ?? "Auto";
-  return <span>{settings.voiceName || settings.voiceId || "Auto voice"} · {provider}{settings.preferNative ? " · native preferred" : ""}</span>;
+  const name = settings.voiceName || settings.voiceId || (settings.preferNative ? "Device default" : "Auto voice");
+  return <span>{name} · {provider}{settings.preferNative ? " · native preferred" : ""}</span>;
 }

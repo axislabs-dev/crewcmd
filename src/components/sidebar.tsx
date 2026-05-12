@@ -41,6 +41,15 @@ const navSections = [
           </svg>
         ),
       },
+      {
+        href: "/later",
+        label: "Later",
+        icon: (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 3.75H6.75A1.5 1.5 0 0 0 5.25 5.25v15l6.75-3.75 6.75 3.75v-15a1.5 1.5 0 0 0-1.5-1.5Z" />
+          </svg>
+        ),
+      },
     ],
   },
   {

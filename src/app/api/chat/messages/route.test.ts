@@ -106,6 +106,7 @@ describe("GET /api/chat/messages", () => {
       threadParentSessionId: "parent-session-1",
       threadParentSessionKey: "neo",
       threadParentMessageId: "parent-message-1",
+      threadParentMessageFingerprint: "assistant::Parent message",
     };
     mockSelect
       .mockReturnValueOnce({
@@ -129,6 +130,7 @@ describe("GET /api/chat/messages", () => {
       parentSessionId: "parent-session-1",
       parentSessionKey: "neo",
       parentMessageId: "parent-message-1",
+      parentMessageFingerprint: "assistant::Parent message",
     });
     expect(body.threads[0].messages).toHaveLength(2);
   });

@@ -78,9 +78,10 @@ async function resolveSessionId(
   const parentSessionKey = firstString(context?.parentSessionKey);
   const parentMessage = asRecord(context?.parentMessage);
   const parentMessageId = firstString(parentMessage?.id);
+  const parentMessageFingerprint = buildThreadParentFingerprint(parentMessage);
   let parentSessionId: string | null = null;
 
-  if (parentSessionKey) {
+  if (parentSessionKey && (parentMessageId || parentMessageFingerprint)) {
     const parentSessions = await withRetry(() =>
       db!.select({ id: chatSessions.id }).from(chatSessions)
         .where(and(
@@ -93,11 +94,12 @@ async function resolveSessionId(
     parentSessionId = parentSessions[0]?.id ?? null;
   }
 
-  const threadLink = parentSessionKey && parentMessageId
+  const threadLink = parentSessionKey && (parentMessageId || parentMessageFingerprint)
     ? {
         threadParentSessionId: parentSessionId,
         threadParentSessionKey: parentSessionKey,
-        threadParentMessageId: parentMessageId,
+        threadParentMessageId: parentMessageId ?? null,
+        threadParentMessageFingerprint: parentMessageFingerprint,
       }
     : null;
 
@@ -157,6 +159,17 @@ function resolveSessionKeyForAgent(agentId: string, requestedSessionKey: unknown
   }
 
   return requestedSessionKey.trim();
+}
+
+function normalizeThreadFingerprintContent(content: string) {
+  return content.trim().replace(/\s+/g, " ").slice(0, 1000);
+}
+
+function buildThreadParentFingerprint(parentMessage: Record<string, unknown> | null) {
+  const role = firstString(parentMessage?.role);
+  const content = firstString(parentMessage?.content);
+  if (!role || !content) return null;
+  return `${role.toLowerCase()}::${normalizeThreadFingerprintContent(content)}`;
 }
 
 function asString(value: unknown): string | null {

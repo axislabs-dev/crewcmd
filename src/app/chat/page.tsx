@@ -90,6 +90,29 @@ type ThreadHistoryLoadResult = {
   summaries: Record<string, ThreadReplySummary>;
 };
 
+type ThreadHistoryResponse = {
+  threads?: Array<{
+    sessionKey?: string | null;
+    parentSessionKey?: string | null;
+    parentMessageId?: string | null;
+    messages?: Array<{
+      id: string;
+      role: "user" | "assistant" | "system";
+      content: string;
+      createdAt: string;
+      metadata?: Record<string, unknown> | null;
+    }>;
+  }>;
+  threadSummaries?: Record<string, {
+    sessionKey?: string | null;
+    replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
+  }>;
+  threadIndex?: Record<string, {
+    sessionKey?: string | null;
+    replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
+  }>;
+};
+
 type ChatExecutionSnapshot = {
   progress?: ExecutionProgressEvent | null;
   events?: ExecutionProgressEvent[];
@@ -754,13 +777,60 @@ function isMessageThreadSessionKey(sessionKey: string | null | undefined) {
   return Boolean(sessionKey?.toLowerCase().includes(":thread:"));
 }
 
+function normalizeThreadHistoryResponse(response: ThreadHistoryResponse): ThreadHistoryLoadResult {
+  const links: Record<string, ThreadParentLink> = {};
+  for (const thread of response.threads ?? []) {
+    if (!thread.sessionKey || !thread.messages?.length) continue;
+    const threadSessionKey = thread.sessionKey.toLowerCase();
+    if (thread.parentSessionKey && thread.parentMessageId) {
+      links[threadSessionKey] = {
+        parentSessionKey: thread.parentSessionKey,
+        parentMessageId: stableThreadLinkId(thread.parentMessageId),
+      };
+    }
+    useChatStore.getState().loadSession(
+      threadSessionKey,
+      thread.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
+        id: m.id,
+        agentId: threadSessionKey,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+        metadata: m.metadata ?? null,
+      }))
+    );
+  }
+
+  const summaryEntries = Object.keys(response.threadIndex ?? {}).length > 0
+    ? Object.entries(response.threadIndex ?? {})
+    : Object.entries(response.threadSummaries ?? {}).map(([parentMessageId, summary]) => [`id:${stableThreadLinkId(parentMessageId)}`, summary] as const);
+  const summaries = Object.fromEntries(
+    summaryEntries.flatMap(([parentMessageKey, summary]) => {
+      if (!summary.sessionKey) return [];
+      const replies = (summary.replies ?? [])
+        .filter((reply) => reply.role === "user" || reply.role === "assistant")
+        .map((reply) => ({
+          id: reply.id,
+          role: reply.role as "user" | "assistant",
+          createdAt: reply.createdAt,
+        }));
+      if (replies.length === 0) return [];
+      return [[parentMessageKey, {
+        sessionKey: summary.sessionKey.toLowerCase(),
+        replies,
+      }]];
+    })
+  );
+  return { links, summaries };
+}
+
 async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: string | null): Promise<ChatHistoryLoadResult> {
   if (!companyId) return null;
   try {
     const params = new URLSearchParams({ sessionKey, companyId, limit: "200" });
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return null;
-    const { messages, sessionId, execution, threads, threadSummaries, threadIndex } = await res.json() as {
+    const history = await res.json() as ThreadHistoryResponse & {
       sessionId: string | null;
       execution?: ChatExecutionSnapshot;
       messages: {
@@ -770,27 +840,8 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
         createdAt: string;
         metadata?: Record<string, unknown> | null;
       }[];
-      threads?: Array<{
-        sessionKey?: string | null;
-        parentSessionKey?: string | null;
-        parentMessageId?: string | null;
-        messages?: Array<{
-          id: string;
-          role: "user" | "assistant" | "system";
-          content: string;
-          createdAt: string;
-          metadata?: Record<string, unknown> | null;
-        }>;
-      }>;
-      threadSummaries?: Record<string, {
-        sessionKey?: string | null;
-        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
-      }>;
-      threadIndex?: Record<string, {
-        sessionKey?: string | null;
-        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
-      }>;
     };
+    const { messages, sessionId, execution } = history;
     if (!sessionId) return null;
     useChatStore.getState().loadSession(
       sessionKey.toLowerCase(),
@@ -803,49 +854,7 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
         metadata: m.metadata ?? null,
       }))
     );
-    const links: Record<string, ThreadParentLink> = {};
-    for (const thread of threads ?? []) {
-      if (!thread.sessionKey || !thread.messages?.length) continue;
-      const threadSessionKey = thread.sessionKey.toLowerCase();
-      if (thread.parentSessionKey && thread.parentMessageId) {
-        links[threadSessionKey] = {
-          parentSessionKey: thread.parentSessionKey,
-          parentMessageId: stableThreadLinkId(thread.parentMessageId),
-        };
-      }
-      useChatStore.getState().loadSession(
-        threadSessionKey,
-        thread.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
-          id: m.id,
-          agentId: threadSessionKey,
-          role: m.role,
-          content: m.content,
-          createdAt: m.createdAt,
-          metadata: m.metadata ?? null,
-        }))
-      );
-    }
-    const summaryEntries = Object.keys(threadIndex ?? {}).length > 0
-      ? Object.entries(threadIndex ?? {})
-      : Object.entries(threadSummaries ?? {}).map(([parentMessageId, summary]) => [`id:${stableThreadLinkId(parentMessageId)}`, summary] as const);
-    const summaries = Object.fromEntries(
-      summaryEntries.flatMap(([parentMessageKey, summary]) => {
-        if (!summary.sessionKey) return [];
-        const replies = (summary.replies ?? [])
-          .filter((reply) => reply.role === "user" || reply.role === "assistant")
-          .map((reply) => ({
-            id: reply.id,
-            role: reply.role as "user" | "assistant",
-            createdAt: reply.createdAt,
-          }));
-        if (replies.length === 0) return [];
-        return [[parentMessageKey, {
-          sessionKey: summary.sessionKey.toLowerCase(),
-          replies,
-        }]];
-      })
-    );
-    return { sessionId, execution: execution ?? null, threadHistory: { links, summaries } };
+    return { sessionId, execution: execution ?? null, threadHistory: normalizeThreadHistoryResponse(history) };
   } catch {
     return null;
   }
@@ -864,71 +873,7 @@ async function loadThreadHistoriesForParent(
     });
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return { links: {}, summaries: {} };
-    const { threads, threadSummaries, threadIndex } = await res.json() as {
-      threads?: Array<{
-        sessionKey?: string | null;
-        parentSessionKey?: string | null;
-        parentMessageId?: string | null;
-        messages?: Array<{
-          id: string;
-          role: "user" | "assistant" | "system";
-          content: string;
-          createdAt: string;
-          metadata?: Record<string, unknown> | null;
-        }>;
-      }>;
-      threadSummaries?: Record<string, {
-        sessionKey?: string | null;
-        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
-      }>;
-      threadIndex?: Record<string, {
-        sessionKey?: string | null;
-        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
-      }>;
-    };
-    const links: Record<string, ThreadParentLink> = {};
-    for (const thread of threads ?? []) {
-      if (!thread.sessionKey || !thread.messages?.length) continue;
-      const sessionKey = thread.sessionKey.toLowerCase();
-      if (thread.parentSessionKey && thread.parentMessageId) {
-        links[sessionKey] = {
-          parentSessionKey: thread.parentSessionKey,
-          parentMessageId: stableThreadLinkId(thread.parentMessageId),
-        };
-      }
-      useChatStore.getState().loadSession(
-        sessionKey,
-        thread.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
-          id: m.id,
-          agentId: sessionKey,
-          role: m.role,
-          content: m.content,
-          createdAt: m.createdAt,
-          metadata: m.metadata ?? null,
-        }))
-      );
-    }
-    const summaryEntries = Object.keys(threadIndex ?? {}).length > 0
-      ? Object.entries(threadIndex ?? {})
-      : Object.entries(threadSummaries ?? {}).map(([parentMessageId, summary]) => [`id:${stableThreadLinkId(parentMessageId)}`, summary] as const);
-    const summaries = Object.fromEntries(
-      summaryEntries.flatMap(([parentMessageKey, summary]) => {
-        if (!summary.sessionKey) return [];
-        const replies = (summary.replies ?? [])
-          .filter((reply) => reply.role === "user" || reply.role === "assistant")
-          .map((reply) => ({
-            id: reply.id,
-            role: reply.role as "user" | "assistant",
-            createdAt: reply.createdAt,
-          }));
-        if (replies.length === 0) return [];
-        return [[parentMessageKey, {
-          sessionKey: summary.sessionKey.toLowerCase(),
-          replies,
-        }]];
-      })
-    );
-    return { links, summaries };
+    return normalizeThreadHistoryResponse(await res.json() as ThreadHistoryResponse);
   } catch {
     // Thread reply summaries are best-effort; opening a thread still loads it directly.
     return { links: {}, summaries: {} };

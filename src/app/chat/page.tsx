@@ -3,7 +3,7 @@
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
-import type { Attachment } from "@/components/chat/chat-message";
+import type { Attachment, ChatIdentityDetails } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { ChatThreadDrawer } from "@/components/chat/thread-drawer";
@@ -1765,6 +1765,22 @@ export default function ChatPage() {
   const userAvatarUrl = session?.user?.image ?? null;
   const assistantDisplayName = selectedAgent?.callsign || selectedAgent?.name || "Agent";
   const assistantAvatarUrl = selectedAgent?.avatarUrl ?? null;
+  const userIdentityDetails = useMemo<ChatIdentityDetails>(() => ({
+    type: "person",
+    title: session?.user?.email || "Workspace member",
+    status: "Active in this chat",
+    profileHref: "/team",
+  }), [session?.user?.email]);
+  const assistantIdentityDetails = useMemo<ChatIdentityDetails>(() => ({
+    type: "agent",
+    title: selectedAgent?.title || selectedAgent?.role || "AI agent",
+    status: selectedAgent?.status ?? "idle",
+    currentTask: selectedAgent?.currentTask,
+    model: selectedAgent?.model,
+    runtimeRef: selectedAgent?.runtimeRef ?? selectedAgent?.runtimeId ?? selectedAgent?.adapterType,
+    workspacePath: selectedAgent?.workspacePath,
+    profileHref: selectedAgent?.callsign ? `/agents/${selectedAgent.callsign.toLowerCase()}` : "/agents",
+  }), [selectedAgent]);
 
   // Find parent agent for header display
   const parentAgent = useMemo(
@@ -3908,6 +3924,7 @@ export default function ChatPage() {
                   authorName={msg.role === "user" ? userDisplayName : assistantDisplayName}
                   authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
                   authorEmoji={msg.role === "assistant" ? agentEmoji : null}
+                  identityDetails={msg.role === "user" ? userIdentityDetails : assistantIdentityDetails}
                   onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
                   onTogglePin={canPersistMessageAction ? () => void togglePin(msg) : undefined}
                   onToggleSaved={canPersistMessageAction ? () => void toggleSaved(msg) : undefined}
@@ -3942,6 +3959,7 @@ export default function ChatPage() {
                 authorName={assistantDisplayName}
                 authorAvatarUrl={assistantAvatarUrl}
                 authorEmoji={agentEmoji}
+                identityDetails={assistantIdentityDetails}
                 voiceSettings={resolvedVoiceSettings}
               />
               <button

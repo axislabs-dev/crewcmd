@@ -56,6 +56,22 @@ function ReplyIcon({ className }: { className?: string }) {
   );
 }
 
+function PinIcon({ className, filled = false }: { className?: string; filled?: boolean }) {
+  return (
+    <svg className={className} fill={filled ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m14.25 4.5 5.25 5.25-3 3 .75 4.5-4.5-.75-3 3-5.25-5.25 3-3-.75-4.5 4.5.75 3-3Z" />
+    </svg>
+  );
+}
+
+function BookmarkIcon({ className, filled = false }: { className?: string; filled?: boolean }) {
+  return (
+    <svg className={className} fill={filled ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 3.75H6.75A1.5 1.5 0 0 0 5.25 5.25v15l6.75-3.75 6.75 3.75v-15a1.5 1.5 0 0 0-1.5-1.5Z" />
+    </svg>
+  );
+}
+
 function StopIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -69,12 +85,20 @@ function MessageActions({
   showSpeak,
   mobileVisible,
   onReplyInThread,
+  onTogglePin,
+  onToggleSaved,
+  isPinned,
+  isSaved,
   voiceSettings,
 }: {
   content: string;
   showSpeak: boolean;
   mobileVisible: boolean;
   onReplyInThread?: () => void;
+  onTogglePin?: () => void;
+  onToggleSaved?: () => void;
+  isPinned?: boolean;
+  isSaved?: boolean;
   voiceSettings?: AgentVoiceSettings | null;
 }) {
   const [copied, setCopied] = useState(false);
@@ -184,7 +208,6 @@ function MessageActions({
     "flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer";
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className={`absolute -top-3 right-2 flex items-center gap-0.5 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-1 py-0.5 transition-opacity duration-150 z-10 ${mobileVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"} group-hover:opacity-100 group-hover:pointer-events-auto`}
       onTouchEnd={(e) => e.stopPropagation()}
@@ -196,6 +219,26 @@ function MessageActions({
       {onReplyInThread && (
         <button onClick={onReplyInThread} aria-label="Reply in thread" title="Reply in thread" className={btnClass}>
           <ReplyIcon className="h-5 w-5" />
+        </button>
+      )}
+      {onTogglePin && (
+        <button
+          onClick={onTogglePin}
+          aria-label={isPinned ? "Unpin message" : "Pin message"}
+          title={isPinned ? "Unpin message" : "Pin message"}
+          className={btnClass}
+        >
+          <PinIcon className={`h-4 w-4 ${isPinned ? "text-[var(--accent)]" : ""}`} filled={isPinned} />
+        </button>
+      )}
+      {onToggleSaved && (
+        <button
+          onClick={onToggleSaved}
+          aria-label={isSaved ? "Remove from Later" : "Save for later"}
+          title={isSaved ? "Remove from Later" : "Save for later"}
+          className={btnClass}
+        >
+          <BookmarkIcon className={`h-4 w-4 ${isSaved ? "text-[var(--accent)]" : ""}`} filled={isSaved} />
         </button>
       )}
       {showSpeak && (
@@ -224,6 +267,10 @@ interface ChatMessageProps {
   authorAvatarUrl?: string | null;
   authorEmoji?: string | null;
   onReplyInThread?: () => void;
+  onTogglePin?: () => void;
+  onToggleSaved?: () => void;
+  isPinned?: boolean;
+  isSaved?: boolean;
   threadReplyCount?: number;
   threadReplies?: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
   voiceSettings?: AgentVoiceSettings | null;
@@ -444,6 +491,10 @@ export function ChatMessage({
   authorAvatarUrl,
   authorEmoji,
   onReplyInThread,
+  onTogglePin,
+  onToggleSaved,
+  isPinned,
+  isSaved,
   threadReplyCount,
   threadReplies = [],
   voiceSettings,
@@ -501,6 +552,10 @@ export function ChatMessage({
           showSpeak={!isUser}
           mobileVisible={showActions}
           onReplyInThread={onReplyInThread}
+          onTogglePin={onTogglePin}
+          onToggleSaved={onToggleSaved}
+          isPinned={isPinned}
+          isSaved={isSaved}
           voiceSettings={voiceSettings}
         />
         <div

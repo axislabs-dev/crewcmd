@@ -953,6 +953,25 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const chatMessagePins = pgTable("chat_message_pins", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id")
+    .references(() => chatSessions.id, { onDelete: "cascade" })
+    .notNull(),
+  messageId: uuid("message_id")
+    .references(() => chatMessages.id, { onDelete: "cascade" })
+    .notNull(),
+  pinnedByUserId: uuid("pinned_by_user_id")
+    .references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  messageUnique: unique().on(table.messageId),
+}));
+
 export const chatSessionEvents = pgTable("chat_session_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: uuid("session_id")
@@ -1012,6 +1031,42 @@ export const chatRuns = pgTable("chat_runs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
+
+export const savedItemStatusEnum = pgEnum("saved_item_status", [
+  "in_progress",
+  "archived",
+  "completed",
+]);
+
+export const savedItemSourceTypeEnum = pgEnum("saved_item_source_type", [
+  "chat_message",
+  "task",
+  "approval",
+  "doc",
+  "run",
+]);
+
+export const savedItems = pgTable("saved_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  sourceType: savedItemSourceTypeEnum("source_type").notNull(),
+  sourceId: text("source_id").notNull(),
+  status: savedItemStatusEnum("status").notNull().default("in_progress"),
+  title: text("title"),
+  note: text("note"),
+  reminderAt: timestamp("reminder_at", { withTimezone: true }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userSourceUnique: unique().on(table.userId, table.sourceType, table.sourceId),
+}));
 
 // ─── Invite Tokens ────────────────────────────────────────────────
 

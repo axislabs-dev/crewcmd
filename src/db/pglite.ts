@@ -138,6 +138,47 @@ async function applySchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await queuedClient.exec(`
+      CREATE TABLE IF NOT EXISTS chat_message_pins (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID,
+        workspace_id UUID,
+        session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        message_id UUID NOT NULL UNIQUE REFERENCES chat_messages(id) ON DELETE CASCADE,
+        pinned_by_user_id UUID,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await queuedClient.exec(`
+      DO $$ BEGIN
+        CREATE TYPE saved_item_status AS ENUM ('in_progress', 'archived', 'completed');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await queuedClient.exec(`
+      DO $$ BEGIN
+        CREATE TYPE saved_item_source_type AS ENUM ('chat_message', 'task', 'approval', 'doc', 'run');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await queuedClient.exec(`
+      CREATE TABLE IF NOT EXISTS saved_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL,
+        company_id UUID,
+        workspace_id UUID,
+        source_type saved_item_source_type NOT NULL,
+        source_id TEXT NOT NULL,
+        status saved_item_status NOT NULL DEFAULT 'in_progress',
+        title TEXT,
+        note TEXT,
+        reminder_at TIMESTAMPTZ,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, source_type, source_id)
+      )
+    `);
   } catch { /* tables may already exist */ }
 
   // Skills tables

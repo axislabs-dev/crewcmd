@@ -125,6 +125,20 @@ type ChatHistoryLoadResult = {
   threadHistory: ThreadHistoryLoadResult;
 } | null;
 
+type ChatPin = {
+  id: string;
+  messageId: string;
+  createdAt: string;
+  role: "user" | "assistant";
+  content: string;
+  messageCreatedAt?: string;
+};
+
+type SavedItem = {
+  id: string;
+  sourceId: string;
+};
+
 type QueuedChatMessage = {
   id: string;
   text: string;
@@ -765,6 +779,11 @@ function uniqueMessagesById(messages: Message[]) {
   });
 }
 
+function messagePreview(content: string, max = 140) {
+  const text = content.replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
 function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
   if (runtimeRef === "main") return "main";
@@ -997,6 +1016,8 @@ export default function ChatPage() {
   const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number } | null>(null);
   const [threadParentLinks, setThreadParentLinks] = useState<Record<string, ThreadParentLink>>({});
   const [serverThreadSummaries, setServerThreadSummaries] = useState<Record<string, ThreadReplySummary>>({});
+  const [pins, setPins] = useState<ChatPin[]>([]);
+  const [savedByMessageId, setSavedByMessageId] = useState<Record<string, SavedItem>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1097,6 +1118,48 @@ export default function ChatPage() {
   useEffect(() => {
     setSessionVoiceOverride(null);
   }, [activeSessionKey]);
+
+  const scopedSearchParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (chatCompanyId) params.set("companyId", chatCompanyId);
+    if (chatWorkspaceId) params.set("workspaceId", chatWorkspaceId);
+    return params;
+  }, [chatCompanyId, chatWorkspaceId]);
+
+  const loadPins = useCallback(async () => {
+    if (!chatCompanyId && !chatWorkspaceId) {
+      setPins([]);
+      return;
+    }
+    const params = scopedSearchParams();
+    params.set("sessionKey", activeSessionKey);
+    try {
+      const res = await fetch(`/api/chat/pins?${params.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json() as { pins?: ChatPin[] };
+      setPins(data.pins ?? []);
+    } catch {
+      // Pin loading is non-blocking; chat history remains usable without it.
+    }
+  }, [activeSessionKey, chatCompanyId, chatWorkspaceId, scopedSearchParams]);
+
+  const loadSavedMessages = useCallback(async (messageIds: string[]) => {
+    if ((!chatCompanyId && !chatWorkspaceId) || messageIds.length === 0) {
+      setSavedByMessageId({});
+      return;
+    }
+    const params = scopedSearchParams();
+    params.set("sourceType", "chat_message");
+    params.set("sourceIds", messageIds.join(","));
+    try {
+      const res = await fetch(`/api/saved-items?${params.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json() as { items?: SavedItem[] };
+      setSavedByMessageId(Object.fromEntries((data.items ?? []).map((item) => [item.sourceId, item])));
+    } catch {
+      // Saved state is best-effort and can refresh on the next message load.
+    }
+  }, [chatCompanyId, chatWorkspaceId, scopedSearchParams]);
 
   const scrollThreadToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = threadScrollContainerRef.current;
@@ -1468,6 +1531,17 @@ export default function ChatPage() {
 
     return () => { cancelled = true; };
   }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, chatCompanyId, chatWorkspaceId, chatScopeKey, applyExecutionSnapshot]);
+
+  useEffect(() => {
+    void loadPins();
+  }, [loadPins]);
+
+  useEffect(() => {
+    const messageIds = messages
+      .filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+      .map((message) => message.id);
+    void loadSavedMessages(messageIds);
+  }, [messages, loadSavedMessages]);
 
   const refreshSessionPreview = useCallback(async (sessionKey: string) => {
     const loaded = await loadSessionPreviewIntoStore(sessionKey);
@@ -3510,8 +3584,76 @@ export default function ChatPage() {
     [stopAllAudio]
   );
 
+  const togglePin = useCallback(async (message: Message) => {
+    if (!chatCompanyId && !chatWorkspaceId) return;
+    const isPinned = pins.some((pin) => pin.messageId === message.id);
+    try {
+      if (isPinned) {
+        await fetch(`/api/chat/pins?messageId=${encodeURIComponent(message.id)}`, { method: "DELETE" });
+        setPins((prev) => prev.filter((pin) => pin.messageId !== message.id));
+        return;
+      }
+
+      const res = await fetch("/api/chat/pins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: message.id,
+          companyId: chatCompanyId,
+          workspaceId: chatWorkspaceId,
+        }),
+      });
+      if (res.ok) {
+        await loadPins();
+      }
+    } catch {
+      // Leave the current pin state unchanged when persistence fails.
+    }
+  }, [chatCompanyId, chatWorkspaceId, loadPins, pins]);
+
+  const toggleSaved = useCallback(async (message: Message) => {
+    if (!chatCompanyId && !chatWorkspaceId) return;
+    const existing = savedByMessageId[message.id];
+    try {
+      if (existing) {
+        const res = await fetch(`/api/saved-items/${encodeURIComponent(existing.id)}`, { method: "DELETE" });
+        if (res.ok) {
+          setSavedByMessageId((prev) => {
+            const next = { ...prev };
+            delete next[message.id];
+            return next;
+          });
+        }
+        return;
+      }
+
+      const res = await fetch("/api/saved-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: chatCompanyId,
+          workspaceId: chatWorkspaceId,
+          sourceType: "chat_message",
+          sourceId: message.id,
+          status: "in_progress",
+          title: messagePreview(message.content, 80),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { item?: SavedItem };
+        if (data.item) {
+          setSavedByMessageId((prev) => ({ ...prev, [message.id]: data.item! }));
+        }
+      }
+    } catch {
+      // Leave the current saved state unchanged when persistence fails.
+    }
+  }, [chatCompanyId, chatWorkspaceId, savedByMessageId]);
+
   const clearChat = async () => {
     setMessages([]);
+    setPins([]);
+    setSavedByMessageId({});
     setExecutionProgress(null);
     setExecutionEvents([]);
     storeClearAgent(activeSessionKey);
@@ -3537,6 +3679,9 @@ export default function ChatPage() {
       // Local clear still succeeds; persistence will retry on next explicit clear.
     }
   };
+
+  const pinnedMessageIds = new Set(pins.map((pin) => pin.messageId));
+  const latestPin = pins.at(-1);
 
   return (
     <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
@@ -3605,6 +3750,23 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {latestPin && (
+        <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-3 py-2 backdrop-blur-xl sm:px-4 lg:px-6">
+          <div className="mx-auto flex max-w-3xl items-start gap-2 text-[12px] text-[var(--text-secondary)]">
+            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">Pin</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[var(--text-primary)]">{pins.length} pinned</span>
+                <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                  {latestPin.role === "user" ? "You" : selectedAgent?.callsign ?? "AI"}
+                </span>
+              </div>
+              <p className="truncate text-[var(--text-tertiary)]">{messagePreview(latestPin.content)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeThread && (
         <ChatThreadDrawer
@@ -3740,6 +3902,10 @@ export default function ChatPage() {
                   authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
                   authorEmoji={msg.role === "assistant" ? agentEmoji : null}
                   onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
+                  onTogglePin={() => void togglePin(msg)}
+                  onToggleSaved={() => void toggleSaved(msg)}
+                  isPinned={pinnedMessageIds.has(msg.id)}
+                  isSaved={Boolean(savedByMessageId[msg.id])}
                   threadReplyCount={threadReplies.length}
                   threadReplies={threadReplies}
                   voiceSettings={resolvedVoiceSettings}

@@ -5,6 +5,7 @@ import { ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-m
 import type { Attachment } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
 import { VoiceAgent } from "@/components/chat/voice-agent";
+import { ChatThreadDrawer } from "@/components/chat/thread-drawer";
 import { VoiceSelectModal } from "@/components/voice-select-modal";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
 import {
@@ -3497,118 +3498,50 @@ export default function ChatPage() {
       </div>
 
       {activeThread && (
-        <div
-          className="fixed inset-x-0 bottom-0 z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:bg-black/10"
-          style={{
-            top: visualViewport ? `${visualViewport.offsetTop}px` : 0,
-            height: visualViewport ? `${visualViewport.height}px` : "100dvh",
-          }}
-        >
-          <section className="flex h-full max-h-[100dvh] w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[480px]">
-            <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-3 pb-3 pt-[var(--mobile-safe-top)] sm:px-4 sm:pt-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <button
-                  onClick={closeThread}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] sm:hidden"
-                  aria-label="Back to chat"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                  </svg>
-                </button>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Thread</div>
-                  <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{selectedAgent?.callsign ?? "Agent"}</div>
-                </div>
-              </div>
-              <button
-                onClick={closeThread}
-                className="hidden rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-2 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] sm:block"
-                aria-label="Close thread"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </header>
-
-            <div ref={threadScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4">
-              <div className="space-y-4">
-                <ChatMessage
-                  role={activeThread.parentMessage.role}
-                  content={activeThread.parentMessage.content}
-                  timestamp={activeThread.parentMessage.createdAt}
-                  metadata={activeThread.parentMessage.metadata}
-                  voiceSettings={resolvedVoiceSettings}
-                />
-                <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
-                {visibleThreadMessages.length === 0 && !threadStreamingContent && !isThreadLoading && (
-                  <div className="ml-11 py-6 text-[12px] text-[var(--text-tertiary)]">
-                    Reply to continue this thread.
-                  </div>
-                )}
-                {visibleThreadMessages.map((message) => (
-                  <ChatMessage
-                    key={message.id}
-                    role={message.role}
-                    content={message.content}
-                    timestamp={message.createdAt}
-                    metadata={message.metadata}
-                    voiceSettings={resolvedVoiceSettings}
-                  />
-                ))}
-                {(isThreadLoading || threadProgress) && (
-                  <ExecutionProgressPanel
-                    progress={threadProgress}
-                    events={threadEvents}
-                    isLoading={isThreadLoading}
-                    hasStreamingContent={Boolean(threadStreamingContent)}
-                    agentColor={agentColor}
-                  />
-                )}
-                {threadStreamingContent && (
-                  <ChatMessage
-                    role="assistant"
-                    content={threadStreamingContent}
-                    isStreaming
-                    voiceSettings={resolvedVoiceSettings}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4">
-              <ChatComposer
-                value={threadInput}
-                onValueChange={setThreadInput}
-                placeholder="Reply in thread..."
-                pendingFiles={threadPendingFiles}
-                onAddFiles={addThreadFiles}
-                onRemoveFile={removeThreadFile}
-                onSend={() => void sendThreadMessage()}
-                onTranscript={(text) => void sendThreadMessage(text)}
-                onFocus={() => window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))}
-                isLoading={isThreadLoading}
-                speakResponses={speakResponses}
-                onToggleSpeak={() => {
-                  if (speakResponses) stopAllAudio();
-                  setSpeakResponses(!speakResponses);
-                }}
-                onEnterAgentMode={() => {
-                  if (!isNativeCapacitorApp() && audioRef.current) {
-                    audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                    audioRef.current.play().catch(() => {});
-                  }
-                  setAgentMicMuted(false);
-                  setAgentAudioMuted(false);
-                  setAgentOverlayMode("transcript");
-                  setVoiceMode("agent");
-                  setSpeakResponses(true);
-                }}
-              />
-            </div>
-          </section>
-        </div>
+        <ChatThreadDrawer
+          activeThread={activeThread}
+          agentCallsign={selectedAgent?.callsign ?? "Agent"}
+          messages={visibleThreadMessages}
+          streamingContent={threadStreamingContent}
+          isLoading={isThreadLoading}
+          progress={threadProgress}
+          events={threadEvents}
+          agentColor={agentColor}
+          voiceSettings={resolvedVoiceSettings}
+          visualViewport={visualViewport}
+          scrollContainerRef={threadScrollContainerRef}
+          onClose={closeThread}
+          composer={(
+            <ChatComposer
+              value={threadInput}
+              onValueChange={setThreadInput}
+              placeholder="Reply in thread..."
+              pendingFiles={threadPendingFiles}
+              onAddFiles={addThreadFiles}
+              onRemoveFile={removeThreadFile}
+              onSend={() => void sendThreadMessage()}
+              onTranscript={(text) => void sendThreadMessage(text)}
+              onFocus={() => window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))}
+              isLoading={isThreadLoading}
+              speakResponses={speakResponses}
+              onToggleSpeak={() => {
+                if (speakResponses) stopAllAudio();
+                setSpeakResponses(!speakResponses);
+              }}
+              onEnterAgentMode={() => {
+                if (!isNativeCapacitorApp() && audioRef.current) {
+                  audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                  audioRef.current.play().catch(() => {});
+                }
+                setAgentMicMuted(false);
+                setAgentAudioMuted(false);
+                setAgentOverlayMode("transcript");
+                setVoiceMode("agent");
+                setSpeakResponses(true);
+              }}
+            />
+          )}
+        />
       )}
 
       {/* Messages area */}

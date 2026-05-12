@@ -708,6 +708,15 @@ function chatMessageFromStore(message: ChatStoreMessage): Message {
   };
 }
 
+function uniqueMessagesById(messages: Message[]) {
+  const seen = new Set<string>();
+  return messages.filter((message) => {
+    if (seen.has(message.id)) return false;
+    seen.add(message.id);
+    return true;
+  });
+}
+
 function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
   if (runtimeRef === "main") return "main";
@@ -1400,12 +1409,10 @@ export default function ChatPage() {
 
     const existing = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
     setThreadMessages(existing.map(chatMessageFromStore));
-    if (existing.length === 0) {
-      void loadCrewCmdSessionHistoryByKey(sessionKey, company?.id).then(() => {
-        const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
-        setThreadMessages(updated.map(chatMessageFromStore));
-      });
-    }
+    void loadCrewCmdSessionHistoryByKey(sessionKey, company?.id).then(() => {
+      const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
+      setThreadMessages(updated.map(chatMessageFromStore));
+    });
   }, [activeSessionKey, company?.id, messages]);
 
   const closeThread = useCallback(() => {
@@ -1590,6 +1597,10 @@ export default function ChatPage() {
   const visibleMessages = useMemo(
     () => messages.filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content)),
     [messages]
+  );
+  const visibleThreadMessages = useMemo(
+    () => uniqueMessagesById(threadMessages),
+    [threadMessages]
   );
   const threadReplySummaries = useMemo(() => {
     const activeKey = activeSessionKey.toLowerCase();
@@ -3108,11 +3119,12 @@ export default function ChatPage() {
       metadata,
       createdAt: userMsg.createdAt ?? new Date().toISOString(),
     });
-    setThreadMessages((prev) =>
-      options.queuedMessageId
+    setThreadMessages((prev) => {
+      if (prev.some((message) => message.id === optimisticId)) return prev;
+      return options.queuedMessageId
         ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
-        : [...prev, userMsg]
-    );
+        : [...prev, userMsg];
+    });
     setThreadInput("");
     setThreadLoading(true);
     setThreadStreamingContent("");
@@ -3479,12 +3491,12 @@ export default function ChatPage() {
                   voiceSettings={resolvedVoiceSettings}
                 />
                 <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
-                {threadMessages.length === 0 && !threadStreamingContent && !isThreadLoading && (
+                {visibleThreadMessages.length === 0 && !threadStreamingContent && !isThreadLoading && (
                   <div className="ml-11 py-6 text-[12px] text-[var(--text-tertiary)]">
                     Reply to continue this thread.
                   </div>
                 )}
-                {threadMessages.map((message) => (
+                {visibleThreadMessages.map((message) => (
                   <ChatMessage
                     key={message.id}
                     role={message.role}

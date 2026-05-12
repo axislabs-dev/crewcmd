@@ -1387,12 +1387,14 @@ export default function ChatPage() {
 
     // If a gateway session is selected, load its preview
     if (selectedSessionKey) {
-      if (!loadedAgentsRef.current.has(selectedSessionKey)) {
-        loadedAgentsRef.current.add(selectedSessionKey);
+      const selectedKey = selectedSessionKey.toLowerCase();
+      const selectedLoadKey = `${company?.id ?? "preview"}:${selectedKey}`;
+      if (!loadedAgentsRef.current.has(selectedLoadKey)) {
+        loadedAgentsRef.current.add(selectedLoadKey);
         loadCrewCmdSessionHistoryByKey(selectedSessionKey, company?.id).then(async (result) => {
           const loaded = result ?? (await loadSessionPreviewIntoStore(selectedSessionKey).then((ok) => ok ? null : null));
           if (cancelled) return;
-          const updated = useChatStore.getState().messagesByAgent[selectedSessionKey.toLowerCase()] || [];
+          const updated = useChatStore.getState().messagesByAgent[selectedKey] || [];
           if (updated.length > 0) {
             setMessages(updated.map((m) => ({
               id: m.id,
@@ -1411,9 +1413,9 @@ export default function ChatPage() {
           }
         });
       }
-    } else if (!loadedAgentsRef.current.has(activeKey)) {
+    } else if (!loadedAgentsRef.current.has(`${company?.id ?? "preview"}:${activeKey}`)) {
       // Otherwise load standard thread history
-      loadedAgentsRef.current.add(activeKey);
+      loadedAgentsRef.current.add(`${company?.id ?? "preview"}:${activeKey}`);
       loadCrewCmdSessionHistoryByKey(activeSessionKey, company?.id).then(async (result) => {
         const loaded = result ?? (await loadSessionPreviewIntoStore(activeSessionKey).then((ok) => ok ? null : null));
         if (cancelled) return;
@@ -3460,8 +3462,10 @@ export default function ChatPage() {
     setExecutionProgress(null);
     setExecutionEvents([]);
     storeClearAgent(activeSessionKey);
-    loadedAgentsRef.current.add(activeSessionKey);
-    loadedAgentsRef.current.add(activeSessionKey.toLowerCase());
+    loadedAgentsRef.current.add(`${company?.id ?? "preview"}:${activeSessionKey.toLowerCase()}`);
+    if (selectedSessionKey) {
+      loadedAgentsRef.current.add(`${company?.id ?? "preview"}:${selectedSessionKey.toLowerCase()}`);
+    }
 
     if (!company?.id) return;
 

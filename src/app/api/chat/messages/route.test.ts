@@ -131,6 +131,14 @@ describe("GET /api/chat/messages", () => {
       parentMessageId: "parent-message-1",
     });
     expect(body.threads[0].messages).toHaveLength(2);
+    expect(body.threadSummaries["parent-message-1"]).toMatchObject({
+      sessionKey: "neo:thread:server-parent",
+      replyCount: 2,
+      replies: [
+        { id: "m1", role: "user" },
+        { id: "m2", role: "assistant" },
+      ],
+    });
   });
 
   it("returns 401 when not authenticated", async () => {

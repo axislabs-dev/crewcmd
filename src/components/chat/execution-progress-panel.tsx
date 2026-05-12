@@ -269,6 +269,12 @@ function activityTone(event: ExecutionProgressEvent) {
   return toolTone(event);
 }
 
+function activityCountLabel(count: number) {
+  if (count === 0) return "No tool events";
+  if (count === 1) return "1 tool event";
+  return `${count} tool events`;
+}
+
 function idleStatusText(phase: ExecutionPhase, hasStreamingContent: boolean) {
   if (phase === "completed") return "Response complete";
   if (phase === "error") return "Run stopped";
@@ -287,10 +293,10 @@ function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; ag
     agentColor;
 
   return (
-    <details className="group rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/45">
-      <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-elevated)]/70">
+    <details className="group border-t border-[var(--border-subtle)] first:border-t-0">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-elevated)]/45">
         <span
-          className={`h-2 w-2 shrink-0 rounded-full ${tone === "running" ? "animate-pulse" : ""}`}
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-[var(--bg-surface)] ${tone === "running" ? "animate-pulse" : ""}`}
           style={{ backgroundColor: markerColor }}
         />
         <span className="min-w-0 flex-1">
@@ -310,7 +316,7 @@ function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; ag
           &gt;
         </span>
       </summary>
-      <div className="border-t border-[var(--border-subtle)] px-3 py-3">
+      <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)]/25 px-3 py-3">
         <dl className="grid gap-2 text-[11px] sm:grid-cols-[7rem_1fr]">
           <dt className="text-[var(--text-tertiary)]">Tool</dt>
           <dd className="font-mono text-[var(--text-secondary)]">{event.activeTool?.name ?? "tool"}</dd>
@@ -354,10 +360,10 @@ function CompactionAuditRow({ event, agentColor }: { event: ExecutionProgressEve
   if (!checkpoint) return null;
 
   return (
-    <details className="group rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/45">
-      <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-elevated)]/70">
+    <details className="group border-t border-[var(--border-subtle)] first:border-t-0">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-elevated)]/45">
         <span
-          className="h-2 w-2 shrink-0 rounded-full"
+          className="h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-[var(--bg-surface)]"
           style={{ backgroundColor: agentColor }}
         />
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]">
@@ -370,7 +376,7 @@ function CompactionAuditRow({ event, agentColor }: { event: ExecutionProgressEve
           &gt;
         </span>
       </summary>
-      <div className="border-t border-[var(--border-subtle)] px-3 py-3">
+      <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)]/25 px-3 py-3">
         <dl className="grid gap-2 text-[11px] sm:grid-cols-[7rem_1fr]">
           <dt className="text-[var(--text-tertiary)]">Event</dt>
           <dd className="font-mono text-[var(--text-secondary)]">history_compacted</dd>
@@ -422,84 +428,97 @@ export function ExecutionProgressPanel({
     "";
   const hasStatusDetail = Boolean(statusDetail);
   const visibleActivity = auditEvents.slice(-4);
+  const latestActivity = auditEvents[auditEvents.length - 1] ?? null;
+  const currentStatus = latestActivity ? activityLabel(latestActivity) : idleStatusText(phase, hasStreamingContent);
+  const currentTone = latestActivity ? activityTone(latestActivity) : "neutral";
+  const currentMarkerColor =
+    phase === "error" || currentTone === "error" ? "rgb(248 113 113)" :
+    currentTone === "done" || phase === "completed" ? "rgb(74 222 128)" :
+    agentColor;
 
   return (
     <div
       aria-live="polite"
-      className="ml-11 max-w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-3 py-2 shadow-sm backdrop-blur-sm"
+      className="ml-11 max-w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 p-3 shadow-sm backdrop-blur-sm"
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span
-          className={`h-2 w-2 rounded-full ${!isTerminal ? "animate-pulse" : ""}`}
-          style={{ backgroundColor: phase === "error" ? "rgb(248 113 113)" : agentColor }}
-        />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
-          {label}
-        </span>
-        {elapsed && (
-          <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
-            {elapsed}
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ring-4 ring-[var(--bg-elevated)] ${!isTerminal ? "animate-pulse" : ""}`}
+            style={{ backgroundColor: phase === "error" ? "rgb(248 113 113)" : agentColor }}
+          />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+            {label}
           </span>
-        )}
-        {progress?.runId && (
-          <span className="hidden max-w-[10rem] truncate font-mono text-[10px] text-[var(--text-tertiary)] sm:inline">
-            {progress.runId}
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="hidden text-[10px] font-medium text-[var(--text-tertiary)] sm:inline">
+            {activityCountLabel(auditEvents.length)}
           </span>
-        )}
+          {elapsed && (
+            <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+              {elapsed}
+            </span>
+          )}
+          {progress?.runId && (
+            <span className="hidden max-w-[10rem] truncate font-mono text-[10px] text-[var(--text-tertiary)] sm:inline">
+              {progress.runId}
+            </span>
+          )}
+        </div>
       </div>
-      <div className="mt-2 flex min-h-6 items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/35 px-2 py-1">
-        {visibleActivity.length > 0 ? (
-          <>
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-              {visibleActivity.map((event, index) => {
+      <div className="mt-3 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/30">
+        <div className="grid min-h-12 grid-cols-[0.35rem_1fr_auto] items-stretch">
+          <div
+            className="opacity-80"
+            style={{ backgroundColor: currentMarkerColor }}
+          />
+          <div className="min-w-0 px-3 py-2">
+            <div className="mb-1 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: currentMarkerColor }} />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+                Current operation
+              </span>
+            </div>
+            <div className="truncate text-[12px] font-medium text-[var(--text-primary)]">
+              {currentStatus}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 border-l border-[var(--border-subtle)] px-2">
+            {visibleActivity.length > 0 ? (
+              visibleActivity.map((event, index) => {
                 const tone = activityTone(event);
                 const markerColor =
                   tone === "error" ? "rgb(248 113 113)" :
                   tone === "done" ? "rgb(74 222 128)" :
                   agentColor;
+                const label = activityLabel(event);
                 return (
                   <span
                     key={`${event.activeTool?.id ?? event.checkpoint?.id ?? event.event}-${event.at ?? index}-${index}`}
-                    className="flex min-w-0 max-w-[12rem] items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/65 px-2 py-0.5"
-                    title={activityLabel(event)}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone === "running" ? "animate-pulse" : ""}`}
-                      style={{ backgroundColor: markerColor }}
-                    />
-                    <span className="truncate text-[10px] text-[var(--text-secondary)]">
-                      {activityLabel(event)}
-                    </span>
-                  </span>
+                    className={`h-2 w-2 rounded-full ${tone === "running" ? "animate-pulse" : ""}`}
+                    style={{ backgroundColor: markerColor }}
+                    title={label}
+                  />
                 );
-              })}
-            </div>
+              })
+            ) : (
+              <span className="h-2 w-7 rounded-full bg-[var(--border-subtle)]" />
+            )}
             {auditEvents.length > visibleActivity.length && (
-              <span className="shrink-0 font-mono text-[10px] text-[var(--text-tertiary)]">
+              <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
                 +{auditEvents.length - visibleActivity.length}
               </span>
             )}
-          </>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--text-tertiary)]">
-            {idleStatusText(phase, hasStreamingContent)}
-          </span>
-        )}
-        {!isTerminal && (
-          <span
-            className="relative flex h-2 w-2 shrink-0"
-            aria-hidden="true"
-          >
-            <span
-              className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-              style={{ backgroundColor: agentColor }}
-            />
-            <span
-              className="relative inline-flex h-2 w-2 rounded-full"
-              style={{ backgroundColor: agentColor }}
-            />
-          </span>
-        )}
+            {!isTerminal && (
+              <span className="ml-1 flex h-4 items-center gap-0.5" aria-hidden="true">
+                <span className="h-1.5 w-0.5 animate-pulse rounded-full" style={{ backgroundColor: agentColor }} />
+                <span className="h-3 w-0.5 animate-pulse rounded-full [animation-delay:120ms]" style={{ backgroundColor: agentColor }} />
+                <span className="h-2 w-0.5 animate-pulse rounded-full [animation-delay:240ms]" style={{ backgroundColor: agentColor }} />
+              </span>
+            )}
+          </div>
+        </div>
       </div>
       <div className="sr-only">Current execution phase: {label}</div>
       <div
@@ -513,7 +532,7 @@ export function ExecutionProgressPanel({
       {auditEvents.length > 0 && (
         <div
           aria-label="Tool call audit trail"
-          className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1"
+          className="mt-2 max-h-80 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/45"
         >
           {auditEvents.map((event, index) => (
             event.checkpoint ? (

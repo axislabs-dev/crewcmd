@@ -26,6 +26,8 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
   asc: vi.fn(),
   desc: vi.fn(),
+  isNull: vi.fn(),
+  sql: vi.fn(),
 }));
 
 const mockRequireAuth = vi.fn().mockResolvedValue(null);
@@ -94,6 +96,41 @@ describe("GET /api/chat/messages", () => {
     expect(res.status).toBe(200);
     expect(body.sessionId).toBe("sess-neo");
     expect(body.messages).toHaveLength(2);
+  });
+
+  it("returns thread summaries with durable parent linkage", async () => {
+    const linkedThread = {
+      id: "thread-1",
+      agentId: "neo",
+      gatewaySessionKey: "neo:thread:server-parent",
+      threadParentSessionId: "parent-session-1",
+      threadParentSessionKey: "neo",
+      threadParentMessageId: "parent-message-1",
+    };
+    mockSelect
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
+      });
+
+    const res = await GET(makeRequest("/api/chat/messages?companyId=co-1&threadParentSessionKey=neo"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.threads).toHaveLength(1);
+    expect(body.threads[0]).toMatchObject({
+      sessionId: "thread-1",
+      sessionKey: "neo:thread:server-parent",
+      parentSessionId: "parent-session-1",
+      parentSessionKey: "neo",
+      parentMessageId: "parent-message-1",
+    });
+    expect(body.threads[0].messages).toHaveLength(2);
   });
 
   it("returns 401 when not authenticated", async () => {

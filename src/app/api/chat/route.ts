@@ -71,8 +71,35 @@ async function resolveSessionId(
   agentId: string,
   companyId: string,
   gatewaySessionKey?: string | null,
+  threadContext?: unknown,
 ): Promise<string> {
   const agentLower = agentId.toLowerCase();
+  const context = asRecord(threadContext);
+  const parentSessionKey = firstString(context?.parentSessionKey);
+  const parentMessage = asRecord(context?.parentMessage);
+  const parentMessageId = firstString(parentMessage?.id);
+  let parentSessionId: string | null = null;
+
+  if (parentSessionKey) {
+    const parentSessions = await withRetry(() =>
+      db!.select({ id: chatSessions.id }).from(chatSessions)
+        .where(and(
+          eq(chatSessions.gatewaySessionKey, parentSessionKey),
+          eq(chatSessions.companyId, companyId)
+        ))
+        .orderBy(desc(chatSessions.updatedAt))
+        .limit(1)
+    );
+    parentSessionId = parentSessions[0]?.id ?? null;
+  }
+
+  const threadLink = parentSessionKey && parentMessageId
+    ? {
+        threadParentSessionId: parentSessionId,
+        threadParentSessionKey: parentSessionKey,
+        threadParentMessageId: parentMessageId,
+      }
+    : null;
 
   if (gatewaySessionKey) {
     const existingByGatewayKey = await withRetry(() =>
@@ -86,6 +113,13 @@ async function resolveSessionId(
     );
 
     if (existingByGatewayKey.length > 0) {
+      if (threadLink) {
+        await withRetry(() =>
+          db!.update(chatSessions)
+            .set({ ...threadLink, updatedAt: new Date() })
+            .where(eq(chatSessions.id, existingByGatewayKey[0].id))
+        );
+      }
       return existingByGatewayKey[0].id;
     }
   } else {
@@ -110,6 +144,7 @@ async function resolveSessionId(
       companyId,
       agentId: agentLower,
       gatewaySessionKey: gatewaySessionKey || null,
+      ...(threadLink ?? {}),
     }).returning()
   );
   return newSession.id;
@@ -766,7 +801,7 @@ export async function POST(request: NextRequest) {
 
     if (db && companyId) {
       try {
-        sessionId = await resolveSessionId(agentId, companyId, sessionKey);
+        sessionId = await resolveSessionId(agentId, companyId, sessionKey, bodyThreadContext);
         const userMsg = await persistAndPublish(
           sessionId,
           agentId,

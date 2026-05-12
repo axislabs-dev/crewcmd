@@ -41,6 +41,25 @@ export async function GET(request: NextRequest) {
           id: chatSessions.id,
           agentId: chatSessions.agentId,
           gatewaySessionKey: chatSessions.gatewaySessionKey,
+          threadParentSessionId: chatSessions.threadParentSessionId,
+          threadParentSessionKey: chatSessions.threadParentSessionKey,
+          threadParentMessageId: chatSessions.threadParentMessageId,
+        }).from(chatSessions)
+          .where(and(
+            eq(chatSessions.companyId, companyId),
+            eq(chatSessions.threadParentSessionKey, threadParentSessionKey)
+          ))
+          .orderBy(asc(chatSessions.updatedAt))
+          .limit(200)
+      );
+      const legacyThreadSessions = await withRetry(() =>
+        db!.select({
+          id: chatSessions.id,
+          agentId: chatSessions.agentId,
+          gatewaySessionKey: chatSessions.gatewaySessionKey,
+          threadParentSessionId: chatSessions.threadParentSessionId,
+          threadParentSessionKey: chatSessions.threadParentSessionKey,
+          threadParentMessageId: chatSessions.threadParentMessageId,
         }).from(chatSessions)
           .where(and(
             eq(chatSessions.companyId, companyId),
@@ -49,9 +68,12 @@ export async function GET(request: NextRequest) {
           .orderBy(asc(chatSessions.gatewaySessionKey))
           .limit(200)
       );
+      const sessionsById = new Map(
+        [...threadSessions, ...legacyThreadSessions].map((session) => [session.id, session])
+      );
 
       const threads = await Promise.all(
-        threadSessions
+        Array.from(sessionsById.values())
           .filter((session) => session.gatewaySessionKey)
           .map(async (session) => {
             const messages = await withRetry(() =>
@@ -64,6 +86,9 @@ export async function GET(request: NextRequest) {
               sessionId: session.id,
               agentId: session.agentId,
               sessionKey: session.gatewaySessionKey,
+              parentSessionId: session.threadParentSessionId,
+              parentSessionKey: session.threadParentSessionKey ?? threadParentSessionKey,
+              parentMessageId: session.threadParentMessageId,
               messages: messages.map((m) => ({
                 id: m.id,
                 role: m.role,

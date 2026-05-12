@@ -967,6 +967,7 @@ export default function ChatPage() {
   const [threadProgress, setThreadProgress] = useState<ExecutionProgressEvent | null>(null);
   const [threadEvents, setThreadEvents] = useState<ExecutionProgressEvent[]>([]);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
+  const [agentModeSessionKey, setAgentModeSessionKey] = useState<string | null>(null);
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -1524,7 +1525,13 @@ export default function ChatPage() {
     setThreadStreamingContent("");
     setThreadProgress(null);
     setThreadEvents([]);
-  }, [activeThread, chatCompanyId, chatWorkspaceId]);
+    if (closingThread && agentModeSessionKey === closingThread.sessionKey) {
+      setVoiceMode("off");
+      setAgentModeSessionKey(null);
+      setAgentMicMuted(false);
+      setAgentAudioMuted(false);
+    }
+  }, [activeThread, agentModeSessionKey, chatCompanyId, chatWorkspaceId]);
 
   useEffect(() => {
     if (!activeThread) return;
@@ -3585,35 +3592,67 @@ export default function ChatPage() {
           scrollContainerRef={threadScrollContainerRef}
           onClose={closeThread}
           composer={(
-            <ChatComposer
-              value={threadInput}
-              onValueChange={setThreadInput}
-              placeholder="Reply in thread..."
-              pendingFiles={threadPendingFiles}
-              onAddFiles={addThreadFiles}
-              onRemoveFile={removeThreadFile}
-              onSend={() => void sendThreadMessage()}
-              onTranscript={(text) => void sendThreadMessage(text)}
-              onFocus={() => window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))}
-              isLoading={isThreadLoading}
-              speakResponses={speakResponses}
-              onToggleSpeak={() => {
-                if (speakResponses) stopAllAudio();
-                setSpeakResponses(!speakResponses);
-              }}
-              onEnterAgentMode={() => {
-                if (!isNativeCapacitorApp() && audioRef.current) {
-                  audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                  audioRef.current.play().catch(() => {});
-                }
-                setAgentMicMuted(false);
-                setAgentAudioMuted(false);
-                setAgentOverlayMode("transcript");
-                setVoiceMode("agent");
-                setSpeakResponses(true);
-              }}
-              showAgentMode={false}
-            />
+            <>
+              {voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? (
+                <div className="mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
+                  <VoiceAgent
+                    onTranscript={(text) => void sendThreadMessage(text)}
+                    isPlayingAudio={isPlayingAudio}
+                    onInterrupt={interruptAudio}
+                    isLoading={isThreadLoading}
+                    accentColor={agentColor}
+                    autoActivate
+                    compact
+                    isMicMuted={agentMicMuted}
+                    isAgentMuted={agentAudioMuted}
+                    onMicMutedChange={setAgentMicMuted}
+                    onAgentMutedChange={handleAgentAudioMutedChange}
+                    agent={selectedAgent?.callsign}
+                    gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
+                    companyId={company?.id}
+                    sessionKey={activeThread.sessionKey}
+                  />
+                </div>
+              ) : null}
+              <ChatComposer
+                value={threadInput}
+                onValueChange={setThreadInput}
+                placeholder="Reply in thread..."
+                pendingFiles={threadPendingFiles}
+                onAddFiles={addThreadFiles}
+                onRemoveFile={removeThreadFile}
+                onSend={() => void sendThreadMessage()}
+                onTranscript={(text) => void sendThreadMessage(text)}
+                onFocus={() => window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))}
+                isLoading={isThreadLoading}
+                speakResponses={speakResponses}
+                onToggleSpeak={() => {
+                  if (speakResponses) stopAllAudio();
+                  setSpeakResponses(!speakResponses);
+                }}
+                onEnterAgentMode={() => {
+                  if (voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey) {
+                    stopAllAudio();
+                    setVoiceMode("off");
+                    setAgentModeSessionKey(null);
+                    setAgentMicMuted(false);
+                    setAgentAudioMuted(false);
+                    return;
+                  }
+                  if (!isNativeCapacitorApp() && audioRef.current) {
+                    audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                    audioRef.current.play().catch(() => {});
+                  }
+                  setAgentMicMuted(false);
+                  setAgentAudioMuted(false);
+                  setAgentOverlayMode("transcript");
+                  setAgentModeSessionKey(activeThread.sessionKey);
+                  setVoiceMode("agent");
+                  setSpeakResponses(true);
+                }}
+                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread agent mode"}
+              />
+            </>
           )}
         />
       )}
@@ -3750,7 +3789,7 @@ export default function ChatPage() {
       </div>
 
       {/* Voice surface: inline by default, immersive only when expanded. */}
-      {voiceMode === "agent" && (
+      {voiceMode === "agent" && !activeThread && (
         <div
           className={
             agentOverlayMode === "immersive"
@@ -3817,10 +3856,10 @@ export default function ChatPage() {
                   }
                 >
                   <VoiceAgent
-                    onTranscript={(text) => activeThread ? sendThreadMessage(text) : sendMessage(text, { forceVoiceResponse: true })}
+                    onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
                     isPlayingAudio={isPlayingAudio}
                     onInterrupt={interruptAudio}
-                    isLoading={activeThread ? isThreadLoading : isLoading}
+                    isLoading={isLoading}
                     accentColor={agentColor}
                     autoActivate
                     immersive={agentOverlayMode === "immersive"}
@@ -3832,7 +3871,7 @@ export default function ChatPage() {
                     agent={selectedAgent?.callsign}
                     gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
                     companyId={company?.id}
-                    sessionKey={activeThread ? activeThread.sessionKey : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                    sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
                       ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                       : gatewaySessionKeyForAgent(selectedAgent)}
                   />
@@ -3899,6 +3938,7 @@ export default function ChatPage() {
               if (voiceMode === "agent") {
                 stopAllAudio();
                 setVoiceMode("off");
+                setAgentModeSessionKey(null);
                 setAgentOverlayMode("transcript");
                 setAgentMicMuted(false);
                 setAgentAudioMuted(false);
@@ -3911,6 +3951,7 @@ export default function ChatPage() {
               setAgentMicMuted(false);
               setAgentAudioMuted(false);
               setAgentOverlayMode("transcript");
+              setAgentModeSessionKey(activeSessionKey);
               setVoiceMode("agent");
               setSpeakResponses(true);
             }}

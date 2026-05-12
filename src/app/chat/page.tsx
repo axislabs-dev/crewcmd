@@ -1063,9 +1063,10 @@ export default function ChatPage() {
   }, [revokeAudioObjectUrl]);
 
   // Derive session key: if a gateway session is selected, use it;
-  // otherwise fall back to agent callsign
+  // otherwise use the runtime gateway key. A runtimeRef="main" agent may have
+  // any display callsign, but its durable chat session is still "main".
   const activeSessionKey = useMemo(
-    () => selectedSessionKey ?? selectedAgent?.callsign.toLowerCase() ?? "main",
+    () => selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent),
     [selectedSessionKey, selectedAgent]
   );
   const agentDefaultVoice = useMemo(

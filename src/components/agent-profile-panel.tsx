@@ -3,7 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { Agent, Task, Activity } from "@/lib/data";
-import { ROLES } from "@/components/agent-config-fields";
+import {
+  AgentConfigFields,
+  type AgentConfigValues,
+  defaultAgentConfigValues,
+  ROLES,
+  GATEWAY_ADAPTERS,
+  HTTP_ADAPTERS,
+  OPENROUTER_ADAPTERS,
+} from "@/components/agent-config-fields";
 import { useWorkspace } from "@/components/company-context";
 import {
   getInitialSkillConfig,
@@ -20,6 +28,7 @@ import { AgentControlPanel } from "@/components/agent-control-panel";
 import { AgentOutputViewer } from "@/components/agent-output-viewer";
 import { AgentAvatar } from "@/components/avatar";
 import { labelModelProfile } from "@/lib/model-profiles";
+import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings } from "@/lib/tts-voices";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -90,8 +99,10 @@ type Tab = "summary" | "skills" | "config" | "terminal" | "activity";
 
 interface AgentProfilePanelProps {
   callsign: string;
+  companyId: string | null;
   onClose: () => void;
-  onEdit: (callsign: string) => void;
+  onSaved?: (callsign?: string) => void;
+  onDelete?: () => void;
 }
 
 // ─── Status helpers ─────────────────────────────────────────────────────
@@ -207,13 +218,22 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePanelProps) {
+export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDelete }: AgentProfilePanelProps) {
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [skills, setSkills] = useState<AgentSkillRow[]>([]);
   const [availableSkills, setAvailableSkills] = useState<AvailableSkill[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("summary");
+  const [editingConfig, setEditingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [deletingAgent, setDeletingAgent] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [configValues, setConfigValues] = useState<AgentConfigValues>(defaultAgentConfigValues());
+  const [existingAgents, setExistingAgents] = useState<{ id: string; name: string; callsign: string }[]>([]);
+  const [ownerType, setOwnerType] = useState<"user" | "company">("user");
+  const [visibility, setVisibility] = useState<"private" | "team" | "org">("private");
   const [loadingAgent, setLoadingAgent] = useState(true);
   const [loadingSkills, setLoadingSkills] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState(true);
@@ -232,6 +252,48 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
       .split("; ")
       .find((c) => c.startsWith("active_workspace="));
     setWorkspaceId(workspaceCookie?.split("=")[1] ?? null);
+  }, []);
+
+  const hydrateConfigValues = useCallback((nextAgent: AgentDetail, nextSkills: AgentSkillRow[] = []) => {
+    const nextAdapterConfig = (nextAgent.adapterConfig ?? {}) as Record<string, unknown>;
+    const nextRuntimeConfig = (nextAgent.runtimeConfig ?? {}) as Record<string, unknown>;
+    const heartbeatConfig = (nextRuntimeConfig.heartbeat ?? {}) as Record<string, unknown>;
+
+    setOwnerType((nextAgent.ownerType as "user" | "company") ?? "user");
+    setVisibility((nextAgent.visibility as "private" | "team" | "org") ?? "private");
+    setConfigValues({
+      name: nextAgent.name ?? "",
+      callsign: nextAgent.callsign ?? "",
+      role: nextAgent.role ?? "engineer",
+      adapterType: nextAgent.adapterType ?? "claude_local",
+      provider: nextAgent.provider ?? "",
+      model: nextAgent.model ?? "",
+      workspacePath: nextAgent.workspacePath ?? "",
+      emoji: nextAgent.emoji ?? "🤖",
+      color: nextAgent.color ?? "#00f0ff",
+      command: (nextAdapterConfig.command as string) ?? "",
+      thinkingEffort: (nextAdapterConfig.thinkingEffort as string) ?? "",
+      promptTemplate: (nextAdapterConfig.promptTemplate as string) ?? "",
+      instructionsFile: (nextAdapterConfig.instructionsFile as string) ?? "",
+      extraArgs: (nextAdapterConfig.extraArgs as string) ?? "",
+      envVars: (nextAdapterConfig.envVars as Record<string, string>) ?? {},
+      heartbeatEnabled: (heartbeatConfig.enabled as boolean) ?? false,
+      heartbeatIntervalSec: (heartbeatConfig.intervalSec as number) ?? 300,
+      wakeOnDemand: (heartbeatConfig.wakeOnDemand as boolean) ?? true,
+      cooldownSec: (heartbeatConfig.cooldownSec as number) ?? 60,
+      maxConcurrentRuns: (heartbeatConfig.maxConcurrentRuns as number) ?? 1,
+      timeoutSec: (nextAdapterConfig.timeoutSec as number) ?? 600,
+      gracePeriodSec: (nextAdapterConfig.gracePeriodSec as number) ?? 30,
+      reportsTo: nextAgent.reportsTo ?? "",
+      gatewayUrl: GATEWAY_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "",
+      gatewayToken: "",
+      httpUrl: HTTP_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "",
+      httpAuthHeader: "",
+      openrouterApiKey: "",
+      openrouterBaseUrl: OPENROUTER_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.baseUrl as string) ?? "" : "",
+      skillIds: nextSkills.map((row) => row.skillId).filter(Boolean),
+      voiceSettings: normalizeAgentVoiceSettings(nextRuntimeConfig.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
+    });
   }, []);
 
   // Animate in on mount
@@ -288,10 +350,32 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
     fetch(`/api/agents/${callsign.toLowerCase()}`)
       .then((r) => r.json())
       .then((data) => {
-        if (!data.error) setAgent(data);
+        if (!data.error) {
+          setAgent(data);
+          hydrateConfigValues(data);
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingAgent(false));
+  }, [callsign, hydrateConfigValues]);
+
+  // Fetch peer agents for manager/reporting selectors.
+  useEffect(() => {
+    fetch("/api/agents")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.agents) return;
+        setExistingAgents(
+          data.agents
+            .filter((row: { callsign: string }) => row.callsign.toLowerCase() !== callsign.toLowerCase())
+            .map((row: { id: string; name: string; callsign: string }) => ({
+              id: row.id,
+              name: row.name,
+              callsign: row.callsign,
+            }))
+        );
+      })
+      .catch(() => {});
   }, [callsign]);
 
   // Fetch skills
@@ -300,11 +384,14 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
     fetch(`/api/agents/${callsign.toLowerCase()}/skills`)
       .then((r) => r.json())
       .then((rows) => {
-        if (Array.isArray(rows)) setSkills(rows.filter((r: AgentSkillRow) => r.skill));
+        if (!Array.isArray(rows)) return;
+        const nextSkills = rows.filter((r: AgentSkillRow) => r.skill);
+        setSkills(nextSkills);
+        if (agent && !editingConfig) hydrateConfigValues(agent, nextSkills);
       })
       .catch(() => {})
       .finally(() => setLoadingSkills(false));
-  }, [callsign]);
+  }, [agent, callsign, editingConfig, hydrateConfigValues]);
 
   // Fetch available skills for this agent company
   useEffect(() => {
@@ -368,7 +455,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "summary", label: "Summary" },
     { key: "skills", label: "Skills", count: skills.length },
-    { key: "config", label: "Config" },
+    { key: "config", label: "Settings" },
     { key: "terminal", label: "Terminal" },
     { key: "activity", label: "Activity" },
   ];
@@ -428,6 +515,135 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
       setApplyingModel(false);
     }
   }, [agent]);
+
+  const startEditingConfig = useCallback(() => {
+    if (agent) hydrateConfigValues(agent, skills);
+    setSettingsError(null);
+    setConfirmDelete(false);
+    setActiveTab("config");
+    setEditingConfig(true);
+  }, [agent, hydrateConfigValues, skills]);
+
+  const cancelEditingConfig = useCallback(() => {
+    if (agent) hydrateConfigValues(agent, skills);
+    setSettingsError(null);
+    setConfirmDelete(false);
+    setEditingConfig(false);
+  }, [agent, hydrateConfigValues, skills]);
+
+  const handleConfigChange = useCallback((patch: Partial<AgentConfigValues>) => {
+    setConfigValues((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  async function saveAgentSettings() {
+    if (!agent) return;
+    setSavingConfig(true);
+    setSettingsError(null);
+
+    try {
+      const nextAdapterConfig: Record<string, unknown> = {};
+      if (configValues.command) nextAdapterConfig.command = configValues.command;
+      if (configValues.thinkingEffort) nextAdapterConfig.thinkingEffort = configValues.thinkingEffort;
+      if (configValues.promptTemplate) nextAdapterConfig.promptTemplate = configValues.promptTemplate;
+      if (configValues.instructionsFile) nextAdapterConfig.instructionsFile = configValues.instructionsFile;
+      if (configValues.extraArgs) nextAdapterConfig.extraArgs = configValues.extraArgs;
+      if (Object.keys(configValues.envVars).length > 0) nextAdapterConfig.envVars = configValues.envVars;
+      nextAdapterConfig.timeoutSec = configValues.timeoutSec;
+      nextAdapterConfig.gracePeriodSec = configValues.gracePeriodSec;
+
+      if (GATEWAY_ADAPTERS.includes(configValues.adapterType)) {
+        if (configValues.gatewayUrl) nextAdapterConfig.url = configValues.gatewayUrl;
+        if (configValues.gatewayToken) {
+          nextAdapterConfig.headers = { "x-openclaw-token": configValues.gatewayToken };
+        }
+      } else if (HTTP_ADAPTERS.includes(configValues.adapterType)) {
+        if (configValues.httpUrl) nextAdapterConfig.url = configValues.httpUrl;
+        if (configValues.httpAuthHeader) {
+          nextAdapterConfig.headers = { Authorization: configValues.httpAuthHeader };
+        }
+      } else if (OPENROUTER_ADAPTERS.includes(configValues.adapterType)) {
+        if (configValues.openrouterApiKey) nextAdapterConfig.apiKey = configValues.openrouterApiKey;
+        if (configValues.openrouterBaseUrl) nextAdapterConfig.baseUrl = configValues.openrouterBaseUrl;
+      }
+
+      const response = await fetch(`/api/agents/${agent.callsign.toLowerCase()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: configValues.name.trim(),
+          callsign: configValues.callsign.trim().toUpperCase(),
+          title: ROLES.find((role) => role.value === configValues.role)?.label || configValues.role || "Agent",
+          emoji: configValues.emoji || "🤖",
+          color: configValues.color || "#00f0ff",
+          adapterType: configValues.adapterType,
+          adapterConfig: nextAdapterConfig,
+          runtimeConfig: {
+            ...runtimeConfig,
+            voice: configValues.voiceSettings,
+          },
+          provider: configValues.provider || null,
+          role: configValues.role,
+          model: configValues.model.trim() || null,
+          workspacePath: configValues.workspacePath.trim() || null,
+          reportsTo: configValues.reportsTo || null,
+          heartbeatEnabled: configValues.heartbeatEnabled,
+          heartbeatIntervalSec: configValues.heartbeatIntervalSec,
+          wakeOnDemand: configValues.wakeOnDemand,
+          cooldownSec: configValues.cooldownSec,
+          maxConcurrentRuns: configValues.maxConcurrentRuns,
+          visibility,
+        }),
+      });
+
+      const updated = await response.json();
+      if (!response.ok || updated.error) {
+        setSettingsError(updated.error || "Failed to save agent");
+        return;
+      }
+
+      const savedCallsign = (updated.callsign ?? agent.callsign).toLowerCase();
+      await fetch(`/api/agents/${savedCallsign}/skills`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skillIds: configValues.skillIds }),
+      }).catch(() => {});
+
+      const nextSkills = await fetch(`/api/agents/${savedCallsign}/skills`)
+        .then((res) => res.json())
+        .then((rows) => (Array.isArray(rows) ? rows.filter((row: AgentSkillRow) => row.skill) : skills))
+        .catch(() => skills);
+
+      setAgent(updated);
+      setSkills(nextSkills);
+      hydrateConfigValues(updated, nextSkills);
+      setEditingConfig(false);
+      onSaved?.(updated.callsign);
+    } catch {
+      setSettingsError("Failed to save agent");
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
+  async function deleteAgent() {
+    if (!agent) return;
+    setDeletingAgent(true);
+    setSettingsError(null);
+    try {
+      const response = await fetch(`/api/agents/${agent.callsign.toLowerCase()}`, { method: "DELETE" });
+      if (!response.ok) {
+        setSettingsError("Failed to delete agent");
+        return;
+      }
+      onDelete?.();
+      handleClose();
+    } catch {
+      setSettingsError("Failed to delete agent");
+    } finally {
+      setDeletingAgent(false);
+      setConfirmDelete(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -548,7 +764,7 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               loading={loadingAgent}
               agentColor={agentColor}
               roleLabel={roleLabel}
-              onEdit={onEdit}
+              onEdit={startEditingConfig}
               operatingLayer={operatingLayer}
               overlayDraft={overlayDraft}
               onOverlayChange={setOverlayDraft}
@@ -575,7 +791,24 @@ export function AgentProfilePanel({ callsign, onClose, onEdit }: AgentProfilePan
               heartbeat={heartbeat}
               adapterConfig={adapterConfig}
               envVars={envVars}
-              onEdit={agent ? () => onEdit(agent.callsign) : undefined}
+              editing={editingConfig}
+              values={configValues}
+              existingAgents={existingAgents}
+              ownerType={ownerType}
+              visibility={visibility}
+              companyId={companyId}
+              workspaceId={workspaceId}
+              error={settingsError}
+              saving={savingConfig}
+              deleting={deletingAgent}
+              confirmDelete={confirmDelete}
+              onEdit={startEditingConfig}
+              onCancel={cancelEditingConfig}
+              onChange={handleConfigChange}
+              onVisibilityChange={setVisibility}
+              onSave={saveAgentSettings}
+              onConfirmDeleteChange={setConfirmDelete}
+              onDelete={deleteAgent}
             />
           )}
           {activeTab === "terminal" && (
@@ -618,7 +851,7 @@ function SummaryTab({
   loading: boolean;
   agentColor: string;
   roleLabel: string;
-  onEdit: (callsign: string) => void;
+  onEdit: () => void;
   operatingLayer: OperatingLayerView;
   overlayDraft: string;
   onOverlayChange: (value: string) => void;
@@ -821,10 +1054,10 @@ function SummaryTab({
 
       {/* Edit button */}
       <button
-        onClick={() => onEdit(agent.callsign)}
+        onClick={onEdit}
         className="mt-2 w-full rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
       >
-        EDIT AGENT
+        EDIT SETTINGS
       </button>
     </div>
   );
@@ -1401,14 +1634,48 @@ function ConfigTab({
   heartbeat,
   adapterConfig,
   envVars,
+  editing,
+  values,
+  existingAgents,
+  ownerType,
+  visibility,
+  companyId,
+  workspaceId,
+  error,
+  saving,
+  deleting,
+  confirmDelete,
   onEdit,
+  onCancel,
+  onChange,
+  onVisibilityChange,
+  onSave,
+  onConfirmDeleteChange,
+  onDelete,
 }: {
   agent: AgentDetail | null;
   loading: boolean;
   heartbeat: Record<string, unknown>;
   adapterConfig: Record<string, unknown>;
   envVars: Record<string, string>;
+  editing: boolean;
+  values: AgentConfigValues;
+  existingAgents: { id: string; name: string; callsign: string }[];
+  ownerType: "user" | "company";
+  visibility: "private" | "team" | "org";
+  companyId: string | null;
+  workspaceId: string | null;
+  error: string | null;
+  saving: boolean;
+  deleting: boolean;
+  confirmDelete: boolean;
   onEdit?: () => void;
+  onCancel: () => void;
+  onChange: (patch: Partial<AgentConfigValues>) => void;
+  onVisibilityChange: (visibility: "private" | "team" | "org") => void;
+  onSave: () => void;
+  onConfirmDeleteChange: (confirm: boolean) => void;
+  onDelete: () => void;
 }) {
   if (loading) return <SummarySkeleton />;
   if (!agent) return null;
@@ -1422,6 +1689,99 @@ function ConfigTab({
   const gracePeriodSec = adapterConfig.gracePeriodSec as number | undefined;
 
   const envKeys = Object.keys(envVars);
+
+  if (editing) {
+    return (
+      <div className="space-y-4 p-5">
+        {error && (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {error}
+          </div>
+        )}
+
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+            Ownership & visibility
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-[var(--text-secondary)]">
+              <span className="mb-1 block">Owned by</span>
+              <input
+                value={ownerType === "company" ? "Current org" : "Personal"}
+                disabled
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] opacity-80"
+              />
+            </label>
+            <label className="text-xs text-[var(--text-secondary)]">
+              <span className="mb-1 block">Visibility</span>
+              <select
+                value={visibility}
+                onChange={(event) => onVisibilityChange(event.target.value as "private" | "team" | "org")}
+                disabled={ownerType === "user"}
+                className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
+              >
+                <option value="private">Private</option>
+                <option value="team">Team</option>
+                <option value="org">Org</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <AgentConfigFields
+          values={values}
+          onChange={onChange}
+          existingAgents={existingAgents}
+          companyId={companyId}
+          workspaceId={workspaceId}
+        />
+
+        <div className="sticky bottom-0 -mx-5 flex items-center gap-2 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)] px-5 py-4">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-red-400">Delete this agent?</span>
+              <button
+                onClick={onDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-500/20 px-3 py-2 text-xs tracking-wider text-red-400 transition-colors hover:bg-red-500/30 disabled:opacity-50"
+              >
+                {deleting ? "DELETING..." : "YES, DELETE"}
+              </button>
+              <button
+                onClick={() => onConfirmDeleteChange(false)}
+                className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+              >
+                CANCEL
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => onConfirmDeleteChange(true)}
+              className="rounded-lg border border-red-500/20 px-3 py-2 text-xs tracking-wider text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            >
+              DELETE
+            </button>
+          )}
+
+          <div className="flex-1" />
+
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]"
+          >
+            CANCEL
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving || !values.name.trim()}
+            className="rounded-lg bg-[var(--accent-soft)] px-4 py-2.5 text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
+          >
+            {saving ? "SAVING..." : "SAVE CHANGES"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 p-5">
@@ -1499,7 +1859,7 @@ function ConfigTab({
           onClick={onEdit}
           className="mt-2 w-full rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-[11px] tracking-wider text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
         >
-          EDIT CONFIGURATION
+          EDIT SETTINGS
         </button>
       )}
     </div>

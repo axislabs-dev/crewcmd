@@ -124,6 +124,41 @@ describe("chat-store", () => {
     });
   });
 
+  describe("replaceOptimisticMessage", () => {
+    it("replaces an optimistic message with the persisted server message", () => {
+      useChatStore.getState().addMessage(
+        makeMsg({ id: "optimistic-1", content: "hello", createdAt: "2026-01-01T00:00:00Z" })
+      );
+
+      useChatStore.getState().replaceOptimisticMessage(
+        "NEO",
+        "optimistic-1",
+        makeMsg({ id: "server-1", content: "hello", createdAt: "2026-01-01T00:00:01Z" })
+      );
+
+      const messages = useChatStore.getState().messagesByAgent["neo"];
+      expect(messages).toHaveLength(1);
+      expect(messages[0].id).toBe("server-1");
+    });
+
+    it("removes duplicate persisted copies by role and content", () => {
+      useChatStore.getState().addMessage(
+        makeMsg({ id: "optimistic-1", content: "hello", createdAt: "2026-01-01T00:00:00Z" })
+      );
+      useChatStore.getState().addMessage(
+        makeMsg({ id: "server-1", content: "hello", createdAt: "2026-01-01T00:00:01Z" })
+      );
+
+      useChatStore.getState().replaceOptimisticMessage(
+        "neo",
+        "optimistic-1",
+        makeMsg({ id: "server-1", content: "hello", createdAt: "2026-01-01T00:00:01Z" })
+      );
+
+      expect(useChatStore.getState().messagesByAgent["neo"].map((message) => message.id)).toEqual(["server-1"]);
+    });
+  });
+
   describe("markRead", () => {
     it("resets unread counter to zero", () => {
       useChatStore.getState().addMessage(makeMsg());

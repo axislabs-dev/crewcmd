@@ -25,6 +25,8 @@ interface ChatStoreState {
   addMessage: (msg: ChatStoreMessage) => void;
   /** Replace an optimistic/local message ID with the persisted server ID. */
   replaceMessageId: (agentId: string, fromId: string, toId: string) => void;
+  /** Replace an optimistic/local message with a persisted server message. */
+  replaceOptimisticMessage: (agentId: string, fromId: string, msg: ChatStoreMessage) => void;
   /** Bulk-load messages for a session (e.g. initial fetch). Deduplicates. */
   loadSession: (agentId: string, messages: ChatStoreMessage[]) => void;
   /** Mark all messages for an agent as read (reset unread counter). */
@@ -73,6 +75,28 @@ export const useChatStore = create<ChatStoreState>((set) => ({
 
       return {
         messagesByAgent: { ...state.messagesByAgent, [key]: updated },
+      };
+    }),
+
+  replaceOptimisticMessage: (agentId, fromId, msg) =>
+    set((state) => {
+      const key = agentId.toLowerCase();
+      const existing = state.messagesByAgent[key] || [];
+      const optimisticIndex = existing.findIndex((message) => message.id === fromId);
+      if (optimisticIndex === -1) return state;
+
+      const serverContentKey = `${msg.role}::${msg.content}`;
+      const updated = existing
+        .filter((message, index) =>
+          index === optimisticIndex ||
+          (message.id !== msg.id && `${message.role}::${message.content}` !== serverContentKey)
+        )
+        .map((message, index) => index === optimisticIndex ? msg : message)
+        .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+
+      return {
+        messagesByAgent: { ...state.messagesByAgent, [key]: updated },
+        lastEventAt: msg.createdAt || state.lastEventAt,
       };
     }),
 

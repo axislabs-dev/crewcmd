@@ -204,6 +204,13 @@
       "when": 1777500000000,
       "tag": "0028_workspace_scoped_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1777600000000,
+      "tag": "0029_chat_pins_saved_items",
+      "breakpoints": true
     }
   ]
 }

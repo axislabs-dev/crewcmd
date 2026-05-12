@@ -137,6 +137,7 @@ function stablePreviewMessageId(params: {
   sessionKey: string;
   role: "user" | "assistant";
   content: string;
+  index: number;
   createdAt?: string | null;
 }) {
   const normalizedContent = params.content.trim().replace(/\s+/g, " ");
@@ -144,6 +145,7 @@ function stablePreviewMessageId(params: {
     params.sessionKey.toLowerCase(),
     params.role,
     params.createdAt ?? "",
+    String(params.index),
     normalizedContent,
   ].join("\n");
   return `${params.sessionKey.toLowerCase()}:preview:${stableHash(basis)}`;
@@ -836,13 +838,13 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     if (data.status && data.status !== "ok") return false;
     if (!items.length) return false;
 
-    const messages = items.map((m): ChatStoreMessage => {
+    const messages = items.map((m, index): ChatStoreMessage => {
       const rawContent = m.text ?? m.content ?? "";
       const role = m.role === "user" ? "user" : "assistant";
       const content = displayContentFromGatewayPreview(rawContent, sessionKey);
       const createdAt = m.createdAt ?? new Date().toISOString();
       return {
-        id: m.id ?? stablePreviewMessageId({ sessionKey, role, content, createdAt: m.createdAt ?? null }),
+        id: m.id ?? stablePreviewMessageId({ sessionKey, role, content, index, createdAt: m.createdAt ?? null }),
         agentId: sessionKey.toLowerCase(),
         role,
         content,

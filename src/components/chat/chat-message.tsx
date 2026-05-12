@@ -464,29 +464,39 @@ export function ChatIdentityProfilePanel({
   profile: ChatIdentityProfile;
   onClose: () => void;
 }) {
+  const [visible, setVisible] = useState(false);
   const { displayName, avatarUrl, emoji, isUser, details } = profile;
   const type = details?.type ?? (isUser ? "person" : "agent");
   const fallback = emoji || getInitials(displayName) || (isUser ? "U" : "A");
   const fallbackClass = emoji ? "text-3xl" : "font-mono text-lg font-bold";
   const defaultStatus = isUser ? "Person" : "AI agent";
   const about = details?.currentTask || details?.title || (isUser ? "Workspace member in this chat." : "AI agent available in this chat.");
+  const requestClose = useCallback(() => {
+    setVisible(false);
+    window.setTimeout(onClose, 180);
+  }, [onClose]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setVisible(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <div
-      className="fixed inset-0 z-[85] bg-black/30 backdrop-blur-[2px] sm:bg-transparent sm:backdrop-blur-0"
+      className={`fixed inset-0 z-[85] bg-black/30 backdrop-blur-[2px] transition-opacity duration-200 ease-out sm:bg-transparent sm:backdrop-blur-0 ${visible ? "opacity-100" : "opacity-0"}`}
       role="dialog"
       aria-label={`${displayName} identity card`}
       aria-modal="true"
-      onClick={onClose}
+      onClick={requestClose}
     >
       <section
-        className="absolute inset-x-0 bottom-0 flex h-[calc(100dvh-var(--mobile-safe-top))] flex-col overflow-hidden rounded-t-[28px] border-t border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[0_-24px_80px_rgba(0,0,0,0.22)] sm:inset-y-0 sm:left-auto sm:right-0 sm:h-auto sm:w-[380px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[var(--theme-shadow-lg)]"
+        className={`absolute inset-x-0 bottom-0 flex h-[calc(100dvh-var(--mobile-safe-top))] flex-col overflow-hidden rounded-t-[28px] border-t border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[0_-24px_80px_rgba(0,0,0,0.22)] transition-all duration-200 ease-out sm:inset-y-0 sm:left-auto sm:right-0 sm:h-auto sm:w-[380px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[var(--theme-shadow-lg)] ${visible ? "translate-y-0 opacity-100 sm:translate-x-0" : "translate-y-8 opacity-0 sm:translate-x-8 sm:translate-y-0"}`}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4 pb-4 pt-[max(var(--mobile-safe-top),1rem)] sm:px-5 sm:py-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
             aria-label="Close profile"
           >

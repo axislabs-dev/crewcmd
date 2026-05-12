@@ -66,11 +66,21 @@ interface Message {
   metadata?: { attachments?: Attachment[] } | null;
 }
 
+type ThreadParentLink = {
+  parentSessionKey: string;
+  parentMessageId: string;
+};
+
 type ActiveThread = {
   sessionKey: string;
   parentSessionKey: string;
   parentMessage: Message;
   contextMessages: Message[];
+};
+
+type ThreadReplySummary = {
+  sessionKey: string;
+  replies: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
 };
 
 type ChatExecutionSnapshot = {
@@ -94,6 +104,12 @@ function executionStorageKey(sessionKey: string) {
 function threadSessionKey(parentSessionKey: string, parentMessageId: string) {
   const safeId = parentMessageId.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
   return `${parentSessionKey}:thread:${safeId || "message"}`;
+}
+
+function threadSessionSuffix(parentSessionKey: string, sessionKey: string) {
+  const prefix = `${parentSessionKey.toLowerCase()}:thread:`;
+  const lower = sessionKey.toLowerCase();
+  return lower.startsWith(prefix) ? lower.slice(prefix.length) : null;
 }
 
 type VoiceMode = "off" | "agent";
@@ -192,6 +208,7 @@ function ChatComposer({
   onRemoveFile,
   onSend,
   onTranscript,
+  onFocus,
   isLoading,
   speakResponses,
   onToggleSpeak,
@@ -211,6 +228,7 @@ function ChatComposer({
   onRemoveFile: (index: number) => void;
   onSend: (value: string) => void;
   onTranscript: (value: string) => void;
+  onFocus?: () => void;
   isLoading: boolean;
   speakResponses: boolean;
   onToggleSpeak: () => void;
@@ -291,6 +309,7 @@ function ChatComposer({
             onValueChange(event.target.value);
             setShowAddMenu(false);
           }}
+          onFocus={onFocus}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
@@ -691,8 +710,11 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
   }
 }
 
-async function loadThreadHistoriesForParent(parentSessionKey: string, companyId?: string | null): Promise<void> {
-  if (!companyId) return;
+async function loadThreadHistoriesForParent(
+  parentSessionKey: string,
+  companyId?: string | null,
+): Promise<Record<string, ThreadParentLink>> {
+  if (!companyId) return {};
   try {
     const params = new URLSearchParams({
       companyId,
@@ -700,10 +722,12 @@ async function loadThreadHistoriesForParent(parentSessionKey: string, companyId?
       limit: "200",
     });
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
-    if (!res.ok) return;
+    if (!res.ok) return {};
     const { threads } = await res.json() as {
       threads?: Array<{
         sessionKey?: string | null;
+        parentSessionKey?: string | null;
+        parentMessageId?: string | null;
         messages?: Array<{
           id: string;
           role: "user" | "assistant" | "system";
@@ -713,9 +737,16 @@ async function loadThreadHistoriesForParent(parentSessionKey: string, companyId?
         }>;
       }>;
     };
+    const links: Record<string, ThreadParentLink> = {};
     for (const thread of threads ?? []) {
       if (!thread.sessionKey || !thread.messages?.length) continue;
       const sessionKey = thread.sessionKey.toLowerCase();
+      if (thread.parentSessionKey && thread.parentMessageId) {
+        links[sessionKey] = {
+          parentSessionKey: thread.parentSessionKey,
+          parentMessageId: thread.parentMessageId,
+        };
+      }
       useChatStore.getState().loadSession(
         sessionKey,
         thread.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
@@ -728,8 +759,10 @@ async function loadThreadHistoriesForParent(parentSessionKey: string, companyId?
         }))
       );
     }
+    return links;
   } catch {
     // Thread reply summaries are best-effort; opening a thread still loads it directly.
+    return {};
   }
 }
 
@@ -824,9 +857,12 @@ export default function ChatPage() {
   const [preferredAgentCallsign, setPreferredAgentCallsign] = useState<string | null>(null);
   const [preferredSessionKey, setPreferredSessionKey] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number } | null>(null);
+  const [threadParentLinks, setThreadParentLinks] = useState<Record<string, ThreadParentLink>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const threadScrollContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
   const ttsSessionRef = useRef<string>(createAgentModeSessionId("tts"));
@@ -910,6 +946,37 @@ export default function ChatPage() {
   useEffect(() => {
     setSessionVoiceOverride(null);
   }, [activeSessionKey]);
+
+  const scrollThreadToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = threadScrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !activeThread) return;
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      setVisualViewport(null);
+      return;
+    }
+
+    const updateViewport = () => {
+      setVisualViewport({
+        height: viewport.height,
+        offsetTop: viewport.offsetTop,
+      });
+      window.requestAnimationFrame(() => scrollThreadToBottom());
+    };
+
+    updateViewport();
+    viewport.addEventListener("resize", updateViewport);
+    viewport.addEventListener("scroll", updateViewport);
+    return () => {
+      viewport.removeEventListener("resize", updateViewport);
+      viewport.removeEventListener("scroll", updateViewport);
+    };
+  }, [activeThread, scrollThreadToBottom]);
   const ttsBreadcrumbContextRef = useRef({
     mode: voiceMode,
     agent: selectedAgent?.callsign ?? null,
@@ -1176,7 +1243,10 @@ export default function ChatPage() {
     const threadParentLoadKey = company?.id ? `${company.id}:${activeKey}` : null;
     if (threadParentLoadKey && !loadedThreadParentsRef.current.has(threadParentLoadKey)) {
       loadedThreadParentsRef.current.add(threadParentLoadKey);
-      void loadThreadHistoriesForParent(activeSessionKey, company?.id);
+      void loadThreadHistoriesForParent(activeSessionKey, company?.id).then((links) => {
+        if (cancelled || Object.keys(links).length === 0) return;
+        setThreadParentLinks((prev) => ({ ...prev, ...links }));
+      });
     }
 
     // Mark as read
@@ -1194,11 +1264,18 @@ export default function ChatPage() {
     return true;
   }, []);
 
-  const openThreadForMessage = useCallback((message: Message, index: number) => {
+  const openThreadForMessage = useCallback((message: Message, index: number, existingSessionKey?: string) => {
     const parentSessionKey = activeSessionKey;
-    const sessionKey = threadSessionKey(parentSessionKey, message.id);
+    const sessionKey = existingSessionKey ?? threadSessionKey(parentSessionKey, message.id);
     const renderableMessages = messages.filter(hasRenderableMessageContent);
     const contextMessages = renderableMessages.slice(Math.max(0, index - 8), index + 1);
+    setThreadParentLinks((prev) => ({
+      ...prev,
+      [sessionKey.toLowerCase()]: {
+        parentSessionKey,
+        parentMessageId: message.id,
+      },
+    }));
 
     setActiveThread({
       sessionKey,
@@ -1238,6 +1315,11 @@ export default function ChatPage() {
     });
     return unsub;
   }, [activeThread]);
+
+  useEffect(() => {
+    if (!activeThread) return;
+    window.requestAnimationFrame(() => scrollThreadToBottom());
+  }, [activeThread, threadMessages.length, threadStreamingContent, isThreadLoading, scrollThreadToBottom]);
 
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
@@ -1390,6 +1472,44 @@ export default function ChatPage() {
     () => messages.filter(hasRenderableMessageContent),
     [messages]
   );
+  const threadReplySummaries = useMemo(() => {
+    const activeKey = activeSessionKey.toLowerCase();
+    const prefix = `${activeKey}:thread:`;
+    const summaries: Record<string, ThreadReplySummary> = {};
+
+    const assignSummary = (parentMessageId: string | null | undefined, summary: ThreadReplySummary) => {
+      if (!parentMessageId) return;
+      const existing = summaries[parentMessageId];
+      if (!existing || summary.replies.length >= existing.replies.length) {
+        summaries[parentMessageId] = summary;
+      }
+    };
+
+    for (const [storeKey, storeMessages] of Object.entries(messagesByStoreKey)) {
+      const lowerStoreKey = storeKey.toLowerCase();
+      if (!lowerStoreKey.startsWith(prefix)) continue;
+
+      const replies = storeMessages
+        .filter((reply) => reply.role === "user" || reply.role === "assistant")
+        .map((reply) => ({
+          id: reply.id,
+          role: reply.role as "user" | "assistant",
+          createdAt: reply.createdAt,
+        }));
+      if (replies.length === 0) continue;
+
+      const link = threadParentLinks[lowerStoreKey];
+      const summary = { sessionKey: lowerStoreKey, replies };
+      if (link?.parentSessionKey.toLowerCase() === activeKey) {
+        assignSummary(link.parentMessageId, summary);
+        continue;
+      }
+
+      assignSummary(threadSessionSuffix(activeKey, lowerStoreKey), summary);
+    }
+
+    return summaries;
+  }, [activeSessionKey, messagesByStoreKey, threadParentLinks]);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -3104,8 +3224,14 @@ export default function ChatPage() {
       </div>
 
       {activeThread && (
-        <div className="fixed inset-0 z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:bg-black/10">
-          <section className="flex h-full w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[480px]">
+        <div
+          className="fixed inset-x-0 bottom-0 z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:bg-black/10"
+          style={{
+            top: visualViewport ? `${visualViewport.offsetTop}px` : 0,
+            height: visualViewport ? `${visualViewport.height}px` : "100dvh",
+          }}
+        >
+          <section className="flex h-full max-h-[100dvh] w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[480px]">
             <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-3 pb-3 pt-[var(--mobile-safe-top)] sm:px-4 sm:pt-3">
               <div className="flex min-w-0 items-center gap-2">
                 <button
@@ -3133,7 +3259,7 @@ export default function ChatPage() {
               </button>
             </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4">
+            <div ref={threadScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4">
               <div className="space-y-4">
                 <ChatMessage
                   role={activeThread.parentMessage.role}
@@ -3188,6 +3314,7 @@ export default function ChatPage() {
                 onRemoveFile={removeThreadFile}
                 onSend={() => void sendThreadMessage()}
                 onTranscript={(text) => void sendThreadMessage(text)}
+                onFocus={() => window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))}
                 isLoading={isThreadLoading}
                 speakResponses={speakResponses}
                 onToggleSpeak={() => {
@@ -3246,13 +3373,8 @@ export default function ChatPage() {
             const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
-            const threadReplies = (messagesByStoreKey[threadSessionKey(activeSessionKey, msg.id).toLowerCase()] || [])
-              .filter((reply) => reply.role === "user" || reply.role === "assistant")
-              .map((reply) => ({
-                id: reply.id,
-                role: reply.role as "user" | "assistant",
-                createdAt: reply.createdAt,
-              }));
+            const threadSummary = threadReplySummaries[msg.id];
+            const threadReplies = threadSummary?.replies ?? [];
             return (
               <div key={msg.id}>
                 {showSeparator && <DateSeparator date={msg.createdAt!} />}
@@ -3261,7 +3383,7 @@ export default function ChatPage() {
                   content={msg.content}
                   timestamp={msg.createdAt}
                   metadata={msg.metadata}
-                  onReplyInThread={() => openThreadForMessage(msg, i)}
+                  onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
                   threadReplyCount={threadReplies.length}
                   threadReplies={threadReplies}
                   voiceSettings={resolvedVoiceSettings}

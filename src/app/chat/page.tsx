@@ -69,7 +69,6 @@ interface Message {
 type ThreadParentLink = {
   parentSessionKey: string;
   parentMessageId?: string | null;
-  parentMessageFingerprint?: string | null;
 };
 
 type ActiveThread = {
@@ -112,13 +111,28 @@ function displayContentFromGatewayPreview(content: string, sessionKey: string) {
   return isMessageThreadSessionKey(sessionKey) ? extractUserThreadReply(content) : "";
 }
 
-function normalizeThreadFingerprintContent(content: string) {
-  return content.trim().replace(/\s+/g, " ").slice(0, 1000);
+function stableHash(input: string) {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
 }
 
-function threadParentMessageFingerprint(message: Pick<Message, "role" | "content">) {
-  const content = normalizeThreadFingerprintContent(message.content);
-  return content ? `${message.role.toLowerCase()}::${content}` : null;
+function stablePreviewMessageId(params: {
+  sessionKey: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt?: string | null;
+}) {
+  const normalizedContent = params.content.trim().replace(/\s+/g, " ");
+  const basis = [
+    params.sessionKey.toLowerCase(),
+    params.role,
+    params.createdAt ?? "",
+    normalizedContent,
+  ].join("\n");
+  return `${params.sessionKey.toLowerCase()}:preview:${stableHash(basis)}`;
 }
 
 function executionStorageKey(sessionKey: string) {
@@ -752,7 +766,6 @@ async function loadThreadHistoriesForParent(
         sessionKey?: string | null;
         parentSessionKey?: string | null;
         parentMessageId?: string | null;
-        parentMessageFingerprint?: string | null;
         messages?: Array<{
           id: string;
           role: "user" | "assistant" | "system";
@@ -766,11 +779,10 @@ async function loadThreadHistoriesForParent(
     for (const thread of threads ?? []) {
       if (!thread.sessionKey || !thread.messages?.length) continue;
       const sessionKey = thread.sessionKey.toLowerCase();
-      if (thread.parentSessionKey && (thread.parentMessageId || thread.parentMessageFingerprint)) {
+      if (thread.parentSessionKey && thread.parentMessageId) {
         links[sessionKey] = {
           parentSessionKey: thread.parentSessionKey,
           parentMessageId: thread.parentMessageId,
-          parentMessageFingerprint: thread.parentMessageFingerprint,
         };
       }
       useChatStore.getState().loadSession(
@@ -802,11 +814,11 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
 
     const data = await res.json() as {
       status?: "ok" | "empty" | "missing" | "error";
-      items?: Array<{ role?: string; text?: string; content?: string }>;
+      items?: Array<{ id?: string; role?: string; text?: string; content?: string; createdAt?: string }>;
       preview?: {
-        items?: Array<{ role?: string; text?: string; content?: string }>;
-        messages?: Array<{ role?: string; text?: string; content?: string }>;
-      } | Array<{ role?: string; text?: string; content?: string }> | null;
+        items?: Array<{ id?: string; role?: string; text?: string; content?: string; createdAt?: string }>;
+        messages?: Array<{ id?: string; role?: string; text?: string; content?: string; createdAt?: string }>;
+      } | Array<{ id?: string; role?: string; text?: string; content?: string; createdAt?: string }> | null;
     };
 
     const previewItems = Array.isArray(data.preview)
@@ -816,15 +828,17 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
     if (data.status && data.status !== "ok") return false;
     if (!items.length) return false;
 
-    const baseTime = Date.now();
-    const messages = items.map((m, index): ChatStoreMessage => {
+    const messages = items.map((m): ChatStoreMessage => {
       const rawContent = m.text ?? m.content ?? "";
+      const role = m.role === "user" ? "user" : "assistant";
+      const content = displayContentFromGatewayPreview(rawContent, sessionKey);
+      const createdAt = m.createdAt ?? new Date().toISOString();
       return {
-        id: `${sessionKey}-history-${index}`,
+        id: m.id ?? stablePreviewMessageId({ sessionKey, role, content, createdAt: m.createdAt ?? null }),
         agentId: sessionKey.toLowerCase(),
-        role: m.role === "user" ? "user" : "assistant",
-        content: displayContentFromGatewayPreview(rawContent, sessionKey),
-        createdAt: new Date(baseTime + index).toISOString(),
+        role,
+        content,
+        createdAt,
         metadata: null,
       };
     }).filter((m) => m.content);
@@ -1212,7 +1226,6 @@ export default function ChatPage() {
 
   // Load messages from Zustand store; on first load for an agent, hydrate from gateway history
   const loadedAgentsRef = useRef(new Set<string>());
-  const loadedThreadParentsRef = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
     const activeKey = activeSessionKey.toLowerCase();
@@ -1269,9 +1282,7 @@ export default function ChatPage() {
       });
     }
 
-    const threadParentLoadKey = company?.id ? `${company.id}:${activeKey}` : null;
-    if (threadParentLoadKey && !loadedThreadParentsRef.current.has(threadParentLoadKey)) {
-      loadedThreadParentsRef.current.add(threadParentLoadKey);
+    if (company?.id) {
       void loadThreadHistoriesForParent(activeSessionKey, company?.id).then((links) => {
         if (cancelled || Object.keys(links).length === 0) return;
         setThreadParentLinks((prev) => ({ ...prev, ...links }));
@@ -1298,13 +1309,11 @@ export default function ChatPage() {
     const sessionKey = existingSessionKey ?? threadSessionKey(parentSessionKey, message.id);
     const renderableMessages = messages.filter(hasRenderableMessageContent);
     const contextMessages = renderableMessages.slice(Math.max(0, index - 8), index + 1);
-    const parentMessageFingerprint = threadParentMessageFingerprint(message);
     setThreadParentLinks((prev) => ({
       ...prev,
       [sessionKey.toLowerCase()]: {
         parentSessionKey,
         parentMessageId: message.id,
-        parentMessageFingerprint,
       },
     }));
 
@@ -1531,9 +1540,8 @@ export default function ChatPage() {
 
       const link = threadParentLinks[lowerStoreKey];
       const summary = { sessionKey: lowerStoreKey, replies };
-      if (link?.parentSessionKey.toLowerCase() === activeKey) {
+      if (link?.parentSessionKey.toLowerCase() === activeKey && link.parentMessageId) {
         assignSummary(`id:${link.parentMessageId}`, summary);
-        assignSummary(`fp:${link.parentMessageFingerprint}`, summary);
         continue;
       }
 
@@ -3405,9 +3413,7 @@ export default function ChatPage() {
             const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
-            const threadSummary =
-              threadReplySummaries[`id:${msg.id}`] ??
-              threadReplySummaries[`fp:${threadParentMessageFingerprint(msg)}`];
+            const threadSummary = threadReplySummaries[`id:${msg.id}`];
             const threadReplies = threadSummary?.replies ?? [];
             return (
               <div key={msg.id}>

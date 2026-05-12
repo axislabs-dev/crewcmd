@@ -6,6 +6,11 @@ import { ensureEventBridge } from "@/lib/init-event-bridge";
 export const dynamic = "force-dynamic";
 
 type GatewayPreviewItem = {
+  id?: string;
+  messageId?: string;
+  createdAt?: string;
+  timestamp?: string;
+  ts?: string | number;
   role?: string;
   text?: string;
   content?: string;
@@ -22,8 +27,10 @@ function normalizePreviewItems(preview: GatewaySessionPreview | null) {
   const items = preview?.items ?? preview?.messages ?? [];
   return items
     .map((item) => ({
+      id: item.id ?? item.messageId,
       role: item.role === "user" ? "user" : "assistant",
       text: item.text ?? item.content ?? "",
+      createdAt: item.createdAt ?? item.timestamp ?? (typeof item.ts === "string" ? item.ts : undefined),
     }))
     .filter((item) => item.text);
 }

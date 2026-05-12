@@ -258,6 +258,25 @@ function toolStatusDetail(event: ExecutionProgressEvent | null) {
   return [summary.title, summary.meta].filter(Boolean).join(" - ");
 }
 
+function activityLabel(event: ExecutionProgressEvent) {
+  if (event.checkpoint) return event.checkpoint.title || "Checkpoint";
+  if (event.activeTool) return summarizeToolEvent(event).title;
+  return event.event.replace(/_/g, " ");
+}
+
+function activityTone(event: ExecutionProgressEvent) {
+  if (event.checkpoint) return "checkpoint";
+  return toolTone(event);
+}
+
+function idleStatusText(phase: ExecutionPhase, hasStreamingContent: boolean) {
+  if (phase === "completed") return "Response complete";
+  if (phase === "error") return "Run stopped";
+  if (phase === "waiting") return "Waiting for the next event";
+  if (hasStreamingContent) return "Drafting response";
+  return "Starting run";
+}
+
 function ToolAuditRow({ event, agentColor }: { event: ExecutionProgressEvent; agentColor: string }) {
   const tone = toolTone(event);
   const detail = event.activeTool?.detail;
@@ -394,9 +413,7 @@ export function ExecutionProgressPanel({
   if (!phase) return null;
 
   const elapsed = formatElapsed(progress?.elapsedMs);
-  const activeIndex = PHASES.findIndex((item) => item.phase === phase);
   const isTerminal = phase === "completed" || phase === "error";
-  const isCompleted = phase === "completed";
   const label = labelFromProgress(progress, phase);
   const auditEvents = events.filter((event) => event.activeTool || event.checkpoint);
   const statusDetail =
@@ -404,6 +421,7 @@ export function ExecutionProgressPanel({
     phase === "error" ? progress?.error :
     "";
   const hasStatusDetail = Boolean(statusDetail);
+  const visibleActivity = auditEvents.slice(-4);
 
   return (
     <div
@@ -429,22 +447,61 @@ export function ExecutionProgressPanel({
           </span>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-6 gap-1">
-        {PHASES.map((item, index) => {
-          const active = item.phase === phase;
-          const passed = isCompleted ? index < activeIndex : !isTerminal && index < activeIndex;
-          return (
-            <div
-              key={item.phase}
-              title={item.label}
-              className={`h-1 rounded-full transition-colors ${
-                active || passed ? "bg-[var(--accent)]" : "bg-[var(--border-subtle)]"
-              }`}
-              style={active || passed ? { backgroundColor: agentColor } : undefined}
+      <div className="mt-2 flex min-h-6 items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/35 px-2 py-1">
+        {visibleActivity.length > 0 ? (
+          <>
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+              {visibleActivity.map((event, index) => {
+                const tone = activityTone(event);
+                const markerColor =
+                  tone === "error" ? "rgb(248 113 113)" :
+                  tone === "done" ? "rgb(74 222 128)" :
+                  agentColor;
+                return (
+                  <span
+                    key={`${event.activeTool?.id ?? event.checkpoint?.id ?? event.event}-${event.at ?? index}-${index}`}
+                    className="flex min-w-0 max-w-[12rem] items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/65 px-2 py-0.5"
+                    title={activityLabel(event)}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone === "running" ? "animate-pulse" : ""}`}
+                      style={{ backgroundColor: markerColor }}
+                    />
+                    <span className="truncate text-[10px] text-[var(--text-secondary)]">
+                      {activityLabel(event)}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+            {auditEvents.length > visibleActivity.length && (
+              <span className="shrink-0 font-mono text-[10px] text-[var(--text-tertiary)]">
+                +{auditEvents.length - visibleActivity.length}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--text-tertiary)]">
+            {idleStatusText(phase, hasStreamingContent)}
+          </span>
+        )}
+        {!isTerminal && (
+          <span
+            className="relative flex h-2 w-2 shrink-0"
+            aria-hidden="true"
+          >
+            <span
+              className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+              style={{ backgroundColor: agentColor }}
             />
-          );
-        })}
+            <span
+              className="relative inline-flex h-2 w-2 rounded-full"
+              style={{ backgroundColor: agentColor }}
+            />
+          </span>
+        )}
       </div>
+      <div className="sr-only">Current execution phase: {label}</div>
       <div
         aria-hidden={!hasStatusDetail}
         className={`mt-1 min-h-[0.875rem] truncate text-[10px] leading-[0.875rem] ${

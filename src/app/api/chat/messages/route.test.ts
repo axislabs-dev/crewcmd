@@ -70,12 +70,12 @@ describe("GET /api/chat/messages", () => {
     expect(body.messages[0].content).toBe("hello");
   });
 
-  it("returns 400 without sessionId or agentId+companyId", async () => {
+  it("returns 400 without sessionId or scoped agent/session key", async () => {
     const res = await GET(makeRequest("/api/chat/messages"));
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toBe("sessionId or ((agentId or sessionKey) + companyId) required");
+    expect(body.error).toBe("sessionId or ((agentId or sessionKey) + companyId/workspaceId) required");
   });
 
   it("returns messages for latest agent session", async () => {
@@ -280,6 +280,40 @@ describe("POST /api/chat/messages", () => {
     expect(body.sessionId).toBe("sess-new");
   });
 
+  it("auto-creates session when agentId + workspaceId given", async () => {
+    mockSelect.mockReturnValue({
+      where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+    });
+
+    const newSession = { id: "sess-personal", agentId: "runtime-agent", workspaceId: "ws-1" };
+    const createdMsg = { id: "m5", role: "user", content: "hi", createdAt: new Date() };
+
+    let insertCall = 0;
+    mockInsert.mockImplementation(() => ({
+      returning: () => {
+        insertCall++;
+        return Promise.resolve(insertCall === 1 ? [newSession] : [createdMsg]);
+      },
+    }));
+    mockUpdate.mockReturnValue({ where: () => Promise.resolve() });
+
+    const res = await POST(
+      makeRequest("/api/chat/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          agentId: "RuntimeAgent",
+          workspaceId: "ws-1",
+          role: "user",
+          content: "hi",
+        }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.sessionId).toBe("sess-personal");
+  });
+
   it("returns 400 when role is missing", async () => {
     const res = await POST(
       makeRequest("/api/chat/messages", {
@@ -306,7 +340,7 @@ describe("POST /api/chat/messages", () => {
     expect(body.error).toBe("role and content required");
   });
 
-  it("returns 400 when neither sessionId nor agentId+companyId", async () => {
+  it("returns 400 when neither sessionId nor scoped agent", async () => {
     const res = await POST(
       makeRequest("/api/chat/messages", {
         method: "POST",
@@ -316,6 +350,6 @@ describe("POST /api/chat/messages", () => {
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toBe("sessionId or (agentId + companyId) required");
+    expect(body.error).toBe("sessionId or (agentId + companyId/workspaceId) required");
   });
 });

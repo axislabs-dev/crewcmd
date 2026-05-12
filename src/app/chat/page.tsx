@@ -824,10 +824,16 @@ function normalizeThreadHistoryResponse(response: ThreadHistoryResponse): Thread
   return { links, summaries };
 }
 
-async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: string | null): Promise<ChatHistoryLoadResult> {
-  if (!companyId) return null;
+async function loadCrewCmdSessionHistoryByKey(
+  sessionKey: string,
+  companyId?: string | null,
+  workspaceId?: string | null,
+): Promise<ChatHistoryLoadResult> {
+  if (!companyId && !workspaceId) return null;
   try {
-    const params = new URLSearchParams({ sessionKey, companyId, limit: "200" });
+    const params = new URLSearchParams({ sessionKey, limit: "200" });
+    if (companyId) params.set("companyId", companyId);
+    if (workspaceId) params.set("workspaceId", workspaceId);
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return null;
     const history = await res.json() as ThreadHistoryResponse & {
@@ -863,14 +869,16 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
 async function loadThreadHistoriesForParent(
   parentSessionKey: string,
   companyId?: string | null,
+  workspaceId?: string | null,
 ): Promise<ThreadHistoryLoadResult> {
-  if (!companyId) return { links: {}, summaries: {} };
+  if (!companyId && !workspaceId) return { links: {}, summaries: {} };
   try {
     const params = new URLSearchParams({
-      companyId,
       threadParentSessionKey: parentSessionKey,
       limit: "200",
     });
+    if (companyId) params.set("companyId", companyId);
+    if (workspaceId) params.set("workspaceId", workspaceId);
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return { links: {}, summaries: {} };
     return normalizeThreadHistoryResponse(await res.json() as ThreadHistoryResponse);
@@ -934,6 +942,9 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
 
 export default function ChatPage() {
   const { workspace, company } = useWorkspace();
+  const chatCompanyId = company?.id ?? null;
+  const chatWorkspaceId = workspace?.id ?? null;
+  const chatScopeKey = chatCompanyId ?? chatWorkspaceId ?? "preview";
   const storeMarkRead = useChatStore((s) => s.markRead);
   const storeClearAgent = useChatStore((s) => s.clearAgent);
   const {
@@ -1388,10 +1399,10 @@ export default function ChatPage() {
     // If a gateway session is selected, load its preview
     if (selectedSessionKey) {
       const selectedKey = selectedSessionKey.toLowerCase();
-      const selectedLoadKey = `${company?.id ?? "preview"}:${selectedKey}`;
+      const selectedLoadKey = `${chatScopeKey}:${selectedKey}`;
       if (!loadedAgentsRef.current.has(selectedLoadKey)) {
         loadedAgentsRef.current.add(selectedLoadKey);
-        loadCrewCmdSessionHistoryByKey(selectedSessionKey, company?.id).then(async (result) => {
+        loadCrewCmdSessionHistoryByKey(selectedSessionKey, chatCompanyId, chatWorkspaceId).then(async (result) => {
           const loaded = result ?? (await loadSessionPreviewIntoStore(selectedSessionKey).then((ok) => ok ? null : null));
           if (cancelled) return;
           const updated = useChatStore.getState().messagesByAgent[selectedKey] || [];
@@ -1413,10 +1424,10 @@ export default function ChatPage() {
           }
         });
       }
-    } else if (!loadedAgentsRef.current.has(`${company?.id ?? "preview"}:${activeKey}`)) {
+    } else if (!loadedAgentsRef.current.has(`${chatScopeKey}:${activeKey}`)) {
       // Otherwise load standard thread history
-      loadedAgentsRef.current.add(`${company?.id ?? "preview"}:${activeKey}`);
-      loadCrewCmdSessionHistoryByKey(activeSessionKey, company?.id).then(async (result) => {
+      loadedAgentsRef.current.add(`${chatScopeKey}:${activeKey}`);
+      loadCrewCmdSessionHistoryByKey(activeSessionKey, chatCompanyId, chatWorkspaceId).then(async (result) => {
         const loaded = result ?? (await loadSessionPreviewIntoStore(activeSessionKey).then((ok) => ok ? null : null));
         if (cancelled) return;
         const updated = useChatStore.getState().messagesByAgent[activeKey] || [];
@@ -1437,8 +1448,8 @@ export default function ChatPage() {
       });
     }
 
-    if (company?.id) {
-      void loadThreadHistoriesForParent(activeSessionKey, company?.id).then(({ links, summaries }) => {
+    if (chatCompanyId || chatWorkspaceId) {
+      void loadThreadHistoriesForParent(activeSessionKey, chatCompanyId, chatWorkspaceId).then(({ links, summaries }) => {
         if (cancelled) return;
         if (Object.keys(links).length > 0) {
           setThreadParentLinks((prev) => ({ ...prev, ...links }));
@@ -1451,7 +1462,7 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, company?.id, applyExecutionSnapshot]);
+  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, chatCompanyId, chatWorkspaceId, chatScopeKey, applyExecutionSnapshot]);
 
   const refreshSessionPreview = useCallback(async (sessionKey: string) => {
     const loaded = await loadSessionPreviewIntoStore(sessionKey);
@@ -1488,17 +1499,17 @@ export default function ChatPage() {
 
     const existing = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
     setThreadMessages(existing.map(chatMessageFromStore));
-    void loadCrewCmdSessionHistoryByKey(sessionKey, company?.id).then(() => {
+    void loadCrewCmdSessionHistoryByKey(sessionKey, chatCompanyId, chatWorkspaceId).then(() => {
       const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
       setThreadMessages(updated.map(chatMessageFromStore));
     });
-  }, [activeSessionKey, company?.id, messages]);
+  }, [activeSessionKey, chatCompanyId, chatWorkspaceId, messages]);
 
   const closeThread = useCallback(() => {
     const closingThread = activeThread;
     if (closingThread) {
-      void loadCrewCmdSessionHistoryByKey(closingThread.sessionKey, company?.id);
-      void loadThreadHistoriesForParent(closingThread.parentSessionKey, company?.id).then(({ links, summaries }) => {
+      void loadCrewCmdSessionHistoryByKey(closingThread.sessionKey, chatCompanyId, chatWorkspaceId);
+      void loadThreadHistoriesForParent(closingThread.parentSessionKey, chatCompanyId, chatWorkspaceId).then(({ links, summaries }) => {
         if (Object.keys(links).length > 0) {
           setThreadParentLinks((prev) => ({ ...prev, ...links }));
         }
@@ -1511,7 +1522,7 @@ export default function ChatPage() {
     setThreadStreamingContent("");
     setThreadProgress(null);
     setThreadEvents([]);
-  }, [activeThread, company?.id]);
+  }, [activeThread, chatCompanyId, chatWorkspaceId]);
 
   useEffect(() => {
     if (!activeThread) return;
@@ -2714,16 +2725,16 @@ export default function ChatPage() {
           };
           setMessages((prev) => [...prev, aMsg]);
           // Persist slash command messages via API (not going through /api/chat SSE)
-          if (company?.id) {
+          if (chatCompanyId || chatWorkspaceId) {
             fetch("/api/chat/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ agentId: agentCallsign, companyId: company.id, role: "user", content: trimmed }),
+              body: JSON.stringify({ agentId: agentCallsign, companyId: chatCompanyId, workspaceId: chatWorkspaceId, role: "user", content: trimmed }),
             }).catch(() => {});
             fetch("/api/chat/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ agentId: agentCallsign, companyId: company.id, role: "assistant", content: assistantContent }),
+              body: JSON.stringify({ agentId: agentCallsign, companyId: chatCompanyId, workspaceId: chatWorkspaceId, role: "assistant", content: assistantContent }),
             }).catch(() => {});
           }
         } catch {
@@ -2889,7 +2900,8 @@ export default function ChatPage() {
                   runtimeRef: selectedAgent.runtimeRef,
                 }
               : undefined,
-            companyId: company?.id,
+            companyId: chatCompanyId,
+            workspaceId: chatWorkspaceId,
             metadata,
             sessionKey: requestSessionKey,
             agentMode: voiceMode === "agent",
@@ -3166,7 +3178,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, company, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, chatCompanyId, chatWorkspaceId, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -3267,7 +3279,8 @@ export default function ChatPage() {
                 runtimeRef: selectedAgent.runtimeRef,
               }
             : undefined,
-          companyId: company?.id,
+          companyId: chatCompanyId,
+          workspaceId: chatWorkspaceId,
           metadata,
           sessionKey: thread.sessionKey,
           clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
@@ -3411,7 +3424,7 @@ export default function ChatPage() {
       }
       setThreadStreamingContent("");
     } finally {
-      void loadCrewCmdSessionHistoryByKey(thread.sessionKey, company?.id);
+      void loadCrewCmdSessionHistoryByKey(thread.sessionKey, chatCompanyId, chatWorkspaceId);
       setThreadLoading(false);
       const nextQueued = queuedThreadMessagesRef.current.shift();
       if (nextQueued) {
@@ -3425,7 +3438,7 @@ export default function ChatPage() {
         }, 0);
       }
     }
-  }, [activeThread, company?.id, delegatedViaAgent, enqueueThreadMessage, selectedAgent, setThreadLoading, threadInput, threadMessages, threadPendingFiles]);
+  }, [activeThread, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, selectedAgent, setThreadLoading, threadInput, threadMessages, threadPendingFiles]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {
@@ -3464,12 +3477,12 @@ export default function ChatPage() {
     setExecutionProgress(null);
     setExecutionEvents([]);
     storeClearAgent(activeSessionKey);
-    loadedAgentsRef.current.add(`${company?.id ?? "preview"}:${activeSessionKey.toLowerCase()}`);
+    loadedAgentsRef.current.add(`${chatScopeKey}:${activeSessionKey.toLowerCase()}`);
     if (selectedSessionKey) {
-      loadedAgentsRef.current.add(`${company?.id ?? "preview"}:${selectedSessionKey.toLowerCase()}`);
+      loadedAgentsRef.current.add(`${chatScopeKey}:${selectedSessionKey.toLowerCase()}`);
     }
 
-    if (!company?.id) return;
+    if (!chatCompanyId && !chatWorkspaceId) return;
 
     try {
       await fetch("/api/chat/messages", {
@@ -3477,7 +3490,8 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           agentId: agentCallsign,
-          companyId: company.id,
+          companyId: chatCompanyId,
+          workspaceId: chatWorkspaceId,
           gatewaySessionKey: selectedSessionKey ?? undefined,
         }),
       });

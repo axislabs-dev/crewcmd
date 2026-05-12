@@ -899,8 +899,9 @@ export const gatewaySessions = pgTable("gateway_sessions", {
 export const chatSessions = pgTable("chat_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id")
-    .references(() => companies.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   agentId: text("agent_id").notNull(), // callsign e.g. "neo", "sentinel"
   title: text("title"), // auto-generated or user-set
   gatewaySessionKey: text("gateway_session_key"), // optional link to OpenClaw gateway session
@@ -916,8 +917,9 @@ export const chatSessions = pgTable("chat_sessions", {
 export const chatThreads = pgTable("chat_threads", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id")
-    .references(() => companies.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   parentSessionId: uuid("parent_session_id")
     .references((): AnyPgColumn => chatSessions.id, { onDelete: "cascade" }),
   parentSessionKey: text("parent_session_key").notNull(),
@@ -931,6 +933,7 @@ export const chatThreads = pgTable("chat_threads", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   threadSessionUnique: unique().on(table.companyId, table.threadSessionKey),
+  workspaceThreadSessionUnique: unique().on(table.workspaceId, table.threadSessionKey),
 }));
 
 export const chatMessageRoleEnum = pgEnum("chat_message_role", [

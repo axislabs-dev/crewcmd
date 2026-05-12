@@ -11,6 +11,7 @@ import { resolveCurrentUser } from "@/lib/resolve-user";
 import { sendAgentReplyNotification } from "@/lib/mobile-push";
 import { registerChatRunAbort } from "@/lib/chat-run-abort-registry";
 import { persistChatProgressEvent } from "@/lib/chat-session-events";
+import type { ChatPersistenceScope } from "@/lib/chat-thread-history";
 import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
@@ -69,10 +70,13 @@ type ChatProgressEvent = {
  */
 async function resolveSessionId(
   agentId: string,
-  companyId: string,
+  scope: ChatPersistenceScope,
   gatewaySessionKey?: string | null,
   threadContext?: unknown,
 ): Promise<string> {
+  if (!scope.companyId && !scope.workspaceId) {
+    throw new Error("Chat persistence requires companyId or workspaceId");
+  }
   const agentLower = agentId.toLowerCase();
   const context = asRecord(threadContext);
   const parentSessionKey = firstString(context?.parentSessionKey);
@@ -85,7 +89,7 @@ async function resolveSessionId(
       db!.select({ id: chatSessions.id }).from(chatSessions)
         .where(and(
           eq(chatSessions.gatewaySessionKey, parentSessionKey),
-          eq(chatSessions.companyId, companyId)
+          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
         ))
         .orderBy(desc(chatSessions.updatedAt))
         .limit(1)
@@ -105,7 +109,8 @@ async function resolveSessionId(
     if (!threadLink || !gatewaySessionKey) return;
     await withRetry(() =>
       db!.insert(chatThreads).values({
-        companyId,
+        companyId: scope.companyId ?? null,
+        workspaceId: scope.workspaceId ?? null,
         agentId: agentLower,
         parentSessionId,
         parentSessionKey: threadLink.threadParentSessionKey,
@@ -113,7 +118,9 @@ async function resolveSessionId(
         threadSessionId: sessionId,
         threadSessionKey: gatewaySessionKey,
       }).onConflictDoUpdate({
-        target: [chatThreads.companyId, chatThreads.threadSessionKey],
+        target: scope.companyId
+          ? [chatThreads.companyId, chatThreads.threadSessionKey]
+          : [chatThreads.workspaceId, chatThreads.threadSessionKey],
         set: {
           agentId: agentLower,
           parentSessionId,
@@ -131,7 +138,7 @@ async function resolveSessionId(
       db!.select().from(chatSessions)
         .where(and(
           eq(chatSessions.gatewaySessionKey, gatewaySessionKey),
-          eq(chatSessions.companyId, companyId)
+          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
         ))
         .orderBy(desc(chatSessions.updatedAt))
         .limit(1)
@@ -153,7 +160,7 @@ async function resolveSessionId(
       db!.select().from(chatSessions)
         .where(and(
           eq(chatSessions.agentId, agentLower),
-          eq(chatSessions.companyId, companyId),
+          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
           isNull(chatSessions.gatewaySessionKey)
         ))
         .orderBy(desc(chatSessions.updatedAt))
@@ -167,7 +174,8 @@ async function resolveSessionId(
 
   const [newSession] = await withRetry(() =>
     db!.insert(chatSessions).values({
-      companyId,
+      companyId: scope.companyId ?? null,
+      workspaceId: scope.workspaceId ?? null,
       agentId: agentLower,
       gatewaySessionKey: gatewaySessionKey || null,
       ...(threadLink ?? {}),
@@ -701,7 +709,7 @@ function buildThreadContextMessage(params: {
 async function persistAndPublish(
   sessionId: string,
   agentId: string,
-  companyId: string,
+  companyId: string | null,
   role: "user" | "assistant",
   content: string,
   metadata?: Record<string, unknown> | null,
@@ -724,18 +732,20 @@ async function persistAndPublish(
       .where(eq(chatSessions.id, sessionId))
   );
 
-  publishChatEvent({
-    id: message.id,
-    sessionId,
-    agentId: agentId.toLowerCase(),
-    companyId,
-    sessionKey: gatewaySessionKey || null,
-    role,
-    content,
-    metadata: metadata || null,
-    createdAt: message.createdAt.toISOString(),
-    interrupted,
-  });
+  if (companyId) {
+    publishChatEvent({
+      id: message.id,
+      sessionId,
+      agentId: agentId.toLowerCase(),
+      companyId,
+      sessionKey: gatewaySessionKey || null,
+      role,
+      content,
+      metadata: metadata || null,
+      createdAt: message.createdAt.toISOString(),
+      interrupted,
+    });
+  }
 
   return message;
 }
@@ -753,6 +763,7 @@ export async function POST(request: NextRequest) {
       gatewayAgent,
       targetAgent,
       companyId: bodyCompanyId,
+      workspaceId: bodyWorkspaceId,
       sessionKey: bodySessionKey,
       agentMode: bodyAgentMode,
       clientVisibility: bodyClientVisibility,
@@ -806,10 +817,15 @@ export async function POST(request: NextRequest) {
       .map((message: { content?: unknown }) => asString(message.content))
       .filter((content: string | null): content is string => Boolean(content));
 
-    // Resolve company ID from body or cookie
+    // Resolve durable chat scope from body or cookies. Company scope is used
+    // for org workspaces; workspace scope keeps personal workspace chat durable.
     const companyId = bodyCompanyId ||
       request.cookies.get("active_company")?.value ||
-      "";
+      null;
+    const workspaceId = bodyWorkspaceId ||
+      request.cookies.get("active_workspace")?.value ||
+      null;
+    const persistenceScope: ChatPersistenceScope = { companyId, workspaceId };
     const currentUser = await resolveCurrentUser(request);
     const initialClientVisibility = bodyClientVisibility === "hidden" || bodyClientVisibility === "disconnected"
       ? bodyClientVisibility
@@ -820,9 +836,9 @@ export async function POST(request: NextRequest) {
     let sessionId: string | null = null;
     let chatRunId: string | null = null;
 
-    if (db && companyId) {
+    if (db && (companyId || workspaceId)) {
       try {
-        sessionId = await resolveSessionId(agentId, companyId, sessionKey, bodyThreadContext);
+        sessionId = await resolveSessionId(agentId, persistenceScope, sessionKey, bodyThreadContext);
         const userMsg = await persistAndPublish(
           sessionId,
           agentId,
@@ -834,7 +850,7 @@ export async function POST(request: NextRequest) {
           sessionKey,
         );
         userMessageId = userMsg.id;
-        if (currentUser) {
+        if (currentUser && companyId) {
           const [run] = await withRetry(() =>
             db!.insert(chatRuns).values({
               sessionId: sessionId!,
@@ -866,6 +882,7 @@ export async function POST(request: NextRequest) {
         sessionKey,
         messageCount: messages.length,
         hasCompanyId: Boolean(companyId),
+        hasWorkspaceId: Boolean(workspaceId),
       },
     });
     // Set up SSE stream
@@ -1223,7 +1240,7 @@ export async function POST(request: NextRequest) {
      * Guarded to run at most once.
      */
     const persistAssistant = async (interrupted: boolean) => {
-      if (assistantPersisted || !db || !sessionId || !companyId) return;
+      if (assistantPersisted || !db || !sessionId) return;
       assistantPersisted = true;
       if (!fullAssistantText) return;
 

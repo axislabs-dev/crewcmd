@@ -1538,7 +1538,7 @@ export default function ChatPage() {
           // Check if the last message IDs match — if so, no update needed
           const lastStore = storeMessages[storeMessages.length - 1];
           const lastLocal = prev[prev.length - 1];
-          if (lastStore?.id === lastLocal?.id) return prev;
+          if (lastStore?.id === lastLocal?.id) return uniqueMessagesById(prev);
         }
 
         // Merge: keep local optimistic messages ONLY if the store doesn't
@@ -1566,7 +1566,7 @@ export default function ChatPage() {
           ...optimistic,
         ].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 
-        return merged;
+        return uniqueMessagesById(merged);
       });
     });
     return unsub;
@@ -1676,7 +1676,9 @@ export default function ChatPage() {
     [selectedAgent, defaultAgent]
   );
   const visibleMessages = useMemo(
-    () => messages.filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content)),
+    () => uniqueMessagesById(
+      messages.filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+    ),
     [messages]
   );
   const visibleThreadMessages = useMemo(

@@ -156,13 +156,7 @@ function resolveSessionKeyForAgent(agentId: string, requestedSessionKey: unknown
     return agentKey;
   }
 
-  const sessionKey = requestedSessionKey.trim();
-  const lower = sessionKey.toLowerCase();
-  if (lower === agentKey || lower.startsWith(`${agentKey}:`)) {
-    return sessionKey;
-  }
-
-  return agentKey;
+  return requestedSessionKey.trim();
 }
 
 function asString(value: unknown): string | null {

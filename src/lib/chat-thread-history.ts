@@ -22,6 +22,23 @@ type ThreadReplySummary = {
   replies: Array<{ id: string; role: string; createdAt: Date | string }>;
 };
 
+export type ChatPersistenceScope = {
+  companyId?: string | null;
+  workspaceId?: string | null;
+};
+
+function sessionScopeWhere(scope: ChatPersistenceScope) {
+  return scope.companyId
+    ? eq(chatSessions.companyId, scope.companyId)
+    : eq(chatSessions.workspaceId, scope.workspaceId!);
+}
+
+function threadScopeWhere(scope: ChatPersistenceScope) {
+  return scope.companyId
+    ? eq(chatThreads.companyId, scope.companyId)
+    : eq(chatThreads.workspaceId, scope.workspaceId!);
+}
+
 function threadParentMessageKey(parentMessageId: string | null | undefined) {
   const stableId = stableThreadLinkId(parentMessageId);
   return stableId ? `id:${stableId}` : null;
@@ -41,7 +58,10 @@ function shouldReplaceThreadSummary(existing: ThreadReplySummary | undefined, ca
   return candidate.sessionKey.localeCompare(existing.sessionKey) > 0;
 }
 
-export async function loadThreadHistoryForParent(parentSessionKey: string, companyId: string, limit: number) {
+export async function loadThreadHistoryForParent(parentSessionKey: string, scope: ChatPersistenceScope, limit: number) {
+  if (!scope.companyId && !scope.workspaceId) {
+    return { threads: [], threadSummaries: {}, threadIndex: {} };
+  }
   const threadPrefix = `${parentSessionKey}:thread:`;
   const aggregateThreads = await withRetry(() =>
     db!.select({
@@ -54,7 +74,7 @@ export async function loadThreadHistoryForParent(parentSessionKey: string, compa
       threadSessionId: chatThreads.threadSessionId,
     }).from(chatThreads)
       .where(and(
-        eq(chatThreads.companyId, companyId),
+        threadScopeWhere(scope),
         eq(chatThreads.parentSessionKey, parentSessionKey)
       ))
       .orderBy(asc(chatThreads.updatedAt))
@@ -70,7 +90,7 @@ export async function loadThreadHistoryForParent(parentSessionKey: string, compa
       threadParentMessageId: chatSessions.threadParentMessageId,
     }).from(chatSessions)
       .where(and(
-        eq(chatSessions.companyId, companyId),
+        sessionScopeWhere(scope),
         eq(chatSessions.threadParentSessionKey, parentSessionKey)
       ))
       .orderBy(asc(chatSessions.updatedAt))
@@ -86,7 +106,7 @@ export async function loadThreadHistoryForParent(parentSessionKey: string, compa
       threadParentMessageId: chatSessions.threadParentMessageId,
     }).from(chatSessions)
       .where(and(
-        eq(chatSessions.companyId, companyId),
+        sessionScopeWhere(scope),
         sql`${chatSessions.gatewaySessionKey} like ${`${threadPrefix.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`} escape '\\'`
       ))
       .orderBy(asc(chatSessions.gatewaySessionKey))

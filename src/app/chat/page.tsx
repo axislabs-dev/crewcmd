@@ -1409,13 +1409,21 @@ export default function ChatPage() {
   }, [activeSessionKey, company?.id, messages]);
 
   const closeThread = useCallback(() => {
+    const closingThread = activeThread;
+    if (closingThread) {
+      void loadCrewCmdSessionHistoryByKey(closingThread.sessionKey, company?.id);
+      void loadThreadHistoriesForParent(closingThread.parentSessionKey, company?.id).then((links) => {
+        if (Object.keys(links).length === 0) return;
+        setThreadParentLinks((prev) => ({ ...prev, ...links }));
+      });
+    }
     setActiveThread(null);
     setThreadInput("");
     setThreadMessages([]);
     setThreadStreamingContent("");
     setThreadProgress(null);
     setThreadEvents([]);
-  }, []);
+  }, [activeThread, company?.id]);
 
   useEffect(() => {
     if (!activeThread) return;
@@ -3109,6 +3117,7 @@ export default function ChatPage() {
     setThreadEvents([startedProgress]);
 
     let fullContent = "";
+    let assistantMessageId: string | null = null;
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -3174,6 +3183,31 @@ export default function ChatPage() {
             setThreadMessages((prev) =>
               prev.map((message) => message.id === optimisticId ? { ...message, id: parsed.messageId } : message)
             );
+            if (typeof parsed.messageId === "string") {
+              useChatStore.getState().addMessage({
+                id: parsed.messageId,
+                agentId: thread.sessionKey.toLowerCase(),
+                role: "user",
+                content: userMsg.content,
+                metadata,
+                createdAt: userMsg.createdAt ?? new Date().toISOString(),
+              });
+            }
+            return;
+          }
+          if (parsed.type === "meta" && parsed.role === "assistant") {
+            if (typeof parsed.messageId === "string") {
+              assistantMessageId = parsed.messageId;
+              if (fullContent.trim()) {
+                useChatStore.getState().addMessage({
+                  id: parsed.messageId,
+                  agentId: thread.sessionKey.toLowerCase(),
+                  role: "assistant",
+                  content: injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent)),
+                  createdAt: new Date().toISOString(),
+                });
+              }
+            }
             return;
           }
           const delta = parsed.choices?.[0]?.delta?.content;
@@ -3206,15 +3240,28 @@ export default function ChatPage() {
 
       if (fullContent.trim()) {
         const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
-        setThreadMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
+        const visibleAssistantId = assistantMessageId ?? crypto.randomUUID();
+        if (!assistantMessageId) {
+          useChatStore.getState().addMessage({
+            id: visibleAssistantId,
+            agentId: thread.sessionKey.toLowerCase(),
             role: "assistant",
             content: enrichedContent,
             createdAt: new Date().toISOString(),
-          },
-        ]);
+          });
+        }
+        setThreadMessages((prev) => {
+          if (prev.some((message) => message.id === visibleAssistantId)) return prev;
+          return [
+            ...prev,
+            {
+              id: visibleAssistantId,
+              role: "assistant",
+              content: enrichedContent,
+              createdAt: new Date().toISOString(),
+            },
+          ];
+        });
       }
       setThreadStreamingContent("");
       const completedProgress = {

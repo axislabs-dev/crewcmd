@@ -258,6 +258,17 @@ export interface Attachment {
   size: number;
 }
 
+export interface ChatIdentityDetails {
+  type: "person" | "agent";
+  title?: string | null;
+  status?: string | null;
+  currentTask?: string | null;
+  model?: string | null;
+  runtimeRef?: string | null;
+  workspacePath?: string | null;
+  profileHref?: string | null;
+}
+
 interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
@@ -267,6 +278,7 @@ interface ChatMessageProps {
   authorName?: string;
   authorAvatarUrl?: string | null;
   authorEmoji?: string | null;
+  identityDetails?: ChatIdentityDetails | null;
   onReplyInThread?: () => void;
   onTogglePin?: () => void;
   onToggleSaved?: () => void;
@@ -389,29 +401,135 @@ function MessageAvatar({
   avatarUrl,
   emoji,
   isUser,
+  onClick,
 }: {
   name: string;
   avatarUrl?: string | null;
   emoji?: string | null;
   isUser: boolean;
+  onClick: () => void;
 }) {
   const fallback = emoji || getInitials(name) || (isUser ? "U" : "A");
   const fallbackClass = emoji ? "text-lg" : "font-mono text-[10px] font-bold";
 
   return (
-    <div
-      className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border transition hover:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 ${
         isUser
           ? "rounded-full border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
           : "rounded-lg border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
       }`}
-      aria-hidden="true"
+      aria-label={`Open ${name} identity card`}
     >
       {avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         <span className={fallbackClass}>{fallback}</span>
+      )}
+    </button>
+  );
+}
+
+function IdentityLine({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+
+  return (
+    <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-2 text-[11px] leading-relaxed">
+      <span className="font-medium text-[var(--text-tertiary)]">{label}</span>
+      <span className="min-w-0 break-words text-[var(--text-secondary)]">{value}</span>
+    </div>
+  );
+}
+
+function IdentityPopover({
+  open,
+  details,
+  displayName,
+  avatarUrl,
+  emoji,
+  isUser,
+  onClose,
+}: {
+  open: boolean;
+  details?: ChatIdentityDetails | null;
+  displayName: string;
+  avatarUrl?: string | null;
+  emoji?: string | null;
+  isUser: boolean;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  const type = details?.type ?? (isUser ? "person" : "agent");
+  const fallback = emoji || getInitials(displayName) || (isUser ? "U" : "A");
+  const fallbackClass = emoji ? "text-xl" : "font-mono text-[11px] font-bold";
+  const defaultStatus = isUser ? "Person" : "AI agent";
+
+  return (
+    <div
+      className="absolute left-0 top-11 z-30 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] p-3 shadow-2xl"
+      role="dialog"
+      aria-label={`${displayName} identity card`}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden border ${
+            isUser
+              ? "rounded-full border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
+              : "rounded-lg border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)]"
+          }`}
+        >
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className={fallbackClass}>{fallback}</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{displayName}</div>
+              <div className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
+                {details?.title || defaultStatus}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--text-tertiary)] transition hover:bg-white/5 hover:text-[var(--text-primary)]"
+              aria-label="Close identity card"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1.5 border-t border-[var(--border-subtle)] pt-3">
+        <IdentityLine label="Type" value={type === "agent" ? "AI agent" : "Person"} />
+        <IdentityLine label="Status" value={details?.status} />
+        <IdentityLine label="Task" value={details?.currentTask} />
+        <IdentityLine label="Model" value={details?.model} />
+        <IdentityLine label="Runtime" value={details?.runtimeRef} />
+        <IdentityLine label="Workspace" value={details?.workspacePath} />
+      </div>
+
+      {details?.profileHref && (
+        <div className="mt-3 flex justify-end border-t border-[var(--border-subtle)] pt-3">
+          <a
+            href={details.profileHref}
+            className="rounded-md border border-[var(--border-medium)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
+          >
+            View details
+          </a>
+        </div>
       )}
     </div>
   );
@@ -491,6 +609,7 @@ export function ChatMessage({
   authorName,
   authorAvatarUrl,
   authorEmoji,
+  identityDetails,
   onReplyInThread,
   onTogglePin,
   onToggleSaved,
@@ -505,6 +624,7 @@ export function ChatMessage({
   const displayTime = formatTime(timestamp);
   const attachments = metadata?.attachments;
   const [showActions, setShowActions] = useState(false);
+  const [showIdentity, setShowIdentity] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const messageWidthClass = "max-w-[min(100%,58rem)]";
 
@@ -531,6 +651,7 @@ export function ChatMessage({
         avatarUrl={authorAvatarUrl}
         emoji={!isUser ? authorEmoji : null}
         isUser={isUser}
+        onClick={() => setShowIdentity((v) => !v)}
       />
 
       <div
@@ -539,15 +660,32 @@ export function ChatMessage({
         onTouchEnd={() => setShowActions((v) => !v)}
       >
         <div className="mb-1 flex min-w-0 items-baseline gap-2">
-          <span className="truncate text-[13px] font-semibold leading-none text-[var(--text-primary)]">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowIdentity((v) => !v);
+            }}
+            className="truncate text-left text-[13px] font-semibold leading-none text-[var(--text-primary)] transition hover:text-[var(--accent)] focus:outline-none focus:text-[var(--accent)]"
+            aria-label={`Open ${displayName} identity card`}
+          >
             {displayName}
-          </span>
+          </button>
           {displayTime && (
             <span className="shrink-0 text-[11px] leading-none text-[var(--text-tertiary)]">
               {displayTime}
             </span>
           )}
         </div>
+        <IdentityPopover
+          open={showIdentity}
+          details={identityDetails}
+          displayName={displayName}
+          avatarUrl={authorAvatarUrl}
+          emoji={!isUser ? authorEmoji : null}
+          isUser={isUser}
+          onClose={() => setShowIdentity(false)}
+        />
         <MessageActions
           content={content}
           showSpeak={!isUser}

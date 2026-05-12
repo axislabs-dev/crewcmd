@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/components/company-context";
 
 type SavedItemStatus = "in_progress" | "archived" | "completed";
@@ -47,13 +48,30 @@ function preview(item: LaterItem) {
 
 function sourceLabel(item: LaterItem) {
   if (item.sourceType === "chat_message") {
-    const agent = item.source?.agentId?.toUpperCase() ?? "CHAT";
+    const agent = metadataString(item, "agentCallsign")?.toUpperCase() ?? item.source?.agentId?.toUpperCase() ?? "CHAT";
     return item.source?.role === "user" ? `Chat / You / ${agent}` : `Chat / ${agent}`;
   }
   return item.sourceType.replace("_", " ");
 }
 
+function metadataString(item: LaterItem, key: string) {
+  const value = item.metadata?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function chatItemUrl(item: LaterItem) {
+  if (item.sourceType !== "chat_message") return null;
+  const query = new URLSearchParams();
+  const agentId = metadataString(item, "agentCallsign") ?? item.source?.agentId ?? metadataString(item, "agentId");
+  const sessionKey = metadataString(item, "sessionKey") ?? item.source?.gatewaySessionKey ?? metadataString(item, "gatewaySessionKey");
+  if (agentId) query.set("agent", agentId.toLowerCase());
+  if (sessionKey) query.set("sessionKey", sessionKey);
+  query.set("messageId", item.sourceId);
+  return `/chat?${query.toString()}`;
+}
+
 export default function LaterPage() {
+  const router = useRouter();
   const { workspace, company } = useWorkspace();
   const [activeTab, setActiveTab] = useState<SavedItemStatus>("in_progress");
   const [items, setItems] = useState<LaterItem[]>([]);
@@ -138,7 +156,25 @@ export default function LaterPage() {
           ) : (
             <div className="divide-y divide-[var(--border-subtle)] overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
               {items.map((item) => (
-                <article key={item.id} className="flex gap-4 px-4 py-4 transition hover:bg-[var(--bg-surface-hover)] sm:px-5">
+                <article
+                  key={item.id}
+                  role={chatItemUrl(item) ? "button" : undefined}
+                  tabIndex={chatItemUrl(item) ? 0 : undefined}
+                  onClick={() => {
+                    const url = chatItemUrl(item);
+                    if (url) router.push(url);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    const url = chatItemUrl(item);
+                    if (!url) return;
+                    event.preventDefault();
+                    router.push(url);
+                  }}
+                  className={`flex gap-4 px-4 py-4 transition hover:bg-[var(--bg-surface-hover)] sm:px-5 ${
+                    chatItemUrl(item) ? "cursor-pointer" : ""
+                  }`}
+                >
                   <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[11px] font-semibold text-[var(--text-tertiary)]">
                     {item.source?.role === "user" ? "YOU" : "AI"}
                   </div>
@@ -154,7 +190,10 @@ export default function LaterPage() {
                     {item.status !== "completed" && (
                       <button
                         type="button"
-                        onClick={() => void updateStatus(item, "completed")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void updateStatus(item, "completed");
+                        }}
                         className="rounded-lg border border-[var(--border-medium)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
                       >
                         Complete
@@ -163,7 +202,10 @@ export default function LaterPage() {
                     {item.status !== "archived" && (
                       <button
                         type="button"
-                        onClick={() => void updateStatus(item, "archived")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void updateStatus(item, "archived");
+                        }}
                         className="rounded-lg border border-[var(--border-medium)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-tertiary)] transition hover:text-[var(--text-secondary)]"
                       >
                         Archive

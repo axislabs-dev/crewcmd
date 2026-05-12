@@ -59,7 +59,8 @@ function ReplyIcon({ className }: { className?: string }) {
 function PinIcon({ className, filled = false }: { className?: string; filled?: boolean }) {
   return (
     <svg className={className} fill={filled ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m14.25 4.5 5.25 5.25-3 3 .75 4.5-4.5-.75-3 3-5.25-5.25 3-3-.75-4.5 4.5.75 3-3Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 4.5h4.5l.75 5.25 3 2.25v2.25H6V12l3-2.25.75-5.25Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 14.25V21" />
     </svg>
   );
 }

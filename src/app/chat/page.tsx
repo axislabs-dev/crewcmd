@@ -784,6 +784,10 @@ function messagePreview(content: string, max = 140) {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
   if (runtimeRef === "main") return "main";
@@ -1538,7 +1542,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const messageIds = messages
-      .filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+      .filter((message) => isUuid(message.id) && hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
       .map((message) => message.id);
     void loadSavedMessages(messageIds);
   }, [messages, loadSavedMessages]);
@@ -3585,6 +3589,7 @@ export default function ChatPage() {
   );
 
   const togglePin = useCallback(async (message: Message) => {
+    if (!isUuid(message.id)) return;
     if (!chatCompanyId && !chatWorkspaceId) return;
     const isPinned = pins.some((pin) => pin.messageId === message.id);
     try {
@@ -3612,6 +3617,7 @@ export default function ChatPage() {
   }, [chatCompanyId, chatWorkspaceId, loadPins, pins]);
 
   const toggleSaved = useCallback(async (message: Message) => {
+    if (!isUuid(message.id)) return;
     if (!chatCompanyId && !chatWorkspaceId) return;
     const existing = savedByMessageId[message.id];
     try {
@@ -3890,6 +3896,7 @@ export default function ChatPage() {
             const showSeparator = currDate && currDate !== prevDate;
             const threadSummary = threadReplySummaries[`id:${threadParentIdForMessage(msg)}`];
             const threadReplies = threadSummary?.replies ?? [];
+            const canPersistMessageAction = isUuid(msg.id);
             return (
               <div key={msg.id}>
                 {showSeparator && <DateSeparator date={msg.createdAt!} />}
@@ -3902,8 +3909,8 @@ export default function ChatPage() {
                   authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
                   authorEmoji={msg.role === "assistant" ? agentEmoji : null}
                   onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
-                  onTogglePin={() => void togglePin(msg)}
-                  onToggleSaved={() => void toggleSaved(msg)}
+                  onTogglePin={canPersistMessageAction ? () => void togglePin(msg) : undefined}
+                  onToggleSaved={canPersistMessageAction ? () => void toggleSaved(msg) : undefined}
                   isPinned={pinnedMessageIds.has(msg.id)}
                   isSaved={Boolean(savedByMessageId[msg.id])}
                   threadReplyCount={threadReplies.length}

@@ -15,6 +15,10 @@ function previewTitle(content: string) {
   return text.length > 80 ? `${text.slice(0, 77)}...` : text || "Saved message";
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 async function currentUserId() {
   const session = await auth();
   return (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
@@ -51,7 +55,8 @@ export async function GET(request: NextRequest) {
 
   const chatMessageIds = rows
     .filter((item) => item.sourceType === "chat_message")
-    .map((item) => item.sourceId);
+    .map((item) => item.sourceId)
+    .filter(isUuid);
   const messageRows = chatMessageIds.length > 0
     ? await withRetry(() =>
         db!.select({
@@ -105,6 +110,9 @@ export async function POST(request: NextRequest) {
   let title = body.title ?? null;
   let metadata = body.metadata ?? null;
   if (body.sourceType === "chat_message") {
+    if (!isUuid(body.sourceId)) {
+      return NextResponse.json({ error: "chat_message sourceId must be a persisted message id" }, { status: 400 });
+    }
     const [message] = await withRetry(() =>
       db!.select({
         id: chatMessages.id,

@@ -98,6 +98,7 @@ type ChatExecutionSnapshot = {
 type ChatHistoryLoadResult = {
   sessionId: string | null;
   execution: ChatExecutionSnapshot;
+  threadHistory: ThreadHistoryLoadResult;
 } | null;
 
 type QueuedChatMessage = {
@@ -759,7 +760,7 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
     const params = new URLSearchParams({ sessionKey, companyId, limit: "200" });
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return null;
-    const { messages, sessionId, execution } = await res.json() as {
+    const { messages, sessionId, execution, threads, threadSummaries, threadIndex } = await res.json() as {
       sessionId: string | null;
       execution?: ChatExecutionSnapshot;
       messages: {
@@ -769,6 +770,26 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
         createdAt: string;
         metadata?: Record<string, unknown> | null;
       }[];
+      threads?: Array<{
+        sessionKey?: string | null;
+        parentSessionKey?: string | null;
+        parentMessageId?: string | null;
+        messages?: Array<{
+          id: string;
+          role: "user" | "assistant" | "system";
+          content: string;
+          createdAt: string;
+          metadata?: Record<string, unknown> | null;
+        }>;
+      }>;
+      threadSummaries?: Record<string, {
+        sessionKey?: string | null;
+        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
+      }>;
+      threadIndex?: Record<string, {
+        sessionKey?: string | null;
+        replies?: Array<{ id: string; role: "user" | "assistant" | "system"; createdAt?: string }>;
+      }>;
     };
     if (!sessionId) return null;
     useChatStore.getState().loadSession(
@@ -782,7 +803,49 @@ async function loadCrewCmdSessionHistoryByKey(sessionKey: string, companyId?: st
         metadata: m.metadata ?? null,
       }))
     );
-    return { sessionId, execution: execution ?? null };
+    const links: Record<string, ThreadParentLink> = {};
+    for (const thread of threads ?? []) {
+      if (!thread.sessionKey || !thread.messages?.length) continue;
+      const threadSessionKey = thread.sessionKey.toLowerCase();
+      if (thread.parentSessionKey && thread.parentMessageId) {
+        links[threadSessionKey] = {
+          parentSessionKey: thread.parentSessionKey,
+          parentMessageId: stableThreadLinkId(thread.parentMessageId),
+        };
+      }
+      useChatStore.getState().loadSession(
+        threadSessionKey,
+        thread.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
+          id: m.id,
+          agentId: threadSessionKey,
+          role: m.role,
+          content: m.content,
+          createdAt: m.createdAt,
+          metadata: m.metadata ?? null,
+        }))
+      );
+    }
+    const summaryEntries = Object.keys(threadIndex ?? {}).length > 0
+      ? Object.entries(threadIndex ?? {})
+      : Object.entries(threadSummaries ?? {}).map(([parentMessageId, summary]) => [`id:${stableThreadLinkId(parentMessageId)}`, summary] as const);
+    const summaries = Object.fromEntries(
+      summaryEntries.flatMap(([parentMessageKey, summary]) => {
+        if (!summary.sessionKey) return [];
+        const replies = (summary.replies ?? [])
+          .filter((reply) => reply.role === "user" || reply.role === "assistant")
+          .map((reply) => ({
+            id: reply.id,
+            role: reply.role as "user" | "assistant",
+            createdAt: reply.createdAt,
+          }));
+        if (replies.length === 0) return [];
+        return [[parentMessageKey, {
+          sessionKey: summary.sessionKey.toLowerCase(),
+          replies,
+        }]];
+      })
+    );
+    return { sessionId, execution: execution ?? null, threadHistory: { links, summaries } };
   } catch {
     return null;
   }
@@ -1394,6 +1457,12 @@ export default function ChatPage() {
             })));
           }
           if (loaded?.execution) applyExecutionSnapshot(loaded.execution);
+          if (loaded?.threadHistory) {
+            if (Object.keys(loaded.threadHistory.links).length > 0) {
+              setThreadParentLinks((prev) => ({ ...prev, ...loaded.threadHistory.links }));
+            }
+            setServerThreadSummaries(loaded.threadHistory.summaries);
+          }
         });
       }
     } else if (!loadedAgentsRef.current.has(activeKey)) {
@@ -1411,6 +1480,12 @@ export default function ChatPage() {
           metadata: m.metadata,
         })));
         if (loaded?.execution) applyExecutionSnapshot(loaded.execution);
+        if (loaded?.threadHistory) {
+          if (Object.keys(loaded.threadHistory.links).length > 0) {
+            setThreadParentLinks((prev) => ({ ...prev, ...loaded.threadHistory.links }));
+          }
+          setServerThreadSummaries(loaded.threadHistory.summaries);
+        }
       });
     }
 

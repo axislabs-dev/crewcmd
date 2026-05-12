@@ -256,6 +256,46 @@ describe("POST /api/chat", () => {
     await reader.cancel();
   });
 
+  it("preserves OpenClaw thread session keys that do not start with the callsign", async () => {
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    const chatAbort = vi.fn(() => Promise.resolve());
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn(),
+      off: vi.fn(),
+      chatSend,
+      chatAbort,
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "Received" }],
+      agent: "neo",
+      gatewayAgent: "neo",
+      sessionKey: "agent:main:neo:thread:agent-main-neo-history-43",
+      threadContext: {
+        parentSessionKey: "agent:main:neo",
+        threadSessionKey: "agent:main:neo:thread:agent-main-neo-history-43",
+        parentMessage: {
+          role: "assistant",
+          content: "Three things to focus on.",
+        },
+      },
+    }));
+    const reader = response.body!.getReader();
+
+    await reader.read();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(chatSend).toHaveBeenCalledWith({
+      message: expect.stringContaining("CrewCMD threaded reply."),
+      sessionKey: "agent:main:neo:thread:agent-main-neo-history-43",
+    });
+
+    await reader.cancel();
+  });
+
   it("streams structured progress events alongside OpenAI-compatible text deltas", async () => {
     const chatHandlers: Array<(payload: unknown) => void> = [];
     const chatSend = vi.fn().mockResolvedValue({ runId: "run-1" });

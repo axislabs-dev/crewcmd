@@ -18,6 +18,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   chatMessages: Symbol("chatMessages"),
   chatSessions: Symbol("chatSessions"),
+  chatThreads: Symbol("chatThreads"),
   chatSessionEvents: Symbol("chatSessionEvents"),
 }));
 
@@ -98,6 +99,9 @@ describe("GET /api/chat/messages", () => {
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       })
       .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      })
+      .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
       })
       .mockReturnValueOnce({
@@ -133,13 +137,25 @@ describe("GET /api/chat/messages", () => {
       id: "thread-2",
       gatewaySessionKey: "runtime-agent:thread:server-parent-reopened",
     };
+    const newerAggregateThread = {
+      id: "aggregate-1",
+      agentId: "runtime-agent",
+      gatewaySessionKey: newerLinkedThread.gatewaySessionKey,
+      threadParentSessionId: linkedThread.threadParentSessionId,
+      threadParentSessionKey: linkedThread.threadParentSessionKey,
+      threadParentMessageId: linkedThread.threadParentMessageId,
+      threadSessionId: newerLinkedThread.id,
+    };
     const newerMessages = [
       { id: "m3", role: "user", content: "follow up", createdAt: "2026-04-01T00:00:02Z", metadata: null },
       { id: "m4", role: "assistant", content: "new answer", createdAt: "2026-04-01T00:00:03Z", metadata: null },
     ];
     mockSelect
       .mockReturnValueOnce({
-        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread, newerLinkedThread]) }) }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([newerAggregateThread]) }) }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
       })
       .mockReturnValueOnce({
         where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),

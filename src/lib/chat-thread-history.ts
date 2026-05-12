@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { chatMessages, chatSessions } from "@/db/schema";
+import { chatMessages, chatSessions, chatThreads } from "@/db/schema";
 
 function stableThreadLinkId(id: string | null | undefined) {
   return id?.replace(/(?::item:|-item-)\d+$/i, "") ?? null;
@@ -43,6 +43,23 @@ function shouldReplaceThreadSummary(existing: ThreadReplySummary | undefined, ca
 
 export async function loadThreadHistoryForParent(parentSessionKey: string, companyId: string, limit: number) {
   const threadPrefix = `${parentSessionKey}:thread:`;
+  const aggregateThreads = await withRetry(() =>
+    db!.select({
+      id: chatThreads.id,
+      agentId: chatThreads.agentId,
+      gatewaySessionKey: chatThreads.threadSessionKey,
+      threadParentSessionId: chatThreads.parentSessionId,
+      threadParentSessionKey: chatThreads.parentSessionKey,
+      threadParentMessageId: chatThreads.parentMessageId,
+      threadSessionId: chatThreads.threadSessionId,
+    }).from(chatThreads)
+      .where(and(
+        eq(chatThreads.companyId, companyId),
+        eq(chatThreads.parentSessionKey, parentSessionKey)
+      ))
+      .orderBy(asc(chatThreads.updatedAt))
+      .limit(200)
+  );
   const threadSessions = await withRetry(() =>
     db!.select({
       id: chatSessions.id,
@@ -78,9 +95,17 @@ export async function loadThreadHistoryForParent(parentSessionKey: string, compa
   const sessionsById = new Map(
     [...threadSessions, ...legacyThreadSessions].map((session) => [session.id, session])
   );
+  const sessionsByKey = new Map(
+    Array.from(sessionsById.values())
+      .filter((session) => session.gatewaySessionKey)
+      .map((session) => [session.gatewaySessionKey!, { ...session, threadSessionId: session.id as string | null }])
+  );
+  for (const thread of aggregateThreads) {
+    sessionsByKey.set(thread.gatewaySessionKey, thread);
+  }
 
   const threads = await Promise.all(
-    Array.from(sessionsById.values())
+    Array.from(sessionsByKey.values())
       .filter((session) => session.gatewaySessionKey)
       .map(async (session) => {
         const parentMessageId =
@@ -88,12 +113,12 @@ export async function loadThreadHistoryForParent(parentSessionKey: string, compa
           stableThreadLinkId(threadSessionSuffix(parentSessionKey, session.gatewaySessionKey));
         const messages = await withRetry(() =>
           db!.select().from(chatMessages)
-            .where(eq(chatMessages.sessionId, session.id))
+            .where(eq(chatMessages.sessionId, session.threadSessionId ?? session.id))
             .orderBy(asc(chatMessages.createdAt))
             .limit(limit)
         );
         return {
-          sessionId: session.id,
+          sessionId: session.threadSessionId ?? session.id,
           agentId: session.agentId,
           sessionKey: session.gatewaySessionKey,
           parentSessionId: session.threadParentSessionId,

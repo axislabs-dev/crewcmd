@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
-import { chatMessages, chatRuns, chatSessions } from "@/db/schema";
+import { chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
@@ -101,6 +101,31 @@ async function resolveSessionId(
       }
     : null;
 
+  const upsertThreadAggregate = async (sessionId: string) => {
+    if (!threadLink || !gatewaySessionKey) return;
+    await withRetry(() =>
+      db!.insert(chatThreads).values({
+        companyId,
+        agentId: agentLower,
+        parentSessionId,
+        parentSessionKey: threadLink.threadParentSessionKey,
+        parentMessageId: threadLink.threadParentMessageId,
+        threadSessionId: sessionId,
+        threadSessionKey: gatewaySessionKey,
+      }).onConflictDoUpdate({
+        target: [chatThreads.companyId, chatThreads.threadSessionKey],
+        set: {
+          agentId: agentLower,
+          parentSessionId,
+          parentSessionKey: threadLink.threadParentSessionKey,
+          parentMessageId: threadLink.threadParentMessageId,
+          threadSessionId: sessionId,
+          updatedAt: new Date(),
+        },
+      })
+    );
+  };
+
   if (gatewaySessionKey) {
     const existingByGatewayKey = await withRetry(() =>
       db!.select().from(chatSessions)
@@ -119,6 +144,7 @@ async function resolveSessionId(
             .set({ ...threadLink, updatedAt: new Date() })
             .where(eq(chatSessions.id, existingByGatewayKey[0].id))
         );
+        await upsertThreadAggregate(existingByGatewayKey[0].id);
       }
       return existingByGatewayKey[0].id;
     }
@@ -147,6 +173,7 @@ async function resolveSessionId(
       ...(threadLink ?? {}),
     }).returning()
   );
+  await upsertThreadAggregate(newSession.id);
   return newSession.id;
 }
 

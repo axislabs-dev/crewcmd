@@ -3100,6 +3100,14 @@ export default function ChatPage() {
       createdAt: new Date().toISOString(),
       metadata,
     };
+    useChatStore.getState().addMessage({
+      id: optimisticId,
+      agentId: thread.sessionKey.toLowerCase(),
+      role: "user",
+      content: userMsg.content,
+      metadata,
+      createdAt: userMsg.createdAt ?? new Date().toISOString(),
+    });
     setThreadMessages((prev) =>
       options.queuedMessageId
         ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
@@ -3184,14 +3192,7 @@ export default function ChatPage() {
               prev.map((message) => message.id === optimisticId ? { ...message, id: parsed.messageId } : message)
             );
             if (typeof parsed.messageId === "string") {
-              useChatStore.getState().addMessage({
-                id: parsed.messageId,
-                agentId: thread.sessionKey.toLowerCase(),
-                role: "user",
-                content: userMsg.content,
-                metadata,
-                createdAt: userMsg.createdAt ?? new Date().toISOString(),
-              });
+              useChatStore.getState().replaceMessageId(thread.sessionKey, optimisticId, parsed.messageId);
             }
             return;
           }

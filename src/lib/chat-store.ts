@@ -23,6 +23,8 @@ interface ChatStoreState {
 
   /** Add a single message (from SSE or local). Deduplicates by id. */
   addMessage: (msg: ChatStoreMessage) => void;
+  /** Replace an optimistic/local message ID with the persisted server ID. */
+  replaceMessageId: (agentId: string, fromId: string, toId: string) => void;
   /** Bulk-load messages for a session (e.g. initial fetch). Deduplicates. */
   loadSession: (agentId: string, messages: ChatStoreMessage[]) => void;
   /** Mark all messages for an agent as read (reset unread counter). */
@@ -55,6 +57,22 @@ export const useChatStore = create<ChatStoreState>((set) => ({
           [key]: (state.unreadByAgent[key] || 0) + 1,
         },
         lastEventAt: msg.createdAt || state.lastEventAt,
+      };
+    }),
+
+  replaceMessageId: (agentId, fromId, toId) =>
+    set((state) => {
+      const key = agentId.toLowerCase();
+      const existing = state.messagesByAgent[key] || [];
+      if (!existing.some((m) => m.id === fromId)) return state;
+
+      const withoutTarget = existing.filter((message) => message.id !== toId || message.id === fromId);
+      const updated = withoutTarget.map((message) =>
+        message.id === fromId ? { ...message, id: toId } : message
+      );
+
+      return {
+        messagesByAgent: { ...state.messagesByAgent, [key]: updated },
       };
     }),
 

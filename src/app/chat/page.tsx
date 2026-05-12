@@ -68,7 +68,8 @@ interface Message {
 
 type ThreadParentLink = {
   parentSessionKey: string;
-  parentMessageId: string;
+  parentMessageId?: string | null;
+  parentMessageFingerprint?: string | null;
 };
 
 type ActiveThread = {
@@ -109,6 +110,15 @@ function extractUserThreadReply(content: string) {
 function displayContentFromGatewayPreview(content: string, sessionKey: string) {
   if (!isThreadContextEnvelope(content)) return content;
   return isMessageThreadSessionKey(sessionKey) ? extractUserThreadReply(content) : "";
+}
+
+function normalizeThreadFingerprintContent(content: string) {
+  return content.trim().replace(/\s+/g, " ").slice(0, 1000);
+}
+
+function threadParentMessageFingerprint(message: Pick<Message, "role" | "content">) {
+  const content = normalizeThreadFingerprintContent(message.content);
+  return content ? `${message.role.toLowerCase()}::${content}` : null;
 }
 
 function executionStorageKey(sessionKey: string) {
@@ -742,6 +752,7 @@ async function loadThreadHistoriesForParent(
         sessionKey?: string | null;
         parentSessionKey?: string | null;
         parentMessageId?: string | null;
+        parentMessageFingerprint?: string | null;
         messages?: Array<{
           id: string;
           role: "user" | "assistant" | "system";
@@ -755,10 +766,11 @@ async function loadThreadHistoriesForParent(
     for (const thread of threads ?? []) {
       if (!thread.sessionKey || !thread.messages?.length) continue;
       const sessionKey = thread.sessionKey.toLowerCase();
-      if (thread.parentSessionKey && thread.parentMessageId) {
+      if (thread.parentSessionKey && (thread.parentMessageId || thread.parentMessageFingerprint)) {
         links[sessionKey] = {
           parentSessionKey: thread.parentSessionKey,
           parentMessageId: thread.parentMessageId,
+          parentMessageFingerprint: thread.parentMessageFingerprint,
         };
       }
       useChatStore.getState().loadSession(
@@ -1286,11 +1298,13 @@ export default function ChatPage() {
     const sessionKey = existingSessionKey ?? threadSessionKey(parentSessionKey, message.id);
     const renderableMessages = messages.filter(hasRenderableMessageContent);
     const contextMessages = renderableMessages.slice(Math.max(0, index - 8), index + 1);
+    const parentMessageFingerprint = threadParentMessageFingerprint(message);
     setThreadParentLinks((prev) => ({
       ...prev,
       [sessionKey.toLowerCase()]: {
         parentSessionKey,
         parentMessageId: message.id,
+        parentMessageFingerprint,
       },
     }));
 
@@ -1494,11 +1508,11 @@ export default function ChatPage() {
     const prefix = `${activeKey}:thread:`;
     const summaries: Record<string, ThreadReplySummary> = {};
 
-    const assignSummary = (parentMessageId: string | null | undefined, summary: ThreadReplySummary) => {
-      if (!parentMessageId) return;
-      const existing = summaries[parentMessageId];
+    const assignSummary = (key: string | null | undefined, summary: ThreadReplySummary) => {
+      if (!key) return;
+      const existing = summaries[key];
       if (!existing || summary.replies.length >= existing.replies.length) {
-        summaries[parentMessageId] = summary;
+        summaries[key] = summary;
       }
     };
 
@@ -1518,11 +1532,12 @@ export default function ChatPage() {
       const link = threadParentLinks[lowerStoreKey];
       const summary = { sessionKey: lowerStoreKey, replies };
       if (link?.parentSessionKey.toLowerCase() === activeKey) {
-        assignSummary(link.parentMessageId, summary);
+        assignSummary(`id:${link.parentMessageId}`, summary);
+        assignSummary(`fp:${link.parentMessageFingerprint}`, summary);
         continue;
       }
 
-      assignSummary(threadSessionSuffix(activeKey, lowerStoreKey), summary);
+      assignSummary(`id:${threadSessionSuffix(activeKey, lowerStoreKey)}`, summary);
     }
 
     return summaries;
@@ -3390,7 +3405,9 @@ export default function ChatPage() {
             const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
-            const threadSummary = threadReplySummaries[msg.id];
+            const threadSummary =
+              threadReplySummaries[`id:${msg.id}`] ??
+              threadReplySummaries[`fp:${threadParentMessageFingerprint(msg)}`];
             const threadReplies = threadSummary?.replies ?? [];
             return (
               <div key={msg.id}>

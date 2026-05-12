@@ -908,6 +908,7 @@ export const chatSessions = pgTable("chat_sessions", {
     .references((): AnyPgColumn => chatSessions.id, { onDelete: "cascade" }),
   threadParentSessionKey: text("thread_parent_session_key"),
   threadParentMessageId: text("thread_parent_message_id"),
+  threadParentMessageFingerprint: text("thread_parent_message_fingerprint"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

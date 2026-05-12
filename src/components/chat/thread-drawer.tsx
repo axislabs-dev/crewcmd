@@ -23,6 +23,11 @@ type ActiveThreadView = {
 type ChatThreadDrawerProps = {
   activeThread: ActiveThreadView;
   agentCallsign: string;
+  agentDisplayName: string;
+  agentAvatarUrl?: string | null;
+  agentEmoji?: string | null;
+  userDisplayName: string;
+  userAvatarUrl?: string | null;
   messages: ThreadDrawerMessage[];
   streamingContent: string;
   isLoading: boolean;
@@ -39,6 +44,11 @@ type ChatThreadDrawerProps = {
 export function ChatThreadDrawer({
   activeThread,
   agentCallsign,
+  agentDisplayName,
+  agentAvatarUrl,
+  agentEmoji,
+  userDisplayName,
+  userAvatarUrl,
   messages,
   streamingContent,
   isLoading,
@@ -94,6 +104,9 @@ export function ChatThreadDrawer({
               content={activeThread.parentMessage.content}
               timestamp={activeThread.parentMessage.createdAt}
               metadata={activeThread.parentMessage.metadata}
+              authorName={activeThread.parentMessage.role === "user" ? userDisplayName : agentDisplayName}
+              authorAvatarUrl={activeThread.parentMessage.role === "user" ? userAvatarUrl : agentAvatarUrl}
+              authorEmoji={activeThread.parentMessage.role === "assistant" ? agentEmoji : null}
               voiceSettings={voiceSettings}
             />
             <div className="ml-11 border-t border-[var(--border-subtle)] pt-4" />
@@ -109,6 +122,9 @@ export function ChatThreadDrawer({
                 content={message.content}
                 timestamp={message.createdAt}
                 metadata={message.metadata}
+                authorName={message.role === "user" ? userDisplayName : agentDisplayName}
+                authorAvatarUrl={message.role === "user" ? userAvatarUrl : agentAvatarUrl}
+                authorEmoji={message.role === "assistant" ? agentEmoji : null}
                 voiceSettings={voiceSettings}
               />
             ))}
@@ -126,6 +142,9 @@ export function ChatThreadDrawer({
                 role="assistant"
                 content={streamingContent}
                 isStreaming
+                authorName={agentDisplayName}
+                authorAvatarUrl={agentAvatarUrl}
+                authorEmoji={agentEmoji}
                 voiceSettings={voiceSettings}
               />
             )}

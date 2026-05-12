@@ -100,6 +100,30 @@ describe("chat-store", () => {
     });
   });
 
+  describe("replaceMessageId", () => {
+    it("replaces an optimistic message id without changing message order", () => {
+      const early = makeMsg({ id: "optimistic-1", createdAt: "2026-01-01T00:00:00Z" });
+      const late = makeMsg({ id: "m2", createdAt: "2026-01-02T00:00:00Z" });
+      useChatStore.getState().addMessage(early);
+      useChatStore.getState().addMessage(late);
+
+      useChatStore.getState().replaceMessageId("NEO", "optimistic-1", "persisted-1");
+
+      const messages = useChatStore.getState().messagesByAgent["neo"];
+      expect(messages.map((message) => message.id)).toEqual(["persisted-1", "m2"]);
+      expect(messages[0].content).toBe(early.content);
+    });
+
+    it("does nothing when the optimistic message is missing", () => {
+      const existing = makeMsg({ id: "m1" });
+      useChatStore.getState().addMessage(existing);
+
+      useChatStore.getState().replaceMessageId("neo", "missing", "persisted-1");
+
+      expect(useChatStore.getState().messagesByAgent["neo"].map((message) => message.id)).toEqual(["m1"]);
+    });
+  });
+
   describe("markRead", () => {
     it("resets unread counter to zero", () => {
       useChatStore.getState().addMessage(makeMsg());

@@ -389,9 +389,20 @@ function ChatComposer({
   onDragLeave?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
 }) {
+  const [draft, setDraft] = useState(value);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const sendDraft = useCallback(() => {
+    onValueChange(draft);
+    onSend(draft);
+    setDraft("");
+  }, [draft, onSend, onValueChange]);
 
   return (
     <>
@@ -447,7 +458,7 @@ function ChatComposer({
         )}
 
         <textarea
-          value={value}
+          value={draft}
           autoCapitalize="off"
           autoComplete="off"
           autoCorrect="off"
@@ -455,14 +466,14 @@ function ChatComposer({
           inputMode="text"
           spellCheck={false}
           onChange={(event) => {
-            onValueChange(event.target.value);
+            setDraft(event.target.value);
             setShowAddMenu(false);
           }}
           onFocus={onFocus}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              onSend(value);
+              sendDraft();
             }
           }}
           onPaste={(event) => {
@@ -529,9 +540,9 @@ function ChatComposer({
               onTranscript={onTranscript}
               isDisabled={isLoading}
             />
-            {value.trim() || pendingFiles.length > 0 ? (
+            {draft.trim() || pendingFiles.length > 0 ? (
               <button
-                onClick={() => onSend(value)}
+                onClick={sendDraft}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--bg-primary)] transition-all hover:opacity-90"
                 title="Send message"
                 style={{ boxShadow: "0 0 12px color-mix(in srgb, var(--accent) 30%, transparent)" }}
@@ -4027,7 +4038,7 @@ export default function ChatPage() {
                 pendingFiles={threadPendingFiles}
                 onAddFiles={addThreadFiles}
                 onRemoveFile={removeThreadFile}
-                onSend={() => void sendThreadMessage()}
+                onSend={(text) => void sendThreadMessage(text)}
                 onTranscript={(text) => void sendThreadMessage(text)}
                 onFocus={() => window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))}
                 isLoading={isThreadLoading}

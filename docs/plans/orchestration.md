@@ -2,19 +2,24 @@
 
 ## Objective
 
-Make CrewCmd the open-source, self-hostable collaborative AI environment where humans and agents work together in channels, direct conversations, tasks, inboxes, and voice sessions without weakening personal runtime privacy.
+Make CrewCmd an **AI-first Slack-class collaboration product**: a polished, high-end team communication environment where channels, DMs, project rooms, threads, voice sessions, tasks, inboxes, approvals, files, and agents are one coherent product surface rather than separate admin tools. This is not a small workspace-feature iteration. It is a new product paradigm for CrewCmd.
+
+CrewCmd should feel like the collaboration layer a serious team lives in all day: Slack-class in navigation speed, conversation durability, permissions clarity, and polish, but AI-native at the core. Humans and agents should work together in shared channels and private chats without weakening personal runtime privacy.
 
 This updates the earlier workspace-first framing. The user-facing model should be **channel / chat first**. Workspaces and runtimes still exist, but primarily as scope, ownership, and enforcement primitives behind the scenes. “Situation” can remain an internal architecture shorthand for any scoped collaboration context, but it should not be the main UI word.
 
 ## Product Thesis
 
+CrewCmd should become the open-source, self-hostable answer to: **what would Slack look like if it had been designed after capable personal and team agents existed?**
+
 CrewCmd should combine:
 
 - **Personal AI work** — private, direct, ChatGPT/Claude-style conversations with a user's own agents and runtime.
 - **Collaborative channels** — shared chats where multiple humans and multiple agents coordinate around a team, project, function, or incident.
+- **Slack-class collaboration primitives** — fast channels, DMs, recents, unread state, search, threads, pins, files, reactions, presence, voice, permissions, and admin controls.
 - **OpenClaw-native agent operations** — agents have callsigns, skills, runtime bindings, ownership, tasks, inboxes, budgets, and governance.
 
-The differentiator is not “AI in chat.” It is **collaborative AI channels with explicit agent participation rules and hard runtime privacy boundaries**.
+The differentiator is not “AI in chat.” It is **collaborative AI channels with explicit agent participation rules and hard runtime privacy boundaries**. The target quality bar is A-class/high-end: users should trust it as their day-to-day team collaboration hub, not as a demo wrapped around agents.
 
 ## Current Foundation
 
@@ -27,6 +32,35 @@ CrewCmd already has several primitives that support this direction:
 - Governance primitives exist for approvals, auditability, runtime configuration, and budget controls.
 
 This plan sharpens those pieces into a channel-first collaboration model.
+
+## Current Implementation Audit Against the Target Paradigm
+
+This audit is intentionally repo-informed. It maps the current codebase to the AI-first Slack-class end-state so implementation work can close concrete gaps rather than drift into vague “workspace features.”
+
+### What exists today
+
+- `src/db/schema.ts` has `companies`, `workspaces`, `companyMembers`, `companyRuntimes`, `chatSessions`, `chatThreads`, `chatMessages`, `chatMessagePins`, `tasks`, and `activityLog` foundations. These are useful tenancy, runtime, chat, and work-tracking primitives.
+- `src/db/schema-access.ts` documents `agentAccessGrants`, but the file is still an access-tier/schema-addition helper rather than a complete, enforced collaboration policy engine.
+- `/api/chat/*` already supports sessions/messages/thread/pin flows, but sessions are currently agent-centric and workspace/company scoped rather than durable Slack-class channels with explicit human/agent membership.
+- `/api/tasks/*`, `/api/inbox/*`, `/api/projects/*`, `/api/agents/*`, `/api/runtimes/*`, `/api/skills/*`, `/api/blueprints/*`, `/api/docs/*`, `/api/approval-*`, and `/api/audit-log` exist as product areas, but they need shared scope-aware authorization contracts before they can safely become global lenses over channel/project/private resources.
+- `workspaceAccess`, `companyMembers`, `companyRuntimes`, and `agentAccessGrants` are useful starting points, but they do not yet model channel roles, project-room roles, runtime-scope binding, resource promotion, or explicit agent participation modes.
+
+### Key gaps to close
+
+- **Channels are not yet first-class enough.** `chatSessions` can carry conversation history, but the target model needs either a `channels` table or typed/grouped `chat_sessions` with explicit membership, roles, participation modes, scope, unread/recents/search metadata, and admin policy.
+- **Membership is under-modeled.** Slack-class channels require `channel_members` with user and agent members, roles, invite/admin rights, and per-agent modes such as `mention_only`, `watching`, `proactive`, and `on_call`.
+- **Resources are not uniformly scoped.** Tasks, inbox messages, docs, skills, blueprints, approvals, automations, activity, files, chat runs, and voice transcripts need `scopeType`, `scopeId`, `ownerUserId`, provenance, and visible-to-viewer query helpers.
+- **Policy helpers are missing as the source of truth.** Before frontend filtering, routes need canonical helpers such as `canReadResource`, `canPostToChannel`, `canMentionAgent`, `canBindRuntime`, `canPromoteResource`, `assertRuntimeAllowedForScope`, and `assertAgentAllowedInScope`.
+- **Runtime privacy is not yet hard enough.** The schema can represent personal/company runtimes, but routes and runtime dispatch must reject attaching user-owned personal runtimes to shared channels, shared tasks, company agents, or team-visible automations.
+- **Promotion is missing.** Sharing private work into a channel/project/org should create a redacted copy or derived artifact, write `resource_promotions`, and audit exactly which fields/artifacts/summaries moved.
+- **Administration needs a product surface.** Company admin, channel admin, project admin, agent admin, runtime admin, and promotion review flows need clear frontend affordances and matching API checks.
+- **RLS is not the primary implementation plan.** Hosted Postgres RLS should mirror policy where supported, but the TypeScript policy engine must be mandatory because self-hosted/PGlite modes cannot rely on production RLS semantics alone.
+
+### Audit conclusion
+
+CrewCmd has the raw ingredients for the new model, but the current implementation is still closer to an AI workspace/control plane with chat than an AI-first Slack-class collaboration product. The change plan must therefore be broad: DB shape, RBAC, API authorization, runtime routing, resource scoping, frontend navigation, admin flows, tests, docs, and migrations all need to move together in staged PRs.
+
+Preserved branch/path identifier for reviewers comparing this planning branch: `/collaborative-ai-workspace...origin/docs/collaborative-ai-workspace`.
 
 ## Core Model
 

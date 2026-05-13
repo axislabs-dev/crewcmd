@@ -147,6 +147,32 @@ Runtime permissions must be separate from agent permissions.
 | Configure credentials | Owner only | Company owner/admin |
 | Export logs | Owner only | Company owner/admin/auditor, redacted |
 
+## Current Schema and Route Audit
+
+This model is a target-state plan plus an audit of the existing CrewCmd implementation. Current code has enough primitives to migrate safely, but not enough policy shape to support the AI-first Slack-class product without additive schema, route, and frontend work.
+
+### Existing primitives to preserve
+
+- `workspaces` and `workspaceAccess` remain useful for tenancy and legacy/default scope resolution. They should become backend infrastructure, not the dominant product metaphor.
+- `companyMembers` / `company_members` provide the company role baseline, but channel/project roles must be layered on top.
+- `companyRuntimes` / `company_runtimes` already distinguish runtime ownership well enough to start enforcing personal-vs-shared runtime rules.
+- `chatSessions` / `chat_sessions`, `chatThreads`, `chatMessages`, and `chatMessagePins` provide durable chat history, threads, and pins, but need channel/DM/project-room typing and membership-aware reads.
+- `tasks`, `inboxMessages`, projects, skills, blueprints, approvals, and docs can become scope-aware resources once common scope columns and visible-to-viewer helpers exist.
+- `agentAccessGrants` / `agent_access_grants` is a useful seed for agent capabilities, but it must be integrated into a real policy engine rather than remaining a standalone schema-access helper.
+
+### Missing enforcement surfaces
+
+- No single `src/lib`/policy module is currently authoritative for `canReadResource`, `canCreateResource`, `canUpdateResource`, `canDeleteResource`, `canPostToChannel`, `canInviteChannelMember`, `canMentionAgent`, `canBindRuntime`, `canPromoteResource`, `assertRuntimeAllowedForScope`, or `assertAgentAllowedInScope`.
+- `/api/chat/*` must stop treating company/workspace access as sufficient for collaboration access; it needs channel/chat membership and runtime binding checks.
+- `/api/tasks/*` and `/api/inbox/*` need visible-to-viewer queries before frontend scope filters ship.
+- `/api/agents/*` must split viewing, invoking, configuring, membership, logs, budget, and retirement.
+- `/api/runtimes/*` must split personal runtime admin from company runtime admin and block personal runtime binding to shared scopes.
+- `/api/audit-log` must be able to record and expose admin/promote/runtime events without leaking hidden private context.
+
+### Additive migration principle
+
+Do not rewrite the existing app around a new abstraction in one step. Add the policy engine and scope columns first, backfill existing rows conservatively, then introduce first-class `channels`/`channel_members` or typed `chat_sessions` behind feature-sliced PRs.
+
 ## Proposed Database Additions
 
 Prefer additive migrations over rewrites.

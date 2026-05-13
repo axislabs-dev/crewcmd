@@ -38,6 +38,7 @@ import {
   recordVoiceCrashBreadcrumb,
 } from "@/lib/agent-mode-diagnostics";
 import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
+import { isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -172,6 +173,14 @@ function extractUserThreadReply(content: string) {
 function displayContentFromGatewayPreview(content: string, sessionKey: string) {
   if (!isThreadContextEnvelope(content)) return content;
   return isMessageThreadSessionKey(sessionKey) ? extractUserThreadReply(content) : "";
+}
+
+function isVisibleChatMessage(message: Pick<Message, "role" | "content" | "metadata">) {
+  return (
+    hasRenderableMessageContent(message) &&
+    !isThreadContextEnvelope(message.content) &&
+    !isOpenClawHeartbeatArtifact({ role: message.role, content: message.content })
+  );
 }
 
 function stableHash(input: string) {
@@ -956,7 +965,7 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
         createdAt,
         metadata: stableId === messageId ? null : { threadParentId: stableId },
       };
-    }).filter((m) => m.content);
+    }).filter((m) => m.content && !isOpenClawHeartbeatArtifact({ role: m.role, content: m.content }));
 
     useChatStore.getState().loadSession(
       sessionKey.toLowerCase(),
@@ -1568,7 +1577,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const messageIds = messages
-      .filter((message) => isUuid(message.id) && hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+      .filter((message) => isUuid(message.id) && isVisibleChatMessage(message))
       .map((message) => message.id);
     void loadSavedMessages(messageIds);
   }, [messages, loadSavedMessages]);
@@ -1829,7 +1838,7 @@ export default function ChatPage() {
   );
   const visibleMessages = useMemo(
     () => uniqueMessagesById(
-      messages.filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+      messages.filter(isVisibleChatMessage)
     ),
     [messages]
   );

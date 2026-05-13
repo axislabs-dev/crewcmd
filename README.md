@@ -8,7 +8,7 @@
   <img src="docs/images/crewcmd-intro.gif" alt="CrewCmd Introduction" width="800" />
 </p>
 
-CrewCmd is an open-source, self-hostable collaborative AI workspace built around channels, conversations, and situations where humans and OpenClaw agents work together. Every person gets private AI leverage in their own runtime, while teams get shared channels with approved agents, tasks, inboxes, voice sessions, and governance.
+CrewCmd is an open-source, self-hostable collaborative AI workspace built around channels and chats where humans and OpenClaw agents work together. Every person gets private AI leverage in their own runtime, while teams get shared channels with approved agents, tasks, inboxes, voice sessions, and governance.
 
 **Built for small teams that want to punch way above their weight without giving up personal runtime privacy.**
 

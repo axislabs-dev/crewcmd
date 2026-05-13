@@ -4,14 +4,14 @@
 
 Make CrewCmd the open-source, self-hostable collaborative AI environment where humans and agents work together in channels, direct conversations, tasks, inboxes, and voice sessions without weakening personal runtime privacy.
 
-This updates the earlier workspace-first framing. The user-facing model should be **channel / conversation / situation first**. Workspaces and runtimes still exist, but primarily as scope, ownership, and enforcement primitives behind the scenes.
+This updates the earlier workspace-first framing. The user-facing model should be **channel / chat first**. Workspaces and runtimes still exist, but primarily as scope, ownership, and enforcement primitives behind the scenes. “Situation” can remain an internal architecture shorthand for any scoped collaboration context, but it should not be the main UI word.
 
 ## Product Thesis
 
 CrewCmd should combine:
 
 - **Personal AI work** — private, direct, ChatGPT/Claude-style conversations with a user's own agents and runtime.
-- **Collaborative channels** — Slack-like shared situations where multiple humans and multiple agents coordinate around a team, project, function, or incident.
+- **Collaborative channels** — shared chats where multiple humans and multiple agents coordinate around a team, project, function, or incident.
 - **OpenClaw-native agent operations** — agents have callsigns, skills, runtime bindings, ownership, tasks, inboxes, budgets, and governance.
 
 The differentiator is not “AI in chat.” It is **collaborative AI channels with explicit agent participation rules and hard runtime privacy boundaries**.
@@ -30,11 +30,11 @@ This plan sharpens those pieces into a channel-first collaboration model.
 
 ## Core Model
 
-### 1. Situation / Conversation First
+### 1. Channel / Chat First
 
-Users should mostly feel like they are moving between **situations**, not switching infrastructure workspaces.
+Users should mostly feel like they are moving between **channels and chats**, not switching infrastructure workspaces.
 
-A situation may be:
+A channel/chat may be:
 
 - a private direct conversation with an agent;
 - a direct human-to-human conversation with optional agent help;
@@ -43,7 +43,7 @@ A situation may be:
 - a task thread;
 - a voice session with transcript and follow-up actions.
 
-Each situation carries metadata:
+Each channel/chat carries metadata:
 
 - participants: humans and agents;
 - visibility: private, team, org, or restricted group;
@@ -54,7 +54,7 @@ Each situation carries metadata:
 
 ### 2. Channels as Collaborative Surfaces
 
-Channels are shared situations for ongoing work. A marketing channel, for example, can include multiple humans and multiple agents.
+Channels are shared chats for ongoing work. A marketing channel, for example, can include multiple humans and multiple agents.
 
 A channel should support:
 
@@ -107,11 +107,11 @@ This is a hard invariant:
 Rules:
 
 - Personal runtimes are private to the owning user.
-- Personal agents can only use the owner's personal runtime in private situations.
+- Personal agents can only use the owner's personal runtime in private chats.
 - Shared/team channels can only invoke team, org, or project agents backed by approved shared runtimes.
 - Personal memory, private prompts, private files, and private runtime context are never injected into shared agent prompts.
 - Users may explicitly share an output, summary, artifact, or task derived from personal work, but not the underlying personal runtime or hidden context.
-- Sharing must create provenance: who shared it, from which private situation, into which shared situation, and when.
+- Sharing must create provenance: who shared it, from which private chat, into which shared channel, and when.
 
 This must be enforced in backend authorization and runtime routing, not only in UI copy.
 
@@ -143,7 +143,7 @@ Account / Company
   ├─ Scope policies / workspaces
   │   ├─ personal scope for each user
   │   └─ shared company/project scopes
-  ├─ Channels / situations
+  ├─ Channels / chats
   │   ├─ private direct conversations
   │   ├─ team channels
   │   ├─ project rooms
@@ -171,7 +171,7 @@ Moving away from workspace-first navigation means the rest of the app cannot sta
 Every major resource should carry scope metadata:
 
 - `private:user` — visible only to the owning user; default for personal-runtime and personal-agent output.
-- `channel:<id>` — visible to members of a shared channel/situation.
+- `channel:<id>` — visible to members of a shared channel/chat.
 - `project:<id>` — visible to project members and linked channel participants where configured.
 - `team:<id>` — visible to a team/function.
 - `org:<id>` — visible according to organization-wide policy.
@@ -180,7 +180,7 @@ Page behavior:
 
 - **Task board** — shows all tasks the viewer can see, with filters for mine, private, channel, project, team, org, agent, and status. Personal-agent-created tasks default private.
 - **Inbox** — shows all pending decisions, mentions, approvals, escalations, and agent updates the viewer can see. Private agent inbox items stay private unless explicitly shared.
-- **Projects** — project rooms are scoped situations with tasks, docs, agents, automations, and channels attached. Private projects may exist for personal planning.
+- **Projects** — project rooms are scoped work contexts with tasks, docs, agents, automations, and channels attached. Private projects may exist for personal planning.
 - **Automations** — automations inherit the scope where they are created. Personal automations can use only the owner's personal runtime; shared automations can use only approved shared runtimes.
 - **Team / agents** — personal agents remain visible only to their owner; team/org agents are visible according to membership and policy. A personal agent should not become a shared channel participant by accident.
 - **Skills** — skills should distinguish private/personal installs from team/org-approved skills. Shared agents can only use skills permitted by their shared runtime and scope.
@@ -190,14 +190,14 @@ Promotion rules apply to every resource type, not just chat messages:
 
 - Private resource → shared resource requires an explicit action.
 - Promotion shares selected fields/artifacts/summaries, not hidden private context.
-- Promotion records provenance: source situation, actor, destination scope, timestamp, and copied fields.
+- Promotion records provenance: source chat/channel, actor, destination scope, timestamp, and copied fields.
 - Team/global pages must never query raw “all resources”; they must query “all resources visible to this viewer.”
 
 ### 7. Runtime Binding
 
-Runtime binding should answer: **which agent runtime is allowed to act in this situation?**
+Runtime binding should answer: **which agent runtime is allowed to act in this channel/chat?**
 
-- Private personal situations may use the user's personal OpenClaw runtime.
+- Private personal chats may use the user's personal OpenClaw runtime.
 - Shared channels may use only approved shared/company/project runtimes.
 - Agent records should make runtime source, owner, and visibility obvious.
 - Channel-agent membership should validate that the agent's runtime is allowed for that channel scope.
@@ -207,10 +207,10 @@ Users should not need to think in raw runtime IDs, but they should always unders
 
 ## UX Principles
 
-1. **Channels are situations, not just message streams.** They include people, agents, tasks, voice, memory, permissions, and runtime scope.
+1. **Channels are work surfaces, not just message streams.** They include people, agents, tasks, voice, memory, permissions, and runtime scope.
 2. **Conversations remain durable.** Important work should be linkable, searchable, threadable, and convertible into tasks or artifacts.
 3. **Agents are invited participants.** They should have roles and participation modes rather than behaving like global bots.
-4. **Privacy is visible.** Every situation should show whether it is private, team-visible, or org-visible.
+4. **Privacy is visible.** Every channel/chat should show whether it is private, team-visible, or org-visible.
 5. **Sharing is intentional.** Private work moves into shared channels only through explicit user action.
 6. **Runtime boundaries are backend-enforced.** UI affordances are not enough.
 7. **Voice follows the same scope rules.** A private voice session stays private; a channel voice session is team-visible according to channel policy.
@@ -219,9 +219,9 @@ Users should not need to think in raw runtime IDs, but they should always unders
 
 ### Lane 1 — Product Language and Information Architecture
 
-- Update README and docs to describe CrewCmd as channel/situation-first collaborative AI.
+- Update README and docs to describe CrewCmd as channel/chat-first collaborative AI.
 - Keep workspaces in architecture language, but stop making workspace switching the main product metaphor.
-- Define canonical terms: situation, conversation, channel, thread, personal runtime, shared runtime, personal agent, team agent, org agent.
+- Define canonical terms: channel, chat, direct message, thread, project room, personal runtime, shared runtime, personal agent, team agent, org agent. Keep “situation” internal-only if used at all.
 
 ### Lane 2 — Data Model Audit
 
@@ -229,7 +229,7 @@ Audit existing workspace, chat session, thread, runtime, and agent visibility ta
 
 Questions to answer:
 
-- Can `chat_sessions` become the durable conversation/situation primitive?
+- Can `chat_sessions` become the durable channel/chat primitive?
 - Do we need a first-class `channels` table, or can channels be typed/grouped conversations initially?
 - Where should channel-agent membership and participation mode live?
 - What fields are needed for visibility, participants, runtime scope, resource scope, provenance, and promotion/sharing?
@@ -261,7 +261,7 @@ Prefer additive migrations over rewrites.
 
 ### Lane 6 — Personal-to-Shared Promotion Flow
 
-- Add explicit “share to channel” / “create shared task” actions from private situations.
+- Add explicit “share to channel” / “create shared task” actions from private chats.
 - Share only selected outputs/artifacts/summaries.
 - Record provenance and audit events.
 - Never expose hidden personal runtime context.
@@ -270,12 +270,12 @@ Prefer additive migrations over rewrites.
 
 - Show runtime ownership and scope in agent detail/settings views.
 - Enforce runtime routing server-side.
-- Add tests for forbidden personal-runtime access from shared situations.
+- Add tests for forbidden personal-runtime access from shared channels/chats.
 - Add audit logs for shared runtime invocation, config changes, and promotion events.
 
 ### Lane 8 — Voice Collaboration
 
-- Treat voice sessions as scoped situations.
+- Treat voice sessions as scoped chats/channels.
 - Private voice transcripts stay private by default.
 - Channel voice transcripts and action items become visible according to channel policy.
 - Add post-call controls for sharing summaries, tasks, and decisions.
@@ -285,18 +285,18 @@ Prefer additive migrations over rewrites.
 Keep the change reviewable with small PRs:
 
 1. **Messaging PR** — README positioning and this orchestration plan.
-2. **Architecture audit PR** — document current schema/routes and additive gaps for channel/situation scope.
+2. **Architecture audit PR** — document current schema/routes and additive gaps for channel/chat scope.
 3. **Channel membership PR** — introduce or formalize channel/conversation membership and agent participation mode.
 4. **Runtime guard PR** — enforce that personal runtimes cannot be used in shared contexts.
 5. **Channel UX PR** — expose participants, agent modes, and scope labels in chat.
 6. **Scoped resources PR** — make Tasks, Inbox, Projects, Automations, Team, Skills, and Blueprints permission-filtered lenses over scoped resources.
 7. **Promotion flow PR** — allow selected private outputs and resources to be shared intentionally.
-8. **Voice scope PR** — align voice sessions/transcripts with situation scope.
+8. **Voice scope PR** — align voice sessions/transcripts with channel/chat scope.
 
 ## Open Questions
 
 - Should channels be first-class tables immediately, or typed conversations first?
-- Is “situation” a product-facing word, or just an internal architecture concept?
+- Should “situation” be removed entirely, or kept only as an internal architecture shorthand?
 - How should users discover available team agents inside a channel?
 - Should a personal agent ever be mentionable in a shared channel if only the owner sees/uses it, or is that too confusing?
 - How should channel memory be summarized, retained, and pruned?

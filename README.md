@@ -8,13 +8,13 @@
   <img src="docs/images/crewcmd-intro.gif" alt="CrewCmd Introduction" width="800" />
 </p>
 
-CrewCmd is an open-source, self-hostable collaborative AI workspace: the hybrid of ChatGPT-style personal AI conversations and Slack-style team coordination, built natively around OpenClaw agents. Humans and agents work side by side across the same task board, inbox, chat surfaces, and agent org chart. Every person gets private AI leverage, while teams get shared agent capacity they can coordinate together.
+CrewCmd is an open-source, self-hostable collaborative AI workspace built around channels, conversations, and situations where humans and OpenClaw agents work together. Every person gets private AI leverage in their own runtime, while teams get shared channels with approved agents, tasks, inboxes, voice sessions, and governance.
 
-**Built for small teams that want to punch way above their weight without giving up personal workspace privacy.**
+**Built for small teams that want to punch way above their weight without giving up personal runtime privacy.**
 
-A solo founder can keep private conversations with personal agents, then pull selected work into a shared company workspace. A 5-person startup can coordinate with shared agents, team-visible conversations, voice chat, and approval gates without pretending Slack plus a bot is enough. That's the idea.
+A solo founder can keep private conversations with personal agents, then intentionally share selected outputs into a team channel. A 5-person startup can coordinate in shared marketing, product, or support channels with multiple humans, approved shared agents, voice chat, and approval gates without pretending Slack plus a bot is enough. That's the idea.
 
-**Private personal workspace · Shared team workspace · OpenClaw runtime integration · Agent inbox · Voice chat · Skills management · Task management · Agent team structure**
+**Private personal runtime · Shared AI channels · OpenClaw runtime integration · Agent inbox · Voice chat · Skills management · Task management · Agent team structure**
 
 <p align="center">
   <img src="docs/images/team-org-chart.png" alt="CrewCmd Team Org Chart" width="800" />
@@ -24,15 +24,15 @@ A solo founder can keep private conversations with personal agents, then pull se
 
 ## Why CrewCmd?
 
-Other platforms bolt AI onto an existing chat tool, or make every conversation feel like a private single-player assistant. CrewCmd is designed for the middle ground teams actually need: private personal AI work, shared collaborative spaces, and a clear boundary between the two.
+Other platforms bolt AI onto an existing chat tool, or make every conversation feel like a private single-player assistant. CrewCmd is designed for the middle ground teams actually need: private personal AI work, shared collaborative channels, and a clear runtime boundary between the two.
 
-- **Personal workspace first** — Each user can have private OpenClaw-backed conversations, agents, tasks, and context that do not leak into a company workspace by default.
-- **Shared team workspace when it matters** — Promote work into team-visible conversations, shared agents, task boards, inbox items, and approvals when collaboration is useful.
+- **Personal runtime privacy** — Each user can have private OpenClaw-backed conversations, agents, tasks, and context that never leak into shared channels by default.
+- **Shared AI channels when it matters** — Bring humans and approved team/org agents into durable channels, project rooms, task threads, voice sessions, inbox items, and approvals when collaboration is useful.
 - **Deploy a full team in one click** — Pre-built team templates let you spin up a dev squad, marketing team, support crew, solo founder setup, and more. Customize roles, hierarchy, and skills before deploying, or just hit go.
 - **Bring your own OpenClaw agents** — Import agents from an OpenClaw runtime and manage them in CrewCmd. Teams can bring their own personal OpenClaw agents, and companies can also provide shared or dedicated OpenClaw agents for team members.
 - **One inbox for everything** — Agents surface decisions, blockers, and completed work with priority tiers. No more checking 7 different tools. Review and approve from one place.
 - **Skills management** — Install, configure, and sync skills to your agents. CrewCmd includes built-in skills and can browse curated external skill sources, but the experience today is primarily about managing installed skills.
-- **Workspace access control** — Personal agents can stay private, and company-owned agents can be shared with team or org visibility.
+- **Channel and runtime access control** — Personal agents stay private, personal runtimes are never attachable to shared channels, and company-owned agents can be shared with team or org visibility.
 - **Humans and agents on the same board** — Task management, project tracking, and time logging that works for both. See who's doing what, human or AI.
 - **Agent team structure** — Visual org chart for agents with reporting lines and delegation paths.
 - **Governance foundation** — Approval-gate and audit-trail primitives exist in the codebase, but the full guardrail workflow is still a work in progress.
@@ -123,10 +123,10 @@ pnpm dev
 
 | Feature | Description |
 |---|---|
-| **Private Personal Workspace** | Personal conversations, agents, tasks, and runtime-backed context stay private unless explicitly shared. |
-| **Shared Team Workspace** | Company workspaces coordinate humans and shared agents across conversations, task boards, inboxes, and approvals. |
+| **Private Personal Runtime** | Personal conversations, agents, tasks, and runtime-backed context stay private unless selected outputs are explicitly shared. |
+| **Shared AI Channels** | Team channels coordinate multiple humans and approved shared agents across conversations, task boards, inboxes, voice sessions, and approvals. |
 | **Team Blueprints** | Pre-built agent team templates. One click to deploy a full team with roles, hierarchy, and skills. |
-| **OpenClaw Runtime Import** | Import and manage agents from an OpenClaw runtime, including runtime metadata and workspace sync. |
+| **OpenClaw Runtime Import** | Import and manage agents from an OpenClaw runtime, including runtime metadata, ownership, visibility, and sync. |
 | **Agent Inbox** | Centralized communication hub. Agents surface decisions, blockers, and updates with priority tiers. |
 | **Skills Management** | Install, configure, and manage agent skills, including curated browse/import flows and runtime sync. |
 | **Access Tiers** | Private personal agents plus team/org visibility for company-owned agents. |

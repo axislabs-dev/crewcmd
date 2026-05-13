@@ -1042,7 +1042,7 @@ export function VoiceAgent({
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
   const usesOrbitalVisual = immersive || compact;
   const particleCount = immersive ? 36 : compact ? 18 : 0;
-  const visualVolume = Math.min(1, volumeLevel * 0.65);
+  const visualVolume = Math.min(1, volumeLevel * (nativeSessionActive ? 1.25 : 0.8));
   const motionLevel =
     state === "speaking"
       ? Math.min(0.82, 0.24 + visualVolume * 0.78)

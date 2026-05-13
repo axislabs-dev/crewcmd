@@ -570,7 +570,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         levelFrameCount += 1
         let now = Date().timeIntervalSince1970 * 1000
 
-        if levelFrameCount % 6 == 0 {
+        if levelFrameCount % 2 == 0 {
             let threshold = currentSilenceThreshold()
             notifyListeners("voiceLevel", data: [
                 "voiceSessionId": currentSessionId ?? "",

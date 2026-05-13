@@ -18,6 +18,7 @@ export type AgentReplyNotification = {
   companyId: string;
   agentId: string;
   sessionId: string;
+  sessionKey: string;
   messageId: string;
   body: string;
 };
@@ -63,7 +64,7 @@ function normalizePrivateKey(value: string | undefined) {
 
 export function buildAgentReplyPayload(params: AgentReplyNotification): PushPayload {
   const preview = params.body.replace(/\s+/g, " ").trim().slice(0, 140);
-  const url = `/chat?agent=${encodeURIComponent(params.agentId)}&session=${encodeURIComponent(params.sessionId)}`;
+  const url = `/chat?agent=${encodeURIComponent(params.agentId)}&sessionKey=${encodeURIComponent(params.sessionKey)}&messageId=${encodeURIComponent(params.messageId)}`;
   return {
     title: `${params.agentId} responded`,
     body: preview || "Your agent has a new response.",
@@ -72,6 +73,7 @@ export function buildAgentReplyPayload(params: AgentReplyNotification): PushPayl
       kind: "agent_reply",
       agentId: params.agentId,
       sessionId: params.sessionId,
+      sessionKey: params.sessionKey,
       messageId: params.messageId,
       url,
     },

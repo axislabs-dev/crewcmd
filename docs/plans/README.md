@@ -16,3 +16,6 @@ Longer-form implementation plans and product hardening roadmaps.
 - [RBAC and permissions model](./rbac-permissions-model.md) -
   full database, RLS/app-policy, API, admin-flow, frontend, and test scope
   for the channel/chat-first collaboration model.
+- [Channel Scope Schema Migration Audit](channel-scope-schema-migration-audit.md) -
+  safe additive path from workspace-scoped resources to channels,
+  memberships, scope metadata, runtime bindings, grants, and promotions.

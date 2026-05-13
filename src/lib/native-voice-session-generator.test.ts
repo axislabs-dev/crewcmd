@@ -54,11 +54,13 @@ describe("iOS native voice-session generator", () => {
     expect(bufferHandler).toContain("recordingChannels = Int(buffer.format.channelCount)");
   });
 
-  it("uses a native VAD threshold suitable for iPhone microphone levels", () => {
-    expect(source).toContain("private let silenceThreshold = 0.005");
-    expect(source).toContain("private let speechStartMs = 100.0");
-    expect(source).toContain("private let silenceEndMs = 700.0");
-    expect(source).toContain("private let minRecordingMs = 250.0");
+  it("uses native VAD timing that tolerates natural pauses and adaptive noise", () => {
+    expect(source).toContain("private let baseSilenceThreshold = 0.006");
+    expect(source).toContain("private let speechStartMs = 250.0");
+    expect(source).toContain("private let silenceEndMs = 1800.0");
+    expect(source).toContain("private let minRecordingMs = 600.0");
+    expect(source).toContain("private func currentSilenceThreshold()");
+    expect(source).toContain("noiseFloorRms * 3.0");
   });
 
   it("suppresses VAD recording while native playback is speaking", () => {

@@ -13,3 +13,6 @@ Longer-form implementation plans and product hardening roadmaps.
 - [Visual Uplift Orchestration Plan](visual-uplift-orchestration-plan.md) -
   concurrent PR plan for the app-wide desktop and Capacitor mobile visual
   redesign.
+- [RBAC and permissions model](./rbac-permissions-model.md) -
+  full database, RLS/app-policy, API, admin-flow, frontend, and test scope
+  for the channel/chat-first collaboration model.

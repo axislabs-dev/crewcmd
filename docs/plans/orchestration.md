@@ -217,29 +217,36 @@ Users should not need to think in raw runtime IDs, but they should always unders
 
 ## Implementation Lanes
 
+This plan now depends on the detailed [RBAC and permissions model](./rbac-permissions-model.md). Treat that model as part of the same change, not a follow-up: database shape, app-layer policy, RLS where available, API authorization, admin flows, frontend affordances, tests, and docs all need to move together.
+
 ### Lane 1 — Product Language and Information Architecture
 
 - Update README and docs to describe CrewCmd as channel/chat-first collaborative AI.
 - Keep workspaces in architecture language, but stop making workspace switching the main product metaphor.
 - Define canonical terms: channel, chat, direct message, thread, project room, personal runtime, shared runtime, personal agent, team agent, org agent. Keep “situation” internal-only if used at all.
 
-### Lane 2 — Data Model Audit
+### Lane 2 — Data Model and RBAC Audit
 
-Audit existing workspace, chat session, thread, runtime, and agent visibility tables.
+Audit existing workspace, chat session, thread, runtime, agent visibility, company member, workspace grant, and agent access grant tables.
 
 Questions to answer:
 
 - Can `chat_sessions` become the durable channel/chat primitive?
 - Do we need a first-class `channels` table, or can channels be typed/grouped conversations initially?
 - Where should channel-agent membership and participation mode live?
-- What fields are needed for visibility, participants, runtime scope, resource scope, provenance, and promotion/sharing?
+- What fields are needed for visibility, participants, runtime scope, resource scope, provenance, RBAC grants, and promotion/sharing?
 - Which checks prevent personal runtime use from shared contexts?
+- Which company, channel, project, agent, and runtime roles are authoritative for each action?
+- Which policies must be mirrored as Postgres RLS and which must be enforced in the TypeScript policy engine for PGlite/self-hosted modes?
 
 Prefer additive migrations over rewrites.
 
-### Lane 3 — Channel Membership and Agent Participation
+### Lane 3 — Channel Membership, RBAC, and Agent Participation
 
 - Add or document channel/conversation membership for humans and agents.
+- Define channel roles: owner, admin, member, contributor, viewer, guest.
+- Define agent capabilities: view, invoke, configure, manage membership, view logs, manage budget, retire.
+- Define runtime capabilities: view, configure, bind, invoke, rotate/remove credentials.
 - Add agent participation modes.
 - Default shared-channel agents to `respond when mentioned` unless configured otherwise.
 - Add backend checks that reject agents/runtimes not allowed in the channel scope.
@@ -255,6 +262,7 @@ Prefer additive migrations over rewrites.
 ### Lane 5 — Scope-Aware Resource Pages
 
 - Update Tasks, Inbox, Projects, Automations, Team/agents, Skills, and Blueprints to behave as permission-filtered lenses over scoped resources.
+- Add backend visible-to-viewer query helpers before changing page filters; frontend filtering must never be the security boundary.
 - Add visible filters for mine, private, channel, project, team, org, and agent where relevant.
 - Ensure personal-agent-created resources default to private owner scope.
 - Ensure shared/channel/project/org resources are only visible to allowed members.
@@ -269,6 +277,7 @@ Prefer additive migrations over rewrites.
 ### Lane 7 — Runtime Visibility and Enforcement
 
 - Show runtime ownership and scope in agent detail/settings views.
+- Split personal runtime administration from company runtime administration in UI and API.
 - Enforce runtime routing server-side.
 - Add tests for forbidden personal-runtime access from shared channels/chats.
 - Add audit logs for shared runtime invocation, config changes, and promotion events.
@@ -282,16 +291,18 @@ Prefer additive migrations over rewrites.
 
 ## PR Strategy
 
-Keep the change reviewable with small PRs:
+Keep the change reviewable with small PRs, but do not treat the later lanes as optional. Each implementation PR should include schema/API/frontend/tests/docs for its slice:
 
 1. **Messaging PR** — README positioning and this orchestration plan.
-2. **Architecture audit PR** — document current schema/routes and additive gaps for channel/chat scope.
-3. **Channel membership PR** — introduce or formalize channel/conversation membership and agent participation mode.
-4. **Runtime guard PR** — enforce that personal runtimes cannot be used in shared contexts.
-5. **Channel UX PR** — expose participants, agent modes, and scope labels in chat.
-6. **Scoped resources PR** — make Tasks, Inbox, Projects, Automations, Team, Skills, and Blueprints permission-filtered lenses over scoped resources.
-7. **Promotion flow PR** — allow selected private outputs and resources to be shared intentionally.
-8. **Voice scope PR** — align voice sessions/transcripts with channel/chat scope.
+2. **Architecture/RBAC audit PR** — document current schema/routes and additive gaps for channel/chat scope, roles, permissions, RLS/app-policy enforcement, admin flows, and tests.
+3. **Policy engine PR** — add canonical permission helpers, role matrices, fixtures, and unit tests before relying on UI checks.
+4. **Channel membership PR** — introduce or formalize channel/conversation membership, channel roles, and agent participation mode.
+5. **Runtime guard PR** — enforce that personal runtimes cannot be used in shared contexts, with API and policy tests.
+6. **Channel UX PR** — expose participants, agent modes, scope labels, disabled-control reasons, and channel admin flows in chat.
+7. **Scoped resources PR** — make Tasks, Inbox, Projects, Automations, Team, Skills, and Blueprints permission-filtered lenses over scoped resources.
+8. **Promotion flow PR** — allow selected private outputs and resources to be shared intentionally with provenance and audit trail.
+9. **Voice scope PR** — align voice sessions/transcripts with channel/chat scope.
+10. **RLS hardening PR** — mirror policy-engine rules as hosted Postgres RLS where supported and keep PGlite/self-hosted policy tests authoritative.
 
 ## Open Questions
 
@@ -302,6 +313,8 @@ Keep the change reviewable with small PRs:
 - How should channel memory be summarized, retained, and pruned?
 - Can a project room and a channel be the same primitive with different labels?
 - Which resource types need separate share/promotion copies versus visibility changes in place?
+- Which permissions are company-level, channel-level, project-level, agent-level, and runtime-level?
+- Should company admins have emergency access to channel content, or only metadata/audit recovery by default?
 
 ## Non-goals for the First PRs
 

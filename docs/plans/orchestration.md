@@ -249,6 +249,38 @@ Users should not need to think in raw runtime IDs, but they should always unders
 6. **Runtime boundaries are backend-enforced.** UI affordances are not enough.
 7. **Voice follows the same scope rules.** A private voice session stays private; a channel voice session is team-visible according to channel policy.
 
+## Product Quality Bar
+
+CrewCmd should be judged against a Slack-class collaboration bar, not a prototype-agent-chat bar. The target experience needs to be fast, legible, durable, and trustworthy enough for a serious team to keep open all day.
+
+Minimum product expectations for the new model:
+
+- **Navigation speed** — channels, DMs, project rooms, threads, and recent conversations should be reachable with low friction from web, desktop, and mobile.
+- **Unread and mention state** — users need reliable unread counts, @mentions, agent mentions, thread replies, and notification controls.
+- **Durable conversation memory** — search, pins, files, summaries, task links, decisions, and provenance should make channels useful after the live discussion ends.
+- **Thread and voice parity** — threaded chat, voice sessions, transcripts, summaries, and action items must follow the same scope and permission rules.
+- **Visible privacy and scope** — every chat/channel/resource should make it obvious whether it is private, DM-scoped, channel-scoped, project-scoped, team-scoped, or org-scoped.
+- **Agent presence without noise** — users should see which agents are available, watching, mention-only, proactive, or on-call, and agents should not pile on unless explicitly configured.
+- **Permission clarity** — disabled controls need reasons, not mystery failures. Admins should be able to understand who can read, post, invite, mention agents, bind runtimes, and promote resources.
+- **Self-hostable trust** — local/PGlite and hosted Postgres deployments must preserve the same policy invariants, even if RLS is only available as hosted defense-in-depth.
+
+## Migration and Backfill Strategy
+
+This should be an additive migration, not a flag-day rewrite. Existing users and local installs should keep working while the channel-first model is introduced behind compatible schema and route changes.
+
+Recommended migration sequence:
+
+1. **Add policy engine first** — introduce canonical actor/scope/resource types and policy helpers before relying on new frontend filters.
+2. **Add scope columns safely** — add nullable/backfilled `scopeType`, `scopeId`, `ownerUserId`, provenance, and promotion fields to chats, tasks, inbox, projects, docs/files, approvals, automations, skills, blueprints, activity, chat runs, and voice session/transcript tables.
+3. **Backfill conservatively** — personal/workspace-owned resources become `private:user:<ownerUserId>` where ownership is known; company-visible resources become `org:<companyId>` or restricted legacy scope only when existing behavior clearly implies that visibility. Ambiguous rows should remain restricted, not broadened.
+4. **Introduce channels/memberships** — add `channels` and `channel_members`, or typed/grouped `chat_sessions` if chosen for v1, with human and agent membership roles.
+5. **Route reads through visible-to-viewer helpers** — update APIs before broadening UI navigation so team/global pages never query raw all-resource lists.
+6. **Add runtime binding enforcement** — reject personal runtime binding to shared scopes before shipping shared agent/channel UX.
+7. **Introduce promotion flows** — migrate sharing behavior to explicit copy/derive/promote actions with `resource_promotions` and audit events.
+8. **Tighten hosted RLS** — mirror the TypeScript policy engine in Postgres RLS where supported after policy fixtures are stable.
+
+Rollback stance: every early migration should be additive and reversible enough to disable the new channel UX while leaving legacy chat/workspace flows intact.
+
 ## Implementation Lanes
 
 This plan now depends on the detailed [RBAC and permissions model](./rbac-permissions-model.md). Treat that model as part of the same change, not a follow-up: database shape, app-layer policy, RLS where available, API authorization, admin flows, frontend affordances, tests, and docs all need to move together.

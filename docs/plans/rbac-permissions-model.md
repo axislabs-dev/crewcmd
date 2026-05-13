@@ -335,6 +335,52 @@ For each scoped table:
 
 RLS policies must not allow broad company member reads unless the resource is explicitly `org` scoped.
 
+## Threat Model
+
+The collaboration model must assume that accidental over-sharing, route shortcuts, service-token bypasses, and agent/runtime confusion are the highest-risk failures. The product is only trustworthy if these failures are designed against explicitly.
+
+### High-risk failures that must never happen
+
+1. **Personal runtime leak into shared scope**
+   - A user-owned OpenClaw runtime must never be attachable to a shared channel, company agent, team-visible task, shared automation, org skill, or channel voice session.
+   - Server-side runtime binding checks must reject this even if a UI bug, forged request, stale client, or service callback attempts it.
+
+2. **Private context copied during promotion**
+   - Promoting private work to a channel must never reveal hidden prompts, private memory, raw personal runtime context, private files, private voice transcript text, or unselected messages.
+   - Promotion must copy or derive selected fields/artifacts/summaries only, with redaction summary and provenance.
+
+3. **Raw global resource queries**
+   - Team/global pages must never fetch raw `all tasks`, `all inbox`, `all docs`, `all chats`, or `all files` and rely on frontend filtering.
+   - Every read path must use visible-to-viewer helpers or equivalent policy-scoped queries.
+
+4. **Service identity becomes an admin bypass**
+   - `HEARTBEAT_SECRET`, runtime callbacks, cron jobs, background workers, and agent run callbacks must carry constrained service capabilities.
+   - A heartbeat or callback token must not read arbitrary private data, bind runtimes, invite agents, change membership, approve gates, or promote resources unless its scoped job/run explicitly permits that action.
+
+5. **Company/admin role overreach**
+   - Company admins need governance and recovery tools, but ordinary admin status must not silently expose private personal chats, personal runtime logs, hidden prompts, private voice transcripts, or private files.
+   - Break-glass diagnostics, if ever added, must be explicit, redacted, audited, and unavailable as normal shared-channel UI.
+
+6. **Agent confusion / identity spoofing**
+   - Users must be able to tell whether an agent is personal, team, org, imported, disabled, offline, watching, mention-only, proactive, or on-call.
+   - Routes must verify agent identity, membership, runtime binding, and capability before allowing mentions, runs, config edits, log reads, or channel membership changes.
+
+7. **Voice transcript scope leak**
+   - Private voice transcripts must remain private by default. Channel voice transcripts, summaries, and action items inherit channel/project scope.
+   - Post-call sharing controls must use the same promotion/audit path as chat and file artifacts.
+
+8. **Permission drift between app policy and RLS**
+   - Hosted Postgres RLS must not become a divergent second policy system. It should mirror tested TypeScript policy fixtures.
+   - Local/PGlite deployments must remain safe through the TypeScript policy engine even where DB-level RLS is unavailable.
+
+### Required mitigations
+
+- Centralize authorization in shared policy helpers and make direct route-local ad hoc checks the exception.
+- Add negative tests for every invariant above, not only happy-path permission tests.
+- Require audit events for role changes, member changes, agent invitations, runtime binding, shared runtime invocation, promotion, approvals, and policy overrides.
+- Treat missing or ambiguous scope as private/restricted, never public/org-visible by default.
+- Include disabled-control reasons in frontend tests so permission failures are understandable and not papered over.
+
 ## API Authorization Contract
 
 Every API route should answer these questions before touching data:

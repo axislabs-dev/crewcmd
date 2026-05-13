@@ -648,11 +648,34 @@ function blobToBase64(blob: Blob) {
   });
 }
 
+function createClientId() {
+  const browserCrypto = globalThis.crypto;
+  if (typeof browserCrypto?.randomUUID === "function") {
+    return browserCrypto.randomUUID();
+  }
+
+  if (typeof browserCrypto?.getRandomValues === "function") {
+    const bytes = browserCrypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+    return [
+      hex.slice(0, 4).join(""),
+      hex.slice(4, 6).join(""),
+      hex.slice(6, 8).join(""),
+      hex.slice(8, 10).join(""),
+      hex.slice(10, 16).join(""),
+    ].join("-");
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 function getMobileDeviceId() {
   const key = "crewcmd.mobile.device-id";
   const existing = window.localStorage.getItem(key);
   if (existing) return existing;
-  const next = crypto.randomUUID();
+  const next = createClientId();
   window.localStorage.setItem(key, next);
   return next;
 }
@@ -1237,7 +1260,7 @@ export default function ChatPage() {
   }, []);
 
   const enqueueMainMessage = useCallback((text: string, files: File[], options: { forceVoiceResponse?: boolean }) => {
-    const id = `queued-${crypto.randomUUID()}`;
+    const id = `queued-${createClientId()}`;
     queuedMainMessagesRef.current.push({ id, text, files, options });
     setMessages((prev) => [
       ...prev,
@@ -1258,7 +1281,7 @@ export default function ChatPage() {
   }, []);
 
   const enqueueThreadMessage = useCallback((thread: ActiveThread, text: string, files: File[]) => {
-    const id = `queued-${crypto.randomUUID()}`;
+    const id = `queued-${createClientId()}`;
     queuedThreadMessagesRef.current.push({ id, thread, text, files });
     setThreadMessages((prev) => [
       ...prev,
@@ -2867,7 +2890,7 @@ export default function ChatPage() {
       if (!wakeAgent && stopWords.some((sw) => lowerTrimmed === sw.toLowerCase())) {
         // Show user message in chat
         const userMsg: Message = {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: "user",
           content: trimmed,
           createdAt: new Date().toISOString(),
@@ -2877,7 +2900,7 @@ export default function ChatPage() {
 
         // Show system-style pause message
         const pauseMsg: Message = {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: "assistant",
           content: "Agent paused. Type a message or say their name to resume.",
           createdAt: new Date().toISOString(),
@@ -2890,7 +2913,7 @@ export default function ChatPage() {
       // --- Paused state: show message locally but don't forward to gateway ---
       if (isPaused && !wakeAgent) {
         const userMsg: Message = {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: "user",
           content: trimmed,
           createdAt: new Date().toISOString(),
@@ -2908,7 +2931,7 @@ export default function ChatPage() {
         if (!taskTitle) return;
 
         const userMsg: Message = {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: "user",
           content: trimmed,
           createdAt: new Date().toISOString(),
@@ -2949,7 +2972,7 @@ export default function ChatPage() {
 
           const assistantContent = `Task created: "${task.title}"\n\n${marker}`;
           const aMsg: Message = {
-            id: crypto.randomUUID(),
+            id: createClientId(),
             role: "assistant",
             content: assistantContent,
             createdAt: new Date().toISOString(),
@@ -2979,7 +3002,7 @@ export default function ChatPage() {
           setMessages((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: createClientId(),
               role: "assistant",
               content: "Failed to create task. Check your connection.",
               createdAt: new Date().toISOString(),
@@ -3043,7 +3066,7 @@ export default function ChatPage() {
         : gatewaySessionKeyForAgent(selectedAgent);
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
-      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const optimisticId = `optimistic-${createClientId()}`;
       const userMsg: Message = {
         id: optimisticId,
         role: "user",
@@ -3093,7 +3116,7 @@ export default function ChatPage() {
           : speakResponses;
       voiceLatencyRef.current = shouldSpeakResponses
         ? {
-            requestId: crypto.randomUUID(),
+            requestId: createClientId(),
             startedAt: performance.now(),
           }
         : null;
@@ -3273,7 +3296,7 @@ export default function ChatPage() {
         if (fullContent.trim()) {
           // Parse task references and inject inline card markers
           const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
-          const assistantId = crypto.randomUUID();
+          const assistantId = createClientId();
           const assistantMsg: Message = {
             id: assistantId,
             role: "assistant",
@@ -3325,7 +3348,7 @@ export default function ChatPage() {
             setMessages((prev) => [
               ...prev,
               {
-                id: crypto.randomUUID(),
+                id: createClientId(),
                 role: "assistant",
                 content: cancelledContent,
               },
@@ -3363,7 +3386,7 @@ export default function ChatPage() {
             setMessages((prev) => [
               ...prev,
               {
-                id: crypto.randomUUID(),
+                id: createClientId(),
                 role: "assistant",
                 content: `${fullContent}\n\n_(connection interrupted)_`,
                 createdAt: new Date().toISOString(),
@@ -3453,7 +3476,7 @@ export default function ChatPage() {
 
     const metadata = attachments.length > 0 ? { attachments } : null;
 
-    const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    const optimisticId = `optimistic-${createClientId()}`;
     const userMsg: Message = {
       id: optimisticId,
       role: "user",
@@ -3627,7 +3650,7 @@ export default function ChatPage() {
 
       if (fullContent.trim()) {
         const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
-        const visibleAssistantId = assistantMessageId ?? crypto.randomUUID();
+        const visibleAssistantId = assistantMessageId ?? createClientId();
         if (!assistantMessageId) {
           useChatStore.getState().addMessage({
             id: visibleAssistantId,
@@ -3669,7 +3692,7 @@ export default function ChatPage() {
         setThreadMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: createClientId(),
             role: "assistant",
             content: `${fullContent}\n\n_(connection interrupted)_`,
             createdAt: new Date().toISOString(),

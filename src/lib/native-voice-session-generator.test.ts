@@ -51,6 +51,8 @@ describe("iOS native voice-session generator", () => {
     expect(startEngine).toContain("audioEngine.connect(input, to: keepaliveMixer, format: format)");
     expect(routeChangeHandler).toContain("let shouldRestart = shouldRestartForRouteChange(reason)");
     expect(routeChangeHandler).toContain('recoverAudioEngine(reason: "route-change", forceRestart: true)');
+    expect(routeChangeHandler).toContain("case .categoryChange:");
+    expect(routeChangeHandler).toContain("session.category != .playAndRecord || session.mode != .voiceChat");
     expect(bufferHandler).toContain("recordingSampleRate = buffer.format.sampleRate");
     expect(bufferHandler).toContain("recordingChannels = Int(buffer.format.channelCount)");
   });

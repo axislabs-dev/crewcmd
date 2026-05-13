@@ -825,7 +825,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "reason": reason.map { String($0.rawValue) } ?? "unknown",
             "applicationState": currentApplicationStateName(),
             "engineRunning": audioEngine.isRunning,
-            "shouldRestart": shouldRestart
+            "shouldRestart": shouldRestart,
+            "category": AVAudioSession.sharedInstance().category.rawValue,
+            "mode": AVAudioSession.sharedInstance().mode.rawValue
         ])
         guard active else { return }
         if shouldRestart {
@@ -846,8 +848,11 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private func shouldRestartForRouteChange(_ reason: AVAudioSession.RouteChangeReason?) -> Bool {
         guard let reason = reason else { return !audioEngine.isRunning }
         switch reason {
-        case .newDeviceAvailable, .oldDeviceUnavailable, .categoryChange, .override:
+        case .newDeviceAvailable, .oldDeviceUnavailable, .override:
             return true
+        case .categoryChange:
+            let session = AVAudioSession.sharedInstance()
+            return !audioEngine.isRunning || session.category != .playAndRecord || session.mode != .voiceChat
         case .routeConfigurationChange:
             if !audioEngine.isRunning { return true }
             let now = Date().timeIntervalSince1970 * 1000

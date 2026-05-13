@@ -26,7 +26,40 @@ export function ChatEventProvider() {
 
     let eventSource: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnecting = false;
     let disposed = false;
+
+    function closeEventSource() {
+      eventSource?.close();
+      eventSource = null;
+    }
+
+    function scheduleReconnect(delayMs: number) {
+      if (disposed || reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delayMs);
+    }
+
+    function reconnectNow() {
+      if (disposed || reconnecting) return;
+      reconnecting = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      closeEventSource();
+      connect();
+      window.setTimeout(() => {
+        reconnecting = false;
+      }, 250);
+    }
+
+    function handleResume() {
+      if (typeof document !== "undefined" && document.hidden) return;
+      reconnectNow();
+    }
 
     function connect() {
       if (disposed) return;
@@ -67,20 +100,23 @@ export function ChatEventProvider() {
 
       eventSource.onerror = () => {
         // Auto-reconnect after 5s
-        eventSource?.close();
-        eventSource = null;
-        if (!disposed) {
-          reconnectTimer = setTimeout(connect, 5_000);
-        }
+        closeEventSource();
+        scheduleReconnect(5_000);
       };
     }
 
     connect();
+    document.addEventListener("visibilitychange", handleResume);
+    window.addEventListener("focus", handleResume);
+    window.addEventListener("pageshow", handleResume);
 
     return () => {
       disposed = true;
-      eventSource?.close();
+      closeEventSource();
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      document.removeEventListener("visibilitychange", handleResume);
+      window.removeEventListener("focus", handleResume);
+      window.removeEventListener("pageshow", handleResume);
     };
   }, [company?.id, addMessage]);
 

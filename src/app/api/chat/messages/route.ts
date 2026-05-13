@@ -5,6 +5,50 @@ import { eq, and, asc, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 import { buildChatExecutionSnapshot, loadChatExecutionEvents } from "@/lib/chat-session-events";
 import { loadThreadHistoryForParent, type ChatPersistenceScope } from "@/lib/chat-thread-history";
+import { resolveAccessibleWorkspace, type WorkspaceRecord } from "@/lib/workspace";
+
+type ChatSessionRecord = typeof chatSessions.$inferSelect;
+
+async function getReadableChatWorkspace(
+  request: NextRequest,
+  scope: ChatPersistenceScope
+): Promise<WorkspaceRecord | null> {
+  if (!scope.workspaceId && !scope.companyId) return null;
+  return resolveAccessibleWorkspace({
+    request,
+    explicitWorkspaceId: scope.workspaceId ?? null,
+    explicitCompanyId: scope.workspaceId ? null : scope.companyId ?? null,
+    requireExplicitForBearer: true,
+  });
+}
+
+async function loadVisibleChatSessionById(
+  request: NextRequest,
+  sessionId: string
+): Promise<ChatSessionRecord | "forbidden" | null> {
+  const [session] = await withRetry(() =>
+    db!
+      .select()
+      .from(chatSessions)
+      .where(eq(chatSessions.id, sessionId))
+      .limit(1)
+  );
+
+  if (!session) return null;
+
+  // Privacy-first: a chat session without an explicit workspace binding is
+  // ambiguous, even if it has a companyId. Do not make legacy/private chats
+  // visible to every company member by inferring broad company access.
+  if (!session.workspaceId) return "forbidden";
+
+  const workspace = await resolveAccessibleWorkspace({
+    request,
+    explicitWorkspaceId: session.workspaceId,
+    requireExplicitForBearer: true,
+  });
+
+  return workspace?.id === session.workspaceId ? session : "forbidden";
+}
 
 /**
  * GET /api/chat/messages?sessionId=xxx&limit=100
@@ -40,19 +84,43 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const readableWorkspace = hasScope
+      ? await getReadableChatWorkspace(request, scope)
+      : null;
+
     if (threadParentSessionKey && hasScope) {
-      return Response.json(await loadThreadHistoryForParent(threadParentSessionKey, scope, limit));
+      if (!readableWorkspace) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return Response.json(await loadThreadHistoryForParent(threadParentSessionKey, { workspaceId: readableWorkspace.id }, limit));
     }
 
     let resolvedSessionId = sessionId;
     let resolvedSessionKey = sessionKey;
+    let resolvedSession: ChatSessionRecord | null = null;
+
+    if (resolvedSessionId) {
+      const visibleSession = await loadVisibleChatSessionById(request, resolvedSessionId);
+      if (visibleSession === "forbidden") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!visibleSession) {
+        resolvedSessionId = null;
+      } else {
+        resolvedSession = visibleSession;
+        resolvedSessionKey = visibleSession.gatewaySessionKey ?? resolvedSessionKey;
+      }
+    }
 
     if (!resolvedSessionId && sessionKey && hasScope) {
+      if (!readableWorkspace) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
       const sessions = await withRetry(() =>
         db!.select().from(chatSessions)
           .where(and(
             eq(chatSessions.gatewaySessionKey, sessionKey),
-            companyId ? eq(chatSessions.companyId, companyId) : eq(chatSessions.workspaceId, workspaceId!)
+            eq(chatSessions.workspaceId, readableWorkspace.id)
           ))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
@@ -61,16 +129,20 @@ export async function GET(request: NextRequest) {
       if (sessions.length > 0) {
         resolvedSessionId = sessions[0].id;
         resolvedSessionKey = sessions[0].gatewaySessionKey ?? sessionKey;
+        resolvedSession = sessions[0];
       }
     }
 
     if (!resolvedSessionId && agentId && hasScope) {
+      if (!readableWorkspace) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
       const agentLower = agentId.toLowerCase();
       const sessions = await withRetry(() =>
         db!.select().from(chatSessions)
           .where(and(
             eq(chatSessions.gatewaySessionKey, agentLower),
-            companyId ? eq(chatSessions.companyId, companyId) : eq(chatSessions.workspaceId, workspaceId!)
+            eq(chatSessions.workspaceId, readableWorkspace.id)
           ))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
@@ -79,15 +151,19 @@ export async function GET(request: NextRequest) {
       if (sessions.length > 0) {
         resolvedSessionId = sessions[0].id;
         resolvedSessionKey = sessions[0].gatewaySessionKey ?? agentLower;
+        resolvedSession = sessions[0];
       }
     }
 
     if (!resolvedSessionId && agentId && hasScope) {
+      if (!readableWorkspace) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
       const sessions = await withRetry(() =>
         db!.select().from(chatSessions)
           .where(and(
             eq(chatSessions.agentId, agentId.toLowerCase()),
-            companyId ? eq(chatSessions.companyId, companyId) : eq(chatSessions.workspaceId, workspaceId!),
+            eq(chatSessions.workspaceId, readableWorkspace.id),
             isNull(chatSessions.gatewaySessionKey)
           ))
           .orderBy(desc(chatSessions.updatedAt))
@@ -97,6 +173,7 @@ export async function GET(request: NextRequest) {
       if (sessions.length > 0) {
         resolvedSessionId = sessions[0].id;
         resolvedSessionKey = sessions[0].gatewaySessionKey ?? null;
+        resolvedSession = sessions[0];
       }
     }
 
@@ -113,8 +190,9 @@ export async function GET(request: NextRequest) {
     const execution = buildChatExecutionSnapshot(
       await loadChatExecutionEvents(resolvedSessionId!, 200)
     );
-    const threadHistory = hasScope && resolvedSessionKey && !resolvedSessionKey.toLowerCase().includes(":thread:")
-      ? await loadThreadHistoryForParent(resolvedSessionKey, scope, limit)
+    const threadWorkspaceId = resolvedSession?.workspaceId ?? readableWorkspace?.id ?? null;
+    const threadHistory = threadWorkspaceId && resolvedSessionKey && !resolvedSessionKey.toLowerCase().includes(":thread:")
+      ? await loadThreadHistoryForParent(resolvedSessionKey, { workspaceId: threadWorkspaceId }, limit)
       : { threads: [], threadSummaries: {}, threadIndex: {} };
 
     return Response.json({

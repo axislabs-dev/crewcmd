@@ -46,6 +46,8 @@ import {
 } from "@/lib/tts-voices";
 import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
 
+const SAVED_MESSAGES_REQUEST_CHUNK_SIZE = 25;
+
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
   if (refs.length === 0) return content;
@@ -1078,6 +1080,7 @@ export default function ChatPage() {
   const activeChatRunIdRef = useRef<string | null>(null);
   const isLoadingRef = useRef(false);
   const isThreadLoadingRef = useRef(false);
+  const savedMessageIdsSignatureRef = useRef<string | null>(null);
   const queuedMainMessagesRef = useRef<QueuedChatMessage[]>([]);
   const queuedThreadMessagesRef = useRef<QueuedThreadMessage[]>([]);
   const activeAudioKindRef = useRef<"filler" | "response" | null>(null);
@@ -1196,12 +1199,22 @@ export default function ChatPage() {
     }
     const params = scopedSearchParams();
     params.set("sourceType", "chat_message");
-    params.set("sourceIds", messageIds.join(","));
     try {
-      const res = await fetch(`/api/saved-items?${params.toString()}`);
-      if (!res.ok) return;
-      const data = await res.json() as { items?: SavedItem[] };
-      setSavedByMessageId(Object.fromEntries((data.items ?? []).map((item) => [item.sourceId, item])));
+      const chunks: string[][] = [];
+      for (let index = 0; index < messageIds.length; index += SAVED_MESSAGES_REQUEST_CHUNK_SIZE) {
+        chunks.push(messageIds.slice(index, index + SAVED_MESSAGES_REQUEST_CHUNK_SIZE));
+      }
+
+      const results = await Promise.all(chunks.map(async (chunk) => {
+        const chunkParams = new URLSearchParams(params);
+        chunkParams.set("sourceIds", chunk.join(","));
+        const res = await fetch(`/api/saved-items?${chunkParams.toString()}`);
+        if (!res.ok) return [];
+        const data = await res.json() as { items?: SavedItem[] };
+        return data.items ?? [];
+      }));
+
+      setSavedByMessageId(Object.fromEntries(results.flat().map((item) => [item.sourceId, item])));
     } catch {
       // Saved state is best-effort and can refresh on the next message load.
     }
@@ -1602,8 +1615,11 @@ export default function ChatPage() {
     const messageIds = messages
       .filter((message) => isUuid(message.id) && isVisibleChatMessage(message))
       .map((message) => message.id);
+    const signature = `${chatScopeKey}:${messageIds.join(",")}`;
+    if (savedMessageIdsSignatureRef.current === signature) return;
+    savedMessageIdsSignatureRef.current = signature;
     void loadSavedMessages(messageIds);
-  }, [messages, loadSavedMessages]);
+  }, [chatScopeKey, messages, loadSavedMessages]);
 
   useEffect(() => {
     if (!urlMessageId) return;

@@ -113,15 +113,8 @@ class EventBridge {
     }, RECONNECT_DELAY_MS);
   }
 
-  private onGatewayEvent = (payload: unknown) => {
+  private onGatewayEvent = (_payload: unknown) => {
     this.eventCount += 1;
-
-    const eventName =
-      typeof payload === "object" && payload !== null && "event" in payload
-        ? String((payload as Record<string, unknown>).event)
-        : "unknown";
-
-    console.log(`[event-bridge] event: ${eventName}`);
   };
 
   private onChatEvent = (payload: unknown) => {

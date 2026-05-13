@@ -49,7 +49,10 @@ describe("iOS native voice-session generator", () => {
     expect(startEngine).toContain("input.installTap(onBus: 0, bufferSize: 1024, format: format)");
     expect(startEngine).toContain("installKeepaliveInputGraph(input: input, format: format)");
     expect(startEngine).toContain("audioEngine.connect(input, to: keepaliveMixer, format: format)");
+    expect(routeChangeHandler).toContain("let shouldRestart = shouldRestartForRouteChange(reason)");
     expect(routeChangeHandler).toContain('recoverAudioEngine(reason: "route-change", forceRestart: true)');
+    expect(routeChangeHandler).toContain("case .categoryChange:");
+    expect(routeChangeHandler).toContain("session.category != .playAndRecord || session.mode != .voiceChat");
     expect(bufferHandler).toContain("recordingSampleRate = buffer.format.sampleRate");
     expect(bufferHandler).toContain("recordingChannels = Int(buffer.format.channelCount)");
   });
@@ -61,6 +64,18 @@ describe("iOS native voice-session generator", () => {
     expect(source).toContain("private let minRecordingMs = 600.0");
     expect(source).toContain("private func currentSilenceThreshold()");
     expect(source).toContain("noiseFloorRms * 3.0");
+  });
+
+  it("does not hard-restart the native engine for every route configuration change", () => {
+    const routeChangeHandler = source.slice(
+      source.indexOf("private func handleAudioRouteChange"),
+      source.indexOf("private func recoverAudioEngine")
+    );
+
+    expect(routeChangeHandler).toContain("private func shouldRestartForRouteChange");
+    expect(routeChangeHandler).toContain("case .routeConfigurationChange:");
+    expect(routeChangeHandler).toContain('notifyDiagnostic("native.audio-session.route-change.coalesced"');
+    expect(routeChangeHandler).toContain("try preferAvailableInput(AVAudioSession.sharedInstance())");
   });
 
   it("suppresses VAD recording while native playback is speaking", () => {

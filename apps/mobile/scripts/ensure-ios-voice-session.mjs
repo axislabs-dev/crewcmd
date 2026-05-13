@@ -77,6 +77,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var cachedApplicationState: UIApplication.State = .active
     private var playbackSuppressionUntil: TimeInterval = 0
     private var noiseFloorRms: Double = 0
+    private var lastRouteRecoveryAt: TimeInterval = 0
 
     private let baseSilenceThreshold = 0.006
     private let speechStartMs = 250.0
@@ -834,13 +835,58 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private func handleAudioRouteChange(_ notification: Notification) {
         let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
         let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue)
+        let shouldRestart = shouldRestartForRouteChange(reason)
         notifyDiagnostic("native.audio-session.route-change", detail: [
             "reason": reason.map { String($0.rawValue) } ?? "unknown",
             "applicationState": currentApplicationStateName(),
-            "engineRunning": audioEngine.isRunning
+            "engineRunning": audioEngine.isRunning,
+            "shouldRestart": shouldRestart,
+            "category": AVAudioSession.sharedInstance().category.rawValue,
+            "mode": AVAudioSession.sharedInstance().mode.rawValue
         ])
-        if active {
+        guard active else { return }
+        if shouldRestart {
             recoverAudioEngine(reason: "route-change", forceRestart: true)
+            return
+        }
+
+        do {
+            try preferAvailableInput(AVAudioSession.sharedInstance())
+        } catch {
+            lastError = error.localizedDescription
+            notifyDiagnostic("native.audio-session.preferred-input.error", detail: [
+                "message": error.localizedDescription
+            ])
+        }
+    }
+
+    private func shouldRestartForRouteChange(_ reason: AVAudioSession.RouteChangeReason?) -> Bool {
+        guard let reason = reason else { return !audioEngine.isRunning }
+        switch reason {
+        case .newDeviceAvailable, .oldDeviceUnavailable, .override:
+            return true
+        case .categoryChange:
+            let session = AVAudioSession.sharedInstance()
+            return !audioEngine.isRunning || session.category != .playAndRecord || session.mode != .voiceChat
+        case .routeConfigurationChange:
+            if !audioEngine.isRunning { return true }
+            let now = Date().timeIntervalSince1970 * 1000
+            if now - lastRouteRecoveryAt > 3000 {
+                lastRouteRecoveryAt = now
+                return false
+            }
+            notifyDiagnostic("native.audio-session.route-change.coalesced", detail: [
+                "reason": String(reason.rawValue),
+                "engineRunning": audioEngine.isRunning,
+                "applicationState": currentApplicationStateName()
+            ])
+            return false
+        case .wakeFromSleep, .noSuitableRouteForCategory:
+            return !audioEngine.isRunning
+        case .unknown:
+            return !audioEngine.isRunning
+        @unknown default:
+            return !audioEngine.isRunning
         }
     }
 

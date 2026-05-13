@@ -28,16 +28,26 @@ const mockFromHeartbeats = vi.fn();
 const mockListWorkspaceAgents = vi.fn();
 const mockGetAgentWorkspaceIds = vi.fn();
 const mockResolveAccessibleWorkspace = vi.fn();
+const mockInsertedAgents: Array<Record<string, unknown>> = [];
 
 vi.mock("@/db", () => ({
   db: {
     select: () => ({
-      from: (table: symbol) => ({
+      from: (_table: symbol) => ({
         catch: (...args: Parameters<Promise<unknown>["catch"]>) => mockFromHeartbeats().catch(...args),
         then: (...args: Parameters<Promise<unknown>["then"]>) => {
           return mockFromHeartbeats().then(...args);
         },
         where: () => mockFromHeartbeats(),
+      }),
+    }),
+    insert: () => ({
+      values: (values: Record<string, unknown>) => ({
+        returning: () => {
+          const agent = { id: `agent-${mockInsertedAgents.length + 1}`, ...values };
+          mockInsertedAgents.push(agent);
+          return Promise.resolve([agent]);
+        },
       }),
     }),
   },
@@ -69,7 +79,12 @@ vi.mock("@/lib/workspace", () => ({
   grantAgentToWorkspace: vi.fn(async () => null),
 }));
 
-import { GET } from "./route";
+vi.mock("@/lib/require-auth", () => ({
+  requireAuth: vi.fn(async () => null),
+}));
+
+import { resolveRuntimeOwnership } from "@/lib/agent-access";
+import { GET, POST } from "./route";
 
 function makeRequest(url = "http://localhost/api/agents") {
   const parsed = new URL(url);
@@ -86,7 +101,9 @@ function makeRequest(url = "http://localhost/api/agents") {
 describe("GET /api/agents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1" });
+    mockInsertedAgents.length = 0;
+    vi.mocked(resolveRuntimeOwnership).mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", type: "personal", ownerUserId: "user-1", companyId: null });
     mockListWorkspaceAgents.mockResolvedValue(mockAgents);
     mockGetAgentWorkspaceIds.mockResolvedValue(["ws-1"]);
     mockFromHeartbeats.mockResolvedValue([]);
@@ -131,5 +148,104 @@ describe("GET /api/agents", () => {
     expect(body.agents[0].status).toBe("busy");
     expect(body.agents[0].currentTask).toBe("Deploying");
     expect(body.agents[0].tokenUsage).toEqual({ input: 100, output: 50 });
+  });
+});
+
+
+function makePostRequest(body: Record<string, unknown>) {
+  return {
+    json: async () => body,
+  } as Parameters<typeof POST>[0];
+}
+
+function agentBody(overrides: Record<string, unknown> = {}) {
+  return {
+    name: "Scout",
+    callsign: "scout",
+    ...overrides,
+  };
+}
+
+describe("POST /api/agents runtime isolation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInsertedAgents.length = 0;
+    mockFromHeartbeats.mockResolvedValue([]);
+    vi.mocked(resolveRuntimeOwnership).mockResolvedValue(null);
+  });
+
+  it("blocks binding a user-owned runtime into a company workspace", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue({
+      id: "ws_company",
+      type: "company",
+      ownerUserId: null,
+      companyId: "co_1",
+    });
+    vi.mocked(resolveRuntimeOwnership).mockResolvedValue({
+      ownerType: "user",
+      ownerUserId: "user-1",
+      ownerCompanyId: null,
+    });
+
+    const res = await POST(makePostRequest(agentBody({ runtimeId: "rt_personal" })));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toContain("Personal runtimes cannot be bound");
+    expect(mockInsertedAgents).toHaveLength(0);
+  });
+
+  it("allows binding a company-owned runtime into a company workspace", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue({
+      id: "ws_company",
+      type: "company",
+      ownerUserId: null,
+      companyId: "co_1",
+    });
+    vi.mocked(resolveRuntimeOwnership).mockResolvedValue({
+      ownerType: "company",
+      ownerUserId: null,
+      ownerCompanyId: "co_1",
+    });
+
+    const res = await POST(makePostRequest(agentBody({ runtimeId: "rt_company" })));
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body).toMatchObject({
+      runtimeId: "rt_company",
+      ownerType: "company",
+      ownerCompanyId: "co_1",
+    });
+  });
+});
+
+describe("GET /api/agents runtime isolation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListWorkspaceAgents.mockResolvedValue(mockAgents);
+    mockGetAgentWorkspaceIds.mockResolvedValue(["ws_company"]);
+    mockFromHeartbeats.mockResolvedValue([]);
+  });
+
+  it("blocks listing a company workspace through a user-owned runtime filter", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue({
+      id: "ws_company",
+      type: "company",
+      ownerUserId: null,
+      companyId: "co_1",
+    });
+    vi.mocked(resolveRuntimeOwnership).mockResolvedValue({
+      ownerType: "user",
+      ownerUserId: "user-1",
+      ownerCompanyId: null,
+    });
+
+    const res = await GET(makeRequest("http://localhost/api/agents?companyId=co_1&runtimeId=rt_personal"));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toContain("Personal runtimes cannot be bound");
+    expect(mockListWorkspaceAgents).not.toHaveBeenCalled();
   });
 });

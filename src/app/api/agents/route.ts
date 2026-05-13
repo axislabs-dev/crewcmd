@@ -8,12 +8,20 @@ import {
   resolveRuntimeOwnership,
 } from "@/lib/agent-access";
 import {
+  RUNTIME_CLASSES,
+  SCOPE_TYPES,
+  assertRuntimeAllowedForScope,
+  type Scope,
+  type RuntimeBindingTarget,
+} from "@/lib/collaboration-policy";
+import {
   getAgentWorkspaceIds,
   grantAgentDefaultWorkspace,
   grantAgentToWorkspace,
   isHeartbeatBearerRequest,
   listWorkspaceAgents,
   resolveAccessibleWorkspace,
+  type WorkspaceRecord,
 } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +54,11 @@ export async function GET(request: NextRequest) {
         );
       }
       return NextResponse.json({ agents: [], source: "none" });
+    }
+
+    const runtimeOwnership = await resolveRuntimeOwnership(runtimeId || null);
+    if (runtimeOwnership) {
+      assertRuntimeAllowedForScope(runtimeBindingTarget(runtimeId!, runtimeOwnership), workspaceScope(workspace));
     }
 
     const includeDetached = request.nextUrl.searchParams.get("includeDetached") === "true";
@@ -95,6 +108,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ agents, source: agents.length > 0 ? "db" : "none" });
   } catch (err) {
     console.error("[api/agents] Error:", err);
+    if (err instanceof Error && err.name === "PolicyViolation") {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     return NextResponse.json({ agents: [], source: "none" });
   }
 }
@@ -170,6 +186,10 @@ export async function POST(request: NextRequest) {
     }
 
     const runtimeOwnership = await resolveRuntimeOwnership(runtimeId || null);
+    if (runtimeOwnership) {
+      assertRuntimeAllowedForScope(runtimeBindingTarget(runtimeId, runtimeOwnership), workspaceScope(targetWorkspace));
+    }
+
     const effectiveOwnerType = runtimeOwnership?.ownerType ?? (ownerType === "company" ? "company" : "user");
     const effectiveOwnerCompanyId = runtimeOwnership?.ownerCompanyId ?? (effectiveOwnerType === "company" ? access.activeCompanyId : null);
     const effectiveOwnerUserId = runtimeOwnership?.ownerUserId ?? (effectiveOwnerType === "user" ? access.userId : null);
@@ -253,6 +273,33 @@ export async function POST(request: NextRequest) {
     if (msg.includes("unique") || msg.includes("duplicate")) {
       return NextResponse.json({ error: "An agent with that callsign already exists" }, { status: 409 });
     }
+    if (err instanceof Error && err.name === "PolicyViolation") {
+      return NextResponse.json({ error: msg }, { status: 403 });
+    }
     return NextResponse.json({ error: "Failed to create agent" }, { status: 500 });
   }
+}
+
+function runtimeBindingTarget(
+  id: string,
+  runtime: Awaited<ReturnType<typeof resolveRuntimeOwnership>>,
+): RuntimeBindingTarget {
+  return {
+    id,
+    class: runtime?.ownerType === "company" ? RUNTIME_CLASSES.SHARED : RUNTIME_CLASSES.PERSONAL,
+    ownerUserId: runtime?.ownerUserId ?? null,
+  };
+}
+
+function workspaceScope(workspace: WorkspaceRecord): Scope {
+  return workspace.type === "personal"
+    ? {
+        id: workspace.id,
+        type: SCOPE_TYPES.PRIVATE_USER,
+        ownerUserId: workspace.ownerUserId ?? undefined,
+      }
+    : {
+        id: workspace.id,
+        type: SCOPE_TYPES.ORG,
+      };
 }

@@ -61,11 +61,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var speechCall: CAPPluginCall?
     private var cachedApplicationState: UIApplication.State = .active
     private var playbackSuppressionUntil: TimeInterval = 0
+    private var noiseFloorRms: Double = 0
 
-    private let silenceThreshold = 0.005
-    private let speechStartMs = 100.0
-    private let silenceEndMs = 700.0
-    private let minRecordingMs = 250.0
+    private let baseSilenceThreshold = 0.006
+    private let speechStartMs = 250.0
+    private let silenceEndMs = 1800.0
+    private let minRecordingMs = 600.0
     private let maxRecordingMs = 20000.0
 
     public override func load() {
@@ -424,7 +425,23 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         try session.setPreferredSampleRate(16_000)
         try session.setPreferredIOBufferDuration(0.02)
         try session.setActive(true)
+        try preferAvailableInput(session)
         notifyDiagnostic("native.audio-session.configured", detail: audioSessionDetail())
+    }
+
+    private func preferAvailableInput(_ session: AVAudioSession) throws {
+        guard let inputs = session.availableInputs, !inputs.isEmpty else { return }
+        let preferredTypes: [AVAudioSession.Port] = [.bluetoothHFP, .headsetMic, .builtInMic]
+        for portType in preferredTypes {
+            if let input = inputs.first(where: { $0.portType == portType }) {
+                try session.setPreferredInput(input)
+                notifyDiagnostic("native.audio-session.preferred-input", detail: [
+                    "portType": input.portType.rawValue,
+                    "portName": input.portName
+                ])
+                return
+            }
+        }
     }
 
     private func stopAudioPlayback(cancelPending: Bool) {
@@ -538,11 +555,13 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         let now = Date().timeIntervalSince1970 * 1000
 
         if levelFrameCount % 6 == 0 {
+            let threshold = currentSilenceThreshold()
             notifyListeners("voiceLevel", data: [
                 "voiceSessionId": currentSessionId ?? "",
                 "level": normalized,
                 "rms": Double(rms),
-                "threshold": silenceThreshold,
+                "threshold": threshold,
+                "noiseFloorRms": noiseFloorRms,
                 "audioSessionActive": self.active,
                 "backgroundCapable": true,
                 "applicationState": self.currentApplicationStateName(),
@@ -556,7 +575,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             return
         }
 
-        if Double(rms) >= silenceThreshold {
+        let threshold = currentSilenceThreshold()
+        if Double(rms) < threshold && recordingStartedAt == nil && speechStartedAt == nil {
+            updateNoiseFloor(rms: Double(rms))
+        }
+
+        if Double(rms) >= threshold {
             silenceStartedAt = nil
             if speechStartedAt == nil {
                 speechStartedAt = now
@@ -565,7 +589,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 recordingStartedAt = now
                 recordingSamples.removeAll(keepingCapacity: true)
                 state = .recording
-                notifyDiagnostic("native.recording.started", detail: ["level": normalized])
+                notifyDiagnostic("native.recording.started", detail: [
+                    "level": normalized,
+                    "rms": Double(rms),
+                    "threshold": threshold,
+                    "noiseFloorRms": noiseFloorRms
+                ])
             }
         } else {
             speechStartedAt = nil
@@ -582,6 +611,18 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 finishRecording(recordingMs: recordingMs)
             }
         }
+    }
+
+    private func currentSilenceThreshold() -> Double {
+        max(baseSilenceThreshold, min(0.04, noiseFloorRms * 3.0))
+    }
+
+    private func updateNoiseFloor(rms: Double) {
+        if noiseFloorRms <= 0 {
+            noiseFloorRms = rms
+            return
+        }
+        noiseFloorRms = (noiseFloorRms * 0.96) + (rms * 0.04)
     }
 
     private func finishRecording(recordingMs: Double) {
@@ -661,9 +702,17 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                         "hasText": !(text?.isEmpty ?? true),
                         "provider": provider ?? "unknown"
                     ])
-                    self.notifyTranscript(text: text, provider: provider, error: nil)
-                    if let text = text, !text.isEmpty {
+                    if let text = text, self.isUsableTranscript(text) {
+                        self.notifyTranscript(text: text, provider: provider, error: nil)
                         self.sendChatMessage(text)
+                    } else if let text = text, !text.isEmpty {
+                        self.notifyDiagnostic("native.transcription.discarded", detail: [
+                            "reason": "low-content",
+                            "characters": text.count
+                        ])
+                        self.notifyTranscript(text: nil, provider: provider, error: nil)
+                    } else {
+                        self.notifyTranscript(text: nil, provider: provider, error: nil)
                     }
                 } catch {
                     self.lastError = error.localizedDescription
@@ -823,7 +872,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                     "engineRunning": self.audioEngine.isRunning,
                     "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
                     "lastLevel": self.lastLevel,
-                    "threshold": self.silenceThreshold,
+                    "threshold": self.currentSilenceThreshold(),
+                    "noiseFloorRms": self.noiseFloorRms,
                     "applicationState": self.currentApplicationStateName()
                 ])
                 self.recoverAudioEngine(reason: "audio-watchdog", forceRestart: true)
@@ -831,7 +881,8 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
                 self.notifyDiagnostic("native.audio-watchdog.listening", detail: [
                     "msSinceLastBuffer": lastBuffer > 0 ? now - lastBuffer : -1,
                     "lastLevel": self.lastLevel,
-                    "threshold": self.silenceThreshold,
+                    "threshold": self.currentSilenceThreshold(),
+                    "noiseFloorRms": self.noiseFloorRms,
                     "engineRunning": self.audioEngine.isRunning,
                     "applicationState": self.currentApplicationStateName()
                 ])
@@ -1038,6 +1089,18 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         ]
     }
 
+    private func isUsableTranscript(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let letters = trimmed.filter { $0.isLetter }
+        if letters.count == 0 { return false }
+        let normalized = trimmed
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: " .,!?:;\"'*_-\n\t"))
+        if ["you"].contains(normalized) { return false }
+        return true
+    }
+
     private func audioSessionDetail() -> [String: Any] {
         let session = AVAudioSession.sharedInstance()
         return [
@@ -1045,6 +1108,10 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "mode": session.mode.rawValue,
             "sampleRate": session.sampleRate,
             "inputAvailable": session.isInputAvailable,
+            "preferredInput": session.preferredInput?.portName ?? NSNull(),
+            "preferredInputType": session.preferredInput?.portType.rawValue ?? NSNull(),
+            "currentInputs": session.currentRoute.inputs.map { $0.portType.rawValue },
+            "currentOutputs": session.currentRoute.outputs.map { $0.portType.rawValue },
             "engineRunning": audioEngine.isRunning,
             "applicationState": currentApplicationStateName(),
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull()

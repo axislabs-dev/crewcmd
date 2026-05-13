@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { resolveAgent } from "@/lib/resolve-agent";
 import { runtime } from "@/lib/agent-runtime";
+import { resolveReadableAgentByCallsign } from "@/lib/agent-route-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ interface RouteParams {
 /** GET /api/agents/[callsign]/output/stream — SSE endpoint for live agent output */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { callsign } = await params;
-  const agent = await resolveAgent(callsign);
+  const agent = await resolveReadableAgentByCallsign(callsign, _request);
 
   if (!agent) {
     return new Response(JSON.stringify({ error: "Agent not found" }), {

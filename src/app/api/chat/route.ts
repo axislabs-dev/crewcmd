@@ -1145,7 +1145,6 @@ export async function POST(request: NextRequest) {
             .returning({
               userId: chatRuns.userId,
               companyId: chatRuns.companyId,
-              clientVisibility: chatRuns.clientVisibility,
               notifyOnCompletion: chatRuns.notifyOnCompletion,
             })
         );
@@ -1155,14 +1154,14 @@ export async function POST(request: NextRequest) {
           run?.notifyOnCompletion &&
           assistantMessageId &&
           fullAssistantText &&
-          sessionId &&
-          (run.clientVisibility === "hidden" || run.clientVisibility === "disconnected")
+          sessionId
         ) {
           await sendAgentReplyNotification({
             userId: run.userId,
             companyId: run.companyId,
             agentId: agentId.toLowerCase(),
             sessionId,
+            sessionKey,
             messageId: assistantMessageId,
             body: fullAssistantText,
           });

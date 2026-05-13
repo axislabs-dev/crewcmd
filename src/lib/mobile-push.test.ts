@@ -8,18 +8,20 @@ describe("mobile push", () => {
       companyId: "company-1",
       agentId: "neo",
       sessionId: "session-1",
+      sessionKey: "neo:thread:parent-message-1",
       messageId: "message-1",
       body: "The agent finished the requested work and has details ready.",
     });
 
     expect(payload.title).toBe("neo responded");
-    expect(payload.url).toBe("/chat?agent=neo&session=session-1");
+    expect(payload.url).toBe("/chat?agent=neo&sessionKey=neo%3Athread%3Aparent-message-1&messageId=message-1");
     expect(payload.data).toMatchObject({
       kind: "agent_reply",
       agentId: "neo",
       sessionId: "session-1",
+      sessionKey: "neo:thread:parent-message-1",
       messageId: "message-1",
-      url: "/chat?agent=neo&session=session-1",
+      url: "/chat?agent=neo&sessionKey=neo%3Athread%3Aparent-message-1&messageId=message-1",
     });
   });
 
@@ -32,6 +34,7 @@ describe("mobile push", () => {
       companyId: "company-1",
       agentId: "neo",
       sessionId: "session-1",
+      sessionKey: "neo",
       messageId: "message-1",
       body: "Done.",
     })).resolves.toEqual({ attempted: 0, sent: 0, skipped: true });

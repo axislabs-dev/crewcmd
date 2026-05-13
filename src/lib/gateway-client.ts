@@ -816,9 +816,6 @@ export class GatewayClient {
         }
       }
 
-      // Log all gateway events for debugging
-      console.log(`[gateway-client] Event: "${event}" keys: ${payload ? Object.keys(payload as Record<string, unknown>).join(",") : "none"}`);
-
       // Also emit on the wildcard channel so consumers can see all events
       const wildcardListeners = this.eventListeners.get("*");
       if (wildcardListeners) {

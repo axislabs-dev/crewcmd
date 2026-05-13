@@ -37,7 +37,13 @@ import {
   publishAgentModeDiagnostic,
   recordVoiceCrashBreadcrumb,
 } from "@/lib/agent-mode-diagnostics";
-import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
+import {
+  DEFAULT_AGENT_VOICE_SETTINGS,
+  isExplicitServerVoice,
+  normalizeAgentVoiceSettings,
+  shouldUseDeviceTts,
+  type AgentVoiceSettings,
+} from "@/lib/tts-voices";
 import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
@@ -626,10 +632,6 @@ function isNativeCapacitorApp() {
   if (capacitor.isNativePlatform?.()) return true;
   const platform = capacitor.getPlatform?.();
   return platform === "ios" || platform === "android";
-}
-
-function shouldUseNativeSpeech(voice: AgentVoiceSettings) {
-  return voice.provider === "auto" || voice.provider === "browser" || voice.provider === "say" || voice.preferNative === true;
 }
 
 function blobToBase64(blob: Blob) {
@@ -2247,7 +2249,7 @@ export default function ChatPage() {
 
     const voices = window.speechSynthesis.getVoices();
     const selectedVoice = (resolvedVoiceSettings.voiceId || resolvedVoiceSettings.voiceName) &&
-      (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" || resolvedVoiceSettings.preferNative)
+      shouldUseDeviceTts(resolvedVoiceSettings)
       ? voices.find((v) =>
           v.voiceURI === resolvedVoiceSettings.voiceId ||
           v.name === resolvedVoiceSettings.voiceId ||
@@ -2282,6 +2284,8 @@ export default function ChatPage() {
   ) => {
     const kind = options.kind ?? "filler";
     const token = kind === "filler" ? fillerAudioTokenRef.current : undefined;
+    const usesExplicitServerVoice = isExplicitServerVoice(resolvedVoiceSettings);
+    const useDeviceSpeech = shouldUseDeviceTts(resolvedVoiceSettings);
     try {
       if (resolvedVoiceSettings.enabled === false) {
         recordTtsBreadcrumb("play.voice-disabled", { kind });
@@ -2294,14 +2298,14 @@ export default function ChatPage() {
       setIsPlayingAudio(true);
       activeAudioKindRef.current = kind;
 
-      if (ttsModRef.current === "disabled") {
+      if (ttsModRef.current === "disabled" && !usesExplicitServerVoice) {
         recordTtsBreadcrumb("play.disabled", { kind });
         setIsPlayingAudio(false);
         activeAudioKindRef.current = null;
         return;
       }
 
-      if (isNativeCapacitorApp() && (shouldUseNativeSpeech(resolvedVoiceSettings) || (ttsModRef.current === "native" && resolvedVoiceSettings.provider === "auto"))) {
+      if (isNativeCapacitorApp() && (useDeviceSpeech || (ttsModRef.current === "native" && resolvedVoiceSettings.provider === "auto"))) {
         if (kind === "filler" && token !== fillerAudioTokenRef.current) {
           recordTtsBreadcrumb("native-speech.stale-filler", { characters: text.length });
           return;
@@ -2329,7 +2333,7 @@ export default function ChatPage() {
       }
 
       // If server TTS is unavailable, or this session prefers a device/browser voice, go straight to browser speech.
-      if (ttsModRef.current === "browser" || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative) {
+      if ((ttsModRef.current === "browser" && !usesExplicitServerVoice) || useDeviceSpeech) {
         recordTtsBreadcrumb("play.browser-fallback", { kind });
         playBrowserTTS(text, kind, token);
         return;
@@ -2345,7 +2349,9 @@ export default function ChatPage() {
       if (response.status === 503) {
         recordTtsBreadcrumb("server.fetch.unavailable", { kind, status: response.status });
         if (isNativeCapacitorApp()) {
-          ttsModRef.current = resolvedVoiceSettings.provider === "auto" ? "native" : "disabled";
+          if (!usesExplicitServerVoice) {
+            ttsModRef.current = resolvedVoiceSettings.provider === "auto" ? "native" : "disabled";
+          }
           if (resolvedVoiceSettings.provider === "auto") {
             await speakNativeVoiceText({
               text,
@@ -2361,10 +2367,16 @@ export default function ChatPage() {
             activeAudioKindRef.current = null;
           }
         } else {
-          // Server has no TTS backend, switch to browser mode
-          console.log("[TTS] Server unavailable, using browser speechSynthesis");
-          ttsModRef.current = "browser";
-          playBrowserTTS(text, kind, token);
+          if (usesExplicitServerVoice) {
+            console.log("[TTS] Server unavailable; no browser fallback for explicit server voice");
+            setIsPlayingAudio(false);
+            activeAudioKindRef.current = null;
+          } else {
+            // Server has no TTS backend, switch to browser mode
+            console.log("[TTS] Server unavailable, using browser speechSynthesis");
+            ttsModRef.current = "browser";
+            playBrowserTTS(text, kind, token);
+          }
         }
         return;
       }
@@ -2437,15 +2449,20 @@ export default function ChatPage() {
         activeAudioKindRef.current = null;
         return;
       }
-      // Network error — try browser fallback on regular web only.
-      playBrowserTTS(text, kind, token);
+      // Network error — try browser fallback on regular web only when it can honor the selected voice class.
+      if (usesExplicitServerVoice) {
+        setIsPlayingAudio(false);
+        activeAudioKindRef.current = null;
+      } else {
+        playBrowserTTS(text, kind, token);
+      }
     }
   }, [assignAudioObjectUrl, markFirstAudioStarted, playBrowserTTS, recordTtsBreadcrumb, resolvedVoiceSettings, revokeAudioObjectUrl]);
 
   const prefetchTTS = useCallback(async (text: string) => {
     if (isNativeCapacitorApp()) return;
     try {
-      if (resolvedVoiceSettings.enabled === false || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative) return;
+      if (resolvedVoiceSettings.enabled === false || shouldUseDeviceTts(resolvedVoiceSettings)) return;
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2483,7 +2500,10 @@ export default function ChatPage() {
       isSpeakingQueueRef.current = false;
       return;
     }
-    if (ttsModRef.current === "disabled") {
+    const usesExplicitServerVoice = isExplicitServerVoice(resolvedVoiceSettings);
+    const useDeviceSpeech = shouldUseDeviceTts(resolvedVoiceSettings);
+
+    if (ttsModRef.current === "disabled" && !usesExplicitServerVoice) {
       recordTtsBreadcrumb("queue.disabled");
       ttsQueueRef.current = [];
       isSpeakingQueueRef.current = false;
@@ -2499,7 +2519,7 @@ export default function ChatPage() {
 
     // Kick off prefetch of the NEXT sentence while this one plays
     const upcoming = ttsQueueRef.current[0];
-    if (upcoming && ttsModRef.current !== "browser") {
+    if (upcoming && (ttsModRef.current !== "browser" || usesExplicitServerVoice)) {
       prefetchTTS(upcoming);
     }
 
@@ -2507,17 +2527,14 @@ export default function ChatPage() {
       const browserSpeechAllowed =
         !isNativeCapacitorApp() &&
         "speechSynthesis" in window;
-      const usesExplicitServerVoice =
-        resolvedVoiceSettings.provider === "openai" ||
-        resolvedVoiceSettings.provider === "elevenlabs";
       const useBrowserForFastStart =
         !usesExplicitServerVoice &&
         !hasStartedResponseAudioRef.current &&
         browserSpeechAllowed &&
-        !resolvedVoiceSettings.preferNative &&
+        !useDeviceSpeech &&
         resolvedVoiceSettings.provider !== "browser";
 
-      if (browserSpeechAllowed && (ttsModRef.current === "browser" || resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.preferNative || useBrowserForFastStart)) {
+      if (browserSpeechAllowed && ((ttsModRef.current === "browser" && !usesExplicitServerVoice) || useDeviceSpeech || useBrowserForFastStart)) {
         hasStartedResponseAudioRef.current = true;
         // Browser TTS with queue continuation
         if (browserSpeechAllowed) {
@@ -2545,7 +2562,7 @@ export default function ChatPage() {
           utterance.rate = resolvedVoiceSettings.speed ?? 1.15;
           const voices = window.speechSynthesis.getVoices();
           const selectedVoice = (resolvedVoiceSettings.voiceId || resolvedVoiceSettings.voiceName) &&
-            (resolvedVoiceSettings.provider === "browser" || resolvedVoiceSettings.provider === "say" || resolvedVoiceSettings.preferNative)
+            useDeviceSpeech
             ? voices.find((v) =>
                 v.voiceURI === resolvedVoiceSettings.voiceId ||
                 v.name === resolvedVoiceSettings.voiceId ||
@@ -2586,7 +2603,7 @@ export default function ChatPage() {
 
       // Check if we have a prefetched audio for this exact sentence
       hasStartedResponseAudioRef.current = true;
-      if (isNativeCapacitorApp() && (shouldUseNativeSpeech(resolvedVoiceSettings) || (ttsModRef.current === "native" && resolvedVoiceSettings.provider === "auto"))) {
+      if (isNativeCapacitorApp() && (useDeviceSpeech || (ttsModRef.current === "native" && resolvedVoiceSettings.provider === "auto"))) {
         revokePrefetchedAudio("native-queue-play");
         recordTtsBreadcrumb("queue.native-speech.play.start", { characters: next.length });
         const status = await speakNativeVoiceText({

@@ -76,3 +76,16 @@ export function normalizeAgentVoiceSettings(value: unknown): AgentVoiceSettings 
     preferNative: typeof record.preferNative === "boolean" ? record.preferNative : DEFAULT_AGENT_VOICE_SETTINGS.preferNative,
   };
 }
+
+export function isExplicitServerVoice(voice: AgentVoiceSettings) {
+  return voice.provider === "openai" || voice.provider === "elevenlabs";
+}
+
+export function shouldUseDeviceTts(voice: AgentVoiceSettings) {
+  return (
+    voice.provider === "auto" ||
+    voice.provider === "browser" ||
+    voice.provider === "say" ||
+    (voice.preferNative === true && !isExplicitServerVoice(voice))
+  );
+}

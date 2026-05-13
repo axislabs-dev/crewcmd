@@ -5,7 +5,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
+import { isExplicitServerVoice, normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +62,13 @@ export async function POST(request: NextRequest) {
     if (process.env.ELEVENLABS_API_KEY && voice.provider === "elevenlabs" && voice.voiceId) {
       const result = await tryElevenLabsTTS(text, voice);
       if (result) return result;
+    }
+
+    if (isExplicitServerVoice(voice)) {
+      return Response.json(
+        { error: `Selected ${voice.provider} TTS voice is unavailable`, fallback: "none" },
+        { status: 503 }
+      );
     }
 
     // 2. Try local TTS CLI

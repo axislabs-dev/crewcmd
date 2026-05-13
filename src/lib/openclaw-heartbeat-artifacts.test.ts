@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOpenClawHeartbeatArtifact } from "./openclaw-heartbeat-artifacts";
+import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "./openclaw-heartbeat-artifacts";
 
 describe("isOpenClawHeartbeatArtifact", () => {
   it("detects OpenClaw heartbeat poll prompts", () => {
@@ -29,6 +29,18 @@ describe("isOpenClawHeartbeatArtifact", () => {
       role: "assistant",
       content: "HEARTBEAT_OK",
     })).toBe(true);
+  });
+
+  it("separates heartbeat acknowledgements from noisy heartbeat internals", () => {
+    expect(isOpenClawHeartbeatAck({
+      role: "assistant",
+      content: "HEARTBEAT_OK",
+    })).toBe(true);
+
+    expect(isOpenClawHeartbeatAck({
+      role: "assistant",
+      content: "# HEARTBEAT.md\n\nActive workstream",
+    })).toBe(false);
   });
 
   it("keeps normal chat content visible", () => {

@@ -39,3 +39,10 @@ export function isOpenClawHeartbeatArtifact(params: {
   const heading = firstMeaningfulLine(content).replace(/^#+\s*/, "").toLowerCase();
   return heading === "heartbeat.md";
 }
+
+export function isOpenClawHeartbeatAck(params: {
+  role?: ChatArtifactRole | string | null;
+  content?: string | null;
+}) {
+  return normalizeContent(params.content ?? "").toLowerCase().replace(/\s+/g, " ") === "heartbeat_ok";
+}

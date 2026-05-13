@@ -153,13 +153,47 @@ Account / Company
   │   ├─ personal agents
   │   ├─ team agents
   │   └─ org agents
-  ├─ Tasks
-  ├─ Inbox
-  ├─ Skills
+  ├─ Scope-aware resource pages
+  │   ├─ Tasks
+  │   ├─ Inbox
+  │   ├─ Projects
+  │   ├─ Automations
+  │   ├─ Team / agents
+  │   ├─ Skills
+  │   └─ Blueprints
   └─ Runtime bindings
 ```
 
-### 6. Runtime Binding
+### 6. Scope-Aware Resource Pages
+
+Moving away from workspace-first navigation means the rest of the app cannot stay as “workspace pages” either. Tasks, inbox, projects, automations, team, skills, and blueprints should become **permission-filtered global lenses over scoped resources**.
+
+Every major resource should carry scope metadata:
+
+- `private:user` — visible only to the owning user; default for personal-runtime and personal-agent output.
+- `channel:<id>` — visible to members of a shared channel/situation.
+- `project:<id>` — visible to project members and linked channel participants where configured.
+- `team:<id>` — visible to a team/function.
+- `org:<id>` — visible according to organization-wide policy.
+
+Page behavior:
+
+- **Task board** — shows all tasks the viewer can see, with filters for mine, private, channel, project, team, org, agent, and status. Personal-agent-created tasks default private.
+- **Inbox** — shows all pending decisions, mentions, approvals, escalations, and agent updates the viewer can see. Private agent inbox items stay private unless explicitly shared.
+- **Projects** — project rooms are scoped situations with tasks, docs, agents, automations, and channels attached. Private projects may exist for personal planning.
+- **Automations** — automations inherit the scope where they are created. Personal automations can use only the owner's personal runtime; shared automations can use only approved shared runtimes.
+- **Team / agents** — personal agents remain visible only to their owner; team/org agents are visible according to membership and policy. A personal agent should not become a shared channel participant by accident.
+- **Skills** — skills should distinguish private/personal installs from team/org-approved skills. Shared agents can only use skills permitted by their shared runtime and scope.
+- **Blueprints** — blueprints can be private drafts, team templates, or org-approved templates. Publishing a blueprint from private to shared scope must be explicit and auditable.
+
+Promotion rules apply to every resource type, not just chat messages:
+
+- Private resource → shared resource requires an explicit action.
+- Promotion shares selected fields/artifacts/summaries, not hidden private context.
+- Promotion records provenance: source situation, actor, destination scope, timestamp, and copied fields.
+- Team/global pages must never query raw “all resources”; they must query “all resources visible to this viewer.”
+
+### 7. Runtime Binding
 
 Runtime binding should answer: **which agent runtime is allowed to act in this situation?**
 
@@ -198,7 +232,7 @@ Questions to answer:
 - Can `chat_sessions` become the durable conversation/situation primitive?
 - Do we need a first-class `channels` table, or can channels be typed/grouped conversations initially?
 - Where should channel-agent membership and participation mode live?
-- What fields are needed for visibility, participants, runtime scope, provenance, and promotion/sharing?
+- What fields are needed for visibility, participants, runtime scope, resource scope, provenance, and promotion/sharing?
 - Which checks prevent personal runtime use from shared contexts?
 
 Prefer additive migrations over rewrites.
@@ -218,21 +252,28 @@ Prefer additive migrations over rewrites.
 - Show which agents are present, watching, on-call, or mention-only.
 - Avoid noisy multi-agent pile-ons.
 
-### Lane 5 — Personal-to-Shared Promotion Flow
+### Lane 5 — Scope-Aware Resource Pages
+
+- Update Tasks, Inbox, Projects, Automations, Team/agents, Skills, and Blueprints to behave as permission-filtered lenses over scoped resources.
+- Add visible filters for mine, private, channel, project, team, org, and agent where relevant.
+- Ensure personal-agent-created resources default to private owner scope.
+- Ensure shared/channel/project/org resources are only visible to allowed members.
+
+### Lane 6 — Personal-to-Shared Promotion Flow
 
 - Add explicit “share to channel” / “create shared task” actions from private situations.
 - Share only selected outputs/artifacts/summaries.
 - Record provenance and audit events.
 - Never expose hidden personal runtime context.
 
-### Lane 6 — Runtime Visibility and Enforcement
+### Lane 7 — Runtime Visibility and Enforcement
 
 - Show runtime ownership and scope in agent detail/settings views.
 - Enforce runtime routing server-side.
 - Add tests for forbidden personal-runtime access from shared situations.
 - Add audit logs for shared runtime invocation, config changes, and promotion events.
 
-### Lane 7 — Voice Collaboration
+### Lane 8 — Voice Collaboration
 
 - Treat voice sessions as scoped situations.
 - Private voice transcripts stay private by default.
@@ -248,8 +289,9 @@ Keep the change reviewable with small PRs:
 3. **Channel membership PR** — introduce or formalize channel/conversation membership and agent participation mode.
 4. **Runtime guard PR** — enforce that personal runtimes cannot be used in shared contexts.
 5. **Channel UX PR** — expose participants, agent modes, and scope labels in chat.
-6. **Promotion flow PR** — allow selected private outputs to be shared intentionally.
-7. **Voice scope PR** — align voice sessions/transcripts with situation scope.
+6. **Scoped resources PR** — make Tasks, Inbox, Projects, Automations, Team, Skills, and Blueprints permission-filtered lenses over scoped resources.
+7. **Promotion flow PR** — allow selected private outputs and resources to be shared intentionally.
+8. **Voice scope PR** — align voice sessions/transcripts with situation scope.
 
 ## Open Questions
 
@@ -259,6 +301,7 @@ Keep the change reviewable with small PRs:
 - Should a personal agent ever be mentionable in a shared channel if only the owner sees/uses it, or is that too confusing?
 - How should channel memory be summarized, retained, and pruned?
 - Can a project room and a channel be the same primitive with different labels?
+- Which resource types need separate share/promotion copies versus visibility changes in place?
 
 ## Non-goals for the First PRs
 

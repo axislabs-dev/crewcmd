@@ -127,10 +127,10 @@ pnpm dev
 | **Shared AI Channels** | Team channels coordinate multiple humans and approved shared agents across conversations, task boards, inboxes, voice sessions, and approvals. |
 | **Team Blueprints** | Pre-built agent team templates. One click to deploy a full team with roles, hierarchy, and skills. |
 | **OpenClaw Runtime Import** | Import and manage agents from an OpenClaw runtime, including runtime metadata, ownership, visibility, and sync. |
-| **Agent Inbox** | Centralized communication hub. Agents surface decisions, blockers, and updates with priority tiers. |
-| **Skills Management** | Install, configure, and manage agent skills, including curated browse/import flows and runtime sync. |
+| **Scope-Aware Inbox** | Centralized communication hub for visible decisions, blockers, approvals, mentions, and agent updates across private, channel, project, team, and org scopes. |
+| **Scope-Aware Skills Management** | Install, configure, and manage private, team, and org-approved skills, including curated browse/import flows and runtime sync. |
 | **Access Tiers** | Private personal agents plus team/org visibility for company-owned agents. |
-| **Task Board** | Kanban and table views with full lifecycle tracking. |
+| **Scope-Aware Task Board** | Kanban and table views over every task the viewer can see, including private personal-agent tasks and shared channel/project/org tasks. |
 | **Team Structure** | Visual org chart for agents, with reporting lines and delegation paths. |
 | **Governance Foundations** | Approval gates, config versioning, and audit log primitives are present, with broader workflows still in progress. |
 | **Voice Chat** | Talk to your agents with speech-to-text and text-to-speech. |

@@ -38,6 +38,7 @@ import {
   recordVoiceCrashBreadcrumb,
 } from "@/lib/agent-mode-diagnostics";
 import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
+import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
 
 /** Append <!--task_card --> markers for parsed task references not already embedded. */
 function injectTaskCardMarkers(content: string, refs: ReturnType<typeof parseTaskReferences>): string {
@@ -172,6 +173,32 @@ function extractUserThreadReply(content: string) {
 function displayContentFromGatewayPreview(content: string, sessionKey: string) {
   if (!isThreadContextEnvelope(content)) return content;
   return isMessageThreadSessionKey(sessionKey) ? extractUserThreadReply(content) : "";
+}
+
+function isVisibleChatMessage(message: Pick<Message, "role" | "content" | "metadata">) {
+  return (
+    hasRenderableMessageContent(message) &&
+    !isThreadContextEnvelope(message.content) &&
+    !isOpenClawHeartbeatArtifact({ role: message.role, content: message.content })
+  );
+}
+
+function isHeartbeatAckMessage(message: { role?: string | null; content?: string | null }) {
+  return isOpenClawHeartbeatAck({ role: message.role, content: message.content });
+}
+
+function HeartbeatAckMarker({ timestamp }: { timestamp?: string | null }) {
+  const label = timestamp ? new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : null;
+
+  return (
+    <div className="flex justify-center py-1">
+      <div className="flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-3 py-1 text-[11px] text-[var(--text-tertiary)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]/70" aria-hidden="true" />
+        <span>Heartbeat checked</span>
+        {label && <span className="text-[var(--text-tertiary)]/70">{label}</span>}
+      </div>
+    </div>
+  );
 }
 
 function stableHash(input: string) {
@@ -956,7 +983,10 @@ async function loadSessionPreviewIntoStore(sessionKey: string) {
         createdAt,
         metadata: stableId === messageId ? null : { threadParentId: stableId },
       };
-    }).filter((m) => m.content);
+    }).filter((m) =>
+      m.content &&
+      (!isOpenClawHeartbeatArtifact({ role: m.role, content: m.content }) || isHeartbeatAckMessage(m))
+    );
 
     useChatStore.getState().loadSession(
       sessionKey.toLowerCase(),
@@ -1568,7 +1598,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const messageIds = messages
-      .filter((message) => isUuid(message.id) && hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+      .filter((message) => isUuid(message.id) && isVisibleChatMessage(message))
       .map((message) => message.id);
     void loadSavedMessages(messageIds);
   }, [messages, loadSavedMessages]);
@@ -1829,7 +1859,13 @@ export default function ChatPage() {
   );
   const visibleMessages = useMemo(
     () => uniqueMessagesById(
-      messages.filter((message) => hasRenderableMessageContent(message) && !isThreadContextEnvelope(message.content))
+      messages.filter(isVisibleChatMessage)
+    ),
+    [messages]
+  );
+  const transcriptItems = useMemo(
+    () => uniqueMessagesById(
+      messages.filter((message) => isVisibleChatMessage(message) || isHeartbeatAckMessage(message))
     ),
     [messages]
   );
@@ -3981,7 +4017,7 @@ export default function ChatPage() {
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
-          {visibleMessages.length === 0 && !streamingContent && (
+          {transcriptItems.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
                 className="mb-4 flex h-16 w-16 items-center justify-center rounded-[var(--radius-panel)] border border-[var(--border-medium)] bg-[var(--bg-surface)]"
@@ -4009,13 +4045,14 @@ export default function ChatPage() {
             </div>
           )}
 
-          {visibleMessages.map((msg, i) => {
-            const prevDate = i > 0 ? getDateKey(visibleMessages[i - 1].createdAt) : null;
+          {transcriptItems.map((msg, i) => {
+            const prevDate = i > 0 ? getDateKey(transcriptItems[i - 1].createdAt) : null;
             const currDate = getDateKey(msg.createdAt);
             const showSeparator = currDate && currDate !== prevDate;
             const threadSummary = threadReplySummaries[`id:${threadParentIdForMessage(msg)}`];
             const threadReplies = threadSummary?.replies ?? [];
             const canPersistMessageAction = isUuid(msg.id);
+            const isHeartbeatAck = isHeartbeatAckMessage(msg);
             return (
               <div
                 key={msg.id}
@@ -4025,25 +4062,29 @@ export default function ChatPage() {
                 }`}
               >
                 {showSeparator && <DateSeparator date={msg.createdAt!} />}
-                <ChatMessage
-                  role={msg.role}
-                  content={msg.content}
-                  timestamp={msg.createdAt}
-                  metadata={msg.metadata}
-                  authorName={msg.role === "user" ? userDisplayName : assistantDisplayName}
-                  authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
-                  authorEmoji={msg.role === "assistant" ? agentEmoji : null}
-                  identityDetails={msg.role === "user" ? userIdentityDetails : assistantIdentityDetails}
-                  onOpenIdentity={setActiveIdentityProfile}
-                  onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
-                  onTogglePin={canPersistMessageAction ? () => void togglePin(msg) : undefined}
-                  onToggleSaved={canPersistMessageAction ? () => void toggleSaved(msg) : undefined}
-                  isPinned={pinnedMessageIds.has(msg.id)}
-                  isSaved={Boolean(savedByMessageId[msg.id])}
-                  threadReplyCount={threadReplies.length}
-                  threadReplies={threadReplies}
-                  voiceSettings={resolvedVoiceSettings}
-                />
+                {isHeartbeatAck ? (
+                  <HeartbeatAckMarker timestamp={msg.createdAt} />
+                ) : (
+                  <ChatMessage
+                    role={msg.role}
+                    content={msg.content}
+                    timestamp={msg.createdAt}
+                    metadata={msg.metadata}
+                    authorName={msg.role === "user" ? userDisplayName : assistantDisplayName}
+                    authorAvatarUrl={msg.role === "user" ? userAvatarUrl : assistantAvatarUrl}
+                    authorEmoji={msg.role === "assistant" ? agentEmoji : null}
+                    identityDetails={msg.role === "user" ? userIdentityDetails : assistantIdentityDetails}
+                    onOpenIdentity={setActiveIdentityProfile}
+                    onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
+                    onTogglePin={canPersistMessageAction ? () => void togglePin(msg) : undefined}
+                    onToggleSaved={canPersistMessageAction ? () => void toggleSaved(msg) : undefined}
+                    isPinned={pinnedMessageIds.has(msg.id)}
+                    isSaved={Boolean(savedByMessageId[msg.id])}
+                    threadReplyCount={threadReplies.length}
+                    threadReplies={threadReplies}
+                    voiceSettings={resolvedVoiceSettings}
+                  />
+                )}
               </div>
             );
           })}

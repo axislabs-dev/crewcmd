@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { getGatewayClient } from "@/lib/gateway-chat-pool";
 import { ensureEventBridge } from "@/lib/init-event-bridge";
+import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,13 @@ function normalizePreviewItems(preview: GatewaySessionPreview | null) {
       text: item.text ?? item.content ?? "",
       createdAt: item.createdAt ?? item.timestamp ?? (typeof item.ts === "string" ? item.ts : undefined),
     }))
-    .filter((item) => item.text);
+    .filter((item) =>
+      item.text &&
+      (
+        !isOpenClawHeartbeatArtifact({ role: item.role, content: item.text }) ||
+        isOpenClawHeartbeatAck({ role: item.role, content: item.text })
+      )
+    );
 }
 
 /**

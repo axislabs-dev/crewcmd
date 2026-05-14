@@ -882,6 +882,10 @@ function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   return agent?.callsign.toLowerCase() ?? "main";
 }
 
+function agentDisplayCallsign(agent: Agent | null | undefined) {
+  return agent?.callsign ?? "MAIN";
+}
+
 function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
   if (!a || !b) return false;
   return a.id === b.id || a.callsign.toLowerCase() === b.callsign.toLowerCase();
@@ -3190,11 +3194,16 @@ export default function ChatPage() {
       }
 
       const metadata = attachments.length > 0 ? { attachments } : null;
-      const requestSessionKey = delegatedViaAgent
-        ? gatewaySessionKeyForAgent(delegatedViaAgent)
-        : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
-        : gatewaySessionKeyForAgent(selectedAgent);
+      const respondingAgent = wakeAgent ?? selectedAgent;
+      const respondingDelegatedViaAgent = wakeAgent && defaultAgent && !sameAgent(wakeAgent, defaultAgent)
+        ? defaultAgent
+        : delegatedViaAgent;
+      const respondingAgentCallsign = agentDisplayCallsign(respondingAgent);
+      const requestSessionKey = respondingDelegatedViaAgent
+        ? gatewaySessionKeyForAgent(respondingDelegatedViaAgent)
+        : selectedSessionBelongsToAgent(selectedSessionKey, respondingAgent?.callsign)
+        ? selectedSessionKey ?? gatewaySessionKeyForAgent(respondingAgent)
+        : gatewaySessionKeyForAgent(respondingAgent);
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const optimisticId = `optimistic-${createClientId()}`;
@@ -3225,6 +3234,40 @@ export default function ChatPage() {
       });
       // User message persisted server-side in /api/chat route
       setInput("");
+      if (activeChannelId && !wakeAgent) {
+        if (chatCompanyId || chatWorkspaceId) {
+          try {
+            const res = await fetch("/api/chat/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                agentId: respondingAgentCallsign,
+                companyId: chatCompanyId,
+                workspaceId: chatWorkspaceId,
+                channelId: activeChannelId,
+                role: "user",
+                content: userMsg.content,
+                metadata,
+              }),
+            });
+            const data = await res.json().catch(() => ({})) as { message?: { id?: string } };
+            if (res.ok && data.message?.id) {
+              useChatStore.getState().replaceOptimisticMessage(requestSessionKey, optimisticId, {
+                ...userMsg,
+                id: data.message.id,
+                agentId: requestSessionKey,
+                createdAt: userMsg.createdAt ?? new Date().toISOString(),
+              });
+              setMessages((prev) =>
+                prev.map((message) => message.id === optimisticId ? { ...message, id: data.message!.id! } : message)
+              );
+            }
+          } catch (error) {
+            console.error("[chat] Failed to persist channel message:", error);
+          }
+        }
+        return;
+      }
       setMainLoading(true);
       const startedProgress = {
         event: "run_started",
@@ -3235,7 +3278,7 @@ export default function ChatPage() {
       setExecutionEvents([startedProgress]);
       setStreamingContent("");
       streamingContentRef.current = "";
-      streamingAgentRef.current = agentCallsign;
+      streamingAgentRef.current = respondingAgentCallsign;
       pageHiddenDuringRequestRef.current = false;
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
@@ -3275,14 +3318,14 @@ export default function ChatPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: chatMessages,
-            agent: selectedAgent?.callsign,
-            gatewayAgent: delegatedViaAgent?.callsign ?? selectedAgent?.callsign,
-            targetAgent: delegatedViaAgent && selectedAgent
+            agent: respondingAgent?.callsign,
+            gatewayAgent: respondingDelegatedViaAgent?.callsign ?? respondingAgent?.callsign,
+            targetAgent: respondingDelegatedViaAgent && respondingAgent
               ? {
-                  callsign: selectedAgent.callsign,
-                  name: selectedAgent.name,
-                  title: selectedAgent.title,
-                  runtimeRef: selectedAgent.runtimeRef,
+                  callsign: respondingAgent.callsign,
+                  name: respondingAgent.name,
+                  title: respondingAgent.title,
+                  runtimeRef: respondingAgent.runtimeRef,
                 }
               : undefined,
             companyId: chatCompanyId,
@@ -3564,7 +3607,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -4060,7 +4103,7 @@ export default function ChatPage() {
                   </span>
                   <span className="text-[10px] text-[var(--text-tertiary)]">
                     {activeChannelMembers.length} member{activeChannelMembers.length === 1 ? "" : "s"}
-                    {selectedAgent ? ` · replies via ${selectedAgent.callsign}` : ""}
+                    {selectedAgent ? ` · mention @${selectedAgent.callsign} to invite an agent` : ""}
                   </span>
                 </div>
               </div>

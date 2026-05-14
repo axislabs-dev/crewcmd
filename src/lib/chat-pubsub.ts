@@ -26,6 +26,7 @@ export interface ChatProgressPubSubEvent {
   agentId: string;
   companyId: string;
   sessionKey: string;
+  channelId?: string | null;
   event?: string;
   at?: string;
   payload: Record<string, unknown>;

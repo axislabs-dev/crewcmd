@@ -1530,10 +1530,10 @@ export default function ChatPage() {
       useActiveChatRunStore.getState().applyProgressEvent({
         type: "chat_progress",
         ...progressRecord,
-        sessionKey: progressRecord.sessionKey ?? activeSessionKey,
+        sessionKey: activeStoreKey,
       });
     }
-  }, [activeSessionKey]);
+  }, [activeStoreKey]);
   const persistExecutionSnapshot = useCallback((
     progress: ExecutionProgressEvent | null,
     events: ExecutionProgressEvent[]
@@ -1541,7 +1541,7 @@ export default function ChatPage() {
     if (typeof window === "undefined") return;
 
     try {
-      const key = executionStorageKey(activeSessionKey);
+      const key = executionStorageKey(activeStoreKey);
       if (!progress && events.length === 0) {
         window.sessionStorage.removeItem(key);
         return;
@@ -1556,13 +1556,13 @@ export default function ChatPage() {
     } catch {
       // Session storage is a best-effort UI cache.
     }
-  }, [activeSessionKey]);
+  }, [activeStoreKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     try {
-      const raw = window.sessionStorage.getItem(executionStorageKey(activeSessionKey));
+      const raw = window.sessionStorage.getItem(executionStorageKey(activeStoreKey));
       if (!raw) {
         setExecutionProgress(null);
         setExecutionEvents([]);
@@ -1578,7 +1578,7 @@ export default function ChatPage() {
       setExecutionProgress(null);
       setExecutionEvents([]);
     }
-  }, [activeSessionKey]);
+  }, [activeStoreKey]);
 
   useEffect(() => {
     persistExecutionSnapshot(executionProgress, executionEvents);
@@ -1587,15 +1587,17 @@ export default function ChatPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const matchesActiveSession = (event: ExecutionProgressEvent & { sessionKey?: string; agentId?: string }) => {
-      const active = activeSessionKey.toLowerCase();
-      return event.sessionKey?.toLowerCase() === active || event.agentId?.toLowerCase() === active;
+    const progressStoreKey = (event: ExecutionProgressEvent & { sessionKey?: string; agentId?: string; channelId?: string | null }) =>
+      chatConversationStoreKey(event.sessionKey ?? event.agentId ?? activeSessionKey, event.channelId ?? null);
+
+    const matchesActiveSession = (event: ExecutionProgressEvent & { sessionKey?: string; agentId?: string; channelId?: string | null }) => {
+      return progressStoreKey(event).toLowerCase() === activeStoreKey.toLowerCase();
     };
 
     const handleProgress = (customEvent: Event) => {
-      const detail = (customEvent as CustomEvent).detail as (ExecutionProgressEvent & { sessionKey?: string; agentId?: string }) | undefined;
+      const detail = (customEvent as CustomEvent).detail as (ExecutionProgressEvent & { sessionKey?: string; agentId?: string; channelId?: string | null }) | undefined;
       if (!detail?.event) return;
-      if (activeThread && detail.sessionKey?.toLowerCase() === activeThread.sessionKey.toLowerCase()) {
+      if (activeThread && progressStoreKey(detail).toLowerCase() === chatConversationStoreKey(activeThread.sessionKey, activeChannelId).toLowerCase()) {
         setThreadProgress(detail);
         setThreadEvents((events) => [...events, detail].slice(-40));
         return;
@@ -1607,7 +1609,7 @@ export default function ChatPage() {
 
     window.addEventListener("crewcmd:chat-progress", handleProgress);
     return () => window.removeEventListener("crewcmd:chat-progress", handleProgress);
-  }, [activeSessionKey, activeThread]);
+  }, [activeChannelId, activeSessionKey, activeStoreKey, activeThread]);
 
   // Server-side /api/chat persists partial content on client disconnect.
 
@@ -2286,7 +2288,7 @@ export default function ChatPage() {
         type: "chat_progress",
         event: "connection_recovering",
         at: recoverProgress.at,
-        sessionKey: activeSessionKey,
+        sessionKey: activeStoreKey,
       });
       void refreshSessionPreview(activeSessionKey).then((loaded) => {
         if (!loaded) return;
@@ -2303,7 +2305,7 @@ export default function ChatPage() {
           type: "chat_progress",
           event: "run_completed",
           at: completedProgress.at,
-          sessionKey: activeSessionKey,
+          sessionKey: activeStoreKey,
         });
       });
     };
@@ -2316,7 +2318,7 @@ export default function ChatPage() {
       window.removeEventListener("pageshow", recover);
       window.removeEventListener("focus", recover);
     };
-  }, [activeSessionKey, executionProgress?.event, isLoading, refreshSessionPreview]);
+  }, [activeSessionKey, activeStoreKey, executionProgress?.event, isLoading, refreshSessionPreview]);
 
   const handleAgentSelect = useCallback(
     (agent: Agent, sessionKey?: string | null) => {
@@ -3474,10 +3476,11 @@ export default function ChatPage() {
             const parsed = JSON.parse(data);
 
             if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
-              setExecutionProgress(parsed);
+              const scopedProgress = { ...parsed, channelId: activeChannelId ?? null };
+              setExecutionProgress(scopedProgress);
               setExecutionEvents((events) => {
-                const nextEvents = [...events, parsed];
-                persistExecutionSnapshot(parsed, nextEvents);
+                const nextEvents = [...events, scopedProgress];
+                persistExecutionSnapshot(scopedProgress, nextEvents);
                 return nextEvents;
               });
               useActiveChatRunStore.getState().applyProgressEvent(parsed);

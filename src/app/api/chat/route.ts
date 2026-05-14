@@ -1058,6 +1058,7 @@ export async function POST(request: NextRequest) {
           agentId: agentId.toLowerCase(),
           companyId,
           sessionKey,
+          channelId,
           event,
           at: payload.at,
           payload: persistedPayload,

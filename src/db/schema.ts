@@ -11,6 +11,7 @@ import {
   unique,
   uniqueIndex,
   index,
+  check,
   numeric,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -1003,6 +1004,14 @@ export const channelMembers = pgTable("channel_members", {
   userIdx: index("channel_members_user_idx").on(table.userId),
   agentIdx: index("channel_members_agent_idx").on(table.agentId),
   roleIdx: index("channel_members_role_idx").on(table.channelId, table.role),
+  exactlyOnePrincipal: check(
+    "channel_members_exactly_one_principal_check",
+    sql`(
+      (${table.memberType} = 'user' AND ${table.userId} IS NOT NULL AND ${table.agentId} IS NULL AND ${table.agentParticipationMode} IS NULL)
+      OR
+      (${table.memberType} = 'agent' AND ${table.agentId} IS NOT NULL AND ${table.userId} IS NULL)
+    )`,
+  ),
 }));
 
 export const chatSessions = pgTable("chat_sessions", {
@@ -1049,6 +1058,7 @@ export const chatThreads = pgTable("chat_threads", {
 }, (table) => ({
   threadSessionUnique: unique().on(table.companyId, table.threadSessionKey),
   workspaceThreadSessionUnique: unique().on(table.workspaceId, table.threadSessionKey),
+  channelIdx: index("chat_threads_channel_idx").on(table.channelId),
 }));
 
 export const chatMessageRoleEnum = pgEnum("chat_message_role", [

@@ -9,10 +9,15 @@ vi.mock("@/lib/require-auth", () => ({
 const mockGetGatewayClient = vi.fn();
 const mockHoldClient = vi.fn();
 const mockReleaseClient = vi.fn();
+const mockAssertPrimaryRuntimeInvocationAllowedForContext = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/gateway-chat-pool", () => ({
   getGatewayClient: (...args: unknown[]) => mockGetGatewayClient(...args),
   holdClient: (...args: unknown[]) => mockHoldClient(...args),
   releaseClient: (...args: unknown[]) => mockReleaseClient(...args),
+}));
+
+vi.mock("@/lib/runtime-scope-guard", () => ({
+  assertPrimaryRuntimeInvocationAllowedForContext: (...args: unknown[]) => mockAssertPrimaryRuntimeInvocationAllowedForContext(...args),
 }));
 
 vi.mock("@/db", () => ({
@@ -55,6 +60,7 @@ vi.mock("@/lib/agent-mode-diagnostics", () => ({
   publishAgentModeDiagnostic: (...args: unknown[]) => mockPublishAgentModeDiagnostic(...args),
 }));
 
+import { PolicyViolation } from "@/lib/collaboration-policy";
 import { POST } from "./route";
 
 function makeRequest(body: Record<string, unknown>) {
@@ -113,6 +119,7 @@ describe("POST /api/chat", () => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
     mockSelectRecoveredAssistantText.mockReturnValue("");
+    mockAssertPrimaryRuntimeInvocationAllowedForContext.mockResolvedValue(undefined);
     mockGetGatewayClient.mockResolvedValue({
       on: vi.fn(),
       off: vi.fn(),
@@ -125,6 +132,27 @@ describe("POST /api/chat", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("rejects shared-context chat when the selected OpenClaw runtime is personal", async () => {
+    mockAssertPrimaryRuntimeInvocationAllowedForContext.mockRejectedValueOnce(new PolicyViolation({
+      allowed: false,
+      code: "runtime_class_scope_mismatch",
+      reason: "Personal runtimes cannot be bound to shared collaborative scopes.",
+    }));
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      companyId: "company-1",
+    }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Personal runtimes cannot be bound to shared collaborative scopes.",
+      code: "runtime_class_scope_mismatch",
+    });
+    expect(mockGetGatewayClient).not.toHaveBeenCalled();
   });
 
   it("returns an SSE response before gateway chatSend resolves", async () => {

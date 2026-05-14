@@ -16,6 +16,8 @@ import {
   createAgentModeSessionId,
   publishAgentModeDiagnostic,
 } from "@/lib/agent-mode-diagnostics";
+import { PolicyViolation } from "@/lib/collaboration-policy";
+import { assertPrimaryRuntimeInvocationAllowedForContext } from "@/lib/runtime-scope-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -827,6 +829,22 @@ export async function POST(request: NextRequest) {
       null;
     const persistenceScope: ChatPersistenceScope = { companyId, workspaceId };
     const currentUser = await resolveCurrentUser(request);
+    try {
+      await assertPrimaryRuntimeInvocationAllowedForContext({
+        companyId,
+        workspaceId,
+        userId: currentUser?.id ?? null,
+        actor: currentUser?.email ?? currentUser?.id ?? null,
+      });
+    } catch (err) {
+      if (err instanceof PolicyViolation) {
+        return Response.json(
+          { error: err.message, code: err.decision.code },
+          { status: 403 },
+        );
+      }
+      throw err;
+    }
     const initialClientVisibility = bodyClientVisibility === "hidden" || bodyClientVisibility === "disconnected"
       ? bodyClientVisibility
       : "visible";

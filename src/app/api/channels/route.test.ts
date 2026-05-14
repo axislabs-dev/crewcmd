@@ -29,6 +29,7 @@ vi.mock("@/db/schema", () => ({
     userId: "channelMembers.userId",
     agentId: "channelMembers.agentId",
     role: "channelMembers.role",
+    agentParticipationMode: "channelMembers.agentParticipationMode",
   },
   users: {
     id: "users.id",

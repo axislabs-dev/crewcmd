@@ -11,8 +11,8 @@ const ADMIN_CHANNEL_ROLES = new Set(["owner", "admin"]);
 
 type ChannelRecord = typeof channels.$inferSelect;
 
-const DEFAULT_CHANNEL_NAME = "general";
-const DEFAULT_CHANNEL_DESCRIPTION = "Default channel for workspace-wide conversation.";
+const DEFAULT_CHANNEL_NAME = "crew";
+const DEFAULT_CHANNEL_DESCRIPTION = "Default channel for crew-wide conversation.";
 
 function forbiddenResponse() {
   return Response.json({ error: "Forbidden" }, { status: 403 });

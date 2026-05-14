@@ -13,6 +13,40 @@ function firstMeaningfulLine(content: string) {
     .find(Boolean) ?? "";
 }
 
+function isPlainToolCallArtifact(content: string) {
+  const compact = content.toLowerCase().replace(/\s+/g, " ");
+  return compact === "no_reply" || /^call [a-z][a-z0-9_-]*(?:\s|$)/.test(compact);
+}
+
+function isStructuredToolResultArtifact(content: string) {
+  const trimmed = normalizeContent(content);
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.tool === "string" && ("status" in record || "error" in record || "result" in record)) {
+      return true;
+    }
+    if (Array.isArray(record.results) && (record.corpus === "memory" || record.source === "memory")) {
+      return true;
+    }
+    if (Array.isArray(record.results) && record.results.some((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      const result = item as Record<string, unknown>;
+      return typeof result.snippet === "string" || typeof result.path === "string" || typeof result.citation === "string";
+    })) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 export function isOpenClawHeartbeatArtifact(params: {
   role?: ChatArtifactRole | string | null;
   content?: string | null;
@@ -33,6 +67,10 @@ export function isOpenClawHeartbeatArtifact(params: {
   }
 
   if (role !== "assistant") return false;
+
+  if (isPlainToolCallArtifact(content) || isStructuredToolResultArtifact(content)) {
+    return true;
+  }
 
   if (compact === "call read") return true;
 

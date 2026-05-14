@@ -204,6 +204,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json() as {
     companyId?: string | null;
     workspaceId?: string | null;
+    type?: "channel" | "dm" | "project_room" | "voice_room";
     name?: string;
     purpose?: string | null;
     description?: string | null;
@@ -227,6 +228,7 @@ export async function POST(request: NextRequest) {
     db!.insert(channels).values({
       companyId: workspace.companyId,
       workspaceId: workspace.companyId ? null : workspace.id,
+      type: body.type ?? "channel",
       name,
       slug: slugifyChannelName(name),
       description: (body.purpose ?? body.description ?? null) || null,

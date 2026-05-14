@@ -42,7 +42,35 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!(await canManageChannel(request, id))) return forbiddenResponse();
 
   const user = await resolveCurrentUser(request);
-  const body = await request.json() as { userId?: string; role?: "admin" | "member" | "contributor" | "viewer" | "guest" };
+  const body = await request.json() as {
+    memberType?: "user" | "agent";
+    userId?: string;
+    agentId?: string;
+    role?: "admin" | "member" | "contributor" | "viewer" | "guest";
+    agentParticipationMode?: "silent" | "watching" | "mention_only" | "proactive" | "on_call";
+  };
+  const memberType = body.memberType ?? (body.agentId ? "agent" : "user");
+  if (memberType === "agent") {
+    if (!body.agentId) return Response.json({ error: "agentId required" }, { status: 400 });
+    const [member] = await withRetry(() => db!.insert(channelMembers).values({
+      channelId: id,
+      memberType: "agent",
+      agentId: body.agentId,
+      role: body.role ?? "member",
+      agentParticipationMode: body.agentParticipationMode ?? "mention_only",
+      joinedByUserId: user?.id ?? null,
+    }).onConflictDoUpdate({
+      target: [channelMembers.channelId, channelMembers.agentId],
+      set: {
+        role: body.role ?? "member",
+        agentParticipationMode: body.agentParticipationMode ?? "mention_only",
+        updatedAt: new Date(),
+      },
+    }).returning());
+
+    return Response.json({ member }, { status: 201 });
+  }
+
   if (!body.userId) return Response.json({ error: "userId required" }, { status: 400 });
 
   const [member] = await withRetry(() => db!.insert(channelMembers).values({

@@ -9,9 +9,12 @@ import {
   boolean,
   serial,
   unique,
+  uniqueIndex,
+  index,
   numeric,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ─── System Settings ──────────────────────────────────────────────────
 
@@ -41,6 +44,49 @@ export const workspaceAccessLevelEnum = pgEnum("workspace_access_level", [
   "viewer",
   "operator",
   "manager",
+]);
+
+export const channelTypeEnum = pgEnum("channel_type", [
+  "channel",
+  "dm",
+  "project_room",
+  "voice_room",
+]);
+
+export const channelVisibilityEnum = pgEnum("channel_visibility", [
+  "private",
+  "restricted",
+  "team",
+  "org",
+]);
+
+export const channelPostPolicyEnum = pgEnum("channel_post_policy", [
+  "members",
+  "contributors",
+  "admins",
+  "read_only",
+]);
+
+export const channelMemberTypeEnum = pgEnum("channel_member_type", [
+  "user",
+  "agent",
+]);
+
+export const channelMemberRoleEnum = pgEnum("channel_member_role", [
+  "owner",
+  "admin",
+  "member",
+  "contributor",
+  "viewer",
+  "guest",
+]);
+
+export const agentParticipationModeEnum = pgEnum("agent_participation_mode", [
+  "silent",
+  "watching",
+  "mention_only",
+  "proactive",
+  "on_call",
 ]);
 
 export const goalStatusEnum = pgEnum("goal_status", [
@@ -896,12 +942,77 @@ export const gatewaySessions = pgTable("gateway_sessions", {
 
 // ─── Chat Sessions & Messages ──────────────────────────────────────
 
+export const channels = pgTable("channels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  type: channelTypeEnum("type").notNull().default("channel"),
+  name: text("name"),
+  slug: text("slug"),
+  description: text("description"),
+  scopeType: text("scope_type").notNull().default("channel"),
+  scopeId: uuid("scope_id"),
+  visibility: channelVisibilityEnum("visibility").notNull().default("restricted"),
+  defaultPostPolicy: channelPostPolicyEnum("default_post_policy").notNull().default("members"),
+  defaultAgentMode: agentParticipationModeEnum("default_agent_mode").notNull().default("mention_only"),
+  createdByUserId: uuid("created_by_user_id")
+    .references(() => users.id, { onDelete: "set null" }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  companySlugUnique: uniqueIndex("channels_company_slug_unique")
+    .on(table.companyId, table.slug)
+    .where(sql`${table.companyId} IS NOT NULL AND ${table.slug} IS NOT NULL`),
+  workspaceSlugUnique: uniqueIndex("channels_workspace_slug_unique")
+    .on(table.workspaceId, table.slug)
+    .where(sql`${table.workspaceId} IS NOT NULL AND ${table.slug} IS NOT NULL`),
+  companyIdx: index("channels_company_idx").on(table.companyId),
+  workspaceIdx: index("channels_workspace_idx").on(table.workspaceId),
+  scopeIdx: index("channels_scope_idx").on(table.scopeType, table.scopeId),
+}));
+
+export const channelMembers = pgTable("channel_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channelId: uuid("channel_id")
+    .references(() => channels.id, { onDelete: "cascade" })
+    .notNull(),
+  memberType: channelMemberTypeEnum("member_type").notNull(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" }),
+  agentId: uuid("agent_id")
+    .references(() => agents.id, { onDelete: "cascade" }),
+  role: channelMemberRoleEnum("role").notNull().default("member"),
+  agentParticipationMode: agentParticipationModeEnum("agent_participation_mode"),
+  canPostOverride: boolean("can_post_override"),
+  canInviteOverride: boolean("can_invite_override"),
+  joinedByUserId: uuid("joined_by_user_id")
+    .references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userMemberUnique: uniqueIndex("channel_members_channel_user_unique")
+    .on(table.channelId, table.userId)
+    .where(sql`${table.userId} IS NOT NULL`),
+  agentMemberUnique: uniqueIndex("channel_members_channel_agent_unique")
+    .on(table.channelId, table.agentId)
+    .where(sql`${table.agentId} IS NOT NULL`),
+  channelIdx: index("channel_members_channel_idx").on(table.channelId),
+  userIdx: index("channel_members_user_idx").on(table.userId),
+  agentIdx: index("channel_members_agent_idx").on(table.agentId),
+  roleIdx: index("channel_members_role_idx").on(table.channelId, table.role),
+}));
+
 export const chatSessions = pgTable("chat_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id")
     .references(() => companies.id, { onDelete: "cascade" }),
   workspaceId: uuid("workspace_id")
     .references(() => workspaces.id, { onDelete: "cascade" }),
+  channelId: uuid("channel_id")
+    .references(() => channels.id, { onDelete: "set null" }),
   agentId: text("agent_id").notNull(), // callsign e.g. "neo", "sentinel"
   title: text("title"), // auto-generated or user-set
   gatewaySessionKey: text("gateway_session_key"), // optional link to OpenClaw gateway session
@@ -912,7 +1023,9 @@ export const chatSessions = pgTable("chat_sessions", {
   threadParentMessageFingerprint: text("thread_parent_message_fingerprint"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  channelIdx: index("chat_sessions_channel_idx").on(table.channelId),
+}));
 
 export const chatThreads = pgTable("chat_threads", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -920,6 +1033,8 @@ export const chatThreads = pgTable("chat_threads", {
     .references(() => companies.id, { onDelete: "cascade" }),
   workspaceId: uuid("workspace_id")
     .references(() => workspaces.id, { onDelete: "cascade" }),
+  channelId: uuid("channel_id")
+    .references(() => channels.id, { onDelete: "set null" }),
   parentSessionId: uuid("parent_session_id")
     .references((): AnyPgColumn => chatSessions.id, { onDelete: "cascade" }),
   parentSessionKey: text("parent_session_key").notNull(),

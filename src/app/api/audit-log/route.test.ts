@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest, NextResponse } from "next/server";
 
-const { mockRequireAuth, mockRequireAccess, mockAuditQuery } = vi.hoisted(() => ({
+const { mockRequireAuth, mockResolveAccessibleWorkspace, mockAuditQuery } = vi.hoisted(() => ({
   mockRequireAuth: vi.fn(),
-  mockRequireAccess: vi.fn(),
+  mockResolveAccessibleWorkspace: vi.fn(),
   mockAuditQuery: vi.fn(),
 }));
 
@@ -41,48 +40,48 @@ vi.mock("@/lib/require-auth", () => ({
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
 }));
 
-vi.mock("@/lib/company-audit-access", () => ({
-  requireCompanyAuditReadAccess: (...args: unknown[]) => mockRequireAccess(...args),
+vi.mock("@/lib/workspace", () => ({
+  resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
 }));
 
 import { GET } from "./route";
 
 function makeRequest(path: string) {
-  return new NextRequest(new URL(path, "http://localhost:3000"));
+  return new Request(new URL(path, "http://localhost:3000"));
 }
 
 describe("GET /api/audit-log authorization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
-    mockRequireAccess.mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co_1" });
     mockAuditQuery.mockResolvedValue([{ id: "audit_1" }]);
   });
 
   it("does not query audit rows for unauthenticated callers", async () => {
-    mockRequireAuth.mockResolvedValue(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+    mockRequireAuth.mockResolvedValue(Response.json({ error: "Unauthorized" }, { status: 401 }));
 
-    const response = await GET(makeRequest("/api/audit-log?company_id=co_1"));
+    const response = await GET(makeRequest("/api/audit-log?company_id=co_1") as never);
 
     expect(response.status).toBe(401);
-    expect(mockRequireAccess).not.toHaveBeenCalled();
+    expect(mockResolveAccessibleWorkspace).not.toHaveBeenCalled();
     expect(mockAuditQuery).not.toHaveBeenCalled();
   });
 
   it("does not query audit rows when company access is denied", async () => {
-    mockRequireAccess.mockResolvedValue(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+    mockResolveAccessibleWorkspace.mockResolvedValue(null);
 
-    const response = await GET(makeRequest("/api/audit-log?company_id=co_1"));
+    const response = await GET(makeRequest("/api/audit-log?company_id=co_1") as never);
 
     expect(response.status).toBe(403);
     expect(mockAuditQuery).not.toHaveBeenCalled();
   });
 
   it("requires an explicit company scope before querying audit rows", async () => {
-    const response = await GET(makeRequest("/api/audit-log"));
+    const response = await GET(makeRequest("/api/audit-log") as never);
 
     expect(response.status).toBe(400);
-    expect(mockRequireAccess).not.toHaveBeenCalled();
+    expect(mockResolveAccessibleWorkspace).not.toHaveBeenCalled();
     expect(mockAuditQuery).not.toHaveBeenCalled();
   });
 });

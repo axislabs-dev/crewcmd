@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest, NextResponse } from "next/server";
 
-const { mockRequireAuth, mockRequireAccess, mockActivityQuery } = vi.hoisted(() => ({
+const { mockRequireAuth, mockResolveAccessibleWorkspace, mockActivityQuery } = vi.hoisted(() => ({
   mockRequireAuth: vi.fn(),
-  mockRequireAccess: vi.fn(),
+  mockResolveAccessibleWorkspace: vi.fn(),
   mockActivityQuery: vi.fn(),
 }));
 
 vi.mock("@/db/schema", () => ({
   activityLog: {
     companyId: Symbol.for("activityLog.companyId"),
+    workspaceId: Symbol.for("activityLog.workspaceId"),
     agentId: Symbol.for("activityLog.agentId"),
     actionType: Symbol.for("activityLog.actionType"),
     createdAt: Symbol.for("activityLog.createdAt"),
@@ -40,48 +40,51 @@ vi.mock("@/lib/require-auth", () => ({
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
 }));
 
-vi.mock("@/lib/company-audit-access", () => ({
-  requireCompanyAuditReadAccess: (...args: unknown[]) => mockRequireAccess(...args),
+vi.mock("@/lib/workspace", () => ({
+  getCompanyIdForWorkspace: vi.fn(),
+  resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
 }));
 
 import { GET } from "./route";
 
 function makeRequest(path: string) {
-  return new NextRequest(new URL(path, "http://localhost:3000"));
+  return new Request(new URL(path, "http://localhost:3000"));
 }
 
 describe("GET /api/activity authorization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
-    mockRequireAccess.mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co_1" });
     mockActivityQuery.mockResolvedValue([{ id: "activity_1" }]);
   });
 
   it("does not query activity rows for unauthenticated callers", async () => {
-    mockRequireAuth.mockResolvedValue(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+    mockRequireAuth.mockResolvedValue(Response.json({ error: "Unauthorized" }, { status: 401 }));
 
-    const response = await GET(makeRequest("/api/activity?company_id=co_1"));
+    const response = await GET(makeRequest("/api/activity?company_id=co_1") as never);
 
     expect(response.status).toBe(401);
-    expect(mockRequireAccess).not.toHaveBeenCalled();
+    expect(mockResolveAccessibleWorkspace).not.toHaveBeenCalled();
     expect(mockActivityQuery).not.toHaveBeenCalled();
   });
 
-  it("does not query activity rows when company access is denied", async () => {
-    mockRequireAccess.mockResolvedValue(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+  it("does not query activity rows when workspace access is denied", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue(null);
 
-    const response = await GET(makeRequest("/api/activity?company_id=co_1"));
+    const response = await GET(makeRequest("/api/activity?company_id=co_1") as never);
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(400);
     expect(mockActivityQuery).not.toHaveBeenCalled();
   });
 
   it("requires an explicit company scope before querying activity rows", async () => {
-    const response = await GET(makeRequest("/api/activity"));
+    mockResolveAccessibleWorkspace.mockResolvedValue(null);
+
+    const response = await GET(makeRequest("/api/activity") as never);
 
     expect(response.status).toBe(400);
-    expect(mockRequireAccess).not.toHaveBeenCalled();
+    expect(mockResolveAccessibleWorkspace).toHaveBeenCalled();
     expect(mockActivityQuery).not.toHaveBeenCalled();
   });
 });

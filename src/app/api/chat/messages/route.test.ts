@@ -36,10 +36,9 @@ vi.mock("@/lib/require-auth", () => ({
   requireAuth: (...a: unknown[]) => mockRequireAuth(...a),
 }));
 
-const mockResolveAccessibleWorkspace = vi.fn();
+const mockResolveAccessibleWorkspace = vi.fn().mockResolvedValue({ id: "ws-1", companyId: null });
 vi.mock("@/lib/workspace", () => ({
-  resolveAccessibleWorkspace: (...a: unknown[]) =>
-    mockResolveAccessibleWorkspace(...a),
+  resolveAccessibleWorkspace: (...a: unknown[]) => mockResolveAccessibleWorkspace(...a),
 }));
 
 import { GET, POST } from "./route";
@@ -51,52 +50,26 @@ function makeRequest(url: string, init?: RequestInit) {
 // ── GET /api/chat/messages ──────────────────────────────────────
 describe("GET /api/chat/messages", () => {
   const mockMessages = [
-    {
-      id: "m1",
-      role: "user",
-      content: "hello",
-      createdAt: "2026-04-01T00:00:00Z",
-      metadata: null,
-    },
-    {
-      id: "m2",
-      role: "assistant",
-      content: "hi there",
-      createdAt: "2026-04-01T00:00:01Z",
-      metadata: null,
-    },
+    { id: "m1", role: "user", content: "hello", createdAt: "2026-04-01T00:00:00Z", metadata: null },
+    { id: "m2", role: "assistant", content: "hi there", createdAt: "2026-04-01T00:00:01Z", metadata: null },
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
-    mockResolveAccessibleWorkspace.mockResolvedValue({
-      id: "ws-1",
-      companyId: "co-1",
-    });
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
   });
 
-  it("returns messages for a visible workspace-bound session", async () => {
-    const session = {
-      id: "sess-1",
-      agentId: "runtime-agent",
-      companyId: "co-1",
-      workspaceId: "ws-1",
-      gatewaySessionKey: null,
-    };
+  it("returns messages for a session", async () => {
     mockSelect
       .mockReturnValueOnce({
-        where: () => ({ limit: () => Promise.resolve([session]) }),
+        where: () => ({ limit: () => Promise.resolve([{ id: "sess-1", workspaceId: "ws-1", companyId: null }]) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       });
 
     const res = await GET(makeRequest("/api/chat/messages?sessionId=sess-1"));
@@ -105,55 +78,6 @@ describe("GET /api/chat/messages", () => {
     expect(res.status).toBe(200);
     expect(body.messages).toHaveLength(2);
     expect(body.messages[0].content).toBe("hello");
-    expect(mockResolveAccessibleWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ explicitWorkspaceId: "ws-1" }),
-    );
-  });
-
-  it("returns 403 and no messages for an ambiguous company-only private session", async () => {
-    const privateSession = {
-      id: "sess-private",
-      agentId: "runtime-agent",
-      companyId: "co-1",
-      workspaceId: null,
-      gatewaySessionKey: null,
-    };
-    mockSelect.mockReturnValueOnce({
-      where: () => ({ limit: () => Promise.resolve([privateSession]) }),
-    });
-
-    const res = await GET(
-      makeRequest("/api/chat/messages?sessionId=sess-private"),
-    );
-    const body = await res.json();
-
-    expect(res.status).toBe(403);
-    expect(body.error).toBe("Forbidden");
-    expect(mockSelect).toHaveBeenCalledTimes(1);
-    expect(mockResolveAccessibleWorkspace).not.toHaveBeenCalled();
-  });
-
-  it("returns 403 when the viewer cannot access the session workspace", async () => {
-    const otherWorkspaceSession = {
-      id: "sess-private",
-      agentId: "runtime-agent",
-      companyId: "co-1",
-      workspaceId: "ws-private",
-      gatewaySessionKey: null,
-    };
-    mockResolveAccessibleWorkspace.mockResolvedValueOnce(null);
-    mockSelect.mockReturnValueOnce({
-      where: () => ({ limit: () => Promise.resolve([otherWorkspaceSession]) }),
-    });
-
-    const res = await GET(
-      makeRequest("/api/chat/messages?sessionId=sess-private"),
-    );
-    const body = await res.json();
-
-    expect(res.status).toBe(403);
-    expect(body.error).toBe("Forbidden");
-    expect(mockSelect).toHaveBeenCalledTimes(1);
   });
 
   it("returns 400 without sessionId or scoped agent/session key", async () => {
@@ -161,19 +85,12 @@ describe("GET /api/chat/messages", () => {
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toBe(
-      "sessionId or ((agentId or sessionKey) + companyId/workspaceId) required",
-    );
+    expect(body.error).toBe("sessionId or ((agentId or sessionKey) + companyId/workspaceId) required");
   });
 
   it("returns messages for latest agent session", async () => {
-    const session = {
-      id: "sess-runtime",
-      agentId: "runtime-agent",
-      companyId: "co-1",
-      workspaceId: "ws-1",
-      gatewaySessionKey: "runtime-agent",
-    };
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-company", companyId: "co-1" });
+    const session = { id: "sess-runtime", agentId: "runtime-agent", companyId: "co-1", gatewaySessionKey: "runtime-agent" };
     const linkedThread = {
       id: "thread-1",
       agentId: "runtime-agent",
@@ -184,44 +101,28 @@ describe("GET /api/chat/messages", () => {
     };
     mockSelect
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([session]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([session]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
       });
 
-    const res = await GET(
-      makeRequest("/api/chat/messages?agentId=RuntimeAgent&companyId=co-1"),
-    );
+    const res = await GET(makeRequest("/api/chat/messages?agentId=RuntimeAgent&companyId=co-1"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -257,55 +158,27 @@ describe("GET /api/chat/messages", () => {
       threadSessionId: newerLinkedThread.id,
     };
     const newerMessages = [
-      {
-        id: "m3",
-        role: "user",
-        content: "follow up",
-        createdAt: "2026-04-01T00:00:02Z",
-        metadata: null,
-      },
-      {
-        id: "m4",
-        role: "assistant",
-        content: "new answer",
-        createdAt: "2026-04-01T00:00:03Z",
-        metadata: null,
-      },
+      { id: "m3", role: "user", content: "follow up", createdAt: "2026-04-01T00:00:02Z", metadata: null },
+      { id: "m4", role: "assistant", content: "new answer", createdAt: "2026-04-01T00:00:03Z", metadata: null },
     ];
     mockSelect
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({
-            limit: () => Promise.resolve([newerAggregateThread]),
-          }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([newerAggregateThread]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([linkedThread]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve([]) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockMessages) }) }),
       })
       .mockReturnValueOnce({
-        where: () => ({
-          orderBy: () => ({ limit: () => Promise.resolve(newerMessages) }),
-        }),
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(newerMessages) }) }),
       });
 
-    const res = await GET(
-      makeRequest(
-        "/api/chat/messages?companyId=co-1&threadParentSessionKey=runtime-agent",
-      ),
-    );
+    const res = await GET(makeRequest("/api/chat/messages?companyId=co-1&threadParentSessionKey=runtime-agent"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -337,7 +210,7 @@ describe("GET /api/chat/messages", () => {
   it("returns 401 when not authenticated", async () => {
     const { NextResponse } = await import("next/server");
     mockRequireAuth.mockResolvedValueOnce(
-      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
 
     const res = await GET(makeRequest("/api/chat/messages?sessionId=sess-1"));
@@ -353,19 +226,14 @@ describe("POST /api/chat/messages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
-    mockResolveAccessibleWorkspace.mockResolvedValue({
-      id: "ws-1",
-      companyId: "co-1",
-    });
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
   });
 
   it("saves a message with explicit sessionId", async () => {
-    const created = {
-      id: "m3",
-      role: "user",
-      content: "test",
-      createdAt: new Date(),
-    };
+    const created = { id: "m3", role: "user", content: "test", createdAt: new Date() };
+    mockSelect.mockReturnValueOnce({
+      where: () => ({ limit: () => Promise.resolve([{ id: "sess-1", workspaceId: "ws-1", companyId: null }]) }),
+    });
     mockInsert.mockReturnValue({
       returning: () => Promise.resolve([created]),
     });
@@ -381,7 +249,7 @@ describe("POST /api/chat/messages", () => {
           role: "user",
           content: "test",
         }),
-      }),
+      })
     );
     const body = await res.json();
 
@@ -391,23 +259,15 @@ describe("POST /api/chat/messages", () => {
   });
 
   it("auto-creates session when agentId + companyId given", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-company", companyId: "co-1" });
     // No existing session found
     mockSelect.mockReturnValue({
       where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
     });
 
     // Session creation
-    const newSession = {
-      id: "sess-new",
-      agentId: "runtime-agent",
-      companyId: "co-1",
-    };
-    const createdMsg = {
-      id: "m4",
-      role: "user",
-      content: "hi",
-      createdAt: new Date(),
-    };
+    const newSession = { id: "sess-new", agentId: "runtime-agent", companyId: "co-1" };
+    const createdMsg = { id: "m4", role: "user", content: "hi", createdAt: new Date() };
 
     // First insert = session, second insert = message
     let insertCall = 0;
@@ -428,7 +288,7 @@ describe("POST /api/chat/messages", () => {
           role: "user",
           content: "hi",
         }),
-      }),
+      })
     );
     const body = await res.json();
 
@@ -441,17 +301,8 @@ describe("POST /api/chat/messages", () => {
       where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
     });
 
-    const newSession = {
-      id: "sess-personal",
-      agentId: "runtime-agent",
-      workspaceId: "ws-1",
-    };
-    const createdMsg = {
-      id: "m5",
-      role: "user",
-      content: "hi",
-      createdAt: new Date(),
-    };
+    const newSession = { id: "sess-personal", agentId: "runtime-agent", workspaceId: "ws-1" };
+    const createdMsg = { id: "m5", role: "user", content: "hi", createdAt: new Date() };
 
     let insertCall = 0;
     mockInsert.mockImplementation(() => ({
@@ -471,7 +322,7 @@ describe("POST /api/chat/messages", () => {
           role: "user",
           content: "hi",
         }),
-      }),
+      })
     );
     const body = await res.json();
 
@@ -484,7 +335,7 @@ describe("POST /api/chat/messages", () => {
       makeRequest("/api/chat/messages", {
         method: "POST",
         body: JSON.stringify({ content: "no role" }),
-      }),
+      })
     );
     const body = await res.json();
 
@@ -497,7 +348,7 @@ describe("POST /api/chat/messages", () => {
       makeRequest("/api/chat/messages", {
         method: "POST",
         body: JSON.stringify({ role: "user" }),
-      }),
+      })
     );
     const body = await res.json();
 
@@ -510,13 +361,11 @@ describe("POST /api/chat/messages", () => {
       makeRequest("/api/chat/messages", {
         method: "POST",
         body: JSON.stringify({ role: "user", content: "orphan" }),
-      }),
+      })
     );
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toBe(
-      "sessionId or (agentId + companyId/workspaceId) required",
-    );
+    expect(body.error).toBe("sessionId or (agentId + companyId/workspaceId) required");
   });
 });

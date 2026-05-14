@@ -3,7 +3,7 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
-import { requireCompanyAuditReadAccess } from "@/lib/company-audit-access";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "company_id query param required" }, { status: 400 });
   }
 
-  const accessError = await requireCompanyAuditReadAccess(request, companyId);
-  if (accessError) return accessError;
+  const workspace = await resolveAccessibleWorkspace({
+    request,
+    explicitCompanyId: companyId,
+    requireExplicitForBearer: true,
+  });
+  if (!workspace || workspace.companyId !== companyId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const conditions = [eq(auditLog.companyId, companyId)];
 

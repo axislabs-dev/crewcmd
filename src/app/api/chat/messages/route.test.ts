@@ -41,6 +41,11 @@ vi.mock("@/lib/workspace", () => ({
   resolveAccessibleWorkspace: (...a: unknown[]) => mockResolveAccessibleWorkspace(...a),
 }));
 
+const mockCanAccessChatSession = vi.fn().mockResolvedValue(true);
+vi.mock("@/lib/chat-session-access", () => ({
+  canAccessChatSession: (...a: unknown[]) => mockCanAccessChatSession(...a),
+}));
+
 import { GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -58,6 +63,7 @@ describe("GET /api/chat/messages", () => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("returns messages for a session", async () => {
@@ -207,6 +213,22 @@ describe("GET /api/chat/messages", () => {
     });
   });
 
+  it("forbids messages when the resolved session channel is unreadable", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-company", companyId: "co-1" });
+    mockCanAccessChatSession.mockResolvedValueOnce(false);
+    mockSelect.mockReturnValueOnce({
+      where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([
+        { id: "sess-channel", agentId: "runtime-agent", companyId: "co-1", channelId: "channel_other" },
+      ]) }) }),
+    });
+
+    const res = await GET(makeRequest("/api/chat/messages?agentId=RuntimeAgent&companyId=co-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+  });
+
   it("returns 401 when not authenticated", async () => {
     const { NextResponse } = await import("next/server");
     mockRequireAuth.mockResolvedValueOnce(
@@ -227,6 +249,7 @@ describe("POST /api/chat/messages", () => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("saves a message with explicit sessionId", async () => {

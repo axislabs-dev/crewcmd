@@ -5,6 +5,7 @@ import { subscribeChatEvents } from "@/lib/chat-pubsub";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessionEvents, chatSessions } from "@/db/schema";
 import { eq, and, gt, asc } from "drizzle-orm";
+import { canAccessChatSession } from "@/lib/chat-session-access";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,28 @@ export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
   let closed = false;
   let cleanup: (() => void) | undefined;
+  const sessionAccessCache = new Map<string, Promise<boolean>>();
+  const canReadSession = (session: typeof chatSessions.$inferSelect) => {
+    let cached = sessionAccessCache.get(session.id);
+    if (!cached) {
+      cached = canAccessChatSession(request, session);
+      sessionAccessCache.set(session.id, cached);
+    }
+    return cached;
+  };
+  const canReadSessionId = (sessionId: string) => {
+    let cached = sessionAccessCache.get(sessionId);
+    if (!cached) {
+      cached = withRetry(async () => {
+        const [session] = await db!.select().from(chatSessions)
+          .where(eq(chatSessions.id, sessionId))
+          .limit(1);
+        return session ? canAccessChatSession(request, session) : false;
+      });
+      sessionAccessCache.set(sessionId, cached);
+    }
+    return cached;
+  };
 
   const stream = new ReadableStream({
     start(controller) {
@@ -51,16 +74,13 @@ export async function GET(request: NextRequest) {
           const sinceDate = new Date(since);
           // Get all sessions for this company
           const sessions = await withRetry(() =>
-            db!.select({
-              id: chatSessions.id,
-              agentId: chatSessions.agentId,
-              gatewaySessionKey: chatSessions.gatewaySessionKey,
-            })
+            db!.select()
               .from(chatSessions)
               .where(eq(chatSessions.companyId, companyId))
           );
 
           for (const session of sessions) {
+            if (!(await canReadSession(session))) continue;
             const [msgs, progressEvents] = await Promise.all([
               withRetry(() =>
                 db!.select().from(chatMessages)
@@ -130,14 +150,19 @@ export async function GET(request: NextRequest) {
       // 2. Subscribe to real-time events
       const unsubscribe = subscribeChatEvents((event) => {
         if (closed || event.companyId !== companyId) return;
-        const data = JSON.stringify(event.type === "chat_progress"
-          ? { ...event.payload, type: "chat_progress", sessionId: event.sessionId, agentId: event.agentId, companyId: event.companyId, sessionKey: event.sessionKey }
-          : { type: "message", ...event });
-        try {
-          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-        } catch {
-          // Stream closed
-        }
+        void canReadSessionId(event.sessionId).then((allowed) => {
+          if (closed || !allowed) return;
+          const data = JSON.stringify(event.type === "chat_progress"
+            ? { ...event.payload, type: "chat_progress", sessionId: event.sessionId, agentId: event.agentId, companyId: event.companyId, sessionKey: event.sessionKey }
+            : { type: "message", ...event });
+          try {
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          } catch {
+            // Stream closed
+          }
+        }).catch((err) => {
+          console.error("[api/chat/events] Subscription access check error:", err);
+        });
       });
 
       // 3. Heartbeat ping every 30s

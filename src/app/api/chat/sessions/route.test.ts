@@ -38,6 +38,11 @@ vi.mock("@/lib/agent-route-auth", () => ({
   resolveReadableAgentByCallsign: (...a: unknown[]) => mockResolveReadableAgentByCallsign(...a),
 }));
 
+const mockCanAccessChatSession = vi.fn().mockResolvedValue(true);
+vi.mock("@/lib/chat-session-access", () => ({
+  canAccessChatSession: (...a: unknown[]) => mockCanAccessChatSession(...a),
+}));
+
 import { GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -54,6 +59,7 @@ describe("GET /api/chat/sessions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("returns sessions for a company", async () => {
@@ -99,6 +105,21 @@ describe("GET /api/chat/sessions", () => {
     expect(body.error).toBe("Forbidden");
     expect(mockSelect).not.toHaveBeenCalled();
   });
+
+  it("filters out sessions whose channel membership is not readable", async () => {
+    mockSelect.mockReturnValue({
+      where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(mockSessions) }) }),
+    });
+    mockCanAccessChatSession
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const res = await GET(makeRequest("/api/chat/sessions?companyId=co-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.sessions).toEqual([mockSessions[0]]);
+  });
 });
 
 // ── POST /api/chat/sessions ─────────────────────────────────────
@@ -108,6 +129,7 @@ describe("POST /api/chat/sessions", () => {
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
     mockResolveReadableAgentByCallsign.mockResolvedValue({ id: "agent-1", callsign: "Forge" });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("creates a session", async () => {
@@ -183,6 +205,22 @@ describe("POST /api/chat/sessions", () => {
 
     expect(res.status).toBe(404);
     expect(body.error).toBe("Agent not found");
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("forbids creating a session in an unreadable channel", async () => {
+    mockCanAccessChatSession.mockResolvedValueOnce(false);
+
+    const res = await POST(
+      makeRequest("/api/chat/sessions", {
+        method: "POST",
+        body: JSON.stringify({ agentId: "neo", companyId: "co-1", channelId: "channel_other" }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
     expect(mockInsert).not.toHaveBeenCalled();
   });
 });

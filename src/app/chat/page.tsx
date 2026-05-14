@@ -15,7 +15,6 @@ import {
   type ExecutionProgressEvent,
 } from "@/components/chat/execution-progress-panel";
 import {
-  AgentTreeSelector,
   findDefaultAgent,
   findParentAgent,
 } from "@/components/chat/agent-tree-selector";
@@ -175,12 +174,26 @@ type ChatChannelMember = {
 
 type ChatChannel = {
   id: string;
+  type?: "channel" | "dm" | "project_room" | "voice_room";
   name: string | null;
   description?: string | null;
   visibility: "private" | "restricted" | "team" | "org";
   myRole?: string | null;
   canManage?: boolean;
   members?: ChatChannelMember[];
+};
+
+type CompanyMemberOption = {
+  id: string;
+  userId: string;
+  email?: string | null;
+  githubUsername?: string | null;
+  role?: string | null;
+};
+
+type PendingAgentInvite = {
+  agentId: string;
+  mode: NonNullable<ChatChannelMember["agentParticipationMode"]>;
 };
 
 type QueuedChatMessage = {
@@ -1086,7 +1099,6 @@ export default function ChatPage() {
   const chatWorkspaceId = workspace?.id ?? null;
   const chatScopeKey = chatCompanyId ?? chatWorkspaceId ?? "preview";
   const storeMarkRead = useChatStore((s) => s.markRead);
-  const storeClearAgent = useChatStore((s) => s.clearAgent);
   const {
     selectedSessionKey,
     selectSession,
@@ -1117,7 +1129,6 @@ export default function ChatPage() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const unreadCounts = useChatStore((s) => s.unreadByAgent);
   const messagesByStoreKey = useChatStore((s) => s.messagesByAgent);
   const [isPaused, setIsPaused] = useState(false);
   const [stopWords, setStopWords] = useState<string[]>([
@@ -1145,10 +1156,16 @@ export default function ChatPage() {
   const [threadListOpen, setThreadListOpen] = useState(false);
   const [dmCreateOpen, setDmCreateOpen] = useState(false);
   const [dmSearch, setDmSearch] = useState("");
+  const [dmUserInvites, setDmUserInvites] = useState<string[]>([]);
+  const [dmAgentInvites, setDmAgentInvites] = useState<string[]>([]);
   const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [channelCreateOpen, setChannelCreateOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelPurpose, setNewChannelPurpose] = useState("");
+  const [newChannelVisibility, setNewChannelVisibility] = useState<"restricted" | "private">("restricted");
+  const [companyMembers, setCompanyMembers] = useState<CompanyMemberOption[]>([]);
+  const [newChannelUserInvites, setNewChannelUserInvites] = useState<string[]>([]);
+  const [newChannelAgentInvites, setNewChannelAgentInvites] = useState<PendingAgentInvite[]>([]);
   const [memberUserId, setMemberUserId] = useState("");
   const [channelNotice, setChannelNotice] = useState<string | null>(null);
 
@@ -1297,7 +1314,7 @@ export default function ChatPage() {
       setChannels(nextChannels);
       setActiveChannelId((current) => {
         if (current && nextChannels.some((channel) => channel.id === current)) return current;
-        return nextChannels[0]?.id ?? null;
+        return nextChannels.find((channel) => (channel.type ?? "channel") !== "dm")?.id ?? nextChannels[0]?.id ?? null;
       });
       setChannelNotice(null);
     } catch {
@@ -1309,6 +1326,28 @@ export default function ChatPage() {
     void loadChannels();
   }, [loadChannels]);
 
+  useEffect(() => {
+    if (!chatCompanyId) {
+      setCompanyMembers([]);
+      return;
+    }
+    let cancelled = false;
+    async function loadCompanyMembers() {
+      try {
+        const res = await fetch(`/api/companies/${encodeURIComponent(chatCompanyId!)}/members`);
+        if (!res.ok) return;
+        const data = await res.json() as CompanyMemberOption[];
+        if (!cancelled) setCompanyMembers(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setCompanyMembers([]);
+      }
+    }
+    void loadCompanyMembers();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatCompanyId]);
+
   const createChannel = useCallback(async () => {
     const name = newChannelName.trim();
     if (!name || (!chatCompanyId && !chatWorkspaceId)) return;
@@ -1319,8 +1358,10 @@ export default function ChatPage() {
         body: JSON.stringify({
           companyId: chatCompanyId,
           workspaceId: chatWorkspaceId,
+          type: "channel",
           name,
           purpose: newChannelPurpose.trim() || null,
+          visibility: newChannelVisibility,
         }),
       });
       const data = await res.json() as { channel?: ChatChannel; error?: string };
@@ -1328,18 +1369,102 @@ export default function ChatPage() {
         setChannelNotice(data.error ?? "Could not create channel.");
         return;
       }
-      setChannels((prev) => [data.channel!, ...prev]);
-      setActiveChannelId(data.channel.id);
+      const createdChannel = data.channel;
+      for (const userId of newChannelUserInvites) {
+        await fetch(`/api/channels/${encodeURIComponent(createdChannel.id)}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memberType: "user", userId, role: "member" }),
+        });
+      }
+      for (const invite of newChannelAgentInvites) {
+        await fetch(`/api/channels/${encodeURIComponent(createdChannel.id)}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberType: "agent",
+            agentId: invite.agentId,
+            role: "member",
+            agentParticipationMode: invite.mode,
+          }),
+        });
+      }
+      await loadChannels();
+      setActiveChannelId(createdChannel.id);
       selectSession(null);
       setMessages([]);
       setNewChannelName("");
       setNewChannelPurpose("");
+      setNewChannelVisibility("restricted");
+      setNewChannelUserInvites([]);
+      setNewChannelAgentInvites([]);
       setChannelCreateOpen(false);
       setChannelNotice(null);
     } catch {
       setChannelNotice("Could not create channel.");
     }
-  }, [chatCompanyId, chatWorkspaceId, newChannelName, newChannelPurpose, selectSession]);
+  }, [chatCompanyId, chatWorkspaceId, loadChannels, newChannelAgentInvites, newChannelName, newChannelPurpose, newChannelUserInvites, newChannelVisibility, selectSession]);
+
+  const createDm = useCallback(async () => {
+    if ((!chatCompanyId && !chatWorkspaceId) || (dmUserInvites.length === 0 && dmAgentInvites.length === 0)) return;
+    const invitedHumans = companyMembers.filter((member) => dmUserInvites.includes(member.userId));
+    const invitedAgents = agents.filter((agent) => dmAgentInvites.includes(agent.id));
+    const participantNames = [
+      ...invitedHumans.map((member) => member.email ?? member.githubUsername ?? "Human"),
+      ...invitedAgents.map((agent) => agent.callsign),
+    ];
+    const name = participantNames.slice(0, 4).join(", ") || "Direct message";
+    try {
+      const res = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: chatCompanyId,
+          workspaceId: chatWorkspaceId,
+          type: "dm",
+          name,
+          purpose: "Direct message",
+          visibility: "private",
+        }),
+      });
+      const data = await res.json() as { channel?: ChatChannel; error?: string };
+      if (!res.ok || !data.channel) {
+        setChannelNotice(data.error ?? "Could not create DM.");
+        return;
+      }
+      const createdChannel = data.channel;
+      for (const userId of dmUserInvites) {
+        await fetch(`/api/channels/${encodeURIComponent(createdChannel.id)}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memberType: "user", userId, role: "member" }),
+        });
+      }
+      for (const agentId of dmAgentInvites) {
+        await fetch(`/api/channels/${encodeURIComponent(createdChannel.id)}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberType: "agent",
+            agentId,
+            role: "member",
+            agentParticipationMode: "mention_only",
+          }),
+        });
+      }
+      await loadChannels();
+      setActiveChannelId(createdChannel.id);
+      selectSession(null);
+      setMessages([]);
+      setDmUserInvites([]);
+      setDmAgentInvites([]);
+      setDmSearch("");
+      setDmCreateOpen(false);
+      setChannelNotice(null);
+    } catch {
+      setChannelNotice("Could not create DM.");
+    }
+  }, [agents, chatCompanyId, chatWorkspaceId, companyMembers, dmAgentInvites, dmUserInvites, loadChannels, selectSession]);
 
   const addChannelMember = useCallback(async () => {
     if (!activeChannelId || !memberUserId.trim()) return;
@@ -2080,6 +2205,14 @@ export default function ChatPage() {
     () => channels.find((channel) => channel.id === activeChannelId) ?? null,
     [activeChannelId, channels]
   );
+  const channelRooms = useMemo(
+    () => channels.filter((channel) => (channel.type ?? "channel") !== "dm"),
+    [channels]
+  );
+  const dmRooms = useMemo(
+    () => channels.filter((channel) => channel.type === "dm"),
+    [channels]
+  );
   const activeChannelMembers = useMemo(
     () => activeChannel?.members ?? [],
     [activeChannel]
@@ -2230,6 +2363,17 @@ export default function ChatPage() {
       : agents;
     return candidates.slice(0, 12);
   }, [agents, dmSearch]);
+  const dmHumanSearchResults = useMemo(() => {
+    const query = dmSearch.trim().toLowerCase();
+    const candidates = query
+      ? companyMembers.filter((member) => [
+          member.email,
+          member.githubUsername,
+          member.role,
+        ].some((value) => value?.toLowerCase().includes(query)))
+      : companyMembers;
+    return candidates.slice(0, 12);
+  }, [companyMembers, dmSearch]);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -4187,40 +4331,11 @@ export default function ChatPage() {
     }
   }, [activeSessionKey, chatCompanyId, chatWorkspaceId, savedByMessageId, selectedAgent?.callsign]);
 
-  const clearChat = async () => {
-    setMessages([]);
-    setPins([]);
-    setSavedByMessageId({});
-    setExecutionProgress(null);
-    setExecutionEvents([]);
-    storeClearAgent(activeStoreKey);
-    loadedAgentsRef.current.add(`${chatScopeKey}:${activeStoreKey.toLowerCase()}`);
-    if (selectedSessionKey) {
-      loadedAgentsRef.current.add(`${chatScopeKey}:${selectedSessionKey.toLowerCase()}`);
-    }
-
-    if (!chatCompanyId && !chatWorkspaceId) return;
-
-    try {
-      await fetch("/api/chat/messages", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agentId: agentCallsign,
-          companyId: chatCompanyId,
-          workspaceId: chatWorkspaceId,
-          channelId: activeChannelId,
-          gatewaySessionKey: selectedSessionKey ?? undefined,
-        }),
-      });
-    } catch {
-      // Local clear still succeeds; persistence will retry on next explicit clear.
-    }
-  };
-
   const pinnedMessageIds = new Set(pins.map((pin) => pin.messageId));
   const visiblePins = pins.slice(0, 3);
-  const activeConversationLabel = activeChannel ? `# ${activeChannel.name ?? "untitled"}` : agentCallsign;
+  const activeConversationLabel = activeChannel
+    ? `${activeChannel.type === "dm" ? "" : "# "}${activeChannel.name ?? "untitled"}`
+    : agentCallsign;
   const eligibleChannelAgentCallsigns = eligibleChannelAgents.map((agent) => `@${agent.callsign}`);
   const channelAgentHint = eligibleChannelAgentCallsigns.length > 0
     ? `mention ${eligibleChannelAgentCallsigns.slice(0, 2).join(" or ")} to invite an agent`
@@ -4228,7 +4343,7 @@ export default function ChatPage() {
   const composerPlaceholder = isPaused
     ? `Say "${agentCallsign}" or @${agentCallsign} to resume...`
     : activeChannel
-      ? `Message #${activeChannel.name ?? "channel"}...`
+      ? `Message ${activeChannel.type === "dm" ? activeChannel.name ?? "DM" : `#${activeChannel.name ?? "channel"}`}...`
       : `Message ${agentCallsign}...`;
 
   return (
@@ -4257,7 +4372,7 @@ export default function ChatPage() {
             {activeChannel ? (
               <div className="flex min-w-0 items-center gap-2">
                 <div className="flex h-8 min-w-0 items-center rounded-[var(--radius-control)] border border-[var(--border-medium)] bg-[var(--control-bg)] px-3 text-sm font-semibold text-[var(--text-primary)]">
-                  <span className="truncate"># {activeChannel.name ?? "untitled"}</span>
+                  <span className="truncate">{activeChannel.type === "dm" ? activeChannel.name ?? "DM" : `# ${activeChannel.name ?? "untitled"}`}</span>
                 </div>
                 <div className="hidden min-w-0 flex-col sm:flex">
                   <span className="truncate text-[11px] font-medium text-[var(--text-secondary)]">
@@ -4270,48 +4385,25 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : (
-              <>
-                <AgentTreeSelector
-                  agents={agents}
-                  selectedAgent={selectedAgent}
-                  onSelect={handleAgentSelect}
-                  unreadCounts={unreadCounts}
-                />
-
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border-medium)] bg-[var(--control-bg)] px-3 text-sm font-semibold text-[var(--text-primary)]">
+                  <span className="text-sm">{agentEmoji}</span>
+                  <span className="truncate">{agentCallsign}</span>
+                </div>
                 {selectedAgent && (
-                  <div className="hidden flex-col sm:flex">
-                    <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                  <div className="hidden min-w-0 flex-col sm:flex">
+                    <span className="truncate text-[11px] font-medium text-[var(--text-secondary)]">
                       {selectedAgent.title || selectedAgent.name}
                     </span>
-                    <span className="text-[10px] text-[var(--text-tertiary)]">
-                      {delegatedViaAgent ? (
-                        <>
-                          Via: {delegatedViaAgent.emoji} {delegatedViaAgent.callsign}
-                        </>
-                      ) : parentAgent ? (
-                        <>
-                          Reports to: {parentAgent.emoji} {parentAgent.callsign}
-                        </>
-                      ) : (
-                        "Direct message"
-                      )}
-                    </span>
+                    <span className="text-[10px] text-[var(--text-tertiary)]">Direct message</span>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
 
           <div className="flex items-center gap-2">
             <CompanySwitcher compact className="w-36 sm:w-40 lg:hidden" />
-
-            {/* Clear chat */}
-            <button
-              onClick={clearChat}
-              className="hidden sm:block rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-1.5 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-all hover:border-[var(--border-medium)] hover:text-[var(--text-tertiary)]"
-            >
-              CLEAR
-            </button>
           </div>
         </div>
       </div>
@@ -4435,7 +4527,13 @@ export default function ChatPage() {
 
       {dmCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 px-4 pt-[max(4rem,var(--mobile-safe-top))] backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createDm();
+            }}
+            className="w-full max-w-xl rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl"
+          >
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-[var(--text-primary)]">New DM</h2>
               <button
@@ -4443,6 +4541,8 @@ export default function ChatPage() {
                 onClick={() => {
                   setDmCreateOpen(false);
                   setDmSearch("");
+                  setDmUserInvites([]);
+                  setDmAgentInvites([]);
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                 aria-label="Close new DM"
@@ -4462,35 +4562,74 @@ export default function ChatPage() {
                 className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
               />
             </label>
-            <div className="mt-3 max-h-[min(26rem,55vh)] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 py-1">
-              {dmSearchResults.length === 0 ? (
-                <div className="px-3 py-3 text-[12px] text-[var(--text-tertiary)]">No matches.</div>
-              ) : dmSearchResults.map((agent) => {
-                const isSelected = selectedAgent?.id === agent.id && !activeChannelId;
-                return (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    onClick={() => {
-                      selectChannel(null);
-                      handleAgentSelect(agent);
-                      setDmCreateOpen(false);
-                      setDmSearch("");
-                    }}
-                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--bg-surface-hover)] ${isSelected ? "bg-[var(--selected-bg)]" : ""}`}
-                  >
+            <div className="mt-3 grid max-h-[min(30rem,60vh)] gap-3 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3">
+              <div className="grid gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Humans</div>
+                {dmHumanSearchResults.length === 0 ? (
+                  <div className="text-[12px] text-[var(--text-tertiary)]">No humans match.</div>
+                ) : dmHumanSearchResults.map((member) => (
+                  <label key={member.userId} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[12px] transition hover:bg-[var(--bg-surface-hover)]">
+                    <input
+                      type="checkbox"
+                      checked={dmUserInvites.includes(member.userId)}
+                      onChange={(event) => {
+                        setDmUserInvites((current) => event.target.checked
+                          ? [...current, member.userId]
+                          : current.filter((id) => id !== member.userId));
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">{member.email ?? member.githubUsername ?? member.userId}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="grid gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Agents</div>
+                {dmSearchResults.length === 0 ? (
+                  <div className="text-[12px] text-[var(--text-tertiary)]">No agents match.</div>
+                ) : dmSearchResults.map((agent) => (
+                  <label key={agent.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[12px] transition hover:bg-[var(--bg-surface-hover)]">
+                    <input
+                      type="checkbox"
+                      checked={dmAgentInvites.includes(agent.id)}
+                      onChange={(event) => {
+                        setDmAgentInvites((current) => event.target.checked
+                          ? [...current, agent.id]
+                          : current.filter((id) => id !== agent.id));
+                      }}
+                    />
                     <span className="text-base">{agent.emoji}</span>
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: agent.color }} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{agent.callsign}</span>
+                      <span className="block truncate font-semibold text-[var(--text-primary)]">{agent.callsign}</span>
                       <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{agent.title || agent.name || "Agent"}</span>
                     </span>
-                    {isSelected ? <span className="text-[11px] text-[var(--accent)]">Open</span> : null}
-                  </button>
-                );
-              })}
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+            {channelNotice && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300">{channelNotice}</div>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDmCreateOpen(false);
+                  setDmSearch("");
+                  setDmUserInvites([]);
+                  setDmAgentInvites([]);
+                }}
+                className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={dmUserInvites.length === 0 && dmAgentInvites.length === 0}
+                className="rounded-lg border border-[var(--accent)] bg-[var(--accent)]/12 px-3 py-2 text-[12px] font-semibold text-[var(--text-primary)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Create DM
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -4501,7 +4640,7 @@ export default function ChatPage() {
               event.preventDefault();
               void createChannel();
             }}
-            className="w-full max-w-md rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl"
+            className="w-full max-w-xl rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -4519,6 +4658,28 @@ export default function ChatPage() {
               </button>
             </div>
             <div className="grid gap-3">
+              <div className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+                Visibility
+                <div className="grid grid-cols-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1">
+                  {([
+                    { value: "restricted", label: "Public" },
+                    { value: "private", label: "Private" },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setNewChannelVisibility(option.value)}
+                      className={`rounded-lg px-3 py-2 text-[12px] font-semibold transition ${
+                        newChannelVisibility === option.value
+                          ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
+                          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
                 Name
                 <input
@@ -4538,6 +4699,71 @@ export default function ChatPage() {
                   className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 />
               </label>
+              {newChannelVisibility === "private" ? (
+                <div className="grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3">
+                  <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+                    Invite humans
+                    <select
+                      multiple
+                      value={newChannelUserInvites}
+                      onChange={(event) => {
+                        setNewChannelUserInvites(Array.from(event.currentTarget.selectedOptions).map((option) => option.value));
+                      }}
+                      className="min-h-24 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                    >
+                      {companyMembers.map((member) => (
+                        <option key={member.userId} value={member.userId}>
+                          {member.email ?? member.githubUsername ?? member.userId}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid gap-2">
+                    <div className="text-[12px] font-medium text-[var(--text-secondary)]">Invite agents</div>
+                    <div className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2">
+                      {agents.map((agent) => {
+                        const invite = newChannelAgentInvites.find((item) => item.agentId === agent.id);
+                        const mode = invite?.mode ?? "mention_only";
+                        return (
+                          <div key={agent.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px]">
+                            <label className="flex min-w-0 flex-1 items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(invite)}
+                                onChange={(event) => {
+                                  setNewChannelAgentInvites((current) => {
+                                    if (event.target.checked) return [...current, { agentId: agent.id, mode }];
+                                    return current.filter((item) => item.agentId !== agent.id);
+                                  });
+                                }}
+                              />
+                              <span className="text-sm">{agent.emoji}</span>
+                              <span className="min-w-0 truncate font-medium text-[var(--text-primary)]">{agent.callsign}</span>
+                            </label>
+                            <select
+                              value={mode}
+                              disabled={!invite}
+                              onChange={(event) => {
+                                const nextMode = event.target.value as PendingAgentInvite["mode"];
+                                setNewChannelAgentInvites((current) => current.map((item) => (
+                                  item.agentId === agent.id ? { ...item, mode: nextMode } : item
+                                )));
+                              }}
+                              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1 text-[11px] text-[var(--text-secondary)] disabled:opacity-40"
+                            >
+                              <option value="watching">Watcher</option>
+                              <option value="mention_only">Tag only response</option>
+                              <option value="silent">Silent</option>
+                              <option value="proactive">Proactive</option>
+                              <option value="on_call">On call</option>
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
             {channelNotice && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300">{channelNotice}</div>}
             <div className="mt-5 flex justify-end gap-2">
@@ -4564,19 +4790,19 @@ export default function ChatPage() {
         {/* Channel sidebar */}
         <aside className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 backdrop-blur-xl lg:h-full lg:w-64 lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-3 sm:px-4 lg:px-3">
-            <div className="grid gap-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Threads</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setThreadListOpen(true)}
-                className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] transition ${threadListOpen ? "bg-[var(--selected-bg)] text-[var(--selected-text)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
-              >
-                <span className="min-w-0 truncate">All threads</span>
-                <span className="shrink-0 rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] text-[var(--text-tertiary)]">{threadDirectoryItems.length}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setThreadListOpen(true)}
+              className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] transition ${threadListOpen ? "bg-[var(--selected-bg)] text-[var(--selected-text)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <svg className="h-4 w-4 shrink-0 text-[var(--text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3.75h5.25M21 12c0 4.142-4.03 7.5-9 7.5a10.58 10.58 0 0 1-3.178-.486L3 20.25l1.623-4.33C3.591 14.768 3 13.419 3 12c0-4.142 4.03-7.5 9-7.5s9 3.358 9 7.5Z" />
+                </svg>
+                <span className="min-w-0 truncate">Threads</span>
+              </span>
+              <span className="shrink-0 rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] text-[var(--text-tertiary)]">{threadDirectoryItems.length}</span>
+            </button>
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-2">
@@ -4593,7 +4819,7 @@ export default function ChatPage() {
               </div>
 
               <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
-              {channels.map((channel) => (
+              {channelRooms.map((channel) => (
                 <button
                   key={channel.id}
                   type="button"
@@ -4621,20 +4847,29 @@ export default function ChatPage() {
                   +
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => selectChannel(null)}
-                className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${!activeChannelId ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
-              >
-                <span className="text-sm">{agentEmoji}</span>
-                <span className="min-w-0 truncate">{agentCallsign}</span>
-              </button>
+              <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
+                {dmRooms.map((channel) => {
+                  const isActiveDm = activeChannelId === channel.id;
+                  return (
+                    <button
+                      key={channel.id}
+                      type="button"
+                      onClick={() => selectChannel(channel.id)}
+                      className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${isActiveDm ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
+                    >
+                      <span className="text-sm">💬</span>
+                      <span className="min-w-0 truncate">{channel.name ?? "DM"}</span>
+                      {isActiveDm ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {activeChannel ? (
               <div className="hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/55 p-3 text-[11px] text-[var(--text-tertiary)] lg:block">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 truncate font-medium text-[var(--text-secondary)]">#{activeChannel.name}</div>
+                  <div className="min-w-0 truncate font-medium text-[var(--text-secondary)]">{activeChannel.type === "dm" ? activeChannel.name : `#${activeChannel.name}`}</div>
                   <button
                     type="button"
                     onClick={() => setChannelPanelOpen((open) => !open)}

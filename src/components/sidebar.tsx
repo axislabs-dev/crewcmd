@@ -16,7 +16,7 @@ const navSections = [
     items: [
       {
         href: "/chat",
-        label: "Home",
+        label: "Chat",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -169,23 +169,16 @@ function BrandName() {
 export function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const { data: session } = useSession();
   const { workspace } = useWorkspace();
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("crewcmd-sidebar-collapsed");
-    if (saved === "true") setCollapsed(true);
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.sidebarCollapsed = collapsed ? "true" : "false";
-    window.localStorage.setItem("crewcmd-sidebar-collapsed", collapsed ? "true" : "false");
+    document.documentElement.dataset.sidebarCollapsed = "true";
     return () => {
       delete document.documentElement.dataset.sidebarCollapsed;
     };
-  }, [collapsed]);
+  }, []);
 
   if (pathname === "/" || pathname === "/access-denied") return null;
   if (pathname.startsWith("/invite/")) return null;
@@ -199,42 +192,42 @@ export function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  const NavLink = ({ item, onClick, iconOnly = false }: { item: { href: string; label: string; icon: React.ReactNode }; onClick?: () => void; iconOnly?: boolean }) => {
+  const NavLink = ({ item, onClick, compact = false }: { item: { href: string; label: string; icon: React.ReactNode }; onClick?: () => void; compact?: boolean }) => {
     const active = isActive(item.href);
     return (
       <li>
         <Link
           href={item.href}
           onClick={onClick}
-          title={iconOnly ? item.label : undefined}
+          title={compact ? item.label : undefined}
           aria-label={item.label}
-          className={`group relative flex items-center rounded-xl py-2.5 text-[13px] font-medium transition-all duration-200 ${
-            iconOnly ? "justify-center px-2.5" : "gap-3 px-3.5"
+          className={`group relative flex rounded-xl py-2.5 font-medium transition-all duration-200 ${
+            compact ? "min-h-[4.25rem] flex-col items-center justify-center gap-1 px-1.5 text-center text-[10px] leading-tight" : "items-center gap-3 px-3.5 text-[13px]"
           } ${
             active
               ? "font-semibold text-[var(--text-primary)]"
               : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
           }`}
         >
-          {active && <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
+          {active && <div className={`absolute rounded-full bg-[var(--accent)] ${compact ? "left-1 top-1/2 h-8 w-1 -translate-y-1/2" : "left-0 top-1/2 h-6 w-1 -translate-y-1/2"}`} />}
           <span className={`transition-colors ${active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
             {item.icon}
           </span>
-          {!iconOnly && <span>{item.label}</span>}
+          <span className={compact ? "max-w-full truncate" : undefined}>{item.label}</span>
         </Link>
       </li>
     );
   };
 
-  const NavList = ({ onClick, iconOnly = false }: { onClick?: () => void; iconOnly?: boolean }) => (
-    <div className={iconOnly ? "space-y-3" : "space-y-4"}>
+  const NavList = ({ onClick, compact = false }: { onClick?: () => void; compact?: boolean }) => (
+    <div className={compact ? "space-y-3" : "space-y-4"}>
       {navSections.map((section, idx) => (
         <div key={idx}>
-          {section.label && !iconOnly && <div className="mb-1.5 px-3 text-[11px] font-medium text-[var(--text-tertiary)]">{section.label}</div>}
-          {section.label && iconOnly && <div className="mx-auto mb-1.5 h-px w-8 bg-[var(--border-subtle)]" />}
+          {section.label && !compact && <div className="mb-1.5 px-3 text-[11px] font-medium text-[var(--text-tertiary)]">{section.label}</div>}
+          {section.label && compact && <div className="mx-auto mb-1.5 h-px w-8 bg-[var(--border-subtle)]" />}
           <ul className="space-y-0.5">
             {section.items.map((item) => (
-              <NavLink key={item.href} item={item} onClick={onClick} iconOnly={iconOnly} />
+              <NavLink key={item.href} item={item} onClick={onClick} compact={compact} />
             ))}
           </ul>
         </div>
@@ -242,16 +235,16 @@ export function Sidebar() {
       <div>
         <div className="mx-3 mb-1.5 h-px bg-gradient-to-r from-transparent via-[var(--border-subtle)] to-transparent" />
         <ul className="space-y-0.5">
-          <NavLink item={settingsItem} onClick={onClick} iconOnly={iconOnly} />
-          {workspace?.type === "company" ? <NavLink item={companySettingsItem} onClick={onClick} iconOnly={iconOnly} /> : null}
+          <NavLink item={settingsItem} onClick={onClick} compact={compact} />
+          {workspace?.type === "company" ? <NavLink item={companySettingsItem} onClick={onClick} compact={compact} /> : null}
         </ul>
       </div>
       {isSuperAdmin && (
         <div>
-          {!iconOnly && <div className="mx-3 mb-1.5 mt-3 text-[11px] font-medium text-[var(--text-tertiary)]">Admin</div>}
-          {iconOnly && <div className="mx-auto mb-1.5 mt-3 h-px w-8 bg-[var(--border-subtle)]" />}
+          {!compact && <div className="mx-3 mb-1.5 mt-3 text-[11px] font-medium text-[var(--text-tertiary)]">Admin</div>}
+          {compact && <div className="mx-auto mb-1.5 mt-3 h-px w-8 bg-[var(--border-subtle)]" />}
           <ul className="space-y-0.5">
-            <NavLink item={{ ...settingsItem, href: "/dashboard/settings", label: "Admin" }} onClick={onClick} iconOnly={iconOnly} />
+            <NavLink item={{ ...settingsItem, href: "/dashboard/settings", label: "Admin" }} onClick={onClick} compact={compact} />
           </ul>
         </div>
       )}
@@ -278,20 +271,6 @@ export function Sidebar() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
       </svg>
       Sign out
-    </button>
-  );
-
-  const CollapseButton = () => (
-    <button
-      type="button"
-      onClick={() => setCollapsed((value) => !value)}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-      title={collapsed ? "Expand navigation" : "Collapse navigation"}
-      aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-    >
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 5.25h15A1.5 1.5 0 0 1 21 6.75v10.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.25V6.75a1.5 1.5 0 0 1 1.5-1.5Zm4.5 0v13.5" />
-      </svg>
     </button>
   );
 
@@ -370,44 +349,21 @@ export function Sidebar() {
         </div>
       </div>
 
-      <aside className="sticky top-0 z-30 hidden h-screen min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
-        <div className={`flex items-center rounded-2xl py-3 ${collapsed ? "justify-center px-1" : "gap-3 px-3"}`}>
-          {collapsed ? (
-            <CollapseButton />
-          ) : (
-            <>
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <BrandLogo size="md" />
-                <div className="flex min-w-0 flex-col">
-                  <BrandName />
-                  <span className="truncate text-[11px] tracking-normal text-[var(--text-tertiary)]">Operations command</span>
-                </div>
-              </div>
-              <CollapseButton />
-            </>
-          )}
+      <aside className="sticky top-0 z-30 hidden h-screen w-24 min-w-24 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
+        <div className="flex justify-center rounded-2xl px-1 py-3">
+          <BrandLogo size="md" />
         </div>
         <div className="mx-3 h-px bg-[var(--border-subtle)]" />
-        {!collapsed && <CompanySwitcher />}
         <nav className="flex-1 overflow-y-auto px-2 py-4">
-          <NavList iconOnly={collapsed} />
+          <NavList compact />
         </nav>
-        <div className={`border-t border-[var(--border-subtle)] py-3 ${collapsed ? "mx-2 px-2" : "mx-3 px-1"}`}>
-          {collapsed ? (
-            <div className="flex flex-col items-center gap-2">
-              <Link href="/settings" title="Settings" aria-label="Settings" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]">
-                <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
-              </Link>
-              <CompactThemeButton />
-            </div>
-          ) : (
-            <>
-              <UserInfo />
-              <SignOutButton />
-              <ThemeToggle />
-              <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1"}</span>
-            </>
-          )}
+        <div className="mx-2 border-t border-[var(--border-subtle)] px-2 py-3">
+          <div className="flex flex-col items-center gap-2">
+            <Link href="/settings" title="Settings" aria-label="Settings" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]">
+              <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
+            </Link>
+            <CompactThemeButton />
+          </div>
         </div>
       </aside>
     </>

@@ -13,6 +13,11 @@ export interface ChatStoreMessage {
   interrupted?: boolean;
 }
 
+export function chatConversationStoreKey(sessionKey: string, channelId?: string | null) {
+  const key = sessionKey.toLowerCase();
+  return channelId ? `channel:${channelId.toLowerCase()}:${key}` : key;
+}
+
 interface ChatStoreState {
   /** Messages keyed by agentId (lowercase callsign) */
   messagesByAgent: Record<string, ChatStoreMessage[]>;

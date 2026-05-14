@@ -32,6 +32,7 @@ vi.mock("@/db/schema", () => ({
     id: "users.id",
     name: "users.name",
     email: "users.email",
+    githubUsername: "users.githubUsername",
   },
 }));
 
@@ -88,7 +89,7 @@ describe("/api/channels", () => {
       .mockReturnValueOnce({
         leftJoin: () => ({
           where: () => Promise.resolve([
-            { id: "m1", channelId: "channel_1", memberType: "user", userId: "user-1", agentId: null, role: "owner", name: "Owner", email: "owner@example.com" },
+            { id: "m1", channelId: "channel_1", memberType: "user", userId: "user-1", agentId: null, role: "owner", name: "Owner", email: "owner@example.com", githubUsername: "owner" },
           ]),
         }),
       });
@@ -102,6 +103,34 @@ describe("/api/channels", () => {
     expect(body.channels[0].id).toBe("channel_1");
     expect(body.channels[0].canManage).toBe(true);
     expect(body.channels[0].members).toHaveLength(1);
+  });
+
+  it("bootstraps a default general channel when the scope has no channels", async () => {
+    const created = { id: "channel_general", name: "general", companyId: "co-1", workspaceId: null, visibility: "restricted", description: "Default channel for workspace-wide conversation." };
+    mockSelectFrom
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      })
+      .mockReturnValueOnce({
+        leftJoin: () => ({
+          where: () => Promise.resolve([
+            { id: "m1", channelId: "channel_general", memberType: "user", userId: "user-1", agentId: null, role: "owner", name: "Owner", email: "owner@example.com", githubUsername: "owner" },
+          ]),
+        }),
+      });
+    mockInsertValues
+      .mockReturnValueOnce({ returning: () => Promise.resolve([created]) })
+      .mockReturnValueOnce({ returning: () => Promise.resolve([{ id: "member-1" }]) });
+
+    const res = await GET(makeRequest("/api/channels?companyId=co-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.channels).toHaveLength(1);
+    expect(body.channels[0].name).toBe("general");
+    expect(body.channels[0].myRole).toBe("owner");
+    expect(body.channels[0].canManage).toBe(true);
+    expect(mockInsertValues).toHaveBeenCalledTimes(2);
   });
 
   it("creates a restricted channel and owner membership", async () => {

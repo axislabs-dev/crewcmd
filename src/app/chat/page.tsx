@@ -1255,7 +1255,10 @@ export default function ChatPage() {
       const data = await res.json() as { channels?: ChatChannel[] };
       const nextChannels = data.channels ?? [];
       setChannels(nextChannels);
-      setActiveChannelId((current) => current && nextChannels.some((channel) => channel.id === current) ? current : null);
+      setActiveChannelId((current) => {
+        if (current && nextChannels.some((channel) => channel.id === current)) return current;
+        return nextChannels[0]?.id ?? null;
+      });
       setChannelNotice(null);
     } catch {
       setChannelNotice("Could not load channels.");

@@ -20,6 +20,11 @@ vi.mock("@/lib/runtime-scope-guard", () => ({
   assertPrimaryRuntimeInvocationAllowedForContext: (...args: unknown[]) => mockAssertPrimaryRuntimeInvocationAllowedForContext(...args),
 }));
 
+const mockResolveAccessibleWorkspace = vi.fn().mockResolvedValue({ id: "workspace-1", companyId: "company-1" });
+vi.mock("@/lib/workspace", () => ({
+  resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
+}));
+
 vi.mock("@/db", () => ({
   db: null,
   withRetry: (fn: () => unknown) => fn(),
@@ -120,6 +125,7 @@ describe("POST /api/chat", () => {
     mockRequireAuth.mockResolvedValue(null);
     mockSelectRecoveredAssistantText.mockReturnValue("");
     mockAssertPrimaryRuntimeInvocationAllowedForContext.mockResolvedValue(undefined);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "workspace-1", companyId: "company-1" });
     mockGetGatewayClient.mockResolvedValue({
       on: vi.fn(),
       off: vi.fn(),
@@ -132,6 +138,27 @@ describe("POST /api/chat", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+
+  it("rejects chat persistence scope the caller cannot access", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValueOnce(null);
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      companyId: "other-company",
+    }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+    expect(mockResolveAccessibleWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      explicitCompanyId: "other-company",
+      explicitWorkspaceId: null,
+      requireExplicitForBearer: true,
+    }));
+    expect(mockAssertPrimaryRuntimeInvocationAllowedForContext).not.toHaveBeenCalled();
+    expect(mockGetGatewayClient).not.toHaveBeenCalled();
   });
 
   it("rejects shared-context chat when the selected OpenClaw runtime is personal", async () => {

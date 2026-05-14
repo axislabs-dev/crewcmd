@@ -52,37 +52,61 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const memberType = body.memberType ?? (body.agentId ? "agent" : "user");
   if (memberType === "agent") {
     if (!body.agentId) return Response.json({ error: "agentId required" }, { status: 400 });
-    const [member] = await withRetry(() => db!.insert(channelMembers).values({
-      channelId: id,
-      memberType: "agent",
-      agentId: body.agentId,
-      role: body.role ?? "member",
-      agentParticipationMode: body.agentParticipationMode ?? "mention_only",
-      joinedByUserId: user?.id ?? null,
-    }).onConflictDoUpdate({
-      target: [channelMembers.channelId, channelMembers.agentId],
-      set: {
+    const [existing] = await withRetry(() =>
+      db!.select({ id: channelMembers.id })
+        .from(channelMembers)
+        .where(and(
+          eq(channelMembers.channelId, id),
+          eq(channelMembers.memberType, "agent"),
+          eq(channelMembers.agentId, body.agentId!),
+        ))
+        .limit(1)
+    );
+    const [member] = existing
+      ? await withRetry(() => db!.update(channelMembers)
+        .set({
+          role: body.role ?? "member",
+          agentParticipationMode: body.agentParticipationMode ?? "mention_only",
+          updatedAt: new Date(),
+        })
+        .where(eq(channelMembers.id, existing.id))
+        .returning())
+      : await withRetry(() => db!.insert(channelMembers).values({
+        channelId: id,
+        memberType: "agent",
+        agentId: body.agentId,
         role: body.role ?? "member",
         agentParticipationMode: body.agentParticipationMode ?? "mention_only",
-        updatedAt: new Date(),
-      },
-    }).returning());
+        joinedByUserId: user?.id ?? null,
+      }).returning());
 
     return Response.json({ member }, { status: 201 });
   }
 
   if (!body.userId) return Response.json({ error: "userId required" }, { status: 400 });
 
-  const [member] = await withRetry(() => db!.insert(channelMembers).values({
-    channelId: id,
-    memberType: "user",
-    userId: body.userId,
-    role: body.role ?? "member",
-    joinedByUserId: user?.id ?? null,
-  }).onConflictDoUpdate({
-    target: [channelMembers.channelId, channelMembers.userId],
-    set: { role: body.role ?? "member", updatedAt: new Date() },
-  }).returning());
+  const [existing] = await withRetry(() =>
+    db!.select({ id: channelMembers.id })
+      .from(channelMembers)
+      .where(and(
+        eq(channelMembers.channelId, id),
+        eq(channelMembers.memberType, "user"),
+        eq(channelMembers.userId, body.userId!),
+      ))
+      .limit(1)
+  );
+  const [member] = existing
+    ? await withRetry(() => db!.update(channelMembers)
+      .set({ role: body.role ?? "member", updatedAt: new Date() })
+      .where(eq(channelMembers.id, existing.id))
+      .returning())
+    : await withRetry(() => db!.insert(channelMembers).values({
+      channelId: id,
+      memberType: "user",
+      userId: body.userId,
+      role: body.role ?? "member",
+      joinedByUserId: user?.id ?? null,
+    }).returning());
 
   return Response.json({ member }, { status: 201 });
 }

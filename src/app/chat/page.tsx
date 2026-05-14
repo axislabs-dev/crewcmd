@@ -1391,6 +1391,7 @@ export default function ChatPage() {
       }
       await loadChannels();
       setActiveChannelId(createdChannel.id);
+      activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), createdChannel.id);
       selectSession(null);
       setMessages([]);
       setNewChannelName("");
@@ -1403,7 +1404,7 @@ export default function ChatPage() {
     } catch {
       setChannelNotice("Could not create channel.");
     }
-  }, [chatCompanyId, chatWorkspaceId, loadChannels, newChannelAgentInvites, newChannelName, newChannelPurpose, newChannelUserInvites, newChannelVisibility, selectSession]);
+  }, [chatCompanyId, chatWorkspaceId, loadChannels, newChannelAgentInvites, newChannelName, newChannelPurpose, newChannelUserInvites, newChannelVisibility, selectSession, selectedAgent]);
 
   const createDm = useCallback(async () => {
     if ((!chatCompanyId && !chatWorkspaceId) || (dmUserInvites.length === 0 && dmAgentInvites.length === 0)) return;
@@ -1454,6 +1455,7 @@ export default function ChatPage() {
       }
       await loadChannels();
       setActiveChannelId(createdChannel.id);
+      activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), createdChannel.id);
       selectSession(null);
       setMessages([]);
       setDmUserInvites([]);
@@ -1464,7 +1466,7 @@ export default function ChatPage() {
     } catch {
       setChannelNotice("Could not create DM.");
     }
-  }, [agents, chatCompanyId, chatWorkspaceId, companyMembers, dmAgentInvites, dmUserInvites, loadChannels, selectSession]);
+  }, [agents, chatCompanyId, chatWorkspaceId, companyMembers, dmAgentInvites, dmUserInvites, loadChannels, selectSession, selectedAgent]);
 
   const addChannelMember = useCallback(async () => {
     if (!activeChannelId || !memberUserId.trim()) return;
@@ -1488,13 +1490,14 @@ export default function ChatPage() {
 
   const selectChannel = useCallback((channelId: string | null) => {
     setActiveChannelId(channelId);
+    activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), channelId);
     selectSession(null);
     setMessages([]);
     setPins([]);
     setThreadListOpen(false);
     setActiveThread(null);
     setThreadMessages([]);
-  }, [selectSession]);
+  }, [selectSession, selectedAgent]);
 
   const loadPins = useCallback(async () => {
     if (!chatCompanyId && !chatWorkspaceId) {
@@ -3275,12 +3278,17 @@ export default function ChatPage() {
           break;
         }
       }
+      const addressedAgent = wakeAgent ?? (
+        activeChannel?.type === "dm" && eligibleChannelAgents.length === 1
+          ? eligibleChannelAgents[0]
+          : null
+      );
 
       // If wake word detected, switch agent and/or unpause
-      if (wakeAgent) {
-        if (wakeAgent.id !== selectedAgent?.id) {
+      if (addressedAgent) {
+        if (addressedAgent.id !== selectedAgent?.id) {
           setStreamingContent("");
-          setSelectedAgent(wakeAgent);
+          setSelectedAgent(addressedAgent);
         }
         if (isPaused) {
           setIsPaused(false);
@@ -3461,8 +3469,8 @@ export default function ChatPage() {
       }
 
       const metadata = attachments.length > 0 ? { attachments } : null;
-      const respondingAgent = wakeAgent ?? selectedAgent;
-      const respondingDelegatedViaAgent = wakeAgent && defaultAgent && !sameAgent(wakeAgent, defaultAgent)
+      const respondingAgent = addressedAgent ?? selectedAgent;
+      const respondingDelegatedViaAgent = addressedAgent && defaultAgent && !sameAgent(addressedAgent, defaultAgent)
         ? defaultAgent
         : delegatedViaAgent;
       const respondingAgentCallsign = agentDisplayCallsign(respondingAgent);
@@ -3505,7 +3513,7 @@ export default function ChatPage() {
       });
       // User message persisted server-side in /api/chat route
       setInput("");
-      if (activeChannelId && !wakeAgent) {
+      if (activeChannelId && !addressedAgent) {
         if (chatCompanyId || chatWorkspaceId) {
           try {
             const res = await fetch("/api/chat/messages", {
@@ -3911,7 +3919,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
   );
 
   const sendThreadMessage = useCallback(async (

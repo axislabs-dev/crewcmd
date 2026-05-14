@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions, savedItems } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,31 @@ async function currentUserId() {
   return (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
 }
 
+function forbiddenResponse() {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+
+async function canAccessSavedItemScope(
+  request: NextRequest,
+  scope: { companyId?: string | null; workspaceId?: string | null },
+) {
+  if (scope.workspaceId) {
+    return Boolean(await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: scope.workspaceId,
+      requireExplicitForBearer: true,
+    }));
+  }
+  if (scope.companyId) {
+    return Boolean(await resolveAccessibleWorkspace({
+      request,
+      explicitCompanyId: scope.companyId,
+      requireExplicitForBearer: true,
+    }));
+  }
+  return true;
+}
+
 export async function GET(request: NextRequest) {
   const authError = await requireAuth(request);
   if (authError) return authError;
@@ -39,6 +65,8 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status") as SavedItemStatus | null;
   const sourceIds = searchParams.get("sourceIds")?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
 
+  if (!await canAccessSavedItemScope(request, { companyId, workspaceId })) return forbiddenResponse();
+
   const conditions = [eq(savedItems.userId, userId)];
   if (companyId) conditions.push(eq(savedItems.companyId, companyId));
   if (workspaceId) conditions.push(eq(savedItems.workspaceId, workspaceId));
@@ -46,12 +74,15 @@ export async function GET(request: NextRequest) {
   if (status) conditions.push(eq(savedItems.status, status));
   if (sourceIds.length > 0) conditions.push(inArray(savedItems.sourceId, sourceIds));
 
-  const rows = await withRetry(() =>
+  const candidateRows = await withRetry(() =>
     db!.select().from(savedItems)
       .where(and(...conditions))
       .orderBy(desc(savedItems.updatedAt), desc(savedItems.createdAt))
       .limit(200)
   );
+  const rows = (await Promise.all(candidateRows.map(async (item) => (
+    await canAccessSavedItemScope(request, item) ? item : null
+  )))).filter((item): item is typeof candidateRows[number] => Boolean(item));
 
   const chatMessageIds = rows
     .filter((item) => item.sourceType === "chat_message")
@@ -107,8 +138,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "sourceType and sourceId are required" }, { status: 400 });
   }
 
+  if (!await canAccessSavedItemScope(request, {
+    companyId: body.companyId ?? null,
+    workspaceId: body.workspaceId ?? null,
+  })) return forbiddenResponse();
+
   let title = body.title ?? null;
   let metadata = body.metadata ?? null;
+  let itemCompanyId = body.companyId ?? null;
+  let itemWorkspaceId = body.workspaceId ?? null;
   if (body.sourceType === "chat_message") {
     if (!isUuid(body.sourceId)) {
       return NextResponse.json({ error: "chat_message sourceId must be a persisted message id" }, { status: 400 });
@@ -131,12 +169,15 @@ export async function POST(request: NextRequest) {
         .limit(1)
     );
     if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    if (!await canAccessSavedItemScope(request, message)) return forbiddenResponse();
     if (body.companyId && message.companyId !== body.companyId) {
       return NextResponse.json({ error: "Message not found in company scope" }, { status: 404 });
     }
     if (body.workspaceId && message.workspaceId !== body.workspaceId) {
       return NextResponse.json({ error: "Message not found in workspace scope" }, { status: 404 });
     }
+    itemCompanyId = message.companyId;
+    itemWorkspaceId = message.workspaceId;
     title = title ?? previewTitle(message.content);
     metadata = {
       ...(metadata ?? {}),
@@ -153,8 +194,8 @@ export async function POST(request: NextRequest) {
     db!.insert(savedItems)
       .values({
         userId,
-        companyId: body.companyId ?? null,
-        workspaceId: body.workspaceId ?? null,
+        companyId: itemCompanyId,
+        workspaceId: itemWorkspaceId,
         sourceType: body.sourceType!,
         sourceId: body.sourceId!,
         status: body.status ?? "in_progress",

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useCompany } from "@/components/company-context";
-import { useChatStore } from "@/lib/chat-store";
+import { chatConversationStoreKey, useChatStore } from "@/lib/chat-store";
 import { useActiveChatRunStore } from "@/lib/chat-active-run-store";
 
 /**
@@ -75,10 +75,14 @@ export function ChatEventProvider() {
             const sessionKey = typeof data.sessionKey === "string" && data.sessionKey.trim()
               ? data.sessionKey.trim()
               : null;
+            const channelId = typeof data.channelId === "string" && data.channelId.trim()
+              ? data.channelId.trim()
+              : null;
+            const storeKey = chatConversationStoreKey(sessionKey ?? data.agentId, channelId);
             const message = {
               id: data.id,
               sessionId: data.sessionId,
-              agentId: sessionKey ?? data.agentId,
+              agentId: storeKey,
               role: data.role,
               content: data.content,
               metadata: data.metadata,

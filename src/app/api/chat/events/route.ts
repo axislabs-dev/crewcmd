@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 import { subscribeChatEvents } from "@/lib/chat-pubsub";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessionEvents, chatSessions } from "@/db/schema";
@@ -28,8 +29,18 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "companyId required" }, { status: 400 });
   }
 
+  const workspace = await resolveAccessibleWorkspace({
+    request,
+    explicitCompanyId: companyId,
+    requireExplicitForBearer: true,
+  });
+  if (!workspace) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const encoder = new TextEncoder();
   let closed = false;
+  let cleanup: (() => void) | undefined;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -142,15 +153,13 @@ export async function GET(request: NextRequest) {
         }
       }, 30_000);
 
-      // Store cleanup references on the controller for the cancel handler
-      (controller as unknown as Record<string, unknown>).__cleanup = () => {
+      cleanup = () => {
         closed = true;
         unsubscribe();
         clearInterval(heartbeat);
       };
     },
-    cancel(controller) {
-      const cleanup = (controller as unknown as Record<string, unknown>).__cleanup as (() => void) | undefined;
+    cancel() {
       if (cleanup) cleanup();
       else closed = true;
     },

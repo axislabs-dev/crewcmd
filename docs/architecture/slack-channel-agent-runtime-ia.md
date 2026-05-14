@@ -6,6 +6,8 @@ Related: `/tenancy/governance`, `docs/plans/channel-scope-schema-migration-audit
 
 ## Product thesis
 
+This is not a replacement for the existing CrewCmd collaboration design. It is a consolidation of the missing implementation steps that became visible while fixing the `#general` → `#crew` onboarding and noisy channel toolbar UX. The earlier direction was right; the gap was that the UI shipped ahead of a few load-bearing IA, policy, and DM/channel primitives.
+
 CrewCmd should feel like Slack for hybrid human/agent teams: users live in **channels**, **DMs**, **project rooms**, and **threads**. Agents are present like teammates, but their runtimes and governance controls stay behind clear product boundaries.
 
 The core product mistake to avoid is exposing backend tenancy words as the primary navigation model. **Workspace** remains important infrastructure, but the daily user model should be:
@@ -221,9 +223,22 @@ Use one modal/search to start a DM with humans and agents. It should feel like S
 - Add agent to channel/project room: explicit membership with mode.
 - Agent tree/hierarchy remains useful in agent admin/monitoring, but not as the main chat navigation primitive.
 
+## Missed implementation steps
+
+The recent channel fixes exposed these missing steps:
+
+1. the app had channel tables before the channel membership/policy layer became the central read/write authority;
+2. the UI had channel controls before the final Slack-like IA decided where those controls should live;
+3. the `#crew` default was implemented before legacy `#general` data normalization and selection behavior were fully deterministic;
+4. agent chat still behaves partly like a selected-agent dropdown instead of explicit DM/channel participation;
+5. workspace/team context is still too visible in normal chat even though it is mostly tenancy/governance plumbing;
+6. personal runtime privacy needs to be encoded as a policy invariant before agents are allowed into shared channels and project rooms.
+
+The next work should close those gaps in order instead of stacking more visual polish on the current model.
+
 ## Migration sequence
 
-### PR 1: Design contract + vocabulary
+### PR 1: Gap contract + vocabulary
 
 - land this architecture doc;
 - add scope/channel/principal constants and tests;

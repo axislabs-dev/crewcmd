@@ -4019,6 +4019,12 @@ export default function ChatPage() {
   const visiblePins = pins.slice(0, 3);
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) ?? null;
   const activeChannelMembers = activeChannel?.members ?? [];
+  const activeConversationLabel = activeChannel ? `# ${activeChannel.name ?? "untitled"}` : agentCallsign;
+  const composerPlaceholder = isPaused
+    ? `Say "${agentCallsign}" or @${agentCallsign} to resume...`
+    : activeChannel
+      ? `Message #${activeChannel.name ?? "channel"}...`
+      : `Message ${agentCallsign}...`;
 
   return (
     <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
@@ -4043,34 +4049,51 @@ export default function ChatPage() {
               </span>
             )}
 
-            {/* Hierarchy-aware agent tree selector */}
-            <AgentTreeSelector
-              agents={agents}
-              selectedAgent={selectedAgent}
-              onSelect={handleAgentSelect}
-              unreadCounts={unreadCounts}
-            />
-
-            {/* Thread context: agent info + reporting chain */}
-            {selectedAgent && (
-              <div className="hidden sm:flex flex-col ml-2">
-                <span className="text-[11px] text-[var(--text-secondary)] font-medium">
-                  {selectedAgent.title || selectedAgent.name}
-                </span>
-                <span className="text-[10px] text-[var(--text-tertiary)]">
-                  {delegatedViaAgent ? (
-                    <>
-                      Via: {delegatedViaAgent.emoji} {delegatedViaAgent.callsign}
-                    </>
-                  ) : parentAgent ? (
-                    <>
-                      Reports to: {parentAgent.emoji} {parentAgent.callsign}
-                    </>
-                  ) : (
-                    "Team Lead"
-                  )}
-                </span>
+            {activeChannel ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-8 min-w-0 items-center rounded-[var(--radius-control)] border border-[var(--border-medium)] bg-[var(--control-bg)] px-3 text-sm font-semibold text-[var(--text-primary)]">
+                  <span className="truncate"># {activeChannel.name ?? "untitled"}</span>
+                </div>
+                <div className="hidden min-w-0 flex-col sm:flex">
+                  <span className="truncate text-[11px] font-medium text-[var(--text-secondary)]">
+                    {activeChannel.description || "Channel conversation"}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-tertiary)]">
+                    {activeChannelMembers.length} member{activeChannelMembers.length === 1 ? "" : "s"}
+                    {selectedAgent ? ` · replies via ${selectedAgent.callsign}` : ""}
+                  </span>
+                </div>
               </div>
+            ) : (
+              <>
+                <AgentTreeSelector
+                  agents={agents}
+                  selectedAgent={selectedAgent}
+                  onSelect={handleAgentSelect}
+                  unreadCounts={unreadCounts}
+                />
+
+                {selectedAgent && (
+                  <div className="hidden flex-col sm:flex">
+                    <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                      {selectedAgent.title || selectedAgent.name}
+                    </span>
+                    <span className="text-[10px] text-[var(--text-tertiary)]">
+                      {delegatedViaAgent ? (
+                        <>
+                          Via: {delegatedViaAgent.emoji} {delegatedViaAgent.callsign}
+                        </>
+                      ) : parentAgent ? (
+                        <>
+                          Reports to: {parentAgent.emoji} {parentAgent.callsign}
+                        </>
+                      ) : (
+                        "Direct message"
+                      )}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -4238,7 +4261,7 @@ export default function ChatPage() {
                 onClick={() => selectChannel(null)}
                 className={`shrink-0 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${!activeChannelId ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
               >
-                Direct
+                Direct messages
               </button>
             </div>
 
@@ -4343,21 +4366,23 @@ export default function ChatPage() {
                   boxShadow: "var(--theme-shadow)",
                 }}
               >
-                <span className="text-xl">{agentEmoji}</span>
+                <span className="text-xl">{activeChannel ? "#" : agentEmoji}</span>
               </div>
               <h2 className="mb-2 text-lg font-semibold text-[var(--text-primary)]">
-                {agentCallsign}
+                {activeConversationLabel}
               </h2>
               <p className="max-w-md text-[12px] leading-relaxed text-[var(--text-tertiary)]">
-                {`Start a conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
-                  delegatedViaAgent
-                    ? ` CrewCmd will route this through ${delegatedViaAgent.callsign}.`
-                    : ""
-                }${
-                  parentAgent
-                    ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
-                    : ""
-                }`}
+                {activeChannel
+                  ? activeChannel.description || "Start a channel conversation with the crew."
+                  : `Start a direct conversation with ${selectedAgent?.name || agentCallsign} via the OpenClaw Gateway.${
+                    delegatedViaAgent
+                      ? ` CrewCmd will route this through ${delegatedViaAgent.callsign}.`
+                      : ""
+                  }${
+                    parentAgent
+                      ? ` This is ${agentCallsign}'s thread — ${parentAgent.emoji} ${parentAgent.callsign} monitors it.`
+                      : ""
+                  }`}
               </p>
 
             </div>
@@ -4623,7 +4648,7 @@ export default function ChatPage() {
           <ChatComposer
             value={input}
             onValueChange={setInput}
-            placeholder={isPaused ? `Say "${agentCallsign}" or @${agentCallsign} to resume...` : `Message ${agentCallsign}...`}
+            placeholder={composerPlaceholder}
             pendingFiles={pendingFiles}
             onAddFiles={addFiles}
             onRemoveFile={removeFile}

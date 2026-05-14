@@ -11,6 +11,9 @@ const ADMIN_CHANNEL_ROLES = new Set(["owner", "admin"]);
 
 type ChannelRecord = typeof channels.$inferSelect;
 
+const DEFAULT_CHANNEL_NAME = "general";
+const DEFAULT_CHANNEL_DESCRIPTION = "Default channel for workspace-wide conversation.";
+
 function forbiddenResponse() {
   return Response.json({ error: "Forbidden" }, { status: 403 });
 }
@@ -39,6 +42,32 @@ async function resolveChannelScope(request: NextRequest) {
     explicitWorkspaceId: searchParams.get("workspaceId"),
     requireExplicitForBearer: true,
   });
+}
+
+async function createDefaultChannel(workspace: WorkspaceRecord, userId: string) {
+  const [created] = await withRetry(() =>
+    db!.insert(channels).values({
+      companyId: workspace.companyId,
+      workspaceId: workspace.companyId ? null : workspace.id,
+      name: DEFAULT_CHANNEL_NAME,
+      slug: DEFAULT_CHANNEL_NAME,
+      description: DEFAULT_CHANNEL_DESCRIPTION,
+      visibility: "restricted",
+      createdByUserId: userId,
+    }).returning()
+  );
+
+  await withRetry(() =>
+    db!.insert(channelMembers).values({
+      channelId: created.id,
+      memberType: "user",
+      userId,
+      role: "owner",
+      joinedByUserId: userId,
+    }).returning({ id: channelMembers.id })
+  );
+
+  return created;
 }
 
 async function loadMembers(channelIds: string[]) {
@@ -91,13 +120,28 @@ export async function GET(request: NextRequest) {
   if (!workspace) return forbiddenResponse();
 
   const user = await resolveCurrentUser(request);
-  const rows = await withRetry(() =>
+  let rows = await withRetry(() =>
     db!.select()
       .from(channels)
       .where(and(scopeWhere(workspace), isNull(channels.archivedAt)))
       .orderBy(desc(channels.updatedAt))
       .limit(100)
   );
+  if (rows.length === 0 && user?.id) {
+    try {
+      const defaultChannel = await createDefaultChannel(workspace, user.id);
+      rows = [defaultChannel];
+    } catch {
+      rows = await withRetry(() =>
+        db!.select()
+          .from(channels)
+          .where(and(scopeWhere(workspace), isNull(channels.archivedAt)))
+          .orderBy(desc(channels.updatedAt))
+          .limit(100)
+      );
+    }
+  }
+
   const readable = [] as ChannelRecord[];
   for (const channel of rows) {
     if (await canAccessChatSession(request, { companyId: channel.companyId, workspaceId: channel.workspaceId, channelId: channel.id })) readable.push(channel);

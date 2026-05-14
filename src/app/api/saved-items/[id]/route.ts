@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db, withRetry } from "@/db";
 import { savedItems } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,31 @@ interface RouteParams {
 async function currentUserId() {
   const session = await auth();
   return (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
+}
+
+function forbiddenResponse() {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+
+async function canAccessSavedItemScope(
+  request: NextRequest,
+  scope: { companyId?: string | null; workspaceId?: string | null },
+) {
+  if (scope.workspaceId) {
+    return Boolean(await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: scope.workspaceId,
+      requireExplicitForBearer: true,
+    }));
+  }
+  if (scope.companyId) {
+    return Boolean(await resolveAccessibleWorkspace({
+      request,
+      explicitCompanyId: scope.companyId,
+      requireExplicitForBearer: true,
+    }));
+  }
+  return true;
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
@@ -32,6 +58,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     note?: string | null;
     reminderAt?: string | null;
   };
+
+  const [existing] = await withRetry(() =>
+    db!.select()
+      .from(savedItems)
+      .where(and(eq(savedItems.id, id), eq(savedItems.userId, userId)))
+      .limit(1)
+  );
+  if (!existing) return NextResponse.json({ error: "Saved item not found" }, { status: 404 });
+  if (!await canAccessSavedItemScope(request, existing)) return forbiddenResponse();
 
   const [item] = await withRetry(() =>
     db!.update(savedItems)
@@ -58,6 +93,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   if (!userId) return NextResponse.json({ error: "User session required" }, { status: 401 });
 
   const { id } = await params;
+  const [existing] = await withRetry(() =>
+    db!.select()
+      .from(savedItems)
+      .where(and(eq(savedItems.id, id), eq(savedItems.userId, userId)))
+      .limit(1)
+  );
+  if (!existing) return NextResponse.json({ error: "Saved item not found" }, { status: 404 });
+  if (!await canAccessSavedItemScope(request, existing)) return forbiddenResponse();
+
   const deleted = await withRetry(() =>
     db!.delete(savedItems)
       .where(and(eq(savedItems.id, id), eq(savedItems.userId, userId)))

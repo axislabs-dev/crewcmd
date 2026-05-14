@@ -19,6 +19,7 @@ import {
 import { PolicyViolation } from "@/lib/collaboration-policy";
 import { assertPrimaryRuntimeInvocationAllowedForContext } from "@/lib/runtime-scope-guard";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
+import { canAccessChatSession } from "@/lib/chat-session-access";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,8 @@ async function resolveSessionId(
       db!.select({ id: chatSessions.id }).from(chatSessions)
         .where(and(
           eq(chatSessions.gatewaySessionKey, parentSessionKey),
-          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
+          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+          scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId)
         ))
         .orderBy(desc(chatSessions.updatedAt))
         .limit(1)
@@ -114,6 +116,7 @@ async function resolveSessionId(
       db!.insert(chatThreads).values({
         companyId: scope.companyId ?? null,
         workspaceId: scope.workspaceId ?? null,
+        channelId: scope.channelId ?? null,
         agentId: agentLower,
         parentSessionId,
         parentSessionKey: threadLink.threadParentSessionKey,
@@ -141,7 +144,8 @@ async function resolveSessionId(
       db!.select().from(chatSessions)
         .where(and(
           eq(chatSessions.gatewaySessionKey, gatewaySessionKey),
-          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
+          scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+          scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId)
         ))
         .orderBy(desc(chatSessions.updatedAt))
         .limit(1)
@@ -164,6 +168,7 @@ async function resolveSessionId(
         .where(and(
           eq(chatSessions.agentId, agentLower),
           scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+          scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId),
           isNull(chatSessions.gatewaySessionKey)
         ))
         .orderBy(desc(chatSessions.updatedAt))
@@ -179,6 +184,7 @@ async function resolveSessionId(
     db!.insert(chatSessions).values({
       companyId: scope.companyId ?? null,
       workspaceId: scope.workspaceId ?? null,
+      channelId: scope.channelId ?? null,
       agentId: agentLower,
       gatewaySessionKey: gatewaySessionKey || null,
       ...(threadLink ?? {}),
@@ -767,6 +773,7 @@ export async function POST(request: NextRequest) {
       targetAgent,
       companyId: bodyCompanyId,
       workspaceId: bodyWorkspaceId,
+      channelId: bodyChannelId,
       sessionKey: bodySessionKey,
       agentMode: bodyAgentMode,
       clientVisibility: bodyClientVisibility,
@@ -828,7 +835,8 @@ export async function POST(request: NextRequest) {
     const workspaceId = bodyWorkspaceId ||
       request.cookies.get("active_workspace")?.value ||
       null;
-    const persistenceScope: ChatPersistenceScope = { companyId, workspaceId };
+    const channelId = typeof bodyChannelId === "string" && bodyChannelId.trim() ? bodyChannelId.trim() : null;
+    const persistenceScope: ChatPersistenceScope = { companyId, workspaceId, channelId };
     if (companyId || workspaceId) {
       const accessibleWorkspace = await resolveAccessibleWorkspace({
         request,
@@ -837,6 +845,13 @@ export async function POST(request: NextRequest) {
         requireExplicitForBearer: true,
       });
       if (!accessibleWorkspace) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (channelId && !(await canAccessChatSession(request, {
+        companyId: accessibleWorkspace.companyId,
+        workspaceId: accessibleWorkspace.id,
+        channelId,
+      }))) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
     }

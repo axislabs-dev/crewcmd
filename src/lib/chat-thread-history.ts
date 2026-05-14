@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import { chatMessages, chatSessions, chatThreads } from "@/db/schema";
 
@@ -25,18 +25,21 @@ type ThreadReplySummary = {
 export type ChatPersistenceScope = {
   companyId?: string | null;
   workspaceId?: string | null;
+  channelId?: string | null;
 };
 
 function sessionScopeWhere(scope: ChatPersistenceScope) {
-  return scope.companyId
+  const base = scope.companyId
     ? eq(chatSessions.companyId, scope.companyId)
     : eq(chatSessions.workspaceId, scope.workspaceId!);
+  return scope.channelId ? and(base, eq(chatSessions.channelId, scope.channelId)) : and(base, isNull(chatSessions.channelId));
 }
 
 function threadScopeWhere(scope: ChatPersistenceScope) {
-  return scope.companyId
+  const base = scope.companyId
     ? eq(chatThreads.companyId, scope.companyId)
     : eq(chatThreads.workspaceId, scope.workspaceId!);
+  return scope.channelId ? and(base, eq(chatThreads.channelId, scope.channelId)) : and(base, isNull(chatThreads.channelId));
 }
 
 function threadParentMessageKey(parentMessageId: string | null | undefined) {

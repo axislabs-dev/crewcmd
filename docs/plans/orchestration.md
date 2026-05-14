@@ -360,7 +360,7 @@ Prefer additive migrations over rewrites.
 Keep the change reviewable with small PRs, but do not treat the later lanes as optional. Each implementation PR should include schema/API/frontend/tests/docs for its slice:
 
 1. **Messaging PR** — README positioning and this orchestration plan.
-2. **Architecture/RBAC audit PR** — document current schema/routes and additive gaps for channel/chat scope, roles, permissions, RLS/app-policy enforcement, admin flows, and tests.
+2. **Architecture/RBAC audit PR** — document current schema/routes and additive gaps for channel/chat scope, roles, permissions, RLS/app-policy enforcement, admin flows, and tests. See [RBAC implementation audit](./rbac-implementation-audit.md).
 3. **Policy engine PR** — add canonical permission helpers, role matrices, fixtures, and unit tests before relying on UI checks.
 4. **Channel membership PR** — introduce or formalize channel/conversation membership, channel roles, and agent participation mode.
 5. **Runtime guard PR** — enforce that personal runtimes cannot be used in shared contexts, with API and policy tests.

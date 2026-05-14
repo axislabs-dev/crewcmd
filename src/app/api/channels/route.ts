@@ -14,6 +14,9 @@ type ChannelRecord = typeof channels.$inferSelect;
 const DEFAULT_CHANNEL_NAME = "crew";
 const DEFAULT_CHANNEL_DESCRIPTION = "Default channel for crew-wide conversation.";
 
+const LEGACY_DEFAULT_CHANNEL_NAME = "general";
+const LEGACY_DEFAULT_CHANNEL_DESCRIPTION = "Default channel for workspace-wide conversation.";
+
 function forbiddenResponse() {
   return Response.json({ error: "Forbidden" }, { status: 403 });
 }
@@ -42,6 +45,34 @@ async function resolveChannelScope(request: NextRequest) {
     explicitWorkspaceId: searchParams.get("workspaceId"),
     requireExplicitForBearer: true,
   });
+}
+
+async function normalizeDefaultChannelNames(rows: ChannelRecord[]) {
+  const hasCrew = rows.some((channel) => channel.name === DEFAULT_CHANNEL_NAME || channel.slug === DEFAULT_CHANNEL_NAME);
+  if (hasCrew) return rows;
+
+  const legacyDefault = rows.find((channel) =>
+    (channel.name === LEGACY_DEFAULT_CHANNEL_NAME || channel.slug === LEGACY_DEFAULT_CHANNEL_NAME) &&
+    channel.description === LEGACY_DEFAULT_CHANNEL_DESCRIPTION
+  );
+  if (!legacyDefault) return rows;
+
+  try {
+    const [updated] = await withRetry(() =>
+      db!.update(channels)
+        .set({
+          name: DEFAULT_CHANNEL_NAME,
+          slug: DEFAULT_CHANNEL_NAME,
+          description: DEFAULT_CHANNEL_DESCRIPTION,
+        })
+        .where(eq(channels.id, legacyDefault.id))
+        .returning()
+    );
+    if (!updated) return rows;
+    return rows.map((channel) => channel.id === updated.id ? updated : channel);
+  } catch {
+    return rows;
+  }
 }
 
 async function createDefaultChannel(workspace: WorkspaceRecord, userId: string) {
@@ -141,6 +172,8 @@ export async function GET(request: NextRequest) {
       );
     }
   }
+
+  rows = await normalizeDefaultChannelNames(rows);
 
   const readable = [] as ChannelRecord[];
   for (const channel of rows) {

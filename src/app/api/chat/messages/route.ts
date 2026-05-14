@@ -14,7 +14,7 @@ function forbiddenResponse() {
 
 async function resolveRequestedChatScope(
   request: NextRequest,
-  params: { companyId?: string | null; workspaceId?: string | null }
+  params: { companyId?: string | null; workspaceId?: string | null; channelId?: string | null }
 ): Promise<{ workspace: WorkspaceRecord; scope: ChatPersistenceScope } | null> {
   const workspace = await resolveAccessibleWorkspace({
     request,
@@ -23,11 +23,19 @@ async function resolveRequestedChatScope(
     requireExplicitForBearer: true,
   });
   if (!workspace) return null;
+  if (params.channelId && !(await canAccessChatSession(request, {
+    companyId: workspace.companyId,
+    workspaceId: workspace.id,
+    channelId: params.channelId,
+  }))) {
+    return null;
+  }
   return {
     workspace,
     scope: {
       companyId: workspace.companyId,
       workspaceId: workspace.id,
+      channelId: params.channelId ?? null,
     },
   };
 }
@@ -67,6 +75,7 @@ export async function GET(request: NextRequest) {
   const companyId = searchParams.get("companyId");
   const workspaceId = searchParams.get("workspaceId");
   const sessionKey = searchParams.get("sessionKey");
+  const channelId = searchParams.get("channelId");
   const threadParentSessionKey = searchParams.get("threadParentSessionKey");
   const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
   const hasScope = Boolean(companyId || workspaceId);
@@ -77,10 +86,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const requestedScope = hasScope
-      ? await resolveRequestedChatScope(request, { companyId, workspaceId })
+      ? await resolveRequestedChatScope(request, { companyId, workspaceId, channelId })
       : null;
     if (hasScope && !requestedScope) return forbiddenResponse();
-    const scope = requestedScope?.scope ?? { companyId: null, workspaceId: null };
+    const scope = requestedScope?.scope ?? { companyId: null, workspaceId: null, channelId: null };
 
     if (threadParentSessionKey && hasScope) {
       return Response.json(await loadThreadHistoryForParent(threadParentSessionKey, scope, limit));
@@ -102,7 +111,8 @@ export async function GET(request: NextRequest) {
         db!.select().from(chatSessions)
           .where(and(
             eq(chatSessions.gatewaySessionKey, sessionKey),
-            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
+            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+            scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId)
           ))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
@@ -121,7 +131,8 @@ export async function GET(request: NextRequest) {
         db!.select().from(chatSessions)
           .where(and(
             eq(chatSessions.gatewaySessionKey, agentLower),
-            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
+            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+            scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId)
           ))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
@@ -140,6 +151,7 @@ export async function GET(request: NextRequest) {
           .where(and(
             eq(chatSessions.agentId, agentId.toLowerCase()),
             scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+            scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId),
             isNull(chatSessions.gatewaySessionKey)
           ))
           .orderBy(desc(chatSessions.updatedAt))
@@ -216,11 +228,12 @@ export async function DELETE(request: NextRequest) {
       agentId?: string;
       companyId?: string;
       workspaceId?: string;
+      channelId?: string | null;
       gatewaySessionKey?: string;
     };
 
     const requestedScope = body.companyId || body.workspaceId
-      ? await resolveRequestedChatScope(request, { companyId: body.companyId, workspaceId: body.workspaceId })
+      ? await resolveRequestedChatScope(request, { companyId: body.companyId, workspaceId: body.workspaceId, channelId: body.channelId ?? null })
       : null;
     if ((body.companyId || body.workspaceId) && !requestedScope) return forbiddenResponse();
 
@@ -240,6 +253,7 @@ export async function DELETE(request: NextRequest) {
       if (body.gatewaySessionKey) {
         conditions.push(eq(chatSessions.gatewaySessionKey, body.gatewaySessionKey));
       }
+      conditions.push(scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId));
 
       const sessions = await withRetry(() =>
         db!.select().from(chatSessions)
@@ -304,6 +318,7 @@ export async function POST(request: NextRequest) {
       agentId?: string;
       companyId?: string;
       workspaceId?: string;
+      channelId?: string | null;
       role: "user" | "assistant" | "system";
       content: string;
       metadata?: Record<string, unknown>;
@@ -314,7 +329,7 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedScope = body.companyId || body.workspaceId
-      ? await resolveRequestedChatScope(request, { companyId: body.companyId, workspaceId: body.workspaceId })
+      ? await resolveRequestedChatScope(request, { companyId: body.companyId, workspaceId: body.workspaceId, channelId: body.channelId ?? null })
       : null;
     if ((body.companyId || body.workspaceId) && !requestedScope) return forbiddenResponse();
 
@@ -335,7 +350,8 @@ export async function POST(request: NextRequest) {
         db!.select().from(chatSessions)
           .where(and(
             eq(chatSessions.agentId, agentLower),
-            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!)
+            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+            scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId)
           ))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
@@ -350,6 +366,7 @@ export async function POST(request: NextRequest) {
           db!.insert(chatSessions).values({
             companyId: scope.companyId ?? null,
             workspaceId: scope.workspaceId ?? null,
+            channelId: scope.channelId ?? null,
             agentId: agentLower,
           }).returning()
         );

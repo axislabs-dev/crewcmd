@@ -4,30 +4,81 @@ import { auth } from "@/lib/auth";
 import { db, withRetry } from "@/db";
 import { chatMessagePins, chatMessages, chatSessions } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
+type ChatSessionRecord = typeof chatSessions.$inferSelect;
+
+function forbiddenResponse() {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+
+async function canAccessChatSession(
+  request: NextRequest,
+  session: Pick<ChatSessionRecord, "workspaceId" | "companyId">,
+) {
+  if (session.workspaceId) {
+    return Boolean(await resolveAccessibleWorkspace({
+      request,
+      explicitWorkspaceId: session.workspaceId,
+      requireExplicitForBearer: true,
+    }));
+  }
+  if (session.companyId) {
+    return Boolean(await resolveAccessibleWorkspace({
+      request,
+      explicitCompanyId: session.companyId,
+      requireExplicitForBearer: true,
+    }));
+  }
+  return false;
+}
+
+async function loadAccessibleSessionById(request: NextRequest, sessionId: string) {
+  const sessions = await withRetry(() =>
+    db!.select().from(chatSessions)
+      .where(eq(chatSessions.id, sessionId))
+      .limit(1)
+  );
+  const session = sessions[0] ?? null;
+  if (!session) return { session: null, allowed: true };
+  return { session, allowed: await canAccessChatSession(request, session) };
+}
+
 async function resolveSessionId(params: {
+  request: NextRequest;
   sessionId?: string | null;
   sessionKey?: string | null;
   companyId?: string | null;
   workspaceId?: string | null;
-}) {
-  if (params.sessionId) return params.sessionId;
+}): Promise<{ sessionId: string | null; allowed: boolean } | null> {
+  if (params.sessionId) {
+    const { session, allowed } = await loadAccessibleSessionById(params.request, params.sessionId);
+    return { sessionId: session?.id ?? null, allowed };
+  }
   if (!params.sessionKey || (!params.companyId && !params.workspaceId)) return null;
+
+  const workspace = await resolveAccessibleWorkspace({
+    request: params.request,
+    explicitWorkspaceId: params.workspaceId ?? null,
+    explicitCompanyId: params.companyId ?? null,
+    requireExplicitForBearer: true,
+  });
+  if (!workspace) return { sessionId: null, allowed: false };
 
   const rows = await withRetry(() =>
     db!.select({ id: chatSessions.id }).from(chatSessions)
       .where(and(
         eq(chatSessions.gatewaySessionKey, params.sessionKey!),
-        params.companyId
-          ? eq(chatSessions.companyId, params.companyId)
-          : eq(chatSessions.workspaceId, params.workspaceId!)
+        workspace.companyId
+          ? eq(chatSessions.companyId, workspace.companyId)
+          : eq(chatSessions.workspaceId, workspace.id)
       ))
       .orderBy(desc(chatSessions.updatedAt))
       .limit(1)
   );
-  return rows[0]?.id ?? null;
+  return { sessionId: rows[0]?.id ?? null, allowed: true };
 }
 
 export async function GET(request: NextRequest) {
@@ -36,13 +87,17 @@ export async function GET(request: NextRequest) {
   if (!db) return NextResponse.json({ error: "Database not initialized" }, { status: 500 });
 
   const { searchParams } = new URL(request.url);
-  const sessionId = await resolveSessionId({
+  const resolved = await resolveSessionId({
+    request,
     sessionId: searchParams.get("sessionId"),
     sessionKey: searchParams.get("sessionKey"),
     companyId: searchParams.get("companyId"),
     workspaceId: searchParams.get("workspaceId"),
   });
+  if (!resolved) return NextResponse.json({ pins: [] });
+  if (!resolved.allowed) return forbiddenResponse();
 
+  const { sessionId } = resolved;
   if (!sessionId) return NextResponse.json({ pins: [] });
 
   const pins = await withRetry(() =>
@@ -93,6 +148,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+  if (!await canAccessChatSession(request, message)) return forbiddenResponse();
   if (body.companyId && message.companyId !== body.companyId) {
     return NextResponse.json({ error: "Message not found in company scope" }, { status: 404 });
   }
@@ -140,6 +196,20 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const messageId = searchParams.get("messageId");
   if (!messageId) return NextResponse.json({ error: "messageId is required" }, { status: 400 });
+
+  const [message] = await withRetry(() =>
+    db!.select({
+      id: chatMessages.id,
+      companyId: chatSessions.companyId,
+      workspaceId: chatSessions.workspaceId,
+    })
+      .from(chatMessages)
+      .innerJoin(chatSessions, eq(chatMessages.sessionId, chatSessions.id))
+      .where(eq(chatMessages.id, messageId))
+      .limit(1)
+  );
+
+  if (message && !await canAccessChatSession(request, message)) return forbiddenResponse();
 
   const deleted = await withRetry(() =>
     db!.delete(chatMessagePins)

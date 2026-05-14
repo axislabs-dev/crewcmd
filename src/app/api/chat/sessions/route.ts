@@ -3,6 +3,8 @@ import { db, withRetry } from "@/db";
 import { chatSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
+import { resolveReadableAgentByCallsign } from "@/lib/agent-route-auth";
 
 /**
  * GET /api/chat/sessions?agentId=neo&companyId=xxx
@@ -26,6 +28,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitCompanyId: companyId,
+      requireExplicitForBearer: true,
+    });
+    if (!workspace) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const conditions = [eq(chatSessions.companyId, companyId)];
     if (agentId) {
       conditions.push(eq(chatSessions.agentId, agentId.toLowerCase()));
@@ -65,10 +76,25 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "agentId and companyId required" }, { status: 400 });
     }
 
+    const workspace = await resolveAccessibleWorkspace({
+      request,
+      explicitCompanyId: body.companyId,
+      requireExplicitForBearer: true,
+    });
+    if (!workspace) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const agent = await resolveReadableAgentByCallsign(body.agentId, request);
+    if (!agent) {
+      return Response.json({ error: "Agent not found" }, { status: 404 });
+    }
+
     const [session] = await withRetry(() =>
       db!.insert(chatSessions).values({
         companyId: body.companyId,
-        agentId: body.agentId.toLowerCase(),
+        workspaceId: workspace.id,
+        agentId: agent.callsign.toLowerCase(),
         title: body.title || null,
       }).returning()
     );

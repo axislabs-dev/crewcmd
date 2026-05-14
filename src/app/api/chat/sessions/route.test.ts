@@ -28,6 +28,16 @@ vi.mock("@/lib/require-auth", () => ({
   requireAuth: (...a: unknown[]) => mockRequireAuth(...a),
 }));
 
+const mockResolveAccessibleWorkspace = vi.fn();
+vi.mock("@/lib/workspace", () => ({
+  resolveAccessibleWorkspace: (...a: unknown[]) => mockResolveAccessibleWorkspace(...a),
+}));
+
+const mockResolveReadableAgentByCallsign = vi.fn();
+vi.mock("@/lib/agent-route-auth", () => ({
+  resolveReadableAgentByCallsign: (...a: unknown[]) => mockResolveReadableAgentByCallsign(...a),
+}));
+
 import { GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -43,6 +53,7 @@ describe("GET /api/chat/sessions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
   });
 
   it("returns sessions for a company", async () => {
@@ -77,6 +88,17 @@ describe("GET /api/chat/sessions", () => {
     expect(body.sessions).toHaveLength(1);
     expect(body.sessions[0].agentId).toBe("neo");
   });
+
+  it("forbids listing sessions outside an accessible company", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue(null);
+
+    const res = await GET(makeRequest("/api/chat/sessions?companyId=co-2"));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
 });
 
 // ── POST /api/chat/sessions ─────────────────────────────────────
@@ -84,10 +106,12 @@ describe("POST /api/chat/sessions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockResolveReadableAgentByCallsign.mockResolvedValue({ id: "agent-1", callsign: "Forge" });
   });
 
   it("creates a session", async () => {
-    const created = { id: "s3", agentId: "forge", companyId: "co-1", title: null };
+    const created = { id: "s3", agentId: "forge", companyId: "co-1", workspaceId: "ws-1", title: null };
     mockInsert.mockReturnValue({
       returning: () => Promise.resolve([created]),
     });
@@ -128,5 +152,37 @@ describe("POST /api/chat/sessions", () => {
 
     expect(res.status).toBe(400);
     expect(body.error).toBe("agentId and companyId required");
+  });
+
+  it("forbids creating sessions outside an accessible company", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue(null);
+
+    const res = await POST(
+      makeRequest("/api/chat/sessions", {
+        method: "POST",
+        body: JSON.stringify({ agentId: "neo", companyId: "co-2" }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("does not create sessions for unreadable agents", async () => {
+    mockResolveReadableAgentByCallsign.mockResolvedValue(null);
+
+    const res = await POST(
+      makeRequest("/api/chat/sessions", {
+        method: "POST",
+        body: JSON.stringify({ agentId: "ghost", companyId: "co-1" }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(body.error).toBe("Agent not found");
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 });

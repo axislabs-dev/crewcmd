@@ -2080,6 +2080,10 @@ export default function ChatPage() {
     ),
     [messages]
   );
+  const hasPersistedExecutionActivity = useMemo(
+    () => executionEvents.some((event) => event.activeTool || event.checkpoint),
+    [executionEvents]
+  );
 
   const scrollToMessage = useCallback((messageId: string) => {
     window.requestAnimationFrame(() => {
@@ -4520,7 +4524,7 @@ export default function ChatPage() {
           })}
 
           {/* Execution progress */}
-          {(isLoading || executionProgress) && (
+          {(isLoading || executionProgress || hasPersistedExecutionActivity) && (
             <ExecutionProgressPanel
               progress={executionProgress}
               events={executionEvents}

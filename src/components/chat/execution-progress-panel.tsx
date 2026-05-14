@@ -415,13 +415,13 @@ export function ExecutionProgressPanel({
   hasStreamingContent,
   agentColor,
 }: ExecutionProgressPanelProps) {
-  const phase = phaseFromProgress(progress, isLoading, hasStreamingContent);
+  const auditEvents = events.filter((event) => event.activeTool || event.checkpoint);
+  const phase = phaseFromProgress(progress, isLoading, hasStreamingContent) ?? (auditEvents.length > 0 ? "completed" : null);
   if (!phase) return null;
 
   const elapsed = formatElapsed(progress?.elapsedMs);
   const isTerminal = phase === "completed" || phase === "error";
-  const label = labelFromProgress(progress, phase);
-  const auditEvents = events.filter((event) => event.activeTool || event.checkpoint);
+  const label = progress ? labelFromProgress(progress, phase) : "Tool activity";
   const statusDetail =
     phase === "tool" ? toolStatusDetail(progress) :
     phase === "error" ? progress?.error :

@@ -11,6 +11,7 @@ export interface ChatMessageEvent {
   agentId: string;
   companyId: string;
   sessionKey?: string | null;
+  channelId?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
   metadata?: Record<string, unknown> | null;

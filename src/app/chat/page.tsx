@@ -22,7 +22,7 @@ import {
 import { useSessionBrowserStore } from "@/lib/session-browser-store";
 import type { Agent } from "@/lib/data";
 import { parseTaskReferences } from "@/lib/parse-task-references";
-import { useChatStore } from "@/lib/chat-store";
+import { chatConversationStoreKey, useChatStore } from "@/lib/chat-store";
 import type { ChatStoreMessage } from "@/lib/chat-store";
 import { useActiveChatRunStore } from "@/lib/chat-active-run-store";
 import { useWorkspace } from "@/components/company-context";
@@ -958,12 +958,15 @@ async function loadCrewCmdSessionHistoryByKey(
   sessionKey: string,
   companyId?: string | null,
   workspaceId?: string | null,
+  channelId?: string | null,
+  storeKey = sessionKey,
 ): Promise<ChatHistoryLoadResult> {
   if (!companyId && !workspaceId) return null;
   try {
     const params = new URLSearchParams({ sessionKey, limit: "200" });
     if (companyId) params.set("companyId", companyId);
     if (workspaceId) params.set("workspaceId", workspaceId);
+    if (channelId) params.set("channelId", channelId);
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return null;
     const history = await res.json() as ThreadHistoryResponse & {
@@ -980,10 +983,10 @@ async function loadCrewCmdSessionHistoryByKey(
     const { messages, sessionId, execution } = history;
     if (!sessionId) return null;
     useChatStore.getState().loadSession(
-      sessionKey.toLowerCase(),
+      storeKey.toLowerCase(),
       messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({
         id: m.id,
-        agentId: sessionKey.toLowerCase(),
+        agentId: storeKey.toLowerCase(),
         role: m.role,
         content: m.content,
         createdAt: m.createdAt,
@@ -1000,6 +1003,7 @@ async function loadThreadHistoriesForParent(
   parentSessionKey: string,
   companyId?: string | null,
   workspaceId?: string | null,
+  channelId?: string | null,
 ): Promise<ThreadHistoryLoadResult> {
   if (!companyId && !workspaceId) return { links: {}, summaries: {} };
   try {
@@ -1009,6 +1013,7 @@ async function loadThreadHistoriesForParent(
     });
     if (companyId) params.set("companyId", companyId);
     if (workspaceId) params.set("workspaceId", workspaceId);
+    if (channelId) params.set("channelId", channelId);
     const res = await fetch(`/api/chat/messages?${params.toString()}`);
     if (!res.ok) return { links: {}, summaries: {} };
     return normalizeThreadHistoryResponse(await res.json() as ThreadHistoryResponse);
@@ -1235,6 +1240,10 @@ export default function ChatPage() {
   const activeSessionKey = useMemo(
     () => selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent),
     [selectedSessionKey, selectedAgent]
+  );
+  const activeStoreKey = useMemo(
+    () => chatConversationStoreKey(activeSessionKey, activeChannelId),
+    [activeChannelId, activeSessionKey]
   );
   const agentDefaultVoice = useMemo(
     () => normalizeAgentVoiceSettings(selectedAgent?.runtimeConfig?.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
@@ -1699,7 +1708,7 @@ export default function ChatPage() {
   const loadedAgentsRef = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
-    const activeKey = activeSessionKey.toLowerCase();
+    const activeKey = activeStoreKey.toLowerCase();
 
     // Read whatever the store already has (from SSE)
     const storeMessages = useChatStore.getState().messagesByAgent[activeKey] || [];
@@ -1717,12 +1726,12 @@ export default function ChatPage() {
 
     // If a gateway session is selected, load its preview
     if (selectedSessionKey) {
-      const selectedKey = selectedSessionKey.toLowerCase();
+      const selectedKey = activeStoreKey.toLowerCase();
       const selectedLoadKey = `${chatScopeKey}:${selectedKey}`;
       if (!loadedAgentsRef.current.has(selectedLoadKey)) {
         loadedAgentsRef.current.add(selectedLoadKey);
-        loadCrewCmdSessionHistoryByKey(selectedSessionKey, chatCompanyId, chatWorkspaceId).then(async (result) => {
-          const loaded = result ?? (await loadSessionPreviewIntoStore(selectedSessionKey).then((ok) => ok ? null : null));
+        loadCrewCmdSessionHistoryByKey(selectedSessionKey, chatCompanyId, chatWorkspaceId, activeChannelId, selectedKey).then(async (result) => {
+          const loaded = result ?? (!activeChannelId ? await loadSessionPreviewIntoStore(selectedSessionKey).then((ok) => ok ? null : null) : null);
           if (cancelled) return;
           const updated = useChatStore.getState().messagesByAgent[selectedKey] || [];
           if (updated.length > 0) {
@@ -1746,8 +1755,8 @@ export default function ChatPage() {
     } else if (!loadedAgentsRef.current.has(`${chatScopeKey}:${activeKey}`)) {
       // Otherwise load standard thread history
       loadedAgentsRef.current.add(`${chatScopeKey}:${activeKey}`);
-      loadCrewCmdSessionHistoryByKey(activeSessionKey, chatCompanyId, chatWorkspaceId).then(async (result) => {
-        const loaded = result ?? (await loadSessionPreviewIntoStore(activeSessionKey).then((ok) => ok ? null : null));
+      loadCrewCmdSessionHistoryByKey(activeSessionKey, chatCompanyId, chatWorkspaceId, activeChannelId, activeKey).then(async (result) => {
+        const loaded = result ?? (!activeChannelId ? await loadSessionPreviewIntoStore(activeSessionKey).then((ok) => ok ? null : null) : null);
         if (cancelled) return;
         const updated = useChatStore.getState().messagesByAgent[activeKey] || [];
         setMessages(updated.map((m) => ({
@@ -1768,7 +1777,7 @@ export default function ChatPage() {
     }
 
     if (chatCompanyId || chatWorkspaceId) {
-      void loadThreadHistoriesForParent(activeSessionKey, chatCompanyId, chatWorkspaceId).then(({ links, summaries }) => {
+      void loadThreadHistoriesForParent(activeSessionKey, chatCompanyId, chatWorkspaceId, activeChannelId).then(({ links, summaries }) => {
         if (cancelled) return;
         if (Object.keys(links).length > 0) {
           setThreadParentLinks((prev) => ({ ...prev, ...links }));
@@ -1781,7 +1790,7 @@ export default function ChatPage() {
     storeMarkRead(activeSessionKey);
 
     return () => { cancelled = true; };
-  }, [activeSessionKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, chatCompanyId, chatWorkspaceId, chatScopeKey, applyExecutionSnapshot]);
+  }, [activeChannelId, activeSessionKey, activeStoreKey, selectedAgent?.callsign, selectedSessionKey, storeMarkRead, chatCompanyId, chatWorkspaceId, chatScopeKey, applyExecutionSnapshot]);
 
   useEffect(() => {
     void loadPins();
@@ -1803,13 +1812,16 @@ export default function ChatPage() {
   }, [urlMessageId]);
 
   const refreshSessionPreview = useCallback(async (sessionKey: string) => {
-    const loaded = await loadSessionPreviewIntoStore(sessionKey);
+    const storeKey = chatConversationStoreKey(sessionKey, activeChannelId);
+    const loaded = activeChannelId
+      ? await loadCrewCmdSessionHistoryByKey(sessionKey, chatCompanyId, chatWorkspaceId, activeChannelId, storeKey).then(Boolean)
+      : await loadSessionPreviewIntoStore(sessionKey);
     if (!loaded) return false;
 
-    const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
+    const updated = useChatStore.getState().messagesByAgent[storeKey.toLowerCase()] || [];
     setMessages(updated.map(chatMessageFromStore));
     return true;
-  }, []);
+  }, [activeChannelId, chatCompanyId, chatWorkspaceId]);
 
   const openThreadForMessage = useCallback((message: Message, index: number, existingSessionKey?: string) => {
     const parentSessionKey = activeSessionKey;
@@ -1837,17 +1849,17 @@ export default function ChatPage() {
 
     const existing = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
     setThreadMessages(existing.map(chatMessageFromStore));
-    void loadCrewCmdSessionHistoryByKey(sessionKey, chatCompanyId, chatWorkspaceId).then(() => {
+    void loadCrewCmdSessionHistoryByKey(sessionKey, chatCompanyId, chatWorkspaceId, activeChannelId).then(() => {
       const updated = useChatStore.getState().messagesByAgent[sessionKey.toLowerCase()] || [];
       setThreadMessages(updated.map(chatMessageFromStore));
     });
-  }, [activeSessionKey, chatCompanyId, chatWorkspaceId, messages]);
+  }, [activeChannelId, activeSessionKey, chatCompanyId, chatWorkspaceId, messages]);
 
   const closeThread = useCallback(() => {
     const closingThread = activeThread;
     if (closingThread) {
-      void loadCrewCmdSessionHistoryByKey(closingThread.sessionKey, chatCompanyId, chatWorkspaceId);
-      void loadThreadHistoriesForParent(closingThread.parentSessionKey, chatCompanyId, chatWorkspaceId).then(({ links, summaries }) => {
+      void loadCrewCmdSessionHistoryByKey(closingThread.sessionKey, chatCompanyId, chatWorkspaceId, activeChannelId);
+      void loadThreadHistoriesForParent(closingThread.parentSessionKey, chatCompanyId, chatWorkspaceId, activeChannelId).then(({ links, summaries }) => {
         if (Object.keys(links).length > 0) {
           setThreadParentLinks((prev) => ({ ...prev, ...links }));
         }
@@ -1866,7 +1878,7 @@ export default function ChatPage() {
       setAgentMicMuted(false);
       setAgentAudioMuted(false);
     }
-  }, [activeThread, agentModeSessionKey, chatCompanyId, chatWorkspaceId]);
+  }, [activeChannelId, activeThread, agentModeSessionKey, chatCompanyId, chatWorkspaceId]);
 
   useEffect(() => {
     if (!activeThread) return;
@@ -1886,7 +1898,7 @@ export default function ChatPage() {
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
     const unsub = useChatStore.subscribe((state) => {
-      const storeMessages = state.messagesByAgent[activeSessionKey.toLowerCase()] || [];
+      const storeMessages = state.messagesByAgent[activeStoreKey.toLowerCase()] || [];
       setMessages((prev) => {
         // Only update if store has messages we don't have
         if (storeMessages.length <= prev.length) {
@@ -1925,7 +1937,7 @@ export default function ChatPage() {
       });
     });
     return unsub;
-  }, [activeSessionKey]);
+  }, [activeStoreKey]);
 
   // Check if user is near bottom of scroll container
   const isNearBottom = useCallback(() => {
@@ -3302,6 +3314,7 @@ export default function ChatPage() {
         : selectedSessionBelongsToAgent(selectedSessionKey, respondingAgent?.callsign)
         ? selectedSessionKey ?? gatewaySessionKeyForAgent(respondingAgent)
         : gatewaySessionKeyForAgent(respondingAgent);
+      const requestStoreKey = chatConversationStoreKey(requestSessionKey, activeChannelId);
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const optimisticId = `optimistic-${createClientId()}`;
@@ -3314,7 +3327,7 @@ export default function ChatPage() {
       };
       useChatStore.getState().addMessage({
         id: optimisticId,
-        agentId: requestSessionKey,
+        agentId: requestStoreKey,
         role: "user",
         content: userMsg.content,
         metadata,
@@ -3350,10 +3363,10 @@ export default function ChatPage() {
             });
             const data = await res.json().catch(() => ({})) as { message?: { id?: string } };
             if (res.ok && data.message?.id) {
-              useChatStore.getState().replaceOptimisticMessage(requestSessionKey, optimisticId, {
+              useChatStore.getState().replaceOptimisticMessage(requestStoreKey, optimisticId, {
                 ...userMsg,
                 id: data.message.id,
-                agentId: requestSessionKey,
+                agentId: requestStoreKey,
                 createdAt: userMsg.createdAt ?? new Date().toISOString(),
               });
               setMessages((prev) =>
@@ -3488,9 +3501,9 @@ export default function ChatPage() {
 
             if (parsed.type === "meta" && parsed.role === "user") {
               // Replace optimistic user message with server-confirmed one
-              useChatStore.getState().replaceOptimisticMessage(requestSessionKey, optimisticId, {
+              useChatStore.getState().replaceOptimisticMessage(requestStoreKey, optimisticId, {
                 id: parsed.messageId,
-                agentId: requestSessionKey,
+                agentId: requestStoreKey,
                 role: "user",
                 content: userMsg.content,
                 metadata,
@@ -3578,7 +3591,7 @@ export default function ChatPage() {
           };
           useChatStore.getState().addMessage({
             id: assistantId,
-            agentId: requestSessionKey,
+            agentId: requestStoreKey,
             role: "assistant",
             content: enrichedContent,
             createdAt: assistantMsg.createdAt ?? new Date().toISOString(),
@@ -3974,7 +3987,7 @@ export default function ChatPage() {
       }
       setThreadStreamingContent("");
     } finally {
-      void loadCrewCmdSessionHistoryByKey(thread.sessionKey, chatCompanyId, chatWorkspaceId);
+      void loadCrewCmdSessionHistoryByKey(thread.sessionKey, chatCompanyId, chatWorkspaceId, activeChannelId);
       setThreadLoading(false);
       const nextQueued = queuedThreadMessagesRef.current.shift();
       if (nextQueued) {
@@ -4131,8 +4144,8 @@ export default function ChatPage() {
     setSavedByMessageId({});
     setExecutionProgress(null);
     setExecutionEvents([]);
-    storeClearAgent(activeSessionKey);
-    loadedAgentsRef.current.add(`${chatScopeKey}:${activeSessionKey.toLowerCase()}`);
+    storeClearAgent(activeStoreKey);
+    loadedAgentsRef.current.add(`${chatScopeKey}:${activeStoreKey.toLowerCase()}`);
     if (selectedSessionKey) {
       loadedAgentsRef.current.add(`${chatScopeKey}:${selectedSessionKey.toLowerCase()}`);
     }

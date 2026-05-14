@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
                   agentId: session.agentId,
                   companyId,
                   sessionKey: session.gatewaySessionKey,
+                  channelId: session.channelId,
                   role: m.role,
                   content: m.content,
                   metadata: m.metadata,

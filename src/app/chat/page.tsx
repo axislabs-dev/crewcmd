@@ -157,6 +157,7 @@ type ChatChannelMember = {
   userId?: string | null;
   agentId?: string | null;
   role: string;
+  agentParticipationMode?: "silent" | "watching" | "mention_only" | "proactive" | "on_call" | null;
   name?: string | null;
   email?: string | null;
 };
@@ -880,6 +881,10 @@ function gatewaySessionKeyForAgent(agent: Agent | null | undefined) {
   const runtimeRef = agent?.runtimeRef?.trim().toLowerCase();
   if (runtimeRef === "main") return "main";
   return agent?.callsign.toLowerCase() ?? "main";
+}
+
+function agentDisplayCallsign(agent: Agent | null | undefined) {
+  return agent?.callsign ?? "MAIN";
 }
 
 function sameAgent(a: Agent | null | undefined, b: Agent | null | undefined) {
@@ -2029,6 +2034,40 @@ export default function ChatPage() {
         : null,
     [selectedAgent, defaultAgent]
   );
+  const activeChannel = useMemo(
+    () => channels.find((channel) => channel.id === activeChannelId) ?? null,
+    [activeChannelId, channels]
+  );
+  const activeChannelMembers = useMemo(
+    () => activeChannel?.members ?? [],
+    [activeChannel]
+  );
+  const channelAgentMemberById = useMemo(() => {
+    const memberById = new Map<string, ChatChannelMember>();
+    for (const member of activeChannelMembers) {
+      if (member.memberType === "agent" && member.agentId) {
+        memberById.set(member.agentId, member);
+      }
+    }
+    return memberById;
+  }, [activeChannelMembers]);
+  const channelAgentById = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent])),
+    [agents]
+  );
+  const eligibleChannelAgents = useMemo(() => {
+    if (!activeChannel) return [];
+    const speakingRoles = new Set(["owner", "admin", "member", "contributor"]);
+    const speakingModes = new Set(["mention_only", "proactive", "on_call"]);
+    return agents.filter((agent) => {
+      const membership = channelAgentMemberById.get(agent.id);
+      if (!membership) return false;
+      if (!speakingRoles.has(membership.role)) return false;
+      if (!speakingModes.has(membership.agentParticipationMode ?? "mention_only")) return false;
+      if (!chatCompanyId) return true;
+      return agent.ownerType === "company" && agent.ownerCompanyId === chatCompanyId;
+    });
+  }, [activeChannel, agents, channelAgentMemberById, chatCompanyId]);
   const visibleMessages = useMemo(
     () => uniqueMessagesById(
       messages.filter(isVisibleChatMessage)
@@ -2985,7 +3024,8 @@ export default function ChatPage() {
       // --- Wake word detection: check if user is addressing a specific agent ---
       const lowerTrimmed = trimmed.toLowerCase();
       let wakeAgent: Agent | null = null;
-      for (const agent of agents) {
+      const mentionableAgents = activeChannelId ? eligibleChannelAgents : agents;
+      for (const agent of mentionableAgents) {
         const callsign = agent.callsign.toLowerCase();
         const name = agent.name.toLowerCase();
         // Match patterns: @callsign, "callsign," , "callsign " at start, "hey callsign", "hey name"
@@ -3190,11 +3230,16 @@ export default function ChatPage() {
       }
 
       const metadata = attachments.length > 0 ? { attachments } : null;
-      const requestSessionKey = delegatedViaAgent
-        ? gatewaySessionKeyForAgent(delegatedViaAgent)
-        : selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
-        ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
-        : gatewaySessionKeyForAgent(selectedAgent);
+      const respondingAgent = wakeAgent ?? selectedAgent;
+      const respondingDelegatedViaAgent = wakeAgent && defaultAgent && !sameAgent(wakeAgent, defaultAgent)
+        ? defaultAgent
+        : delegatedViaAgent;
+      const respondingAgentCallsign = agentDisplayCallsign(respondingAgent);
+      const requestSessionKey = respondingDelegatedViaAgent
+        ? gatewaySessionKeyForAgent(respondingDelegatedViaAgent)
+        : selectedSessionBelongsToAgent(selectedSessionKey, respondingAgent?.callsign)
+        ? selectedSessionKey ?? gatewaySessionKeyForAgent(respondingAgent)
+        : gatewaySessionKeyForAgent(respondingAgent);
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const optimisticId = `optimistic-${createClientId()}`;
@@ -3225,6 +3270,40 @@ export default function ChatPage() {
       });
       // User message persisted server-side in /api/chat route
       setInput("");
+      if (activeChannelId && !wakeAgent) {
+        if (chatCompanyId || chatWorkspaceId) {
+          try {
+            const res = await fetch("/api/chat/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                agentId: respondingAgentCallsign,
+                companyId: chatCompanyId,
+                workspaceId: chatWorkspaceId,
+                channelId: activeChannelId,
+                role: "user",
+                content: userMsg.content,
+                metadata,
+              }),
+            });
+            const data = await res.json().catch(() => ({})) as { message?: { id?: string } };
+            if (res.ok && data.message?.id) {
+              useChatStore.getState().replaceOptimisticMessage(requestSessionKey, optimisticId, {
+                ...userMsg,
+                id: data.message.id,
+                agentId: requestSessionKey,
+                createdAt: userMsg.createdAt ?? new Date().toISOString(),
+              });
+              setMessages((prev) =>
+                prev.map((message) => message.id === optimisticId ? { ...message, id: data.message!.id! } : message)
+              );
+            }
+          } catch (error) {
+            console.error("[chat] Failed to persist channel message:", error);
+          }
+        }
+        return;
+      }
       setMainLoading(true);
       const startedProgress = {
         event: "run_started",
@@ -3235,7 +3314,7 @@ export default function ChatPage() {
       setExecutionEvents([startedProgress]);
       setStreamingContent("");
       streamingContentRef.current = "";
-      streamingAgentRef.current = agentCallsign;
+      streamingAgentRef.current = respondingAgentCallsign;
       pageHiddenDuringRequestRef.current = false;
       firstDeltaSeenRef.current = false;
       lastBusyReplyAtRef.current = 0;
@@ -3275,14 +3354,14 @@ export default function ChatPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: chatMessages,
-            agent: selectedAgent?.callsign,
-            gatewayAgent: delegatedViaAgent?.callsign ?? selectedAgent?.callsign,
-            targetAgent: delegatedViaAgent && selectedAgent
+            agent: respondingAgent?.callsign,
+            gatewayAgent: respondingDelegatedViaAgent?.callsign ?? respondingAgent?.callsign,
+            targetAgent: respondingDelegatedViaAgent && respondingAgent
               ? {
-                  callsign: selectedAgent.callsign,
-                  name: selectedAgent.name,
-                  title: selectedAgent.title,
-                  runtimeRef: selectedAgent.runtimeRef,
+                  callsign: respondingAgent.callsign,
+                  name: respondingAgent.name,
+                  title: respondingAgent.title,
+                  runtimeRef: respondingAgent.runtimeRef,
                 }
               : undefined,
             companyId: chatCompanyId,
@@ -3564,7 +3643,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -4017,9 +4096,11 @@ export default function ChatPage() {
 
   const pinnedMessageIds = new Set(pins.map((pin) => pin.messageId));
   const visiblePins = pins.slice(0, 3);
-  const activeChannel = channels.find((channel) => channel.id === activeChannelId) ?? null;
-  const activeChannelMembers = activeChannel?.members ?? [];
   const activeConversationLabel = activeChannel ? `# ${activeChannel.name ?? "untitled"}` : agentCallsign;
+  const eligibleChannelAgentCallsigns = eligibleChannelAgents.map((agent) => `@${agent.callsign}`);
+  const channelAgentHint = eligibleChannelAgentCallsigns.length > 0
+    ? `mention ${eligibleChannelAgentCallsigns.slice(0, 2).join(" or ")} to invite an agent`
+    : "no shared agents in this channel";
   const composerPlaceholder = isPaused
     ? `Say "${agentCallsign}" or @${agentCallsign} to resume...`
     : activeChannel
@@ -4060,7 +4141,7 @@ export default function ChatPage() {
                   </span>
                   <span className="text-[10px] text-[var(--text-tertiary)]">
                     {activeChannelMembers.length} member{activeChannelMembers.length === 1 ? "" : "s"}
-                    {selectedAgent ? ` · replies via ${selectedAgent.callsign}` : ""}
+                    {` · ${channelAgentHint}`}
                   </span>
                 </div>
               </div>
@@ -4317,8 +4398,14 @@ export default function ChatPage() {
                           <div className="text-[11px] text-[var(--text-tertiary)]">No visible members.</div>
                         ) : activeChannelMembers.map((member) => (
                           <div key={member.id ?? `${member.memberType}:${member.userId ?? member.agentId}`} className="flex items-center justify-between gap-2 text-[11px]">
-                            <span className="truncate text-[var(--text-secondary)]">{member.name || member.email || member.userId || member.agentId || "Unknown"}</span>
-                            <span className="rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[var(--text-tertiary)]">{member.role}</span>
+                            <span className="truncate text-[var(--text-secondary)]">
+                              {member.memberType === "agent" && member.agentId
+                                ? `@${channelAgentById.get(member.agentId)?.callsign ?? member.agentId}`
+                                : member.name || member.email || member.userId || "Unknown"}
+                            </span>
+                            <span className="rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[var(--text-tertiary)]">
+                              {member.memberType === "agent" ? member.agentParticipationMode ?? "mention_only" : member.role}
+                            </span>
                           </div>
                         ))}
                       </div>

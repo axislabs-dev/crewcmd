@@ -3,8 +3,8 @@ import { requireAuth } from "@/lib/require-auth";
 import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
-import { chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { agents, channelMembers, chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
+import { eq, desc, and, isNull, sql } from "drizzle-orm";
 import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
 import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
@@ -26,6 +26,8 @@ export const dynamic = "force-dynamic";
 const ACTIVE_HISTORY_POLL_INTERVAL_MS = 1_500;
 const ACTIVE_HISTORY_POLL_MAX_ATTEMPTS = 80;
 const AGENT_MODE_THINKING_LEVEL = "low";
+const CHANNEL_AGENT_SPEAKING_ROLES = new Set(["owner", "admin", "member", "contributor"]);
+const CHANNEL_AGENT_SPEAKING_MODES = new Set(["mention_only", "proactive", "on_call"]);
 
 type ChatProgressEventName =
   | "run_started"
@@ -759,6 +761,48 @@ async function persistAndPublish(
   return message;
 }
 
+async function resolveChannelAgentInvocationViolation(params: {
+  channelId: string;
+  companyId: string | null;
+  agentCallsign: string;
+}) {
+  if (!db) return null;
+  const callsign = params.agentCallsign.trim().toLowerCase();
+  if (!callsign) return "Channel agent mention is required.";
+
+  const [row] = await withRetry(() =>
+    db!.select({
+      agent: agents,
+      member: channelMembers,
+    })
+      .from(agents)
+      .innerJoin(
+        channelMembers,
+        and(
+          eq(channelMembers.agentId, agents.id),
+          eq(channelMembers.channelId, params.channelId),
+        ),
+      )
+      .where(sql`lower(${agents.callsign}) = ${callsign}`)
+      .limit(1)
+  );
+
+  if (!row) return "Agent is not a member of this channel.";
+  if (!CHANNEL_AGENT_SPEAKING_ROLES.has(row.member.role)) {
+    return "Agent cannot post in this channel.";
+  }
+  if (!CHANNEL_AGENT_SPEAKING_MODES.has(row.member.agentParticipationMode ?? "mention_only")) {
+    return "Agent is not configured to respond in this channel.";
+  }
+  if (params.companyId) {
+    const ownerCompanyId = row.agent.ownerCompanyId ?? row.agent.companyId ?? null;
+    if (row.agent.ownerType !== "company" || ownerCompanyId !== params.companyId) {
+      return "Personal agents cannot participate in company channels.";
+    }
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   const bearerToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const authError = isValidVoiceUploadToken(bearerToken) ? null : await requireAuth(request);
@@ -853,6 +897,16 @@ export async function POST(request: NextRequest) {
         channelId,
       }))) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (channelId) {
+        const violation = await resolveChannelAgentInvocationViolation({
+          channelId,
+          companyId: accessibleWorkspace.companyId,
+          agentCallsign: targetAgentCallsign || agentId,
+        });
+        if (violation) {
+          return Response.json({ error: violation }, { status: 403 });
+        }
       }
     }
     const currentUser = await resolveCurrentUser(request);

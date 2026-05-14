@@ -1121,7 +1121,7 @@ export default function ChatPage() {
   const [activeIdentityProfile, setActiveIdentityProfile] = useState<ChatIdentityProfile | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
-  const [channelPanelOpen, setChannelPanelOpen] = useState(true);
+  const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelPurpose, setNewChannelPurpose] = useState("");
   const [memberUserId, setMemberUserId] = useState("");

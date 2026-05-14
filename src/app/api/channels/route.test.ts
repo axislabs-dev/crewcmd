@@ -3,11 +3,13 @@ import { NextRequest } from "next/server";
 
 const mockSelectFrom = vi.fn();
 const mockInsertValues = vi.fn();
+const mockUpdateSet = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
     select: () => ({ from: mockSelectFrom }),
     insert: () => ({ values: mockInsertValues }),
+    update: () => ({ set: mockUpdateSet }),
   },
   withRetry: (fn: () => unknown) => fn(),
 }));
@@ -77,6 +79,37 @@ describe("/api/channels", () => {
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
     mockResolveCurrentUser.mockResolvedValue({ id: "user-1", email: "owner@example.com" });
     mockCanAccessChatSession.mockResolvedValue(true);
+  });
+
+  it("renames the legacy bootstrapped general channel to crew", async () => {
+    const legacy = { id: "channel_general", name: "general", slug: "general", companyId: "co-1", workspaceId: null, visibility: "restricted", description: "Default channel for workspace-wide conversation.", updatedAt: new Date(), archivedAt: null };
+    const renamed = { ...legacy, name: "crew", slug: "crew", description: "Default channel for crew-wide conversation." };
+    mockSelectFrom
+      .mockReturnValueOnce({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([legacy]) }) }),
+      })
+      .mockReturnValueOnce({
+        leftJoin: () => ({
+          where: () => Promise.resolve([
+            { id: "m1", channelId: "channel_general", memberType: "user", userId: "user-1", agentId: null, role: "owner", name: "Owner", email: "owner@example.com", githubUsername: "owner" },
+          ]),
+        }),
+      });
+    mockUpdateSet.mockReturnValueOnce({
+      where: () => ({ returning: () => Promise.resolve([renamed]) }),
+    });
+
+    const res = await GET(makeRequest("/api/channels?companyId=co-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.channels[0].name).toBe("crew");
+    expect(body.channels[0].description).toBe("Default channel for crew-wide conversation.");
+    expect(mockUpdateSet).toHaveBeenCalledWith({
+      name: "crew",
+      slug: "crew",
+      description: "Default channel for crew-wide conversation.",
+    });
   });
 
   it("lists only readable channels with members and management metadata", async () => {

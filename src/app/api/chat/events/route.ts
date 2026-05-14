@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
                   agentId: session.agentId,
                   companyId,
                   sessionKey: (m.payload as Record<string, unknown>).sessionKey ?? m.gatewaySessionKey,
+                  channelId: session.channelId,
                 },
               })),
             ].sort((a, b) => a.order - b.order);
@@ -154,7 +155,7 @@ export async function GET(request: NextRequest) {
         void canReadSessionId(event.sessionId).then((allowed) => {
           if (closed || !allowed) return;
           const data = JSON.stringify(event.type === "chat_progress"
-            ? { ...event.payload, type: "chat_progress", sessionId: event.sessionId, agentId: event.agentId, companyId: event.companyId, sessionKey: event.sessionKey }
+            ? { ...event.payload, type: "chat_progress", sessionId: event.sessionId, agentId: event.agentId, companyId: event.companyId, sessionKey: event.sessionKey, channelId: event.channelId ?? null }
             : { type: "message", ...event });
           try {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));

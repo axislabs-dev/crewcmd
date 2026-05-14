@@ -96,6 +96,17 @@ type ThreadReplySummary = {
   replies: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
 };
 
+type ThreadDirectoryItem = {
+  message: Message;
+  index: number;
+  summary: ThreadReplySummary;
+};
+
+type ThreadDirectoryGroup = {
+  label: string;
+  items: ThreadDirectoryItem[];
+};
+
 type ThreadHistoryLoadResult = {
   links: Record<string, ThreadParentLink>;
   summaries: Record<string, ThreadReplySummary>;
@@ -1126,6 +1137,9 @@ export default function ChatPage() {
   const [activeIdentityProfile, setActiveIdentityProfile] = useState<ChatIdentityProfile | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const [threadListOpen, setThreadListOpen] = useState(false);
+  const [dmCreateOpen, setDmCreateOpen] = useState(false);
+  const [dmSearch, setDmSearch] = useState("");
   const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [channelCreateOpen, setChannelCreateOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
@@ -1332,6 +1346,7 @@ export default function ChatPage() {
     selectSession(null);
     setMessages([]);
     setPins([]);
+    setThreadListOpen(false);
     setActiveThread(null);
     setThreadMessages([]);
   }, [selectSession]);
@@ -2150,16 +2165,46 @@ export default function ChatPage() {
 
     return summaries;
   }, [activeSessionKey, messagesByStoreKey, serverThreadSummaries, threadParentLinks]);
-  const recentThreadItems = useMemo(() => (
+  const threadDirectoryItems = useMemo<ThreadDirectoryItem[]>(() => (
     transcriptItems
       .map((message, index) => {
         const summary = threadReplySummaries[`id:${threadParentIdForMessage(message)}`];
         return summary ? { message, index, summary } : null;
       })
-      .filter((item): item is { message: Message; index: number; summary: ThreadReplySummary } => Boolean(item))
-      .slice(-5)
+      .filter((item): item is ThreadDirectoryItem => Boolean(item))
       .reverse()
   ), [threadReplySummaries, transcriptItems]);
+  const threadDirectoryGroups = useMemo<ThreadDirectoryGroup[]>(() => {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const startOfWeek = startOfToday - 6 * 24 * 60 * 60 * 1000;
+    const groups: ThreadDirectoryGroup[] = [
+      { label: "Today", items: [] },
+      { label: "Last 7 days", items: [] },
+      { label: "Older", items: [] },
+    ];
+
+    for (const item of threadDirectoryItems) {
+      const timestamp = item.message.createdAt ? new Date(item.message.createdAt).getTime() : 0;
+      if (timestamp >= startOfToday) groups[0].items.push(item);
+      else if (timestamp >= startOfWeek) groups[1].items.push(item);
+      else groups[2].items.push(item);
+    }
+
+    return groups.filter((group) => group.items.length > 0);
+  }, [threadDirectoryItems]);
+  const dmSearchResults = useMemo(() => {
+    const query = dmSearch.trim().toLowerCase();
+    const candidates = query
+      ? agents.filter((agent) => [
+          agent.callsign,
+          agent.name,
+          agent.title,
+          agent.role,
+        ].some((value) => value?.toLowerCase().includes(query)))
+      : agents;
+    return candidates.slice(0, 12);
+  }, [agents, dmSearch]);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -2282,6 +2327,7 @@ export default function ChatPage() {
       setIsPlayingAudio(false);
       // Clear messages immediately so previous agent's thread doesn't bleed
       setMessages([]);
+      setThreadListOpen(false);
       // Update session selection (or clear it for regular agent mode)
       selectSession(nextSessionKey);
       if (typeof window !== "undefined" && !nextSessionKey) {
@@ -4325,6 +4371,67 @@ export default function ChatPage() {
         />
       )}
 
+      {dmCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 px-4 pt-[max(4rem,var(--mobile-safe-top))] backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-[var(--text-primary)]">New DM</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setDmCreateOpen(false);
+                  setDmSearch("");
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                aria-label="Close new DM"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+              To
+              <input
+                autoFocus
+                value={dmSearch}
+                onChange={(event) => setDmSearch(event.target.value)}
+                placeholder="Search people or agents"
+                className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+              />
+            </label>
+            <div className="mt-3 max-h-[min(26rem,55vh)] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 py-1">
+              {dmSearchResults.length === 0 ? (
+                <div className="px-3 py-3 text-[12px] text-[var(--text-tertiary)]">No matches.</div>
+              ) : dmSearchResults.map((agent) => {
+                const isSelected = selectedAgent?.id === agent.id && !activeChannelId;
+                return (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => {
+                      selectChannel(null);
+                      handleAgentSelect(agent);
+                      setDmCreateOpen(false);
+                      setDmSearch("");
+                    }}
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--bg-surface-hover)] ${isSelected ? "bg-[var(--selected-bg)]" : ""}`}
+                  >
+                    <span className="text-base">{agent.emoji}</span>
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: agent.color }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{agent.callsign}</span>
+                      <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{agent.title || agent.name || "Agent"}</span>
+                    </span>
+                    {isSelected ? <span className="text-[11px] text-[var(--accent)]">Open</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {channelCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 backdrop-blur-sm">
           <form
@@ -4399,19 +4506,14 @@ export default function ChatPage() {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Threads</span>
               </div>
-              {recentThreadItems.length > 0 ? recentThreadItems.map(({ message, index, summary }) => (
-                <button
-                  key={summary.sessionKey}
-                  type="button"
-                  onClick={() => openThreadForMessage(message, index, summary.sessionKey)}
-                  className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                >
-                  <span className="min-w-0 truncate">{messagePreview(message.content, 42)}</span>
-                  <span className="shrink-0 rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] text-[var(--text-tertiary)]">{summary.replies.length}</span>
-                </button>
-              )) : (
-                <div className="rounded-lg px-3 py-2 text-[12px] text-[var(--text-tertiary)]">No threads</div>
-              )}
+              <button
+                type="button"
+                onClick={() => setThreadListOpen(true)}
+                className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] transition ${threadListOpen ? "bg-[var(--selected-bg)] text-[var(--selected-text)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+              >
+                <span className="min-w-0 truncate">All threads</span>
+                <span className="shrink-0 rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] text-[var(--text-tertiary)]">{threadDirectoryItems.length}</span>
+              </button>
             </div>
 
             <div className="grid gap-2">
@@ -4447,6 +4549,15 @@ export default function ChatPage() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">DMs</span>
+                <button
+                  type="button"
+                  onClick={() => setDmCreateOpen(true)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                  aria-label="Start direct message"
+                  title="Start direct message"
+                >
+                  +
+                </button>
               </div>
               <button
                 type="button"
@@ -4532,7 +4643,88 @@ export default function ChatPage() {
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
+      {threadListOpen && (
+        <div className="absolute inset-0 z-30 overflow-y-auto bg-[var(--bg-primary)] px-4 py-4 lg:px-6">
+          <div className="mx-auto max-w-4xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-[var(--text-primary)]">Threads</h2>
+                <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
+                  {activeConversationLabel}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setThreadListOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                aria-label="Close threads"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {threadDirectoryGroups.length === 0 ? (
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-4 py-8 text-center text-[13px] text-[var(--text-tertiary)]">
+                No threads in this conversation yet.
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {threadDirectoryGroups.map((group) => (
+                  <section key={group.label} className="space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">{group.label}</div>
+                    <div className="space-y-2">
+                      {group.items.map(({ message, index, summary }) => {
+                        const latestReply = summary.replies[summary.replies.length - 1];
+                        return (
+                          <details
+                            key={summary.sessionKey}
+                            className="group rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-3 open:border-[var(--border-medium)]"
+                          >
+                            <summary className="flex cursor-pointer list-none items-center gap-3">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[12px] font-semibold text-[var(--text-secondary)]">
+                                {message.role === "user" ? "R" : agentAbbrev}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">{messagePreview(message.content, 92) || "Thread"}</span>
+                                <span className="block text-[11px] text-[var(--text-tertiary)]">
+                                  {summary.replies.length} repl{summary.replies.length === 1 ? "y" : "ies"}
+                                  {latestReply?.createdAt ? ` · ${new Date(latestReply.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  setThreadListOpen(false);
+                                  openThreadForMessage(message, index, summary.sessionKey);
+                                }}
+                                className="shrink-0 rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-[11px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                              >
+                                Open
+                              </button>
+                              <span className="shrink-0 text-[var(--text-tertiary)] transition group-open:rotate-180">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+                                </svg>
+                              </span>
+                            </summary>
+                            <div className="mt-3 border-t border-[var(--border-subtle)] pt-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
+                              {messagePreview(message.content, 360) || "No parent message preview."}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">

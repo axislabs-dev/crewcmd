@@ -6,8 +6,7 @@ import { eq, and, asc, desc, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 import { buildChatExecutionSnapshot, loadChatExecutionEvents } from "@/lib/chat-session-events";
 import { loadThreadHistoryForParent, type ChatPersistenceScope } from "@/lib/chat-thread-history";
-
-type ChatSessionRecord = typeof chatSessions.$inferSelect;
+import { canAccessChatSession } from "@/lib/chat-session-access";
 
 function forbiddenResponse() {
   return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -31,24 +30,6 @@ async function resolveRequestedChatScope(
       workspaceId: workspace.id,
     },
   };
-}
-
-async function canAccessChatSession(request: NextRequest, session: ChatSessionRecord) {
-  if (session.workspaceId) {
-    return Boolean(await resolveAccessibleWorkspace({
-      request,
-      explicitWorkspaceId: session.workspaceId,
-      requireExplicitForBearer: true,
-    }));
-  }
-  if (session.companyId) {
-    return Boolean(await resolveAccessibleWorkspace({
-      request,
-      explicitCompanyId: session.companyId,
-      requireExplicitForBearer: true,
-    }));
-  }
-  return false;
 }
 
 async function loadAccessibleSessionById(request: NextRequest, sessionId: string) {
@@ -107,10 +88,13 @@ export async function GET(request: NextRequest) {
 
     let resolvedSessionId = sessionId;
     let resolvedSessionKey = sessionKey;
+    let sessionAccessChecked = false;
+    let resolvedSessionForAccess: typeof chatSessions.$inferSelect | null = null;
 
     if (resolvedSessionId) {
       const { allowed } = await loadAccessibleSessionById(request, resolvedSessionId);
       if (!allowed) return forbiddenResponse();
+      sessionAccessChecked = true;
     }
 
     if (!resolvedSessionId && sessionKey && hasScope) {
@@ -127,6 +111,7 @@ export async function GET(request: NextRequest) {
       if (sessions.length > 0) {
         resolvedSessionId = sessions[0].id;
         resolvedSessionKey = sessions[0].gatewaySessionKey ?? sessionKey;
+        resolvedSessionForAccess = sessions[0];
       }
     }
 
@@ -145,6 +130,7 @@ export async function GET(request: NextRequest) {
       if (sessions.length > 0) {
         resolvedSessionId = sessions[0].id;
         resolvedSessionKey = sessions[0].gatewaySessionKey ?? agentLower;
+        resolvedSessionForAccess = sessions[0];
       }
     }
 
@@ -163,11 +149,19 @@ export async function GET(request: NextRequest) {
       if (sessions.length > 0) {
         resolvedSessionId = sessions[0].id;
         resolvedSessionKey = sessions[0].gatewaySessionKey ?? null;
+        resolvedSessionForAccess = sessions[0];
       }
     }
 
     if (!resolvedSessionId) {
       return Response.json({ messages: [], sessionId: null, execution: { progress: null, events: [] } });
+    }
+
+    if (!sessionAccessChecked) {
+      const allowed = resolvedSessionForAccess
+        ? await canAccessChatSession(request, resolvedSessionForAccess)
+        : (await loadAccessibleSessionById(request, resolvedSessionId)).allowed;
+      if (!allowed) return forbiddenResponse();
     }
 
     const messages = await withRetry(() =>
@@ -257,6 +251,7 @@ export async function DELETE(request: NextRequest) {
       if (sessions.length === 0) {
         return Response.json({ cleared: 0, sessionId: null });
       }
+      if (!(await canAccessChatSession(request, sessions[0]))) return forbiddenResponse();
 
       sessionId = sessions[0].id;
     }
@@ -347,6 +342,7 @@ export async function POST(request: NextRequest) {
       );
 
       if (existing.length > 0) {
+        if (!(await canAccessChatSession(request, existing[0]))) return forbiddenResponse();
         sessionId = existing[0].id;
       } else {
         // Create a new session

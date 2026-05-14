@@ -43,6 +43,11 @@ vi.mock("@/lib/workspace", () => ({
   resolveAccessibleWorkspace: (...a: unknown[]) => mockResolveAccessibleWorkspace(...a),
 }));
 
+const mockCanAccessChatSession = vi.fn().mockResolvedValue(true);
+vi.mock("@/lib/chat-session-access", () => ({
+  canAccessChatSession: (...a: unknown[]) => mockCanAccessChatSession(...a),
+}));
+
 import { DELETE, GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -78,6 +83,7 @@ describe("GET /api/chat/pins", () => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("returns pins for an accessible session", async () => {
@@ -90,14 +96,14 @@ describe("GET /api/chat/pins", () => {
 
     expect(res.status).toBe(200);
     expect(body.pins).toHaveLength(1);
-    expect(mockResolveAccessibleWorkspace).toHaveBeenCalledWith(expect.objectContaining({
-      explicitWorkspaceId: "ws-1",
-      requireExplicitForBearer: true,
+    expect(mockCanAccessChatSession).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      id: "sess-1",
+      workspaceId: "ws-1",
     }));
   });
 
   it("forbids pins for an inaccessible sessionId", async () => {
-    mockResolveAccessibleWorkspace.mockResolvedValueOnce(null);
+    mockCanAccessChatSession.mockResolvedValueOnce(false);
     mockSelect.mockReturnValueOnce(sessionLookup([{ id: "sess-1", workspaceId: "other-ws", companyId: null }]));
 
     const res = await GET(makeRequest("/api/chat/pins?sessionId=sess-1"));
@@ -118,6 +124,21 @@ describe("GET /api/chat/pins", () => {
     expect(body.error).toBe("Forbidden");
     expect(mockSelect).not.toHaveBeenCalled();
   });
+
+  it("forbids pins when sessionKey resolves to an unreadable channel session", async () => {
+    mockCanAccessChatSession.mockResolvedValueOnce(false);
+    mockSelect.mockReturnValueOnce({
+      where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([
+        { id: "sess-channel", workspaceId: "ws-1", companyId: "co-1", channelId: "channel_other" },
+      ]) }) }),
+    });
+
+    const res = await GET(makeRequest("/api/chat/pins?sessionKey=agent-thread&companyId=co-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+  });
 });
 
 describe("POST /api/chat/pins", () => {
@@ -126,6 +147,7 @@ describe("POST /api/chat/pins", () => {
     mockRequireAuth.mockResolvedValue(null);
     mockAuth.mockResolvedValue({ user: { id: "user-1" } });
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("pins a message in an accessible session", async () => {
@@ -147,7 +169,7 @@ describe("POST /api/chat/pins", () => {
   });
 
   it("forbids pinning a message in an inaccessible session", async () => {
-    mockResolveAccessibleWorkspace.mockResolvedValueOnce(null);
+    mockCanAccessChatSession.mockResolvedValueOnce(false);
     mockSelect.mockReturnValueOnce(messageJoin([{ id: "msg-1", sessionId: "sess-1", workspaceId: "other-ws", companyId: null }]));
 
     const res = await POST(makeRequest("/api/chat/pins", {
@@ -167,6 +189,7 @@ describe("DELETE /api/chat/pins", () => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("deletes a pin for an accessible message", async () => {
@@ -181,7 +204,7 @@ describe("DELETE /api/chat/pins", () => {
   });
 
   it("forbids deleting a pin for an inaccessible message", async () => {
-    mockResolveAccessibleWorkspace.mockResolvedValueOnce(null);
+    mockCanAccessChatSession.mockResolvedValueOnce(false);
     mockSelect.mockReturnValueOnce(messageJoin([{ id: "msg-1", workspaceId: "other-ws", companyId: null }]));
 
     const res = await DELETE(makeRequest("/api/chat/pins?messageId=msg-1"));

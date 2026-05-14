@@ -5,6 +5,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 import { resolveReadableAgentByCallsign } from "@/lib/agent-route-auth";
+import { canAccessChatSession } from "@/lib/chat-session-access";
 
 /**
  * GET /api/chat/sessions?agentId=neo&companyId=xxx
@@ -48,8 +49,14 @@ export async function GET(request: NextRequest) {
         .orderBy(desc(chatSessions.updatedAt))
         .limit(50)
     );
+    const accessibleSessions = [];
+    for (const session of sessions) {
+      if (await canAccessChatSession(request, session)) {
+        accessibleSessions.push(session);
+      }
+    }
 
-    return Response.json({ sessions });
+    return Response.json({ sessions: accessibleSessions });
   } catch (error) {
     console.error("[api/chat/sessions] Error:", error);
     return Response.json({ error: "Failed to fetch sessions" }, { status: 500 });
@@ -71,7 +78,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json() as { agentId: string; companyId: string; title?: string };
+    const body = await request.json() as { agentId: string; companyId: string; channelId?: string | null; title?: string };
     if (!body.agentId || !body.companyId) {
       return Response.json({ error: "agentId and companyId required" }, { status: 400 });
     }
@@ -89,11 +96,19 @@ export async function POST(request: NextRequest) {
     if (!agent) {
       return Response.json({ error: "Agent not found" }, { status: 404 });
     }
+    if (body.channelId && !(await canAccessChatSession(request, {
+      companyId: body.companyId,
+      workspaceId: workspace.id,
+      channelId: body.channelId,
+    }))) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const [session] = await withRetry(() =>
       db!.insert(chatSessions).values({
         companyId: body.companyId,
         workspaceId: workspace.id,
+        channelId: body.channelId ?? null,
         agentId: agent.callsign.toLowerCase(),
         title: body.title || null,
       }).returning()

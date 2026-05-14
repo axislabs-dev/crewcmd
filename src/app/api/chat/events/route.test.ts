@@ -20,6 +20,11 @@ vi.mock("@/lib/chat-pubsub", () => ({
   subscribeChatEvents: (listener: unknown) => mockSubscribeChatEvents(listener),
 }));
 
+const mockCanAccessChatSession = vi.fn().mockResolvedValue(true);
+vi.mock("@/lib/chat-session-access", () => ({
+  canAccessChatSession: (...a: unknown[]) => mockCanAccessChatSession(...a),
+}));
+
 import { GET } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -33,6 +38,7 @@ describe("GET /api/chat/events", () => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
+    mockCanAccessChatSession.mockResolvedValue(true);
   });
 
   it("requires a company scope", async () => {

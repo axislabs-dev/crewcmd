@@ -53,6 +53,7 @@ async function loadMembers(channelIds: string[]) {
       role: channelMembers.role,
       name: users.name,
       email: users.email,
+      githubUsername: users.githubUsername,
     })
       .from(channelMembers)
       .leftJoin(users, eq(channelMembers.userId, users.id))
@@ -70,6 +71,7 @@ async function loadMembers(channelIds: string[]) {
       role: row.role,
       name: row.name,
       email: row.email,
+      githubUsername: row.githubUsername,
     });
     byChannel.set(row.channelId, list);
   }

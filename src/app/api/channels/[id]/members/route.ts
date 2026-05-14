@@ -1,13 +1,48 @@
 import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { channelMembers, channels } from "@/db/schema";
+import { channelMembers, channels, users } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 import { resolveCurrentUser } from "@/lib/resolve-user";
 import { canAccessChatSession } from "@/lib/chat-session-access";
 
 function forbiddenResponse() {
   return Response.json({ error: "Forbidden" }, { status: 403 });
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function resolveUserIdentifier(identifier: string) {
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (UUID_RE.test(normalized)) {
+    const [user] = await withRetry(() =>
+      db!.select({ id: users.id, name: users.name, email: users.email, githubUsername: users.githubUsername })
+        .from(users)
+        .where(eq(users.id, normalized))
+        .limit(1)
+    );
+    if (user) return user;
+  }
+
+  if (normalized.includes("@")) {
+    const [user] = await withRetry(() =>
+      db!.select({ id: users.id, name: users.name, email: users.email, githubUsername: users.githubUsername })
+        .from(users)
+        .where(eq(users.email, normalized))
+        .limit(1)
+    );
+    if (user) return user;
+  }
+
+  const [user] = await withRetry(() =>
+    db!.select({ id: users.id, name: users.name, email: users.email, githubUsername: users.githubUsername })
+      .from(users)
+      .where(eq(users.githubUsername, normalized))
+      .limit(1)
+  );
+  return user ?? null;
 }
 
 async function loadChannel(id: string) {
@@ -42,21 +77,39 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!(await canManageChannel(request, id))) return forbiddenResponse();
 
   const user = await resolveCurrentUser(request);
-  const body = await request.json() as { userId?: string; role?: "admin" | "member" | "contributor" | "viewer" | "guest" };
-  if (!body.userId) return Response.json({ error: "userId required" }, { status: 400 });
+  const body = await request.json() as {
+    userId?: string;
+    identifier?: string;
+    email?: string;
+    githubUsername?: string;
+    role?: "admin" | "member" | "contributor" | "viewer" | "guest";
+  };
+  const identifier = body.userId ?? body.identifier ?? body.email ?? body.githubUsername;
+  if (!identifier) return Response.json({ error: "user identifier required" }, { status: 400 });
 
+  const targetUser = await resolveUserIdentifier(identifier);
+  if (!targetUser) return Response.json({ error: "User not found" }, { status: 404 });
+
+  const role = body.role ?? "member";
   const [member] = await withRetry(() => db!.insert(channelMembers).values({
     channelId: id,
     memberType: "user",
-    userId: body.userId,
-    role: body.role ?? "member",
+    userId: targetUser.id,
+    role,
     joinedByUserId: user?.id ?? null,
   }).onConflictDoUpdate({
     target: [channelMembers.channelId, channelMembers.userId],
-    set: { role: body.role ?? "member", updatedAt: new Date() },
+    set: { role, updatedAt: new Date() },
   }).returning());
 
-  return Response.json({ member }, { status: 201 });
+  return Response.json({
+    member: {
+      ...member,
+      name: targetUser.name,
+      email: targetUser.email,
+      githubUsername: targetUser.githubUsername,
+    },
+  }, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {

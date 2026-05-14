@@ -111,6 +111,7 @@ async function loadMembers(channelIds: string[]) {
       userId: channelMembers.userId,
       agentId: channelMembers.agentId,
       role: channelMembers.role,
+      agentParticipationMode: channelMembers.agentParticipationMode,
       name: users.name,
       email: users.email,
     })
@@ -128,6 +129,7 @@ async function loadMembers(channelIds: string[]) {
       userId: row.userId,
       agentId: row.agentId,
       role: row.role,
+      agentParticipationMode: row.agentParticipationMode,
       name: row.name,
       email: row.email,
     });

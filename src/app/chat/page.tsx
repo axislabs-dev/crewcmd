@@ -4205,123 +4205,133 @@ export default function ChatPage() {
         />
       )}
 
-      {/* Channel surface */}
-      <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 px-3 py-2 backdrop-blur-xl sm:px-4 lg:px-6">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Channels</span>
-            <button
-              type="button"
-              onClick={() => selectChannel(null)}
-              className={`rounded-full border px-3 py-1 text-[11px] transition ${!activeChannelId ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
-            >
-              Direct
-            </button>
-            {channels.map((channel) => (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        {/* Channel sidebar */}
+        <aside className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 backdrop-blur-xl lg:h-full lg:w-64 lg:border-b-0 lg:border-r">
+          <div className="flex h-full flex-col gap-3 overflow-y-auto px-3 py-3 sm:px-4 lg:px-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Channels</span>
               <button
-                key={channel.id}
                 type="button"
-                onClick={() => selectChannel(channel.id)}
-                className={`rounded-full border px-3 py-1 text-[11px] transition ${activeChannelId === channel.id ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
-                title={channel.description ?? undefined}
+                onClick={() => setChannelPanelOpen((open) => !open)}
+                className="rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
               >
-                # {channel.name ?? "untitled"}
+                {channelPanelOpen ? "Done" : "Manage"}
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setChannelPanelOpen((open) => !open)}
-              className="ml-auto rounded-full border border-[var(--border-subtle)] px-3 py-1 text-[11px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
-            >
-              {channelPanelOpen ? "Hide channel tools" : "Manage channels"}
-            </button>
-          </div>
-
-          {activeChannel ? (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
-              <span className="font-medium text-[var(--text-secondary)]">#{activeChannel.name}</span>
-              <span>{activeChannel.description || "No purpose set yet."}</span>
-              <span className="rounded-full bg-[var(--bg-primary)] px-2 py-0.5 uppercase tracking-wide">{activeChannel.visibility}</span>
-              <span>{activeChannelMembers.length} member{activeChannelMembers.length === 1 ? "" : "s"}</span>
             </div>
-          ) : (
-            <div className="text-[11px] text-[var(--text-tertiary)]">Direct chat mode. Pick a channel to bind sessions, messages, pins, and threads to that channel.</div>
-          )}
 
-          {channelPanelOpen && (
-            <div className="grid gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/70 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <div className="space-y-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Create channel</div>
-                <input
-                  value={newChannelName}
-                  onChange={(event) => setNewChannelName(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Enter") void createChannel(); }}
-                  placeholder="Channel name"
-                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
-                />
-                <input
-                  value={newChannelPurpose}
-                  onChange={(event) => setNewChannelPurpose(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Enter") void createChannel(); }}
-                  placeholder="Purpose / topic"
-                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
-                />
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
+              {channels.map((channel) => (
                 <button
+                  key={channel.id}
                   type="button"
-                  onClick={() => void createChannel()}
-                  disabled={!newChannelName.trim()}
-                  className="rounded-lg border border-[var(--accent)] bg-[var(--accent)]/12 px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] transition disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => selectChannel(channel.id)}
+                  className={`flex shrink-0 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${activeChannelId === channel.id ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
+                  title={channel.description ?? undefined}
                 >
-                  Create
+                  <span className="min-w-0 truncate"># {channel.name ?? "untitled"}</span>
+                  {activeChannelId === channel.id ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> : null}
                 </button>
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Members</div>
-                {activeChannel ? (
-                  <>
-                    <div className="max-h-24 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2">
-                      {activeChannelMembers.length === 0 ? (
-                        <div className="text-[11px] text-[var(--text-tertiary)]">No visible members.</div>
-                      ) : activeChannelMembers.map((member) => (
-                        <div key={member.id ?? `${member.memberType}:${member.userId ?? member.agentId}`} className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="truncate text-[var(--text-secondary)]">{member.name || member.email || member.userId || member.agentId || "Unknown"}</span>
-                          <span className="rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[var(--text-tertiary)]">{member.role}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {activeChannel.canManage ? (
-                      <div className="flex gap-2">
-                        <input
-                          value={memberUserId}
-                          onChange={(event) => setMemberUserId(event.target.value)}
-                          onKeyDown={(event) => { if (event.key === "Enter") void addChannelMember(); }}
-                          placeholder="User ID to add"
-                          className="min-w-0 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void addChannelMember()}
-                          disabled={!memberUserId.trim()}
-                          className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[11px] text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-[11px] text-[var(--text-tertiary)]">Only channel admins can manage membership.</div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-[11px] text-[var(--text-tertiary)]">Select a channel to see members and admin controls.</div>
-                )}
-              </div>
-              {channelNotice && <div className="sm:col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">{channelNotice}</div>}
+              ))}
+              <button
+                type="button"
+                onClick={() => selectChannel(null)}
+                className={`shrink-0 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${!activeChannelId ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
+              >
+                Direct
+              </button>
             </div>
-          )}
-        </div>
-      </div>
 
+            {activeChannel ? (
+              <div className="hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/55 p-3 text-[11px] text-[var(--text-tertiary)] lg:block">
+                <div className="font-medium text-[var(--text-secondary)]">#{activeChannel.name}</div>
+                <div className="mt-1 leading-relaxed">{activeChannel.description || "No purpose set yet."}</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5 uppercase tracking-wide">{activeChannel.visibility}</span>
+                  <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5">{activeChannelMembers.length} member{activeChannelMembers.length === 1 ? "" : "s"}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/55 p-3 text-[11px] text-[var(--text-tertiary)] lg:block">
+                Direct mode is separate from channel-scoped sessions, messages, pins, and threads.
+              </div>
+            )}
+
+            {channelPanelOpen && (
+              <div className="grid gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/70 p-3">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Create channel</div>
+                  <input
+                    value={newChannelName}
+                    onChange={(event) => setNewChannelName(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Enter") void createChannel(); }}
+                    placeholder="Channel name"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                  />
+                  <input
+                    value={newChannelPurpose}
+                    onChange={(event) => setNewChannelPurpose(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Enter") void createChannel(); }}
+                    placeholder="Purpose / topic"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void createChannel()}
+                    disabled={!newChannelName.trim()}
+                    className="rounded-lg border border-[var(--accent)] bg-[var(--accent)]/12 px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] transition disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Create
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Members</div>
+                  {activeChannel ? (
+                    <>
+                      <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2">
+                        {activeChannelMembers.length === 0 ? (
+                          <div className="text-[11px] text-[var(--text-tertiary)]">No visible members.</div>
+                        ) : activeChannelMembers.map((member) => (
+                          <div key={member.id ?? `${member.memberType}:${member.userId ?? member.agentId}`} className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="truncate text-[var(--text-secondary)]">{member.name || member.email || member.userId || member.agentId || "Unknown"}</span>
+                            <span className="rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[var(--text-tertiary)]">{member.role}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {activeChannel.canManage ? (
+                        <div className="flex gap-2">
+                          <input
+                            value={memberUserId}
+                            onChange={(event) => setMemberUserId(event.target.value)}
+                            onKeyDown={(event) => { if (event.key === "Enter") void addChannelMember(); }}
+                            placeholder="User ID to add"
+                            className="min-w-0 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void addChannelMember()}
+                            disabled={!memberUserId.trim()}
+                            className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[11px] text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-[var(--text-tertiary)]">Only channel admins can manage membership.</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-[11px] text-[var(--text-tertiary)]">Select a channel to see members and admin controls.</div>
+                  )}
+                </div>
+                {channelNotice && <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">{channelNotice}</div>}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto max-w-3xl space-y-4">
@@ -4657,7 +4667,9 @@ export default function ChatPage() {
             }}
           />
         </div>
+        </div>
       </div>
+    </div>
     </div>
   );
 }

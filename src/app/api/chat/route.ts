@@ -18,6 +18,7 @@ import {
 } from "@/lib/agent-mode-diagnostics";
 import { PolicyViolation } from "@/lib/collaboration-policy";
 import { assertPrimaryRuntimeInvocationAllowedForContext } from "@/lib/runtime-scope-guard";
+import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -828,6 +829,17 @@ export async function POST(request: NextRequest) {
       request.cookies.get("active_workspace")?.value ||
       null;
     const persistenceScope: ChatPersistenceScope = { companyId, workspaceId };
+    if (companyId || workspaceId) {
+      const accessibleWorkspace = await resolveAccessibleWorkspace({
+        request,
+        explicitCompanyId: companyId,
+        explicitWorkspaceId: workspaceId,
+        requireExplicitForBearer: true,
+      });
+      if (!accessibleWorkspace) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
     const currentUser = await resolveCurrentUser(request);
     try {
       await assertPrimaryRuntimeInvocationAllowedForContext({

@@ -31,6 +31,37 @@ describe("isOpenClawHeartbeatArtifact", () => {
     })).toBe(true);
   });
 
+  it("detects leaked tool call and result artifacts", () => {
+    expect(isOpenClawHeartbeatArtifact({
+      role: "assistant",
+      content: "call write",
+    })).toBe(true);
+
+    expect(isOpenClawHeartbeatArtifact({
+      role: "assistant",
+      content: "NO_REPLY",
+    })).toBe(true);
+
+    expect(isOpenClawHeartbeatArtifact({
+      role: "assistant",
+      content: `{ "status": "error", "tool": "read", "error": "ENOENT: no such file or directory" }`,
+    })).toBe(true);
+
+    expect(isOpenClawHeartbeatArtifact({
+      role: "assistant",
+      content: JSON.stringify({
+        results: [
+          {
+            path: "memory/2026-04-19-filename-slug.md",
+            snippet: "Relevant memory result",
+            citation: "memory/2026-04-19-filename-slug.md#L120-L127",
+          },
+        ],
+        corpus: "memory",
+      }),
+    })).toBe(true);
+  });
+
   it("separates heartbeat acknowledgements from noisy heartbeat internals", () => {
     expect(isOpenClawHeartbeatAck({
       role: "assistant",
@@ -52,6 +83,16 @@ describe("isOpenClawHeartbeatArtifact", () => {
     expect(isOpenClawHeartbeatArtifact({
       role: "assistant",
       content: "HEARTBEAT.md is the optional OpenClaw heartbeat checklist.",
+    })).toBe(false);
+
+    expect(isOpenClawHeartbeatArtifact({
+      role: "user",
+      content: "call write",
+    })).toBe(false);
+
+    expect(isOpenClawHeartbeatArtifact({
+      role: "assistant",
+      content: `{"answer":"Use JSON when the API requires it."}`,
     })).toBe(false);
   });
 });

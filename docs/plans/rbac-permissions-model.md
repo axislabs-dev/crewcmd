@@ -659,3 +659,11 @@ These should be decided before implementation starts, not left to individual PRs
 5. Which shared resources are copied on promotion versus changed in place?
 6. How much audit detail is visible to channel admins versus company owners?
 7. Should hosted Postgres RLS be mandatory for production, or defense-in-depth behind the TypeScript policy engine?
+
+## Foundation policy module
+
+The additive TypeScript foundation lives in `src/lib/collaboration-policy.ts`. It is intentionally schema-light so API handlers can adopt it before channel/project tables land.
+
+It defines canonical collaboration terms for channel/chat/direct message/thread/project room, personal/shared runtime classes, personal/team/org agents, company/channel/project roles, agent capabilities, runtime capabilities, and reusable decisions for resource visibility, channel/project posting, agent invocation/configuration/logs/budget, runtime binding, and promotion.
+
+The module preserves the hard runtime invariant: personal runtimes are allowed only in the matching owner's private direct-message/private-user scope, and are rejected for shared channels, project rooms, team/org scopes, company agents, and shared runtime binding flows.

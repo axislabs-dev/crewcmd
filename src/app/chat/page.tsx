@@ -159,6 +159,7 @@ type ChatChannelMember = {
   role: string;
   name?: string | null;
   email?: string | null;
+  githubUsername?: string | null;
 };
 
 type ChatChannel = {
@@ -1125,6 +1126,7 @@ export default function ChatPage() {
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelPurpose, setNewChannelPurpose] = useState("");
   const [memberUserId, setMemberUserId] = useState("");
+  const [memberRole, setMemberRole] = useState<"member" | "admin" | "viewer" | "guest">("member");
   const [channelNotice, setChannelNotice] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1303,7 +1305,7 @@ export default function ChatPage() {
       const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelId)}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: memberUserId.trim(), role: "member" }),
+        body: JSON.stringify({ identifier: memberUserId.trim(), role: memberRole }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { error?: string };
@@ -1311,11 +1313,29 @@ export default function ChatPage() {
         return;
       }
       setMemberUserId("");
+      setChannelNotice(null);
       await loadChannels();
     } catch {
       setChannelNotice("Could not add member.");
     }
-  }, [activeChannelId, loadChannels, memberUserId]);
+  }, [activeChannelId, loadChannels, memberRole, memberUserId]);
+
+  const removeChannelMember = useCallback(async (member: ChatChannelMember) => {
+    if (!activeChannelId || member.memberType !== "user" || !member.userId) return;
+    try {
+      const params = new URLSearchParams({ userId: member.userId });
+      const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelId)}/members?${params.toString()}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        setChannelNotice(data.error ?? "Could not remove member.");
+        return;
+      }
+      setChannelNotice(null);
+      await loadChannels();
+    } catch {
+      setChannelNotice("Could not remove member.");
+    }
+  }, [activeChannelId, loadChannels]);
 
   const selectChannel = useCallback((channelId: string | null) => {
     setActiveChannelId(channelId);
@@ -4282,20 +4302,40 @@ export default function ChatPage() {
                         <div className="text-[11px] text-[var(--text-tertiary)]">No visible members.</div>
                       ) : activeChannelMembers.map((member) => (
                         <div key={member.id ?? `${member.memberType}:${member.userId ?? member.agentId}`} className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="truncate text-[var(--text-secondary)]">{member.name || member.email || member.userId || member.agentId || "Unknown"}</span>
+                          <span className="min-w-0 flex-1 truncate text-[var(--text-secondary)]">{member.name || member.email || member.githubUsername || member.userId || member.agentId || "Unknown"}</span>
+                          {member.githubUsername && <span className="hidden truncate text-[var(--text-tertiary)] sm:inline">@{member.githubUsername}</span>}
                           <span className="rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[var(--text-tertiary)]">{member.role}</span>
+                          {activeChannel.canManage && member.role !== "owner" && member.memberType === "user" && (
+                            <button
+                              type="button"
+                              onClick={() => void removeChannelMember(member)}
+                              className="text-[10px] text-[var(--text-tertiary)] transition hover:text-red-300"
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                     {activeChannel.canManage ? (
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row">
                         <input
                           value={memberUserId}
                           onChange={(event) => setMemberUserId(event.target.value)}
                           onKeyDown={(event) => { if (event.key === "Enter") void addChannelMember(); }}
-                          placeholder="User ID to add"
+                          placeholder="Email, GitHub username, or user ID"
                           className="min-w-0 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                         />
+                        <select
+                          value={memberRole}
+                          onChange={(event) => setMemberRole(event.target.value as typeof memberRole)}
+                          className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                        >
+                          <option value="member">member</option>
+                          <option value="admin">admin</option>
+                          <option value="viewer">viewer</option>
+                          <option value="guest">guest</option>
+                        </select>
                         <button
                           type="button"
                           onClick={() => void addChannelMember()}

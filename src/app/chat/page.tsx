@@ -1127,6 +1127,7 @@ export default function ChatPage() {
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [channelPanelOpen, setChannelPanelOpen] = useState(false);
+  const [channelCreateOpen, setChannelCreateOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelPurpose, setNewChannelPurpose] = useState("");
   const [memberUserId, setMemberUserId] = useState("");
@@ -1299,6 +1300,7 @@ export default function ChatPage() {
       setMessages([]);
       setNewChannelName("");
       setNewChannelPurpose("");
+      setChannelCreateOpen(false);
       setChannelNotice(null);
     } catch {
       setChannelNotice("Could not create channel.");
@@ -2144,6 +2146,16 @@ export default function ChatPage() {
 
     return summaries;
   }, [activeSessionKey, messagesByStoreKey, serverThreadSummaries, threadParentLinks]);
+  const recentThreadItems = useMemo(() => (
+    transcriptItems
+      .map((message, index) => {
+        const summary = threadReplySummaries[`id:${threadParentIdForMessage(message)}`];
+        return summary ? { message, index, summary } : null;
+      })
+      .filter((item): item is { message: Message; index: number; summary: ThreadReplySummary } => Boolean(item))
+      .slice(-5)
+      .reverse()
+  ), [threadReplySummaries, transcriptItems]);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -4309,22 +4321,110 @@ export default function ChatPage() {
         />
       )}
 
+      {channelCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 backdrop-blur-sm">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createChannel();
+            }}
+            className="w-full max-w-md rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--text-primary)]">Create channel</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChannelCreateOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                aria-label="Close create channel"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid gap-3">
+              <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+                Name
+                <input
+                  autoFocus
+                  value={newChannelName}
+                  onChange={(event) => setNewChannelName(event.target.value)}
+                  placeholder="e.g. product"
+                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                />
+              </label>
+              <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+                Purpose
+                <input
+                  value={newChannelPurpose}
+                  onChange={(event) => setNewChannelPurpose(event.target.value)}
+                  placeholder="What is this channel for?"
+                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                />
+              </label>
+            </div>
+            {channelNotice && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300">{channelNotice}</div>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setChannelCreateOpen(false)}
+                className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!newChannelName.trim()}
+                className="rounded-lg border border-[var(--accent)] bg-[var(--accent)]/12 px-3 py-2 text-[12px] font-semibold text-[var(--text-primary)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Channel sidebar */}
         <aside className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 backdrop-blur-xl lg:h-full lg:w-64 lg:border-b-0 lg:border-r">
-          <div className="flex h-full flex-col gap-3 overflow-y-auto px-3 py-3 sm:px-4 lg:px-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Channels</span>
-              <button
-                type="button"
-                onClick={() => setChannelPanelOpen((open) => !open)}
-                className="rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
-              >
-                {channelPanelOpen ? "Done" : "Manage"}
-              </button>
+          <div className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-3 sm:px-4 lg:px-3">
+            <div className="grid gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Threads</span>
+              </div>
+              {recentThreadItems.length > 0 ? recentThreadItems.map(({ message, index, summary }) => (
+                <button
+                  key={summary.sessionKey}
+                  type="button"
+                  onClick={() => openThreadForMessage(message, index, summary.sessionKey)}
+                  className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                >
+                  <span className="min-w-0 truncate">{messagePreview(message.content, 42)}</span>
+                  <span className="shrink-0 rounded-full bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] text-[var(--text-tertiary)]">{summary.replies.length}</span>
+                </button>
+              )) : (
+                <div className="rounded-lg px-3 py-2 text-[12px] text-[var(--text-tertiary)]">No threads</div>
+              )}
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Channels</span>
+                <button
+                  type="button"
+                  onClick={() => setChannelCreateOpen(true)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                  aria-label="Create channel"
+                  title="Create channel"
+                >
+                  +
+                </button>
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
               {channels.map((channel) => (
                 <button
                   key={channel.id}
@@ -4337,58 +4437,45 @@ export default function ChatPage() {
                   {activeChannelId === channel.id ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> : null}
                 </button>
               ))}
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">DMs</span>
+              </div>
               <button
                 type="button"
                 onClick={() => selectChannel(null)}
-                className={`shrink-0 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${!activeChannelId ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
+                className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${!activeChannelId ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
               >
-                Direct messages
+                <span className="text-sm">{agentEmoji}</span>
+                <span className="min-w-0 truncate">{agentCallsign}</span>
               </button>
             </div>
 
             {activeChannel ? (
               <div className="hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/55 p-3 text-[11px] text-[var(--text-tertiary)] lg:block">
-                <div className="font-medium text-[var(--text-secondary)]">#{activeChannel.name}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 truncate font-medium text-[var(--text-secondary)]">#{activeChannel.name}</div>
+                  <button
+                    type="button"
+                    onClick={() => setChannelPanelOpen((open) => !open)}
+                    className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                  >
+                    {channelPanelOpen ? "Done" : "Manage"}
+                  </button>
+                </div>
                 <div className="mt-1 leading-relaxed">{activeChannel.description || "No purpose set yet."}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5 uppercase tracking-wide">{activeChannel.visibility}</span>
                   <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5">{activeChannelMembers.length} member{activeChannelMembers.length === 1 ? "" : "s"}</span>
                 </div>
               </div>
-            ) : (
-              <div className="hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/55 p-3 text-[11px] text-[var(--text-tertiary)] lg:block">
-                Direct mode is separate from channel-scoped sessions, messages, pins, and threads.
-              </div>
-            )}
+            ) : null}
 
             {channelPanelOpen && (
               <div className="grid gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/70 p-3">
-                <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Create channel</div>
-                  <input
-                    value={newChannelName}
-                    onChange={(event) => setNewChannelName(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === "Enter") void createChannel(); }}
-                    placeholder="Channel name"
-                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
-                  />
-                  <input
-                    value={newChannelPurpose}
-                    onChange={(event) => setNewChannelPurpose(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === "Enter") void createChannel(); }}
-                    placeholder="Purpose / topic"
-                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void createChannel()}
-                    disabled={!newChannelName.trim()}
-                    className="rounded-lg border border-[var(--accent)] bg-[var(--accent)]/12 px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] transition disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Create
-                  </button>
-                </div>
-
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Members</div>
                   {activeChannel ? (

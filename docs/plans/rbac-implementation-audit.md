@@ -3,6 +3,8 @@
 Status: audit for PR strategy item 2 from `docs/plans/orchestration.md`.
 Base audited: `origin/main` at `2f2295d` (`fix: guard api visibility by workspace scope (#462)`).
 
+Post-audit update: the first implementation follow-ups have now landed on `main`: policy engine foundation (#463), channel membership schema foundation (#465), and shared chat runtime guard (#466). This document remains the audit trail for the original gap analysis; the remaining sections call out where those merged PRs have closed items.
+
 ## Executive summary
 
 The current implementation has useful workspace/company seeds, but it is not yet a complete Slack-class channel/chat RBAC model.
@@ -10,17 +12,20 @@ The current implementation has useful workspace/company seeds, but it is not yet
 Implemented today:
 
 - `workspaces`, `company_members`, `company_runtimes`, `agents`, `agent_workspace_grants`, and `agent_access_grants` exist.
-- `chat_sessions`, `chat_threads`, `chat_messages`, `chat_message_pins`, `saved_items`, and many app resources now carry `company_id` and/or `workspace_id`.
+- `channels` and `channel_members` now exist with channel/member uniqueness indexes, channel/thread indexes, and a database check ensuring each member row maps to exactly one user or agent principal.
+- `chat_sessions`, `chat_threads`, `chat_messages`, `chat_message_pins`, `saved_items`, and many app resources carry `company_id` and/or `workspace_id`; `chat_sessions` and `chat_threads` now also carry `channel_id`.
 - `src/lib/workspace.ts` can resolve an accessible workspace from user session, cookies, explicit `workspaceId`, explicit `companyId`, or heartbeat bearer runtime scope.
-- `src/lib/agent-access.ts`, `src/lib/agent-route-auth.ts`, and `src/lib/collaboration-policy.ts` provide partial TypeScript authorization helpers.
+- `src/lib/collaboration-policy.ts` now provides the first tested policy-engine foundation.
+- `src/lib/channel-membership.ts` provides typed membership helpers and requires agent membership matching through the agent database UUID, not a callsign.
+- `src/lib/runtime-scope-guard.ts` blocks personal primary runtime invocation in shared company/workspace chat contexts and records audit entries on rejections.
+- `src/lib/agent-access.ts` and `src/lib/agent-route-auth.ts` provide route-specific authorization helpers that still need consolidation behind the canonical policy surface.
 
-Missing for the target architecture:
+Still missing for the target architecture:
 
-- No first-class `channels` or `channel_members` tables.
 - No `resource_grants`, `runtime_scope_bindings`, or `resource_promotions` tables.
-- No canonical app-layer policy engine that all routes use for `actor -> scope -> resource -> action` decisions.
+- The app-layer policy engine is seeded but not yet mandatory across every route for `actor -> scope -> resource -> action` decisions.
 - No hosted Postgres RLS policy migrations. Current protection is route/helper based only.
-- Several chat/pin/saved-item routes rely on caller-supplied ids and do not consistently prove workspace membership or agent readability before reading/mutating records.
+- Several chat/pin/saved-item routes still rely on caller-supplied ids and do not consistently prove workspace/channel membership or agent readability before reading/mutating records.
 
 ## Implementation decisions resolved by this audit
 
@@ -76,7 +81,8 @@ Missing for the target architecture:
 
 - `company_runtimes`
   - Columns include `companyId`, `ownerType`, `ownerUserId`, `ownerCompanyId`, `runtimeType`, gateway URLs, status.
-  - Gap: no declared runtime class (`personal | shared`) beyond `ownerType`; no binding table that states where the runtime may execute.
+  - Closed follow-up: `src/lib/runtime-scope-guard.ts` derives `personal | shared` from runtime ownership and blocks personal primary runtime invocation in shared chat contexts.
+  - Remaining gap: no `runtime_scope_bindings` table that states exactly where each runtime may execute.
 
 - `runtime_managed_resources`
   - Tracks runtime-managed external resources by `runtimeId`, `companyId`, `resourceType`, `resourceKey`, target agent refs.
@@ -84,13 +90,22 @@ Missing for the target architecture:
 
 ### Existing chat/thread/pin tables
 
+- `channels`
+  - Columns: `companyId`, `workspaceId`, `type`, `name`, `slug`, `description`, `scopeType`, `scopeId`, `visibility`, default post/agent policies, creator, archive state, timestamps.
+  - Remaining gap: the table exists, but route reads/writes still need to consistently enforce channel membership.
+
+- `channel_members`
+  - Columns: `channelId`, `memberType`, `userId`, `agentId`, `role`, `agentParticipationMode`, post/invite overrides, join actor, timestamps.
+  - Includes partial unique indexes for `(channelId, userId)` and `(channelId, agentId)` and a Drizzle/database check for exactly one principal.
+  - Remaining gap: policy helpers need to be wired through all chat/session/thread/pin routes.
+
 - `chat_sessions`
-  - Columns: `companyId`, `workspaceId`, `agentId`, `title`, `gatewaySessionKey`, thread parent fields.
-  - Gap: no `channelId`, `scopeType`, `scopeId`, `createdByUserId`, membership model, conversation type, privacy label, or channel role.
+  - Columns: `companyId`, `workspaceId`, `channelId`, `agentId`, `title`, `gatewaySessionKey`, thread parent fields.
+  - Gap: no `scopeType`, `scopeId`, `createdByUserId`, conversation type, privacy label, or channel role.
 
 - `chat_threads`
-  - Columns: `companyId`, `workspaceId`, parent session/message fields, thread session fields, `agentId`.
-  - Gap: thread visibility derives only from workspace/company, not channel membership.
+  - Columns: `companyId`, `workspaceId`, `channelId`, parent session/message fields, thread session fields, `agentId`.
+  - Gap: thread visibility can now attach to `channelId`, but route enforcement still needs to prove channel membership.
 
 - `chat_messages`
   - Columns: `sessionId`, `role`, `content`, `metadata`, `createdAt`.
@@ -106,7 +121,7 @@ Missing for the target architecture:
 
 ### RLS state
 
-No migrations defining `ENABLE ROW LEVEL SECURITY`, `CREATE POLICY`, `channels`, `channel_members`, `resource_grants`, `runtime_scope_bindings`, or `resource_promotions` were found in `drizzle/`.
+No migrations defining `ENABLE ROW LEVEL SECURITY`, `CREATE POLICY`, `resource_grants`, `runtime_scope_bindings`, or `resource_promotions` were found in `drizzle/`. The `channels` and `channel_members` migration has since landed as `drizzle/0030_channel_membership.sql`.
 
 ## Route inventory and authorization observations
 

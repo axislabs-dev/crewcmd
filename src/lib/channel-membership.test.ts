@@ -45,11 +45,19 @@ describe("channel membership helpers", () => {
     });
 
     expect(
-      channelMemberSelectorForActor({ type: "agent", id: "agent_triage" }),
+      channelMemberSelectorForActor({
+        type: "agent",
+        id: "triage",
+        agentDbId: "agent_triage",
+      }),
     ).toEqual({
       memberType: CHANNEL_MEMBER_TYPES.AGENT,
       agentId: "agent_triage",
     });
+
+    expect(
+      channelMemberSelectorForActor({ type: "agent", id: "triage" }),
+    ).toBeNull();
 
     expect(
       channelMemberSelectorForActor({ type: "system", id: "system" }),
@@ -63,7 +71,10 @@ describe("channel membership helpers", () => {
       findChannelMembership({ type: "user", id: "user_alice" }, members),
     ).toBe(userMember);
     expect(
-      findChannelMembership({ type: "agent", id: "agent_triage" }, members),
+      findChannelMembership(
+        { type: "agent", id: "triage", agentDbId: "agent_triage" },
+        members,
+      ),
     ).toBe(agentMember);
     expect(
       findChannelMembership({ type: "user", id: "user_unknown" }, members),

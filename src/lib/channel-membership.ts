@@ -32,6 +32,7 @@ export type ChannelMemberRecord = {
   channelId: string;
   memberType: ChannelMemberType;
   userId?: string | null;
+  /** Database UUID from agents.id, not an agent callsign like "neo". */
   agentId?: string | null;
   role: ChannelRole;
   agentParticipationMode?: AgentParticipationMode | null;
@@ -41,9 +42,18 @@ export type ChannelMemberRecord = {
 
 export type ChannelActor = {
   type: "user" | "agent" | "system";
+  /**
+   * User id for humans; agent callsign/session identifier for agents.
+   * Agent membership matching intentionally does not fall back to this value
+   * because channel_members.agent_id stores the agents.id database UUID.
+   */
   id: string;
   userId?: string | null;
+  /** Database UUID from agents.id. Required for agent membership matching. */
+  agentDbId?: string | null;
+  /** @deprecated Use agentDbId for membership matching; agentId is retained as a UUID alias. */
   agentId?: string | null;
+  agentCallsign?: string | null;
 };
 
 export type ChannelMemberSelector = {
@@ -76,7 +86,7 @@ export function channelMemberSelectorForActor(
   if (actor.type === "system") return null;
 
   if (actor.type === "agent") {
-    const agentId = actor.agentId ?? actor.id;
+    const agentId = actor.agentDbId ?? actor.agentId;
     return agentId ? { memberType: CHANNEL_MEMBER_TYPES.AGENT, agentId } : null;
   }
 

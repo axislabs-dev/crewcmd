@@ -1245,6 +1245,17 @@ export default function ChatPage() {
     () => chatConversationStoreKey(activeSessionKey, activeChannelId),
     [activeChannelId, activeSessionKey]
   );
+  const activeStoreKeyRef = useRef(activeStoreKey);
+  const activeMainRequestStoreKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeStoreKeyRef.current = activeStoreKey;
+    if (activeMainRequestStoreKeyRef.current && activeMainRequestStoreKeyRef.current !== activeStoreKey) {
+      isLoadingRef.current = false;
+      setIsLoading(false);
+      setStreamingContent("");
+      streamingContentRef.current = "";
+    }
+  }, [activeStoreKey]);
   const agentDefaultVoice = useMemo(
     () => normalizeAgentVoiceSettings(selectedAgent?.runtimeConfig?.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
     [selectedAgent?.runtimeConfig]
@@ -3317,6 +3328,7 @@ export default function ChatPage() {
         ? selectedSessionKey ?? gatewaySessionKeyForAgent(respondingAgent)
         : gatewaySessionKeyForAgent(respondingAgent);
       const requestStoreKey = chatConversationStoreKey(requestSessionKey, activeChannelId);
+      const requestIsVisible = () => activeStoreKeyRef.current === requestStoreKey;
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const optimisticId = `optimistic-${createClientId()}`;
@@ -3335,11 +3347,13 @@ export default function ChatPage() {
         metadata,
         createdAt: userMsg.createdAt ?? new Date().toISOString(),
       });
-      setMessages((prev) =>
-        options.queuedMessageId
-          ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
-          : [...prev, userMsg]
-      );
+      if (requestIsVisible()) {
+        setMessages((prev) =>
+          options.queuedMessageId
+            ? prev.map((message) => message.id === options.queuedMessageId ? { ...userMsg } : message)
+            : [...prev, userMsg]
+        );
+      }
       // Always scroll to bottom when user sends a message
       wasAtBottomRef.current = true;
       requestAnimationFrame(() => {
@@ -3371,9 +3385,11 @@ export default function ChatPage() {
                 agentId: requestStoreKey,
                 createdAt: userMsg.createdAt ?? new Date().toISOString(),
               });
-              setMessages((prev) =>
-                prev.map((message) => message.id === optimisticId ? { ...message, id: data.message!.id! } : message)
-              );
+              if (requestIsVisible()) {
+                setMessages((prev) =>
+                  prev.map((message) => message.id === optimisticId ? { ...message, id: data.message!.id! } : message)
+                );
+              }
             }
           } catch (error) {
             console.error("[chat] Failed to persist channel message:", error);
@@ -3381,16 +3397,19 @@ export default function ChatPage() {
         }
         return;
       }
+      activeMainRequestStoreKeyRef.current = requestStoreKey;
       setMainLoading(true);
       const startedProgress = {
         event: "run_started",
         at: new Date().toISOString(),
         elapsedMs: 0,
       };
-      setExecutionProgress(startedProgress);
-      setExecutionEvents([startedProgress]);
-      setStreamingContent("");
-      streamingContentRef.current = "";
+      if (requestIsVisible()) {
+        setExecutionProgress(startedProgress);
+        setExecutionEvents([startedProgress]);
+        setStreamingContent("");
+        streamingContentRef.current = "";
+      }
       streamingAgentRef.current = respondingAgentCallsign;
       pageHiddenDuringRequestRef.current = false;
       firstDeltaSeenRef.current = false;
@@ -3477,12 +3496,14 @@ export default function ChatPage() {
 
             if (parsed.type === "chat_progress" && typeof parsed.event === "string") {
               const scopedProgress = { ...parsed, channelId: activeChannelId ?? null };
-              setExecutionProgress(scopedProgress);
-              setExecutionEvents((events) => {
-                const nextEvents = [...events, scopedProgress];
-                persistExecutionSnapshot(scopedProgress, nextEvents);
-                return nextEvents;
-              });
+              if (requestIsVisible()) {
+                setExecutionProgress(scopedProgress);
+                setExecutionEvents((events) => {
+                  const nextEvents = [...events, scopedProgress];
+                  persistExecutionSnapshot(scopedProgress, nextEvents);
+                  return nextEvents;
+                });
+              }
               useActiveChatRunStore.getState().applyProgressEvent(parsed);
               return;
             }
@@ -3512,13 +3533,15 @@ export default function ChatPage() {
                 metadata,
                 createdAt: userMsg.createdAt ?? new Date().toISOString(),
               });
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === optimisticId
-                    ? { ...m, id: parsed.messageId }
-                    : m
-                )
-              );
+              if (requestIsVisible()) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === optimisticId
+                      ? { ...m, id: parsed.messageId }
+                      : m
+                  )
+                );
+              }
               return;
             }
 
@@ -3535,8 +3558,10 @@ export default function ChatPage() {
                 }
               }
               fullContent += delta;
-              streamingContentRef.current = fullContent;
-              setStreamingContent(fullContent);
+              if (requestIsVisible()) {
+                streamingContentRef.current = fullContent;
+                setStreamingContent(fullContent);
+              }
 
               // Sentence-level TTS: extract complete sentences and queue them
               if (shouldSpeakResponses) {
@@ -3599,26 +3624,32 @@ export default function ChatPage() {
             content: enrichedContent,
             createdAt: assistantMsg.createdAt ?? new Date().toISOString(),
           });
-          setMessages((prev) => [...prev, assistantMsg]);
+          if (requestIsVisible()) {
+            setMessages((prev) => [...prev, assistantMsg]);
+          }
         }
         // Assistant message persisted server-side in /api/chat route
-        streamingContentRef.current = "";
         streamingAgentRef.current = null;
-        setStreamingContent("");
+        if (requestIsVisible()) {
+          streamingContentRef.current = "";
+          setStreamingContent("");
+        }
         const completedProgress = {
           event: "run_completed",
           at: new Date().toISOString(),
         };
-        setExecutionProgress((current) =>
-          current?.event === "run_error" || current?.event === "run_aborted"
-            ? current
-            : completedProgress
-        );
-        setExecutionEvents((events) => {
-          const last = events.at(-1);
-          if (last?.event === "run_error" || last?.event === "run_aborted") return events;
-          return [...events, completedProgress];
-        });
+        if (requestIsVisible()) {
+          setExecutionProgress((current) =>
+            current?.event === "run_error" || current?.event === "run_aborted"
+              ? current
+              : completedProgress
+          );
+          setExecutionEvents((events) => {
+            const last = events.at(-1);
+            if (last?.event === "run_error" || last?.event === "run_aborted") return events;
+            return [...events, completedProgress];
+          });
+        }
         useActiveChatRunStore.getState().applyProgressEvent({
           type: "chat_progress",
           event: "run_completed",
@@ -3632,7 +3663,7 @@ export default function ChatPage() {
             sessionKey: requestSessionKey,
           });
           // User cancelled with Escape — keep any partial content as the message
-          if (fullContent) {
+          if (fullContent && requestIsVisible()) {
             const cancelledContent = fullContent + "\n\n_(cancelled)_";
             setMessages((prev) => [
               ...prev,
@@ -3644,15 +3675,19 @@ export default function ChatPage() {
             ]);
             // Partial content persisted server-side via cancel handler
           }
-          streamingContentRef.current = "";
           streamingAgentRef.current = null;
-          setStreamingContent("");
+          if (requestIsVisible()) {
+            streamingContentRef.current = "";
+            setStreamingContent("");
+          }
           const abortedProgress = {
             event: "run_aborted",
             at: new Date().toISOString(),
           };
-          setExecutionProgress(abortedProgress);
-          setExecutionEvents((events) => [...events, abortedProgress]);
+          if (requestIsVisible()) {
+            setExecutionProgress(abortedProgress);
+            setExecutionEvents((events) => [...events, abortedProgress]);
+          }
         } else {
           const wasBackgrounded = pageHiddenDuringRequestRef.current ||
             (typeof document !== "undefined" && document.hidden);
@@ -3669,9 +3704,11 @@ export default function ChatPage() {
             event: errorProgress.event,
             sessionKey: requestSessionKey,
           });
-          setExecutionProgress(errorProgress);
-          setExecutionEvents((events) => [...events, errorProgress]);
-          if (!wasBackgrounded && fullContent.trim()) {
+          if (requestIsVisible()) {
+            setExecutionProgress(errorProgress);
+            setExecutionEvents((events) => [...events, errorProgress]);
+          }
+          if (!wasBackgrounded && fullContent.trim() && requestIsVisible()) {
             setMessages((prev) => [
               ...prev,
               {
@@ -3690,8 +3727,10 @@ export default function ChatPage() {
                 event: "run_completed",
                 at: new Date().toISOString(),
               };
-              setExecutionProgress(completedProgress);
-              setExecutionEvents((events) => [...events, completedProgress]);
+              if (requestIsVisible()) {
+                setExecutionProgress(completedProgress);
+                setExecutionEvents((events) => [...events, completedProgress]);
+              }
               useActiveChatRunStore.getState().applyProgressEvent({
                 type: "chat_progress",
                 event: "run_completed",
@@ -3700,15 +3739,22 @@ export default function ChatPage() {
               });
             });
           }
-          streamingContentRef.current = "";
           streamingAgentRef.current = null;
-          setStreamingContent("");
+          if (requestIsVisible()) {
+            streamingContentRef.current = "";
+            setStreamingContent("");
+          }
         }
       }
 
       abortControllerRef.current = null;
       activeChatRunIdRef.current = null;
-      setMainLoading(false);
+      if (activeMainRequestStoreKeyRef.current === requestStoreKey) {
+        activeMainRequestStoreKeyRef.current = null;
+      }
+      if (requestIsVisible()) {
+        setMainLoading(false);
+      }
       const nextQueued = queuedMainMessagesRef.current.shift();
       if (nextQueued) {
         window.setTimeout(() => {

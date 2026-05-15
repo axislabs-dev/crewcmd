@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import type { Task, Agent, TaskStatus, TaskPriority, TaskSource } from "@/lib/data";
 import { buildAgentLookup, getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
+import { useAgentVoiceSession } from "@/components/app-tray";
 
 interface Project {
   id: string;
@@ -65,6 +66,7 @@ const PRIORITY_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1,
 const PAGE_SIZE = 50;
 
 export function TaskTable({ tasks, agents, projects = [], agentsLoading = false, agentsError = null, onTaskUpdate, onTaskDelete, onTaskClick }: TaskTableProps) {
+  const { pinTarget } = useAgentVoiceSession();
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -568,6 +570,27 @@ export function TaskTable({ tasks, agents, projects = [], agentsLoading = false,
                           </span>
                         );
                       })()}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void pinTarget({
+                            targetType: "task",
+                            targetId: task.id,
+                            title: task.title,
+                            metadata: {
+                              shortId: task.shortId,
+                              status: task.status,
+                              priority: task.priority,
+                            },
+                          });
+                        }}
+                        className="ml-auto rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[8px] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
+                        aria-label={`Pin ${task.title} to tray`}
+                        title="Pin task to tray"
+                      >
+                        Pin
+                      </button>
                     </div>
                   </td>
 

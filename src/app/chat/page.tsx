@@ -1125,6 +1125,7 @@ export default function ChatPage() {
     setIsPlayingAudio: setTrayIsPlayingAudio,
     setMicMuted: setTrayMicMuted,
     setVoiceState: setTrayVoiceState,
+    pinTarget: pinTrayTarget,
   } = useAgentVoiceSession();
   const storeMarkRead = useChatStore((s) => s.markRead);
   const {
@@ -4601,6 +4602,18 @@ export default function ChatPage() {
     : activeChannel
       ? `Message ${activeChannel.type === "dm" ? activeChannel.name ?? "DM" : `#${activeChannel.name ?? "channel"}`}...`
       : `Message ${agentCallsign}...`;
+  const pinActiveConversationToTray = useCallback(async () => {
+    await pinTrayTarget({
+      targetType: activeThread ? "chat_thread" : "chat_session",
+      targetKey: activeThread?.sessionKey ?? activeSessionKey,
+      title: activeThread ? `${activeConversationLabel} thread` : activeConversationLabel,
+      metadata: {
+        agentId: selectedAgent?.callsign ?? null,
+        gatewaySessionKey: activeThread ? null : activeSessionKey,
+        threadSessionKey: activeThread?.sessionKey ?? null,
+      },
+    });
+  }, [activeConversationLabel, activeSessionKey, activeThread, pinTrayTarget, selectedAgent?.callsign]);
 
   return (
     <div className="fixed inset-x-0 bottom-[var(--mobile-app-bar-height)] top-[var(--mobile-safe-top)] z-0 flex min-h-0 flex-col overflow-hidden bg-[var(--bg-primary)] lg:relative lg:inset-auto lg:bottom-auto lg:top-auto lg:h-dvh">
@@ -4670,6 +4683,15 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void pinActiveConversationToTray()}
+              className="hidden h-8 items-center rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--control-bg)] px-3 text-[11px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] sm:flex"
+              aria-label="Pin conversation to tray"
+              title="Pin conversation to tray"
+            >
+              Pin
+            </button>
             <CompanySwitcher compact className="w-36 sm:w-40 lg:hidden" />
           </div>
         </div>

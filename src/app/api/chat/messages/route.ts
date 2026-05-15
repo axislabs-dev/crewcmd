@@ -125,6 +125,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (!resolvedSessionId && sessionKey && hasScope) {
+      const agentLower = sessionKey.toLowerCase();
+      const sessions = await withRetry(() =>
+        db!.select().from(chatSessions)
+          .where(and(
+            eq(chatSessions.agentId, agentLower),
+            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+            scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId),
+            isNull(chatSessions.gatewaySessionKey)
+          ))
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(1)
+      );
+
+      if (sessions.length > 0) {
+        resolvedSessionId = sessions[0].id;
+        resolvedSessionKey = sessions[0].gatewaySessionKey ?? sessionKey;
+        resolvedSessionForAccess = sessions[0];
+      }
+    }
+
     if (!resolvedSessionId && agentId && hasScope) {
       const agentLower = agentId.toLowerCase();
       const sessions = await withRetry(() =>
@@ -319,6 +340,8 @@ export async function POST(request: NextRequest) {
       companyId?: string;
       workspaceId?: string;
       channelId?: string | null;
+      gatewaySessionKey?: string;
+      sessionKey?: string;
       role: "user" | "assistant" | "system";
       content: string;
       metadata?: Record<string, unknown>;
@@ -343,16 +366,19 @@ export async function POST(request: NextRequest) {
     // Auto-resolve session: find or create for this agent
     if (!sessionId && body.agentId && (body.companyId || body.workspaceId)) {
       const agentLower = body.agentId.toLowerCase();
+      const gatewaySessionKey = body.gatewaySessionKey ?? body.sessionKey ?? null;
 
       // Find most recent session for this agent
       const scope = requestedScope!.scope;
+      const conditions = [
+        eq(chatSessions.agentId, agentLower),
+        scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
+        scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId),
+      ];
+      conditions.push(gatewaySessionKey ? eq(chatSessions.gatewaySessionKey, gatewaySessionKey) : isNull(chatSessions.gatewaySessionKey));
       const existing = await withRetry(() =>
         db!.select().from(chatSessions)
-          .where(and(
-            eq(chatSessions.agentId, agentLower),
-            scope.companyId ? eq(chatSessions.companyId, scope.companyId) : eq(chatSessions.workspaceId, scope.workspaceId!),
-            scope.channelId ? eq(chatSessions.channelId, scope.channelId) : isNull(chatSessions.channelId)
-          ))
+          .where(and(...conditions))
           .orderBy(desc(chatSessions.updatedAt))
           .limit(1)
       );
@@ -368,6 +394,7 @@ export async function POST(request: NextRequest) {
             workspaceId: scope.workspaceId ?? null,
             channelId: scope.channelId ?? null,
             agentId: agentLower,
+            gatewaySessionKey,
           }).returning()
         );
         sessionId = newSession.id;

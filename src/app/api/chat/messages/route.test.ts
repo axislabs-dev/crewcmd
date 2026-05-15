@@ -319,6 +319,46 @@ describe("POST /api/chat/messages", () => {
     expect(body.sessionId).toBe("sess-new");
   });
 
+  it("stores gateway session key when auto-creating a scoped channel session", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-company", companyId: "co-1" });
+    mockSelect.mockReturnValue({
+      where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+    });
+
+    const newSession = { id: "sess-channel", agentId: "infra", companyId: "co-1", channelId: "channel-1", gatewaySessionKey: "infra" };
+    const createdMsg = { id: "m-channel", role: "user", content: "hi", createdAt: new Date() };
+
+    let insertCall = 0;
+    mockInsert.mockImplementation(() => ({
+      returning: () => {
+        insertCall++;
+        return Promise.resolve(insertCall === 1 ? [newSession] : [createdMsg]);
+      },
+    }));
+    mockUpdate.mockReturnValue({ where: () => Promise.resolve() });
+
+    const res = await POST(
+      makeRequest("/api/chat/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          agentId: "INFRA",
+          companyId: "co-1",
+          channelId: "channel-1",
+          gatewaySessionKey: "infra",
+          role: "user",
+          content: "hi",
+        }),
+      })
+    );
+
+    expect(res.status).toBe(201);
+    expect(mockInsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      agentId: "infra",
+      channelId: "channel-1",
+      gatewaySessionKey: "infra",
+    }));
+  });
+
   it("auto-creates session when agentId + workspaceId given", async () => {
     mockSelect.mockReturnValue({
       where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),

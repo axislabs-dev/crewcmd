@@ -280,7 +280,7 @@ export function UserPresenceDot({ className = "" }: { className?: string }) {
       <span
         title={presence.text}
         aria-label={`Presence: ${presence.text}`}
-        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] leading-none ring-2 ring-[var(--bg-elevated)] dark:bg-[#171b20] ${className}`}
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-[11px] leading-none ring-2 ring-[var(--bg-elevated)] ${className}`}
       >
         {presence.emoji}
       </span>
@@ -330,7 +330,7 @@ export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
   const [customDuration, setCustomDuration] = useState<number | null>(FOCUS_DEFAULT_MS);
 
   return (
-    <div className="max-h-[calc(100dvh_-_6.5rem_-_env(safe-area-inset-bottom))] w-full overflow-y-auto rounded-2xl border border-[var(--border-subtle)] bg-white p-3 shadow-2xl shadow-black/25 dark:bg-[#171b20] sm:max-h-none sm:w-72 sm:overflow-visible">
+    <div className="max-h-[calc(100dvh_-_6.5rem_-_env(safe-area-inset-bottom))] w-full overflow-y-auto rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 shadow-2xl shadow-black/25 sm:max-h-none sm:w-72 sm:overflow-visible">
       <div className="flex items-center justify-between gap-3 px-1 pb-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[var(--text-primary)]">Set a status</p>

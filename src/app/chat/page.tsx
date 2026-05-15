@@ -4473,6 +4473,7 @@ export default function ChatPage() {
       sessionKey,
       threadSessionKey: activeThread?.sessionKey ?? null,
       title: activeThread ? `${selectedAgent.callsign.toUpperCase()} thread` : selectedAgent.name ?? selectedAgent.callsign,
+      voiceSettings: resolvedVoiceSettings,
     });
   }, [
     activeSessionKey,
@@ -4482,6 +4483,7 @@ export default function ChatPage() {
     selectedAgent?.color,
     selectedAgent?.name,
     hasTrayActiveSession,
+    resolvedVoiceSettings,
     setTrayActiveSession,
     setTrayVoiceState,
     voiceMode,

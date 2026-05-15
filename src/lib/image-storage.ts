@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { put } from "@vercel/blob";
 
 export interface ImageUploadResult {
   url: string;
@@ -23,19 +23,25 @@ export async function uploadImage(
 ): Promise<ImageUploadResult> {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
-  if (!blobToken) {
-    throw new Error('BLOB_READ_WRITE_TOKEN is not configured. Please add it to your environment variables.');
-  }
-
-  // Generate filename if not provided
-  const originalName = (file as File).name || 'image';
-  const fileExtension = originalName.split('.').pop() || 'png';
+  const originalName = getFileName(file) || "image";
+  const fileExtension = originalName.split(".").pop() || "png";
   const timestamp = Date.now();
   const uniqueFilename = filename || `task-${timestamp}.${fileExtension}`;
+  const contentType = getContentType(file, uniqueFilename);
+
+  if (!blobToken) {
+    const buffer = Buffer.isBuffer(file) ? file : Buffer.from(await file.arrayBuffer());
+
+    return {
+      url: `data:${contentType};base64,${buffer.toString("base64")}`,
+      filename: uniqueFilename,
+      uploadedAt: new Date().toISOString(),
+    };
+  }
 
   const blob = await put(uniqueFilename, file, {
-    access: 'public',
-    contentType: (file as File).type || 'image/png',
+    access: "public",
+    contentType,
   });
 
   return {
@@ -43,6 +49,31 @@ export async function uploadImage(
     filename: uniqueFilename,
     uploadedAt: new Date().toISOString(),
   };
+}
+
+function getFileName(file: Buffer | File): string | undefined {
+  return typeof File !== "undefined" && file instanceof File ? file.name : undefined;
+}
+
+function getContentType(file: Buffer | File, filename: string): string {
+  if (typeof File !== "undefined" && file instanceof File && file.type) {
+    return file.type;
+  }
+
+  const extension = filename.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "svg":
+      return "image/svg+xml";
+    default:
+      return "image/png";
+  }
 }
 
 /**
@@ -60,7 +91,6 @@ export async function deleteImage(url: string): Promise<void> {
   // Vercel Blob URLs are in the format: https://<account-name>.public.blob.vercel-storage.com/<filename>
   const urlParts = url.split('/');
   const filename = urlParts.pop();
-  const accountId = urlParts[urlParts.length - 2];
 
   if (!filename) {
     throw new Error('Invalid image URL');

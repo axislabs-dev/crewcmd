@@ -1154,6 +1154,7 @@ export default function ChatPage() {
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [threadListOpen, setThreadListOpen] = useState(false);
+  const [mobileConversationOpen, setMobileConversationOpen] = useState(false);
   const [dmCreateOpen, setDmCreateOpen] = useState(false);
   const [dmSearch, setDmSearch] = useState("");
   const [dmUserInvites, setDmUserInvites] = useState<string[]>([]);
@@ -1394,6 +1395,7 @@ export default function ChatPage() {
       }
       await loadChannels();
       setActiveChannelId(createdChannel.id);
+      setMobileConversationOpen(true);
       activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), createdChannel.id);
       selectSession(null);
       setMessages([]);
@@ -1461,6 +1463,7 @@ export default function ChatPage() {
       const sessionAgent = dmAgent ?? selectedAgent;
       setActiveChannelId(createdChannel.id);
       if (dmAgent) setSelectedAgent(dmAgent);
+      setMobileConversationOpen(true);
       activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(sessionAgent), createdChannel.id);
       selectSession(null);
       setMessages([]);
@@ -1549,6 +1552,7 @@ export default function ChatPage() {
     const sessionAgent = dmAgent ?? selectedAgent;
     setActiveChannelId(channelId);
     if (dmAgent) setSelectedAgent(dmAgent);
+    setMobileConversationOpen(Boolean(channelId));
     activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(sessionAgent), channelId);
     selectSession(null);
     setMessages([]);
@@ -4459,9 +4463,20 @@ export default function ChatPage() {
       <audio ref={audioRef} className="hidden" />
 
       {/* Header */}
-      <div className="sticky top-0 z-40 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6">
+      <div className={`sticky top-0 z-40 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6 ${mobileConversationOpen ? "block" : "hidden lg:block"}`}>
         <div className="flex items-center justify-between">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileConversationOpen(false)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] lg:hidden"
+              aria-label="Back to conversations"
+              title="Back to conversations"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+              </svg>
+            </button>
             <div
               className={`h-2.5 w-2.5 rounded-full transition-opacity ${isPaused ? "opacity-30" : ""}`}
               style={{
@@ -4516,7 +4531,7 @@ export default function ChatPage() {
       </div>
 
       {visiblePins.length > 0 && (
-        <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-3 py-2 backdrop-blur-xl sm:px-4 lg:px-6">
+        <div className={`shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-3 py-2 backdrop-blur-xl sm:px-4 lg:px-6 ${mobileConversationOpen ? "block" : "hidden lg:block"}`}>
           <div className="mx-auto flex max-w-3xl gap-2 text-[12px] text-[var(--text-secondary)]">
             <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">Pin</span>
             <div className="grid min-w-0 flex-1 gap-1">
@@ -5029,11 +5044,23 @@ export default function ChatPage() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Channel sidebar */}
-        <aside className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 backdrop-blur-xl lg:h-full lg:w-64 lg:border-b-0 lg:border-r">
+        <aside className={`min-h-0 flex-1 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 backdrop-blur-xl lg:block lg:h-full lg:w-64 lg:flex-none lg:border-b-0 lg:border-r ${mobileConversationOpen ? "hidden" : "block"}`}>
           <div className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-3 sm:px-4 lg:px-3">
+            <div className="flex items-center justify-between gap-3 lg:hidden">
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-semibold text-[var(--text-primary)]">Messages</h1>
+                <p className="truncate text-[12px] text-[var(--text-tertiary)]">
+                  {workspace?.type === "personal" ? "Private workspace" : company?.name ?? "Workspace"}
+                </p>
+              </div>
+              <CompanySwitcher compact className="w-36" />
+            </div>
             <button
               type="button"
-              onClick={() => setThreadListOpen(true)}
+              onClick={() => {
+                setThreadListOpen(true);
+                setMobileConversationOpen(true);
+              }}
               className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] transition ${threadListOpen ? "bg-[var(--selected-bg)] text-[var(--selected-text)]" : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
             >
               <span className="flex min-w-0 items-center gap-2">
@@ -5059,13 +5086,13 @@ export default function ChatPage() {
                 </button>
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
+              <div className="grid gap-2 lg:flex lg:flex-col lg:overflow-x-visible lg:pb-0">
               {channelRooms.map((channel) => (
                 <button
                   key={channel.id}
                   type="button"
                   onClick={() => selectChannel(channel.id)}
-                  className={`flex shrink-0 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${activeChannelId === channel.id ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
+                  className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left text-[13px] transition lg:w-full lg:py-2 lg:text-[12px] ${activeChannelId === channel.id ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
                   title={channel.description ?? undefined}
                 >
                   <span className="min-w-0 truncate"># {channel.name ?? "untitled"}</span>
@@ -5088,7 +5115,7 @@ export default function ChatPage() {
                   +
                 </button>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:pb-0">
+              <div className="grid gap-2 lg:flex lg:flex-col lg:overflow-x-visible lg:pb-0">
                 {dmRooms.map((channel) => {
                   const isActiveDm = activeChannelId === channel.id;
                   return (
@@ -5096,7 +5123,7 @@ export default function ChatPage() {
                       key={channel.id}
                       type="button"
                       onClick={() => selectChannel(channel.id)}
-                      className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-[12px] transition lg:w-full ${isActiveDm ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
+                      className={`flex min-w-0 items-center gap-2 rounded-xl border px-3 py-3 text-left text-[13px] transition lg:w-full lg:py-2 lg:text-[12px] ${isActiveDm ? "border-[var(--accent)] bg-[var(--accent)]/12 text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"}`}
                     >
                       <span className="text-sm">💬</span>
                       <span className="min-w-0 truncate">{channel.name ?? "DM"}</span>
@@ -5187,7 +5214,7 @@ export default function ChatPage() {
           </div>
         </aside>
 
-        <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className={`relative min-w-0 flex-1 flex-col ${mobileConversationOpen ? "flex" : "hidden lg:flex"}`}>
       {threadListOpen && (
         <div className="absolute inset-0 z-30 overflow-y-auto bg-[var(--bg-primary)] px-4 py-4 lg:px-6">
           <div className="mx-auto max-w-4xl">
@@ -5418,7 +5445,7 @@ export default function ChatPage() {
         {showScrollButton && (
           <button
             onClick={scrollToBottom}
-            className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/90 backdrop-blur-sm px-4 py-2 text-xs text-[var(--text-secondary)] shadow-lg transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)] animate-fade-in"
+            className="sticky bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/95 px-4 py-2 text-xs text-[var(--text-secondary)] shadow-lg backdrop-blur-sm transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)] animate-fade-in"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
@@ -5434,7 +5461,7 @@ export default function ChatPage() {
           className={
             agentOverlayMode === "immersive"
               ? "fixed inset-0 z-[90] overflow-hidden"
-              : "shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pt-2 backdrop-blur-xl sm:px-4"
+              : `shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pt-2 backdrop-blur-xl sm:px-4 ${mobileConversationOpen ? "block" : "hidden lg:block"}`
           }
           style={{
             color: "var(--text-primary)",
@@ -5557,7 +5584,7 @@ export default function ChatPage() {
       />
 
       {/* Input area — Claude-style layout */}
-      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 transition-opacity ${isPaused ? "opacity-60" : ""}`}>
+      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           <ChatComposer
             value={input}

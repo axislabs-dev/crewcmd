@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react";
 import { Avatar } from "@/components/avatar";
 import { useWorkspace } from "@/components/company-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserPresenceBadge } from "@/components/user-presence";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 import { labelModelProfile, listSupportedModelProfiles } from "@/lib/model-profiles";
 
@@ -417,6 +418,16 @@ export default function SettingsPage() {
             <p className="mt-1 text-sm text-[var(--text-secondary)]">Pick the interface theme that feels right for your command center.</p>
             <div className="mt-4 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] p-3">
               <ThemeToggle />
+            </div>
+          </div>
+
+          <div className={cardClassName}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Presence</h2>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">Automatic status for your current browser session.</p>
+              </div>
+              <UserPresenceBadge />
             </div>
           </div>
 

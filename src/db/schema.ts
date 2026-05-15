@@ -213,6 +213,19 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
 });
 
+export const userPresence = pgTable("user_presence", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("active"),
+  customText: text("custom_text"),
+  emoji: text("emoji"),
+  manualExpiresAt: timestamp("manual_expires_at", { withTimezone: true }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const agentStatusEnum = pgEnum("agent_status", [
   "online",
   "idle",

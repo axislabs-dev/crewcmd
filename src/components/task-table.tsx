@@ -65,6 +65,14 @@ const sourceStyles: Record<TaskSource, { label: string; cls: string }> = {
 const PRIORITY_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 const PAGE_SIZE = 50;
 
+function PinIcon() {
+  return (
+    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 4.5 19.5 9.75m-10.5 0L4.5 14.25l5.25 5.25 4.5-4.5m-5.25-5.25 5.25 5.25m-5.25-5.25 3-3a2.121 2.121 0 0 1 3 0l2.25 2.25a2.121 2.121 0 0 1 0 3l-3 3" />
+    </svg>
+  );
+}
+
 export function TaskTable({ tasks, agents, projects = [], agentsLoading = false, agentsError = null, onTaskUpdate, onTaskDelete, onTaskClick }: TaskTableProps) {
   const { pinTarget } = useAgentVoiceSession();
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
@@ -85,6 +93,22 @@ export function TaskTable({ tasks, agents, projects = [], agentsLoading = false,
 
   const agentMap = useMemo(() => buildAgentLookup(agents), [agents]);
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const pinTaskToTray = useCallback((task: Task) => {
+    const project = task.projectId ? projectMap.get(task.projectId) : null;
+    void pinTarget({
+      targetType: "task",
+      targetId: task.id,
+      title: task.title,
+      metadata: {
+        shortId: task.shortId,
+        status: task.status,
+        priority: task.priority,
+        description: task.description,
+        projectId: task.projectId,
+        projectName: project?.name,
+      },
+    });
+  }, [pinTarget, projectMap]);
   const agentSelectStatus = agentsLoading
     ? "Loading agents..."
     : agentsError
@@ -574,22 +598,13 @@ export function TaskTable({ tasks, agents, projects = [], agentsLoading = false,
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void pinTarget({
-                            targetType: "task",
-                            targetId: task.id,
-                            title: task.title,
-                            metadata: {
-                              shortId: task.shortId,
-                              status: task.status,
-                              priority: task.priority,
-                            },
-                          });
+                          pinTaskToTray(task);
                         }}
-                        className="ml-auto rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[8px] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
+                        className="ml-auto flex h-6 w-6 items-center justify-center rounded border border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
                         aria-label={`Pin ${task.title} to tray`}
                         title="Pin task to tray"
                       >
-                        Pin
+                        <PinIcon />
                       </button>
                     </div>
                   </td>

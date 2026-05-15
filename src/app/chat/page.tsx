@@ -148,6 +148,7 @@ type ChatHistoryLoadResult = {
 type ChatPin = {
   id: string;
   messageId: string;
+  pinnedByUserId?: string | null;
   createdAt: string;
   role: "user" | "assistant";
   content: string;
@@ -1106,6 +1107,7 @@ export default function ChatPage() {
   const chatCompanyId = company?.id ?? null;
   const chatWorkspaceId = workspace?.id ?? null;
   const chatScopeKey = chatCompanyId ?? chatWorkspaceId ?? "preview";
+  const currentUserId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
   const storeMarkRead = useChatStore((s) => s.markRead);
   const {
     selectedSessionKey,
@@ -1152,6 +1154,7 @@ export default function ChatPage() {
   const [threadParentLinks, setThreadParentLinks] = useState<Record<string, ThreadParentLink>>({});
   const [serverThreadSummaries, setServerThreadSummaries] = useState<Record<string, ThreadReplySummary>>({});
   const [pins, setPins] = useState<ChatPin[]>([]);
+  const [conversationTab, setConversationTab] = useState<"messages" | "pins">("messages");
   const [savedByMessageId, setSavedByMessageId] = useState<Record<string, SavedItem>>({});
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [urlAgentCallsign, setUrlAgentCallsign] = useState<string | null>(null);
@@ -1284,6 +1287,7 @@ export default function ChatPage() {
       setStreamingContent("");
       streamingContentRef.current = "";
     }
+    setConversationTab("messages");
   }, [activeStoreKey]);
   const agentDefaultVoice = useMemo(
     () => normalizeAgentVoiceSettings(selectedAgent?.runtimeConfig?.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
@@ -4339,14 +4343,21 @@ export default function ChatPage() {
     [stopAllAudio]
   );
 
+  const removePin = useCallback(async (messageId: string) => {
+    const res = await fetch(`/api/chat/pins?messageId=${encodeURIComponent(messageId)}`, { method: "DELETE" });
+    if (res.ok) {
+      setPins((prev) => prev.filter((pin) => pin.messageId !== messageId));
+    }
+    return res.ok;
+  }, []);
+
   const togglePin = useCallback(async (message: Message) => {
     if (!isUuid(message.id)) return;
     if (!chatCompanyId && !chatWorkspaceId) return;
     const isPinned = pins.some((pin) => pin.messageId === message.id);
     try {
       if (isPinned) {
-        await fetch(`/api/chat/pins?messageId=${encodeURIComponent(message.id)}`, { method: "DELETE" });
-        setPins((prev) => prev.filter((pin) => pin.messageId !== message.id));
+        await removePin(message.id);
         return;
       }
 
@@ -4365,7 +4376,7 @@ export default function ChatPage() {
     } catch {
       // Leave the current pin state unchanged when persistence fails.
     }
-  }, [chatCompanyId, chatWorkspaceId, loadPins, pins]);
+  }, [chatCompanyId, chatWorkspaceId, loadPins, pins, removePin]);
 
   const buildChatMessageUrl = useCallback((params: {
     agentId?: string | null;
@@ -4386,6 +4397,7 @@ export default function ChatPage() {
     sessionKey?: string | null;
     messageId: string;
   }) => {
+    setConversationTab("messages");
     pendingMessageScrollRef.current = params.messageId;
     const agent = params.agentId || selectedAgent?.callsign || null;
     const sessionKey = params.sessionKey || activeSessionKey;
@@ -4443,7 +4455,6 @@ export default function ChatPage() {
   }, [activeSessionKey, chatCompanyId, chatWorkspaceId, savedByMessageId, selectedAgent?.callsign]);
 
   const pinnedMessageIds = new Set(pins.map((pin) => pin.messageId));
-  const visiblePins = pins.slice(0, 3);
   const activeConversationLabel = activeChannel
     ? `${activeChannel.type === "dm" ? "" : "# "}${activeChannel.name ?? "untitled"}`
     : agentCallsign;
@@ -4528,32 +4539,27 @@ export default function ChatPage() {
             <CompanySwitcher compact className="w-36 sm:w-40 lg:hidden" />
           </div>
         </div>
-      </div>
 
-      {visiblePins.length > 0 && (
-        <div className={`shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-3 py-2 backdrop-blur-xl sm:px-4 lg:px-6 ${mobileConversationOpen ? "block" : "hidden lg:block"}`}>
-          <div className="mx-auto flex max-w-3xl gap-2 text-[12px] text-[var(--text-secondary)]">
-            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">Pin</span>
-            <div className="grid min-w-0 flex-1 gap-1">
-              {visiblePins.map((pin) => (
-                <button
-                  key={pin.id}
-                  type="button"
-                  onClick={() => navigateToMessage({
-                    agentId: pin.agentId,
-                    sessionKey: pin.gatewaySessionKey ?? activeSessionKey,
-                    messageId: pin.messageId,
-                  })}
-                  className="min-w-0 rounded-md px-2 py-1 text-left transition hover:bg-[var(--bg-surface-hover)]"
-                >
-                  <span className="mr-2 font-semibold text-[var(--text-primary)]">{pin.role === "user" ? "You" : selectedAgent?.callsign ?? "AI"}</span>
-                  <span className="text-[var(--text-tertiary)]">{messagePreview(pin.content)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="mt-2 flex items-center gap-4 text-[12px] font-medium">
+          {(["messages", "pins"] as const).map((tab) => {
+            const active = conversationTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setConversationTab(tab)}
+                className={`relative flex h-7 items-center gap-1.5 transition ${active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"}`}
+              >
+                <span>{tab === "messages" ? "Messages" : "Pins"}</span>
+                {tab === "pins" && pins.length > 0 ? (
+                  <span className="rounded-full bg-[var(--bg-primary)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">{pins.length}</span>
+                ) : null}
+                {active ? <span className="absolute inset-x-0 -bottom-[11px] h-0.5 rounded-full bg-[var(--accent)]" /> : null}
+              </button>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {activeThread && (
         <ChatThreadDrawer
@@ -5298,6 +5304,65 @@ export default function ChatPage() {
       {/* Messages area */}
       <div ref={scrollContainerRef} className="relative min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto px-4 py-4 lg:px-6" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", overscrollBehaviorY: "contain" }}>
         <div className="mx-auto max-w-3xl space-y-4">
+          {conversationTab === "pins" ? (
+            pins.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-panel)] border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[18px] text-[var(--text-tertiary)]">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 3.75 20.25 9.75m-8.25-3 5.25 5.25m-9 .75-3.75 3.75v3h3l3.75-3.75m-3-3 4.5 4.5" />
+                  </svg>
+                </div>
+                <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">No pinned messages</h2>
+                <p className="max-w-sm text-[12px] leading-relaxed text-[var(--text-tertiary)]">
+                  Pin important messages from the message actions.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 py-1">
+                {pins.map((pin) => {
+                  const canRemovePin = Boolean(currentUserId && pin.pinnedByUserId === currentUserId);
+                  return (
+                    <div
+                      key={pin.id}
+                      className="group flex gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-3 transition hover:border-[var(--border-medium)]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => navigateToMessage({
+                          agentId: pin.agentId,
+                          sessionKey: pin.gatewaySessionKey ?? activeSessionKey,
+                          messageId: pin.messageId,
+                        })}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="mb-1 flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
+                          <span className="font-semibold text-[var(--text-primary)]">{pin.role === "user" ? "You" : selectedAgent?.callsign ?? "AI"}</span>
+                          {pin.messageCreatedAt ? <span>{new Date(pin.messageCreatedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span> : null}
+                        </div>
+                        <div className="max-h-[4.875rem] overflow-hidden text-[13px] leading-relaxed text-[var(--text-secondary)]">
+                          {messagePreview(pin.content, 260)}
+                        </div>
+                      </button>
+                      {canRemovePin ? (
+                        <button
+                          type="button"
+                          onClick={() => void removePin(pin.messageId)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--text-tertiary)] opacity-70 transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] group-hover:opacity-100"
+                          aria-label="Remove pin"
+                          title="Remove pin"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <>
           {transcriptItems.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
@@ -5438,10 +5503,12 @@ export default function ChatPage() {
           )}
 
           <div ref={messagesEndRef} />
+            </>
+          )}
         </div>
 
         {/* Scroll to bottom floating button */}
-        {showScrollButton && (
+        {conversationTab === "messages" && showScrollButton && (
           <button
             onClick={scrollToBottom}
             className="sticky bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/95 px-4 py-2 text-xs text-[var(--text-secondary)] shadow-lg backdrop-blur-sm transition-all hover:border-[var(--accent)]/30 hover:text-[var(--accent)] animate-fade-in"
@@ -5541,7 +5608,7 @@ export default function ChatPage() {
       />
 
       {/* Input area — Claude-style layout */}
-      <div ref={composerDockRef} className={`z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1.5 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
+      <div ref={composerDockRef} className={`z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1.5 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${conversationTab === "messages" ? mobileConversationOpen ? "block" : "hidden lg:block" : "hidden"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           <ChatComposer
             value={input}

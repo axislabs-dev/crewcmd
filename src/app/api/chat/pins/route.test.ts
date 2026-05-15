@@ -78,6 +78,16 @@ function messageJoin(rows: unknown[]) {
   };
 }
 
+function pinJoin(rows: unknown[]) {
+  return {
+    innerJoin: () => ({
+      innerJoin: () => ({
+        where: () => ({ limit: () => Promise.resolve(rows) }),
+      }),
+    }),
+  };
+}
+
 describe("GET /api/chat/pins", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -153,9 +163,10 @@ describe("POST /api/chat/pins", () => {
   it("pins a message in an accessible session", async () => {
     mockSelect
       .mockReturnValueOnce(messageJoin([{ id: "msg-1", sessionId: "sess-1", workspaceId: "ws-1", companyId: null }]))
+      .mockReturnValueOnce({ where: () => ({ limit: () => Promise.resolve([]) }) })
       .mockReturnValueOnce({ where: () => ({ orderBy: () => Promise.resolve([{ id: "pin-1" }]) }) });
     mockInsert.mockReturnValue({
-      onConflictDoUpdate: () => ({ returning: () => Promise.resolve([{ id: "pin-1", messageId: "msg-1" }]) }),
+      onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "pin-1", messageId: "msg-1" }]) }),
     });
 
     const res = await POST(makeRequest("/api/chat/pins", {
@@ -166,6 +177,22 @@ describe("POST /api/chat/pins", () => {
 
     expect(res.status).toBe(201);
     expect(body.pin).toMatchObject({ id: "pin-1", messageId: "msg-1" });
+  });
+
+  it("returns an existing pin without changing ownership", async () => {
+    mockSelect
+      .mockReturnValueOnce(messageJoin([{ id: "msg-1", sessionId: "sess-1", workspaceId: "ws-1", companyId: null }]))
+      .mockReturnValueOnce({ where: () => ({ limit: () => Promise.resolve([{ id: "pin-1", messageId: "msg-1", pinnedByUserId: "user-2" }]) }) });
+
+    const res = await POST(makeRequest("/api/chat/pins", {
+      method: "POST",
+      body: JSON.stringify({ messageId: "msg-1" }),
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.pin).toMatchObject({ id: "pin-1", pinnedByUserId: "user-2" });
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
   it("forbids pinning a message in an inaccessible session", async () => {
@@ -188,12 +215,13 @@ describe("DELETE /api/chat/pins", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuth.mockResolvedValue(null);
+    mockAuth.mockResolvedValue({ user: { id: "user-1" } });
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: null });
     mockCanAccessChatSession.mockResolvedValue(true);
   });
 
-  it("deletes a pin for an accessible message", async () => {
-    mockSelect.mockReturnValueOnce(messageJoin([{ id: "msg-1", workspaceId: "ws-1", companyId: null }]));
+  it("deletes a pin created by the current user", async () => {
+    mockSelect.mockReturnValueOnce(pinJoin([{ id: "pin-1", messageId: "msg-1", pinnedByUserId: "user-1", workspaceId: "ws-1", companyId: null }]));
     mockDelete.mockReturnValue({ returning: () => Promise.resolve([{ id: "pin-1" }]) });
 
     const res = await DELETE(makeRequest("/api/chat/pins?messageId=msg-1"));
@@ -203,9 +231,20 @@ describe("DELETE /api/chat/pins", () => {
     expect(body.deleted).toBe(1);
   });
 
+  it("forbids deleting a pin created by another user", async () => {
+    mockSelect.mockReturnValueOnce(pinJoin([{ id: "pin-1", messageId: "msg-1", pinnedByUserId: "user-2", workspaceId: "ws-1", companyId: null }]));
+
+    const res = await DELETE(makeRequest("/api/chat/pins?messageId=msg-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
   it("forbids deleting a pin for an inaccessible message", async () => {
     mockCanAccessChatSession.mockResolvedValueOnce(false);
-    mockSelect.mockReturnValueOnce(messageJoin([{ id: "msg-1", workspaceId: "other-ws", companyId: null }]));
+    mockSelect.mockReturnValueOnce(pinJoin([{ id: "pin-1", messageId: "msg-1", pinnedByUserId: "user-1", workspaceId: "other-ws", companyId: null }]));
 
     const res = await DELETE(makeRequest("/api/chat/pins?messageId=msg-1"));
     const body = await res.json();

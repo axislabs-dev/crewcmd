@@ -1149,7 +1149,6 @@ export default function ChatPage() {
   const [preferredAgentCallsign, setPreferredAgentCallsign] = useState<string | null>(null);
   const [preferredSessionKey, setPreferredSessionKey] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number } | null>(null);
   const [threadParentLinks, setThreadParentLinks] = useState<Record<string, ThreadParentLink>>({});
   const [serverThreadSummaries, setServerThreadSummaries] = useState<Record<string, ThreadReplySummary>>({});
   const [pins, setPins] = useState<ChatPin[]>([]);
@@ -1675,30 +1674,6 @@ export default function ChatPage() {
     requestAnimationFrame(() => scrollThreadToBottom("smooth"));
   }, [scrollThreadToBottom]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !activeThread) return;
-    const viewport = window.visualViewport;
-    if (!viewport) {
-      setVisualViewport(null);
-      return;
-    }
-
-    const updateViewport = () => {
-      setVisualViewport({
-        height: viewport.height,
-        offsetTop: viewport.offsetTop,
-      });
-      window.requestAnimationFrame(() => scrollThreadToBottom());
-    };
-
-    updateViewport();
-    viewport.addEventListener("resize", updateViewport);
-    viewport.addEventListener("scroll", updateViewport);
-    return () => {
-      viewport.removeEventListener("resize", updateViewport);
-      viewport.removeEventListener("scroll", updateViewport);
-    };
-  }, [activeThread, scrollThreadToBottom]);
   const ttsBreadcrumbContextRef = useRef({
     mode: voiceMode,
     agent: selectedAgent?.callsign ?? null,
@@ -4590,7 +4565,6 @@ export default function ChatPage() {
           events={threadEvents}
           agentColor={agentColor}
           voiceSettings={resolvedVoiceSettings}
-          visualViewport={visualViewport}
           scrollContainerRef={threadScrollContainerRef}
           onClose={closeThread}
           composer={(

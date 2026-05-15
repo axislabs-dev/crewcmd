@@ -35,7 +35,6 @@ type ChatThreadDrawerProps = {
   events: ExecutionProgressEvent[];
   agentColor: string;
   voiceSettings: AgentVoiceSettings | null;
-  visualViewport: { height: number; offsetTop: number } | null;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   composer: ReactNode;
   onClose: () => void;
@@ -56,21 +55,14 @@ export function ChatThreadDrawer({
   events,
   agentColor,
   voiceSettings,
-  visualViewport,
   scrollContainerRef,
   composer,
   onClose,
 }: ChatThreadDrawerProps) {
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:bg-black/10"
-      style={{
-        top: visualViewport ? `${visualViewport.offsetTop}px` : 0,
-        height: visualViewport ? `${visualViewport.height}px` : "100dvh",
-      }}
-    >
-      <section className="flex h-full max-h-[100dvh] w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-w-[480px]">
-        <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-3 pb-3 pt-[var(--mobile-safe-top)] sm:px-4 sm:pt-3">
+    <div className="fixed inset-x-0 bottom-[var(--mobile-app-bar-height)] top-[var(--mobile-safe-top)] z-[80] flex justify-end bg-black/20 backdrop-blur-[2px] sm:inset-y-0 sm:bg-black/10">
+      <section className="flex h-full min-h-0 w-full flex-col border-l border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-[var(--theme-shadow-lg)] sm:max-h-[100dvh] sm:max-w-[480px]">
+        <header className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-3 py-3 sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={onClose}
@@ -97,7 +89,15 @@ export function ChatThreadDrawer({
           </button>
         </header>
 
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4">
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-4 sm:px-4"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-y",
+            overscrollBehaviorY: "contain",
+          }}
+        >
           <div className="space-y-4">
             <ChatMessage
               role={activeThread.parentMessage.role}
@@ -151,7 +151,7 @@ export function ChatThreadDrawer({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-4">
+        <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/50 px-3 pb-1.5 pt-1.5 backdrop-blur-xl sm:px-4 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pt-2">
           {composer}
         </div>
       </section>

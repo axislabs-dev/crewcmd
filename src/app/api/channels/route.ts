@@ -31,6 +31,26 @@ function slugifyChannelName(name: string) {
   return slug || `channel-${Date.now()}`;
 }
 
+async function allocateScopedChannelSlug(workspace: WorkspaceRecord, name: string) {
+  const baseSlug = slugifyChannelName(name);
+  const existingRows = await withRetry(() =>
+    db!.select({ slug: channels.slug })
+      .from(channels)
+      .where(scopeWhere(workspace))
+      .limit(500)
+  );
+  const existing = new Set(existingRows.map((row) => row.slug).filter(Boolean));
+  if (!existing.has(baseSlug)) return baseSlug;
+
+  for (let index = 2; index < 1000; index += 1) {
+    const suffix = `-${index}`;
+    const candidate = `${baseSlug.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+
+  return `${baseSlug.slice(0, 48)}-${Date.now().toString(36)}`;
+}
+
 function scopeWhere(workspace: WorkspaceRecord) {
   return workspace.companyId
     ? eq(channels.companyId, workspace.companyId)
@@ -223,6 +243,7 @@ export async function POST(request: NextRequest) {
 
   const name = body.name?.trim();
   if (!name) return Response.json({ error: "name required" }, { status: 400 });
+  const slug = await allocateScopedChannelSlug(workspace, name);
 
   const [created] = await withRetry(() =>
     db!.insert(channels).values({
@@ -230,7 +251,7 @@ export async function POST(request: NextRequest) {
       workspaceId: workspace.companyId ? null : workspace.id,
       type: body.type ?? "channel",
       name,
-      slug: slugifyChannelName(name),
+      slug,
       description: (body.purpose ?? body.description ?? null) || null,
       visibility: body.visibility ?? "restricted",
       createdByUserId: user.id,

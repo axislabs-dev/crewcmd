@@ -19,6 +19,7 @@ vi.mock("@/db/schema", () => ({
     id: "channels.id",
     companyId: "channels.companyId",
     workspaceId: "channels.workspaceId",
+    slug: "channels.slug",
     archivedAt: "channels.archivedAt",
     updatedAt: "channels.updatedAt",
   },
@@ -169,6 +170,9 @@ describe("/api/channels", () => {
 
   it("creates a restricted channel and owner membership", async () => {
     const created = { id: "channel_new", name: "incidents", companyId: "co-1", workspaceId: null, visibility: "restricted", description: "prod incidents" };
+    mockSelectFrom.mockReturnValueOnce({
+      where: () => ({ limit: () => Promise.resolve([]) }),
+    });
     mockInsertValues
       .mockReturnValueOnce({ returning: () => Promise.resolve([created]) })
       .mockReturnValueOnce({ returning: () => Promise.resolve([{ id: "member-1" }]) });
@@ -182,7 +186,28 @@ describe("/api/channels", () => {
     expect(res.status).toBe(201);
     expect(body.channel.id).toBe("channel_new");
     expect(body.channel.canManage).toBe(true);
+    expect(mockInsertValues).toHaveBeenNthCalledWith(1, expect.objectContaining({ slug: "incidents" }));
     expect(mockInsertValues).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates a unique slug when an archived DM already has the agent slug", async () => {
+    const created = { id: "channel_dm", name: "NEO", slug: "neo-2", companyId: "co-1", workspaceId: null, type: "dm", visibility: "private", description: "Direct message" };
+    mockSelectFrom.mockReturnValueOnce({
+      where: () => ({ limit: () => Promise.resolve([{ slug: "neo" }]) }),
+    });
+    mockInsertValues
+      .mockReturnValueOnce({ returning: () => Promise.resolve([created]) })
+      .mockReturnValueOnce({ returning: () => Promise.resolve([{ id: "member-1" }]) });
+
+    const res = await POST(makeRequest("/api/channels", {
+      method: "POST",
+      body: JSON.stringify({ companyId: "co-1", type: "dm", name: "NEO", purpose: "Direct message", visibility: "private" }),
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.channel.id).toBe("channel_dm");
+    expect(mockInsertValues).toHaveBeenNthCalledWith(1, expect.objectContaining({ name: "NEO", slug: "neo-2" }));
   });
 
   it("requires an accessible workspace", async () => {

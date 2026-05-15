@@ -10,6 +10,7 @@ import { VoiceAgent } from "@/components/chat/voice-agent";
 import { ChatThreadDrawer } from "@/components/chat/thread-drawer";
 import { VoiceSelectModal } from "@/components/voice-select-modal";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
+import { useAgentVoiceSession } from "@/components/app-tray";
 import {
   ExecutionProgressPanel,
   type ExecutionProgressEvent,
@@ -1115,6 +1116,16 @@ export default function ChatPage() {
   const chatWorkspaceId = workspace?.id ?? null;
   const chatScopeKey = chatCompanyId ?? chatWorkspaceId ?? "preview";
   const currentUserId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
+  const {
+    activeSession: trayActiveSession,
+    audioMuted: trayAudioMuted,
+    micMuted: trayMicMuted,
+    setActiveSession: setTrayActiveSession,
+    setAudioMuted: setTrayAudioMuted,
+    setIsPlayingAudio: setTrayIsPlayingAudio,
+    setMicMuted: setTrayMicMuted,
+    setVoiceState: setTrayVoiceState,
+  } = useAgentVoiceSession();
   const storeMarkRead = useChatStore((s) => s.markRead);
   const {
     selectedSessionKey,
@@ -2790,10 +2801,6 @@ export default function ChatPage() {
     setIsPlayingAudio(false);
   }, [recordTtsBreadcrumb, revokeAudioObjectUrl]);
 
-  useEffect(() => {
-    return () => stopAllAudio();
-  }, [stopAllAudio]);
-
   const markFirstAudioStarted = useCallback((provider: "browser" | "server" | "native") => {
     const metrics = voiceLatencyRef.current;
     if (!metrics || metrics.firstAudioStartedAt) return;
@@ -4386,6 +4393,89 @@ export default function ChatPage() {
     },
     [stopAllAudio]
   );
+
+  useEffect(() => {
+    const handleTrayStop = () => {
+      stopAllAudio();
+      setVoiceMode("off");
+      setAgentModeSessionKey(null);
+      setAgentMicMuted(false);
+      setAgentAudioMuted(false);
+    };
+    window.addEventListener("crewcmd:agent-voice-stop", handleTrayStop);
+    return () => window.removeEventListener("crewcmd:agent-voice-stop", handleTrayStop);
+  }, [stopAllAudio]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent" || !selectedAgent?.callsign) {
+      if (trayActiveSession) setTrayVoiceState("idle");
+      return;
+    }
+
+    const sessionKey = agentModeSessionKey ?? activeSessionKey;
+    setTrayActiveSession({
+      agentCallsign: selectedAgent.callsign,
+      agentName: selectedAgent.name,
+      agentColor: selectedAgent.color,
+      sessionKey,
+      threadSessionKey: activeThread?.sessionKey ?? null,
+      title: activeThread ? `${selectedAgent.callsign.toUpperCase()} thread` : selectedAgent.name ?? selectedAgent.callsign,
+    });
+  }, [
+    activeSessionKey,
+    activeThread,
+    agentModeSessionKey,
+    selectedAgent?.callsign,
+    selectedAgent?.color,
+    selectedAgent?.name,
+    setTrayActiveSession,
+    setTrayVoiceState,
+    trayActiveSession?.sessionKey,
+    voiceMode,
+  ]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent") return;
+    setTrayIsPlayingAudio(isPlayingAudio);
+    setTrayMicMuted(agentMicMuted);
+    setTrayAudioMuted(agentAudioMuted);
+    if (agentMicMuted) {
+      setTrayVoiceState("muted");
+    } else if (isPlayingAudio) {
+      setTrayVoiceState("speaking");
+    } else if (isLoading || isThreadLoading) {
+      setTrayVoiceState("thinking");
+    } else {
+      setTrayVoiceState("listening");
+    }
+  }, [
+    agentAudioMuted,
+    agentMicMuted,
+    isLoading,
+    isPlayingAudio,
+    isThreadLoading,
+    setTrayAudioMuted,
+    setTrayIsPlayingAudio,
+    setTrayMicMuted,
+    setTrayVoiceState,
+    voiceMode,
+  ]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent") return;
+    if (trayMicMuted !== agentMicMuted) setAgentMicMuted(trayMicMuted);
+    if (trayAudioMuted !== agentAudioMuted) {
+      if (trayAudioMuted) stopAllAudio();
+      setAgentAudioMuted(trayAudioMuted);
+    }
+  }, [
+    agentAudioMuted,
+    agentMicMuted,
+    stopAllAudio,
+    trayAudioMuted,
+    trayMicMuted,
+    voiceMode,
+  ]);
 
   const removePin = useCallback(async (messageId: string) => {
     const res = await fetch(`/api/chat/pins?messageId=${encodeURIComponent(messageId)}`, { method: "DELETE" });

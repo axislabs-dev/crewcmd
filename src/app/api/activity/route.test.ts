@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRequireAuth, mockResolveAccessibleWorkspace, mockActivityQuery } = vi.hoisted(() => ({
-  mockRequireAuth: vi.fn(),
+const { mockRequireUserOrRuntimeAuth, mockResolveAccessibleWorkspace, mockActivityQuery } = vi.hoisted(() => ({
+  mockRequireUserOrRuntimeAuth: vi.fn(),
   mockResolveAccessibleWorkspace: vi.fn(),
   mockActivityQuery: vi.fn(),
 }));
@@ -37,7 +37,7 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/lib/require-auth", () => ({
-  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
+  requireUserOrRuntimeAuth: (...args: unknown[]) => mockRequireUserOrRuntimeAuth(...args),
 }));
 
 vi.mock("@/lib/workspace", () => ({
@@ -47,20 +47,20 @@ vi.mock("@/lib/workspace", () => ({
 
 import { GET } from "./route";
 
-function makeRequest(path: string) {
-  return new Request(new URL(path, "http://localhost:3000"));
+function makeRequest(path: string, headers?: Record<string, string>) {
+  return new Request(new URL(path, "http://localhost:3000"), { headers });
 }
 
 describe("GET /api/activity authorization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequireAuth.mockResolvedValue(null);
+    mockRequireUserOrRuntimeAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co_1" });
     mockActivityQuery.mockResolvedValue([{ id: "activity_1" }]);
   });
 
   it("does not query activity rows for unauthenticated callers", async () => {
-    mockRequireAuth.mockResolvedValue(Response.json({ error: "Unauthorized" }, { status: 401 }));
+    mockRequireUserOrRuntimeAuth.mockResolvedValue(Response.json({ error: "Unauthorized" }, { status: 401 }));
 
     const response = await GET(makeRequest("/api/activity?company_id=co_1") as never);
 
@@ -86,5 +86,17 @@ describe("GET /api/activity authorization", () => {
     expect(response.status).toBe(400);
     expect(mockResolveAccessibleWorkspace).toHaveBeenCalled();
     expect(mockActivityQuery).not.toHaveBeenCalled();
+  });
+
+  it("uses explicit user-or-runtime auth before querying activity rows", async () => {
+    const response = await GET(
+      makeRequest("/api/activity?workspaceId=ws-1", {
+        authorization: "Bearer heartbeat-secret",
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRequireUserOrRuntimeAuth).toHaveBeenCalledTimes(1);
+    expect(mockActivityQuery).toHaveBeenCalled();
   });
 });

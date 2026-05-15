@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
-import { requireAuth } from "@/lib/require-auth";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import { getCompanyIdForWorkspace, resolveAccessibleWorkspace } from "@/lib/workspace";
 import { and, desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const authError = await requireAuth(request);
+  const authError = await requireUserOrRuntimeAuth(request);
   if (authError) return authError;
   if (!db) return NextResponse.json([]);
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = await requireAuth(request);
+  const authError = await requireUserOrRuntimeAuth(request);
   if (authError) return authError;
 
   if (!db) {

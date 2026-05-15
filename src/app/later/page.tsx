@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useWorkspace } from "@/components/company-context";
 
 type SavedItemStatus = "in_progress" | "archived" | "completed";
@@ -22,6 +24,7 @@ type LaterItem = {
     createdAt?: string;
     agentId?: string;
     gatewaySessionKey?: string | null;
+    channelId?: string | null;
   } | null;
 };
 
@@ -40,10 +43,30 @@ function compactDate(value?: string | null) {
   }
 }
 
-function preview(item: LaterItem) {
+const previewMarkdownComponents: Components = {
+  a({ children }) {
+    return <span className="font-medium text-[var(--accent)]">{children}</span>;
+  },
+  p({ children }) {
+    return <p className="mb-1 last:mb-0">{children}</p>;
+  },
+  ul({ children }) {
+    return <ul className="mb-1 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>;
+  },
+  ol({ children }) {
+    return <ol className="mb-1 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>;
+  },
+  li({ children }) {
+    return <li className="pl-1">{children}</li>;
+  },
+  code({ children }) {
+    return <code className="rounded bg-[var(--bg-primary)] px-1 py-0.5 text-[12px] text-[var(--text-secondary)]">{children}</code>;
+  },
+};
+
+function previewContent(item: LaterItem) {
   const text = item.source?.content ?? item.title ?? "";
-  const normalized = text.replace(/\s+/g, " ").trim();
-  return normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
+  return text.trim();
 }
 
 function sourceLabel(item: LaterItem) {
@@ -64,8 +87,10 @@ function chatItemUrl(item: LaterItem) {
   const query = new URLSearchParams();
   const agentId = metadataString(item, "agentCallsign") ?? item.source?.agentId ?? metadataString(item, "agentId");
   const sessionKey = metadataString(item, "sessionKey") ?? item.source?.gatewaySessionKey ?? metadataString(item, "gatewaySessionKey");
+  const channelId = metadataString(item, "channelId") ?? item.source?.channelId ?? null;
   if (agentId) query.set("agent", agentId.toLowerCase());
   if (sessionKey) query.set("sessionKey", sessionKey);
+  if (channelId) query.set("channelId", channelId);
   query.set("messageId", item.sourceId);
   return `/chat?${query.toString()}`;
 }
@@ -183,7 +208,11 @@ export default function LaterPage() {
                       <span className="font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{sourceLabel(item)}</span>
                       <span>{compactDate(item.source?.createdAt ?? item.createdAt)}</span>
                     </div>
-                    <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-primary)]">{preview(item)}</p>
+                    <div className="pointer-events-none mt-1 max-h-[4.75rem] overflow-hidden text-[13px] leading-relaxed text-[var(--text-primary)]">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewMarkdownComponents}>
+                        {previewContent(item)}
+                      </ReactMarkdown>
+                    </div>
                     {item.note ? <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">{item.note}</p> : null}
                   </div>
                   <div className="flex shrink-0 items-start gap-2">

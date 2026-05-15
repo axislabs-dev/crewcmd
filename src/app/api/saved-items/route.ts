@@ -98,6 +98,7 @@ export async function GET(request: NextRequest) {
           metadata: chatMessages.metadata,
           agentId: chatSessions.agentId,
           gatewaySessionKey: chatSessions.gatewaySessionKey,
+          channelId: chatSessions.channelId,
         })
           .from(chatMessages)
           .innerJoin(chatSessions, eq(chatMessages.sessionId, chatSessions.id))
@@ -162,6 +163,7 @@ export async function POST(request: NextRequest) {
         workspaceId: chatSessions.workspaceId,
         agentId: chatSessions.agentId,
         gatewaySessionKey: chatSessions.gatewaySessionKey,
+        channelId: chatSessions.channelId,
       })
         .from(chatMessages)
         .innerJoin(chatSessions, eq(chatMessages.sessionId, chatSessions.id))
@@ -185,6 +187,7 @@ export async function POST(request: NextRequest) {
       role: message.role,
       agentId: message.agentId,
       gatewaySessionKey: message.gatewaySessionKey,
+      channelId: message.channelId,
       messageCreatedAt: message.createdAt?.toISOString?.() ?? message.createdAt,
     };
   }

@@ -1457,10 +1457,17 @@ export default function ChatPage() {
         });
       }
       await loadChannels();
+      const dmAgent = invitedAgents[0] ?? null;
+      const sessionAgent = dmAgent ?? selectedAgent;
       setActiveChannelId(createdChannel.id);
-      activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), createdChannel.id);
+      if (dmAgent) setSelectedAgent(dmAgent);
+      activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(sessionAgent), createdChannel.id);
       selectSession(null);
       setMessages([]);
+      setStreamingContent("");
+      streamingContentRef.current = "";
+      setExecutionProgress(null);
+      setExecutionEvents([]);
       setDmUserInvites([]);
       setDmAgentInvites([]);
       setDmSearch("");
@@ -1534,15 +1541,26 @@ export default function ChatPage() {
   }, [activeChannelId, channels, loadChannels, selectSession, selectedAgent]);
 
   const selectChannel = useCallback((channelId: string | null) => {
+    const channel = channels.find((item) => item.id === channelId) ?? null;
+    const dmAgentId = channel?.type === "dm"
+      ? channel.members?.filter((member) => member.memberType === "agent" && member.agentId).map((member) => member.agentId!)[0] ?? null
+      : null;
+    const dmAgent = dmAgentId ? agents.find((agent) => agent.id === dmAgentId) ?? null : null;
+    const sessionAgent = dmAgent ?? selectedAgent;
     setActiveChannelId(channelId);
-    activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), channelId);
+    if (dmAgent) setSelectedAgent(dmAgent);
+    activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(sessionAgent), channelId);
     selectSession(null);
     setMessages([]);
     setPins([]);
     setThreadListOpen(false);
     setActiveThread(null);
     setThreadMessages([]);
-  }, [selectSession, selectedAgent]);
+    setStreamingContent("");
+    streamingContentRef.current = "";
+    setExecutionProgress(null);
+    setExecutionEvents([]);
+  }, [agents, channels, selectSession, selectedAgent]);
 
   const loadPins = useCallback(async () => {
     if (!chatCompanyId && !chatWorkspaceId) {

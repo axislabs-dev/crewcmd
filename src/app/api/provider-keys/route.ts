@@ -3,8 +3,42 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
+import { resolveCurrentUser } from "@/lib/resolve-user";
 
 export const dynamic = "force-dynamic";
+
+async function requireCompanyAdmin(request: NextRequest, companyId: string) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
+  const user = await resolveCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const [membership] = await withRetry(() =>
+    db!
+      .select({ role: schema.companyMembers.role })
+      .from(schema.companyMembers)
+      .where(
+        and(
+          eq(schema.companyMembers.userId, user.id),
+          eq(schema.companyMembers.companyId, companyId)
+        )
+      )
+      .limit(1)
+  );
+
+  if (membership?.role !== "owner" && membership?.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return null;
+}
+
+function maskedKey(apiKey: string) {
+  return apiKey.length > 4 ? "****" + apiKey.slice(-4) : "****";
+}
 
 // GET: List provider keys for a company (returns masked keys)
 export async function GET(request: NextRequest) {
@@ -16,6 +50,9 @@ export async function GET(request: NextRequest) {
   if (!db) {
     return NextResponse.json({ keys: [] });
   }
+
+  const authError = await requireCompanyAdmin(request, companyId);
+  if (authError) return authError;
 
   try {
     const keys = await withRetry(() =>
@@ -30,7 +67,7 @@ export async function GET(request: NextRequest) {
       id: k.id,
       provider: k.provider,
       label: k.label,
-      maskedKey: k.apiKey.length > 4 ? "****" + k.apiKey.slice(-4) : "****",
+      maskedKey: maskedKey(k.apiKey),
       createdAt: k.createdAt.toISOString(),
       updatedAt: k.updatedAt.toISOString(),
     }));
@@ -44,9 +81,6 @@ export async function GET(request: NextRequest) {
 
 // POST: Create or update a provider key for a company
 export async function POST(request: NextRequest) {
-  const authError = await requireAuth(request);
-  if (authError) return authError;
-
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }
@@ -61,6 +95,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const authError = await requireCompanyAdmin(request, companyId);
+    if (authError) return authError;
 
     const validProviders = ["anthropic", "openai", "google", "openrouter"];
     if (!validProviders.includes(provider)) {
@@ -100,7 +137,7 @@ export async function POST(request: NextRequest) {
         id: updated.id,
         provider: updated.provider,
         label: updated.label,
-        maskedKey: updated.apiKey.length > 4 ? "****" + updated.apiKey.slice(-4) : "****",
+        maskedKey: maskedKey(updated.apiKey),
       });
     }
 
@@ -121,7 +158,7 @@ export async function POST(request: NextRequest) {
         id: created.id,
         provider: created.provider,
         label: created.label,
-        maskedKey: created.apiKey.length > 4 ? "****" + created.apiKey.slice(-4) : "****",
+        maskedKey: maskedKey(created.apiKey),
       },
       { status: 201 }
     );
@@ -133,9 +170,6 @@ export async function POST(request: NextRequest) {
 
 // DELETE: Remove a provider key
 export async function DELETE(request: NextRequest) {
-  const authError = await requireAuth(request);
-  if (authError) return authError;
-
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }
@@ -146,6 +180,21 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const [key] = await withRetry(() =>
+      db!
+        .select({ companyId: schema.companyProviderKeys.companyId })
+        .from(schema.companyProviderKeys)
+        .where(eq(schema.companyProviderKeys.id, keyId))
+        .limit(1)
+    );
+
+    if (!key) {
+      return NextResponse.json({ error: "Provider key not found" }, { status: 404 });
+    }
+
+    const authError = await requireCompanyAdmin(request, key.companyId);
+    if (authError) return authError;
+
     await withRetry(() =>
       db!
         .delete(schema.companyProviderKeys)

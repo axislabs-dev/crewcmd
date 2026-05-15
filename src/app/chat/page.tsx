@@ -2132,6 +2132,29 @@ export default function ChatPage() {
     window.requestAnimationFrame(() => scrollThreadToBottom());
   }, [activeThread, threadMessages.length, threadStreamingContent, isThreadLoading, scrollThreadToBottom]);
 
+  useEffect(() => {
+    const handleTrayChannelMessage = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        channelId?: string;
+        content?: string;
+        createdAt?: string;
+        messageId?: string;
+      }>).detail;
+      if (!detail?.channelId || detail.channelId !== activeChannelId || !detail.content) return;
+      const messageId = detail.messageId ?? createClientId();
+      const nextMessage: Message = {
+        id: messageId,
+        role: "user",
+        content: detail.content,
+        createdAt: detail.createdAt ?? new Date().toISOString(),
+      };
+      setMessages((prev) => prev.some((message) => message.id === messageId) ? prev : [...prev, nextMessage]);
+    };
+
+    window.addEventListener("crewcmd:tray-channel-message", handleTrayChannelMessage);
+    return () => window.removeEventListener("crewcmd:tray-channel-message", handleTrayChannelMessage);
+  }, [activeChannelId]);
+
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
     const unsub = useChatStore.subscribe((state) => {
@@ -4667,7 +4690,7 @@ export default function ChatPage() {
       ? `Message ${activeChannel.type === "dm" ? activeChannel.name ?? "DM" : `#${activeChannel.name ?? "channel"}`}...`
       : `Message ${agentCallsign}...`;
   const activeTrayTargetType = activeThread ? "chat_thread" : "chat_session";
-  const activeTrayTargetKey = activeThread?.sessionKey ?? activeSessionKey;
+  const activeTrayTargetKey = activeThread?.sessionKey ?? (activeChannelId ? `channel:${activeChannelId}` : activeSessionKey);
   const activeConversationTrayPin = trayPins.find((pin) => pin.targetType === activeTrayTargetType && pin.targetKey === activeTrayTargetKey);
   const pinActiveConversationToTray = useCallback(async () => {
     if (activeConversationTrayPin) {
@@ -4679,12 +4702,16 @@ export default function ChatPage() {
       targetKey: activeTrayTargetKey,
       title: activeThread ? `${activeConversationLabel} thread` : activeConversationLabel,
       metadata: {
-        agentId: selectedAgent?.callsign ?? null,
+        agentId: activeChannelId ? null : selectedAgent?.callsign ?? null,
+        storageAgentId: activeChannelId ? selectedAgent?.callsign ?? agentCallsign : null,
+        channelId: activeChannelId,
+        channelName: activeChannel?.name ?? null,
+        channelType: activeChannel?.type ?? null,
         gatewaySessionKey: activeThread ? null : activeSessionKey,
         threadSessionKey: activeThread?.sessionKey ?? null,
       },
     });
-  }, [activeConversationLabel, activeConversationTrayPin, activeSessionKey, activeThread, activeTrayTargetKey, activeTrayTargetType, pinTrayTarget, removeTrayPin, selectedAgent?.callsign]);
+  }, [activeChannel?.name, activeChannel?.type, activeChannelId, activeConversationLabel, activeConversationTrayPin, activeSessionKey, activeThread, activeTrayTargetKey, activeTrayTargetType, agentCallsign, pinTrayTarget, removeTrayPin, selectedAgent?.callsign]);
 
   return (
     <div className="fixed inset-x-0 bottom-[var(--mobile-app-bar-height)] top-[var(--mobile-safe-top)] z-0 flex min-h-0 flex-col overflow-hidden bg-[var(--bg-primary)] lg:relative lg:inset-auto lg:bottom-auto lg:top-auto lg:h-dvh">

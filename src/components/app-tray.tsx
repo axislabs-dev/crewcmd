@@ -193,6 +193,11 @@ function miniProgressContent(parsed: unknown) {
 function pinHref(pin: TrayPin) {
   const metadata = pin.metadata ?? {};
   if (pin.targetType === "task") return `/tasks?taskId=${encodeURIComponent(pin.targetId ?? pin.targetKey)}`;
+  const channelId = typeof metadata.channelId === "string" ? metadata.channelId : null;
+  if (channelId) {
+    const params = new URLSearchParams({ channelId, pane: "chat" });
+    return `/chat?${params.toString()}`;
+  }
   if (pin.targetType === "chat_thread") {
     const agent = typeof metadata.agentId === "string" ? metadata.agentId : null;
     const sessionKey = typeof metadata.threadSessionKey === "string" ? metadata.threadSessionKey : pin.targetKey;
@@ -902,10 +907,42 @@ function ManualPins() {
     setMiniSending(true);
     try {
       const metadata = pin.metadata ?? {};
+      const channelId = typeof metadata.channelId === "string" && metadata.channelId ? metadata.channelId : null;
       const agent = typeof metadata.agentId === "string" && metadata.agentId ? metadata.agentId : undefined;
+      const storageAgent = typeof metadata.storageAgentId === "string" && metadata.storageAgentId
+        ? metadata.storageAgentId
+        : agent;
       const sessionKey = pin.targetType === "chat_thread"
         ? (typeof metadata.threadSessionKey === "string" && metadata.threadSessionKey ? metadata.threadSessionKey : pin.targetKey)
         : (typeof metadata.gatewaySessionKey === "string" && metadata.gatewaySessionKey ? metadata.gatewaySessionKey : pin.targetKey);
+      if (channelId && !agent) {
+        const response = await fetch("/api/chat/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentId: storageAgent ?? "channel",
+            companyId: workspace?.companyId,
+            workspaceId: workspace?.id,
+            channelId,
+            gatewaySessionKey: sessionKey,
+            role: "user",
+            content: trimmed,
+            metadata: { source: "tray", pageContext },
+          }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json().catch(() => null);
+        window.dispatchEvent(new CustomEvent("crewcmd:tray-channel-message", {
+          detail: {
+            channelId,
+            content: trimmed,
+            createdAt: typeof data?.message?.createdAt === "string" ? data.message.createdAt : new Date().toISOString(),
+            messageId: typeof data?.message?.id === "string" ? data.message.id : createMiniChatId(),
+          },
+        }));
+        setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "tool", content: `Sent to ${pin.title}` }]);
+        return;
+      }
       const pageContextPrompt = formatPageContextForPrompt(pageContext);
       const recentMessages = miniMessages
         .slice(-8)
@@ -1073,8 +1110,8 @@ function ManualPins() {
       ) : null}
 
       {activeChatPin ? (
-        <div className="fixed inset-0 z-[76] flex items-end bg-black/30 lg:items-center lg:justify-end" onClick={() => setActiveChatPin(null)}>
-          <div className="w-full rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 shadow-2xl lg:mr-6 lg:max-w-md lg:rounded-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--mobile-app-bar-height)+4.5rem)] z-[76] flex justify-end lg:inset-auto lg:bottom-24 lg:right-4">
+          <div className="pointer-events-auto w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/92 p-4 shadow-2xl backdrop-blur-md lg:w-[26rem]">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">{pinShortLabel(activeChatPin)}</div>
@@ -1145,7 +1182,7 @@ export function AppTray() {
   const pathname = usePathname();
   if (pathname === "/" || pathname === "/access-denied" || pathname.startsWith("/invite/")) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--mobile-app-bar-height)+0.5rem)] z-[55] flex flex-col items-stretch gap-2 lg:bottom-4 lg:left-auto lg:right-4 lg:w-[min(34rem,calc(100vw-7rem))]">
+    <div className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--mobile-app-bar-height)+0.5rem)] z-[55] flex flex-col items-stretch gap-2 lg:bottom-auto lg:left-auto lg:right-4 lg:top-4 lg:w-[min(34rem,calc(100vw-7rem))]">
       <div className="pointer-events-auto flex flex-col gap-2 lg:items-end">
         <ActiveAgentTrayItem />
         <ManualPins />

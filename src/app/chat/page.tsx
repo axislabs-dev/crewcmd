@@ -1184,6 +1184,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pendingMessageScrollRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
   const threadScrollContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
@@ -2221,6 +2222,17 @@ export default function ChatPage() {
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
+
+  useEffect(() => {
+    if (voiceMode !== "agent" || agentOverlayMode !== "transcript" || activeThread) return;
+    wasAtBottomRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        composerDockRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+      });
+    });
+  }, [activeThread, agentOverlayMode, voiceMode]);
 
   // Media Session API for background audio
   useEffect(() => {
@@ -4466,7 +4478,7 @@ export default function ChatPage() {
       : `Message ${agentCallsign}...`;
 
   return (
-    <div className="relative flex h-[calc(100dvh_-_var(--mobile-app-bar-height)_-_var(--mobile-safe-top))] overflow-hidden lg:h-dvh flex-col">
+    <div className="relative flex h-[calc(100dvh_-_var(--mobile-app-bar-height)_-_var(--mobile-safe-top))] min-h-0 overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
@@ -5305,7 +5317,7 @@ export default function ChatPage() {
         </div>
       )}
       {/* Messages area */}
-      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto px-4 py-4 lg:px-6" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-scroll px-4 py-4 lg:px-6" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", overscrollBehaviorY: "contain" }}>
         <div className="mx-auto max-w-3xl space-y-4">
           {transcriptItems.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -5550,7 +5562,7 @@ export default function ChatPage() {
       />
 
       {/* Input area — Claude-style layout */}
-      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
+      <div ref={composerDockRef} className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           <ChatComposer
             value={input}
@@ -5598,7 +5610,7 @@ export default function ChatPage() {
               if (event.dataTransfer.files.length) addFiles(event.dataTransfer.files);
             }}
             agentPanel={voiceMode === "agent" && !activeThread && agentOverlayMode === "transcript" ? (
-              <div className="relative rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
+              <div className="relative max-h-[min(10.75rem,28dvh)] overflow-hidden rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl sm:max-h-none">
                 <VoiceAgent
                   onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
                   isPlayingAudio={isPlayingAudio}

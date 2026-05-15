@@ -207,6 +207,26 @@ function pinHref(pin: TrayPin) {
   return `/chat?${params.toString()}`;
 }
 
+const TRAY_TASK_STATUSES = ["backlog", "inbox", "queued", "in_progress", "review", "done"] as const;
+
+function pinMetaString(pin: TrayPin, key: string) {
+  const value = pin.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function pinMetaNumber(pin: TrayPin, key: string) {
+  const value = pin.metadata?.[key];
+  return typeof value === "number" ? value : null;
+}
+
+function pinShortLabel(pin: TrayPin) {
+  if (pin.targetType === "task") {
+    const shortId = pinMetaNumber(pin, "shortId");
+    return shortId ? `TSK-${String(shortId).padStart(4, "0")}` : "TASK";
+  }
+  return pinMetaString(pin, "agentId")?.slice(0, 2).toUpperCase() ?? "CH";
+}
+
 export function AgentVoiceSessionProvider({ children }: { children: React.ReactNode }) {
   const { workspace } = useWorkspace();
   const [activeSession, setActiveSessionState] = useState<ActiveAgentVoiceSession | null>(null);
@@ -839,50 +859,114 @@ function ControlIcon({ icon }: { icon: "mic" | "mic-off" | "volume" | "volume-of
 }
 
 function ManualPins() {
-  const { pins, removePin } = useAgentVoiceSession();
-  const [expanded, setExpanded] = useState(false);
+  const { pins, removePin, refreshPins } = useAgentVoiceSession();
+  const [activeTaskPin, setActiveTaskPin] = useState<TrayPin | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   if (pins.length === 0) return null;
-  if (!expanded) {
-    return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="ml-auto flex h-12 min-w-12 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 text-[var(--text-primary)] shadow-2xl transition hover:scale-[1.02]"
-        aria-label={`Open ${pins.length} tray pin${pins.length === 1 ? "" : "s"}`}
-        title={`${pins.length} pinned item${pins.length === 1 ? "" : "s"}`}
-      >
-        <span className="flex -space-x-2">
-          {pins.slice(0, 3).map((pin) => (
-            <span
-              key={pin.id}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bg-elevated)] bg-[var(--bg-surface-hover)] text-[10px] font-bold uppercase text-[var(--text-secondary)]"
-            >
-              {pin.targetType === "task" ? "T" : "C"}
-            </span>
-          ))}
-        </span>
-        {pins.length > 3 ? <span className="ml-1 text-[10px] font-semibold text-[var(--text-tertiary)]">+{pins.length - 3}</span> : null}
-      </button>
-    );
-  }
+
+  const updateTaskStatus = async (pin: TrayPin, status: string) => {
+    const taskId = pin.targetId ?? pin.targetKey;
+    if (!taskId || updatingStatus) return;
+    setUpdatingStatus(true);
+    try {
+      const taskResponse = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!taskResponse.ok) return;
+      const metadata = { ...(pin.metadata ?? {}), status };
+      await fetch("/api/tray/pins", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: pin.id, metadata }),
+      });
+      setActiveTaskPin({ ...pin, metadata });
+      await refreshPins();
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const visiblePins = pins.slice(0, 5);
+
   return (
-    <div className="flex min-w-0 gap-2 overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-2 shadow-lg">
-      {pins.map((pin) => (
-        <div key={pin.id} className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--bg-surface)] px-2 py-1">
-          <Link href={pinHref(pin)} onClick={() => setExpanded(false)} className="max-w-40 truncate text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-            {pin.targetType === "task" ? "Task" : "Chat"} / {pin.title}
-          </Link>
-          <button type="button" onClick={() => void removePin(pin.id)} className="rounded px-1 text-[11px] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label={`Remove ${pin.title} from tray`}>
-            x
-          </button>
+    <>
+      <div className="ml-auto flex max-w-full gap-1.5 overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-2 shadow-lg">
+        {visiblePins.map((pin) => {
+          const content = (
+            <>
+              <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5 font-mono text-[8px] text-[var(--text-tertiary)]">
+                {pinShortLabel(pin)}
+              </span>
+              <span className="max-w-32 truncate text-xs font-medium text-[var(--text-secondary)]">{pin.title}</span>
+            </>
+          );
+          return (
+            <div key={pin.id} className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--bg-surface)] px-2 py-1">
+              {pin.targetType === "task" ? (
+                <button type="button" onClick={() => setActiveTaskPin(pin)} className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]" title={pin.title}>
+                  {content}
+                </button>
+              ) : (
+                <Link href={pinHref(pin)} className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]" title={pin.title}>
+                  {content}
+                </Link>
+              )}
+              <button type="button" onClick={() => void removePin(pin.id)} className="flex h-5 w-5 items-center justify-center rounded text-[11px] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label={`Remove ${pin.title} from tray`}>
+                x
+              </button>
+            </div>
+          );
+        })}
+        {pins.length > visiblePins.length ? (
+          <div className="flex shrink-0 items-center rounded-md bg-[var(--bg-surface)] px-2 py-1 text-xs font-semibold text-[var(--text-tertiary)]">
+            +{pins.length - visiblePins.length}
+          </div>
+        ) : null}
+      </div>
+
+      {activeTaskPin ? (
+        <div className="fixed inset-0 z-[76] flex items-end bg-black/30 lg:items-center lg:justify-end" onClick={() => setActiveTaskPin(null)}>
+          <div className="w-full rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 shadow-2xl lg:mr-6 lg:max-w-md lg:rounded-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">{pinShortLabel(activeTaskPin)}</div>
+                <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">{activeTaskPin.title}</h3>
+                <p className="mt-1 text-xs text-[var(--text-tertiary)]">{pinMetaString(activeTaskPin, "projectName") ?? "No project"}</p>
+              </div>
+              <button type="button" onClick={() => setActiveTaskPin(null)} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label="Close task pin">
+                x
+              </button>
+            </div>
+            <p className="max-h-28 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-3 text-xs leading-relaxed text-[var(--text-secondary)]">
+              {pinMetaString(activeTaskPin, "description") ?? "No description."}
+            </p>
+            <label className="mt-3 block text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+              Status
+              <select
+                value={pinMetaString(activeTaskPin, "status") ?? "inbox"}
+                disabled={updatingStatus}
+                onChange={(event) => void updateTaskStatus(activeTaskPin, event.target.value)}
+                className="mt-1 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
+              >
+                {TRAY_TASK_STATUSES.map((status) => (
+                  <option key={status} value={status}>{status.replace("_", " ")}</option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-3 flex gap-2">
+              <Link href={pinHref(activeTaskPin)} className="flex-1 rounded-lg bg-[var(--accent)] px-3 py-2 text-center text-xs font-semibold text-white">
+                Open task
+              </Link>
+              <button type="button" onClick={() => void removePin(activeTaskPin.id).then(() => setActiveTaskPin(null))} className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                Unpin
+              </button>
+            </div>
+          </div>
         </div>
-      ))}
-      <button type="button" onClick={() => setExpanded(false)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label="Collapse tray pins" title="Collapse">
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+      ) : null}
+    </>
   );
 }
 

@@ -339,7 +339,7 @@ export function Sidebar() {
     <>
       {moreOpen && <button type="button" className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden" onClick={() => setMoreOpen(false)} aria-label="Close more menu" />}
 
-      <div className={`fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-[0_24px_80px_rgba(15,23,42,0.24)] transition-all duration-200 lg:hidden ${moreOpen ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}>
+      <div className={`fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] transition-all duration-200 lg:hidden ${moreOpen ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}>
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <BrandLogo size="sm" />
@@ -369,7 +369,7 @@ export function Sidebar() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden" aria-label="Mobile navigation">
-        <div className="flex w-full max-w-md items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 p-1.5 shadow-[0_18px_54px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+        <div className="flex w-full max-w-md items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-1.5">
           {mobilePrimaryItems.map((item) => <MobileNavButton key={item.label} item={item} />)}
           <button
             type="button"
@@ -388,7 +388,7 @@ export function Sidebar() {
         </div>
       </nav>
 
-      <aside className="sticky top-0 z-30 hidden h-screen w-20 min-w-20 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
+      <aside className="sticky top-0 z-30 hidden h-screen w-20 min-w-20 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-2 lg:flex">
         <div className="flex justify-center rounded-2xl px-1 py-3">
           <BrandLogo size="md" />
         </div>

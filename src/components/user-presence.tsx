@@ -330,7 +330,7 @@ export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
   const [customDuration, setCustomDuration] = useState<number | null>(FOCUS_DEFAULT_MS);
 
   return (
-    <div className="max-h-[min(75dvh,30rem)] w-full overflow-y-auto rounded-2xl border border-[var(--border-subtle)] bg-white p-3 shadow-2xl shadow-black/25 dark:bg-[#171b20] sm:w-72">
+    <div className="max-h-[min(75dvh,30rem)] w-full overflow-y-auto rounded-2xl border border-[var(--border-subtle)] bg-white p-3 shadow-2xl shadow-black/25 dark:bg-[#171b20] sm:max-h-none sm:w-72 sm:overflow-visible">
       <div className="flex items-center justify-between gap-3 px-1 pb-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[var(--text-primary)]">Set a status</p>

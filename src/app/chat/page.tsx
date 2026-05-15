@@ -2171,7 +2171,7 @@ export default function ChatPage() {
   // Auto-scroll to bottom when new content arrives (if user was already at bottom)
   useEffect(() => {
     if (wasAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      messagesEndRef.current?.scrollIntoView({ behavior: streamingContent ? "auto" : "smooth" });
     }
   }, [messages, streamingContent]);
 

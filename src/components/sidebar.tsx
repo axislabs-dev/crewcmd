@@ -168,7 +168,7 @@ function BrandName() {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const { data: session } = useSession();
   const { workspace } = useWorkspace();
   const { theme, setTheme } = useTheme();
@@ -202,7 +202,7 @@ export function Sidebar() {
           title={compact ? item.label : undefined}
           aria-label={item.label}
           className={`group relative flex rounded-xl py-2.5 font-medium transition-all duration-200 ${
-            compact ? "min-h-[4.25rem] flex-col items-center justify-center gap-1 px-1.5 text-center text-[10px] leading-tight" : "items-center gap-3 px-3.5 text-[13px]"
+            compact ? "min-h-[4.25rem] flex-col items-center justify-center gap-1 px-0.5 text-center text-[10px] leading-tight" : "items-center gap-3 px-3.5 text-[13px]"
           } ${
             active
               ? "font-semibold text-[var(--text-primary)]"
@@ -213,7 +213,7 @@ export function Sidebar() {
           <span className={`transition-colors ${active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}>
             {item.icon}
           </span>
-          <span className={compact ? "max-w-full truncate" : undefined}>{item.label}</span>
+          <span className={compact ? "max-w-[4.25rem] whitespace-normal break-words leading-[1.15]" : undefined}>{item.label}</span>
         </Link>
       </li>
     );
@@ -301,45 +301,64 @@ export function Sidebar() {
     );
   };
 
+  const mobilePrimaryItems = [
+    { href: "/chat", label: "Chat", icon: navSections[0].items[0].icon },
+    { href: "/chat", label: "DMs", icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3.75h4.5m-7.5 7.5 3.2-1.28A9.85 9.85 0 0 0 12 19.5c4.97 0 9-3.358 9-7.5s-4.03-7.5-9-7.5-9 3.358-9 7.5c0 1.74.712 3.342 1.905 4.615L4.5 19.5Z" />
+      </svg>
+    ) },
+    { href: "/inbox", label: "Activity", icon: navSections[0].items[1].icon },
+  ];
+
+  const MobileNavButton = ({ item }: { item: { href: string; label: string; icon: React.ReactNode } }) => {
+    const active =
+      item.label === "Chat"
+        ? pathname.startsWith("/chat")
+        : item.label === "Activity"
+          ? pathname.startsWith("/inbox")
+          : false;
+    return (
+      <Link
+        href={item.href}
+        onClick={() => setMoreOpen(false)}
+        aria-label={item.label}
+        className={`flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-full text-[11px] font-semibold transition ${
+          active
+            ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow-sm"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        }`}
+      >
+        <span className={active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>{item.icon}</span>
+        <span>{item.label}</span>
+      </Link>
+    );
+  };
+
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 z-50 overflow-hidden border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--bg-primary)_12%)] shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:hidden">
-        <div className="relative flex items-center justify-between px-4 pb-3 pt-[var(--mobile-safe-top)]">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo size="sm" />
-            <BrandName />
-          </div>
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Toggle navigation">
-            {mobileOpen ? (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </div>
+      {moreOpen && <button type="button" className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden" onClick={() => setMoreOpen(false)} aria-label="Close more menu" />}
 
-      {mobileOpen && <div className="fixed inset-0 z-40 bg-transparent lg:hidden" onClick={() => setMobileOpen(false)} />}
-
-      <div className={`fixed top-0 left-0 z-50 flex h-[100dvh] w-72 flex-col overflow-hidden border-r border-[var(--border-medium)] bg-[var(--bg-secondary)] pt-[var(--mobile-safe-top)] shadow-[0_18px_44px_rgba(15,23,42,0.18)] transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="relative flex items-center justify-between border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface-strong)_84%,var(--bg-primary)_16%)] px-5 py-4 backdrop-blur-xl">
-          <div className="flex items-center gap-2.5">
+      <div className={`fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-[0_24px_80px_rgba(15,23,42,0.24)] transition-all duration-200 lg:hidden ${moreOpen ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}>
+        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
             <BrandLogo size="sm" />
-            <BrandName />
+            <div className="min-w-0">
+              <BrandName />
+              <div className="truncate text-[11px] text-[var(--text-tertiary)]">{workspace?.type === "personal" ? "Private workspace" : "Workspace"}</div>
+            </div>
           </div>
-          <button onClick={() => setMobileOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Close navigation">
+          <button onClick={() => setMoreOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Close more menu">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <CompanySwitcher />
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <NavList onClick={() => setMobileOpen(false)} />
+        <nav className="max-h-[calc(min(70dvh,34rem)-4rem)] overflow-y-auto px-3 py-4">
+          <div className="mb-3">
+            <CompanySwitcher />
+          </div>
+          <NavList onClick={() => setMoreOpen(false)} />
         </nav>
         <div className="shrink-0 border-t border-[var(--border-subtle)] px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <UserInfo />
@@ -348,6 +367,26 @@ export function Sidebar() {
           <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1"}</span>
         </div>
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden" aria-label="Mobile navigation">
+        <div className="flex w-full max-w-md items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 p-1.5 shadow-[0_18px_54px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+          {mobilePrimaryItems.map((item) => <MobileNavButton key={item.label} item={item} />)}
+          <button
+            type="button"
+            onClick={() => setMoreOpen((open) => !open)}
+            className={`flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-full text-[11px] font-semibold transition ${
+              moreOpen ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+            aria-label="More"
+            aria-expanded={moreOpen}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+            </svg>
+            <span>More</span>
+          </button>
+        </div>
+      </nav>
 
       <aside className="sticky top-0 z-30 hidden h-screen w-20 min-w-20 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
         <div className="flex justify-center rounded-2xl px-1 py-3">

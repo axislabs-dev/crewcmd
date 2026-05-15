@@ -2,7 +2,7 @@
 
 Status: draft implementation contract
 Scope: CrewCmd chat/channel information architecture, schema migration order, and privacy invariants
-Related: `/tenancy/governance`, `docs/plans/channel-scope-schema-migration-audit.md`, `docs/specs/chat-hierarchy-threading.md`, `docs/architecture/runtime-agent-access-v1.md`
+Related: `/tenancy/governance`, `docs/plans/channel-scope-schema-migration-audit.md`, `docs/specs/chat-hierarchy-threading.md`, `docs/architecture/runtime-agent-access-v1.md`, `docs/architecture/runtime-contract-definitions.md`
 
 ## Product thesis
 

@@ -1,10 +1,25 @@
 # CrewCmd API Reference
 
-All endpoints require authentication (session cookie or `Authorization: Bearer <token>`) unless noted otherwise.
+Most endpoints require a signed-in CrewCMD session cookie unless noted otherwise.
+`Authorization: Bearer <token>` is reserved for runtime-scoped access on routes
+that explicitly support it; it is not a general API key for every endpoint.
 
 Base URL: `http://localhost:3000/api` (or your deployment URL)
 
 ---
+
+## Authentication
+
+- Session auth: normal dashboard and integration calls use the NextAuth session
+  cookie for the signed-in user.
+- Runtime bearer auth: selected workspace-aware runtime routes may accept
+  `Authorization: Bearer <HEARTBEAT_SECRET>` when the request also identifies
+  the runtime with `X-CrewCMD-Runtime-Id: <runtimeId>`.
+- Runtime bearer calls must include an explicit `workspaceId` or `companyId`
+  in the query string or request body when the route is workspace-scoped.
+  The runtime can only access the workspace that belongs to that runtime.
+- Public auth exceptions are documented on the endpoint. `GET /api/health` is
+  public.
 
 ## Health
 
@@ -463,7 +478,7 @@ Validate an invitation token.
 
 ### `GET /api/auth/status`
 
-Get current authentication status.
+Get current authentication status for the session cookie.
 
 ### `POST /api/auth/signup`
 
@@ -476,6 +491,9 @@ NextAuth.js endpoints (sign in, sign out, session, providers).
 ---
 
 ## Runtimes & OpenClaw Integration
+
+Runtime management endpoints are session-authenticated. Runtime bearer access
+only applies to routes that explicitly opt in to heartbeat bearer handling.
 
 ### `GET /api/runtimes`
 
@@ -560,6 +578,19 @@ Sync automations with runtime.
 ---
 
 ## Heartbeats
+
+Heartbeat/runtime bearer clients must send both the shared heartbeat secret and
+the runtime id header:
+
+```bash
+curl \
+  -H "Authorization: Bearer $HEARTBEAT_SECRET" \
+  -H "X-CrewCMD-Runtime-Id: $RUNTIME_ID" \
+  "http://localhost:3000/api/tasks?workspaceId=$WORKSPACE_ID"
+```
+
+Use `workspaceId` or `companyId` on workspace-scoped runtime calls. Do not use
+the heartbeat secret as a replacement for a user session on generic endpoints.
 
 ### `GET /api/heartbeat-schedules`
 

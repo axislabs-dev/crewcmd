@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export type UserPresenceStatus = "active" | "focus" | "meeting" | "away" | "sleep" | "offline";
+export type UserPresenceStatus = "active" | "focus" | "meeting" | "away" | "sick" | "sleep" | "offline";
 type ManualPresenceStatus = Exclude<UserPresenceStatus, "offline">;
 
 interface StatusOption {
@@ -38,6 +38,7 @@ const statusOptions: StatusOption[] = [
   { status: "focus", label: "Focus", emoji: "🎧", expiresInMs: FOCUS_DEFAULT_MS },
   { status: "meeting", label: "In a meeting", emoji: "📅", expiresInMs: 60 * 60 * 1000 },
   { status: "away", label: "Away", emoji: "☕", expiresInMs: 30 * 60 * 1000 },
+  { status: "sick", label: "Sick day", emoji: "🤒", expiresInMs: 8 * 60 * 60 * 1000 },
   { status: "sleep", label: "Sleep", emoji: "🌙", expiresInMs: null },
 ];
 
@@ -72,6 +73,12 @@ const presenceMeta: Record<UserPresenceStatus, { label: string; detail: string; 
     detail: "Calendar or meeting time",
     dotClass: "bg-cyan-300 ring-cyan-300/25",
     badgeClass: "border-cyan-500/25 bg-cyan-500/10 text-cyan-200",
+  },
+  sick: {
+    label: "Sick day",
+    detail: "Out sick",
+    dotClass: "bg-rose-300 ring-rose-300/25",
+    badgeClass: "border-rose-500/25 bg-rose-500/10 text-rose-200",
   },
   sleep: {
     label: "Sleep",
@@ -268,6 +275,18 @@ export function useUserPresenceStatus() {
 
 export function UserPresenceDot({ className = "" }: { className?: string }) {
   const presence = useUserPresenceStatus();
+  if (presence.emoji) {
+    return (
+      <span
+        title={presence.text}
+        aria-label={`Presence: ${presence.text}`}
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] leading-none ring-2 ring-[var(--bg-elevated)] dark:bg-[#171b20] ${className}`}
+      >
+        {presence.emoji}
+      </span>
+    );
+  }
+
   return (
     <span
       title={presence.text}
@@ -295,8 +314,12 @@ export function UserPresenceLine({ className = "" }: { className?: string }) {
   const presence = useUserPresenceStatus();
   return (
     <span className={`flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] ${className}`} title={presence.detail}>
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${presence.dotClass}`} />
-      <span className="truncate">{presence.emoji ? `${presence.emoji} ` : null}{presence.text}</span>
+      {presence.emoji ? (
+        <span className="shrink-0 text-[11px] leading-none">{presence.emoji}</span>
+      ) : (
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${presence.dotClass}`} />
+      )}
+      <span className="truncate">{presence.text}</span>
     </span>
   );
 }

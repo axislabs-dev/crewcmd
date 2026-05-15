@@ -30,6 +30,7 @@ const AWAY_AFTER_MS = 5 * 60 * 1000;
 const SLEEP_AFTER_MS = 30 * 60 * 1000;
 
 const STORAGE_KEY = "crewcmd.user-presence";
+const PRESENCE_CHANGE_EVENT = "crewcmd:user-presence-change";
 const FOCUS_DEFAULT_MS = 60 * 60 * 1000;
 
 const statusOptions: StatusOption[] = [
@@ -113,9 +114,11 @@ function readManualPresence(): ManualPresence | null {
 function writeManualPresence(presence: ManualPresence | null) {
   if (!presence) {
     window.localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event(PRESENCE_CHANGE_EVENT));
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(presence));
+  window.dispatchEvent(new Event(PRESENCE_CHANGE_EVENT));
 }
 
 function formatDuration(ms: number | null) {
@@ -189,11 +192,16 @@ export function useUserPresenceStatus() {
   useEffect(() => {
     setManualPresenceState(readManualPresence());
 
+    const onPresenceChange = () => setManualPresenceState(readManualPresence());
     const onStorage = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY) setManualPresenceState(readManualPresence());
     };
+    window.addEventListener(PRESENCE_CHANGE_EVENT, onPresenceChange);
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(PRESENCE_CHANGE_EVENT, onPresenceChange);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -384,4 +392,44 @@ export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
       </form>
     </div>
   );
+}
+
+export function UserPresenceSync() {
+  const presence = useUserPresenceStatus();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function pushPresence() {
+      const manual = presence.isManual ? presence.manualPresence : null;
+      const status = manual?.status ?? presence.automaticStatus;
+
+      try {
+        await fetch("/api/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status,
+            customText: manual?.text ?? null,
+            emoji: manual?.emoji ?? null,
+            manualExpiresAt: manual?.expiresAt ? new Date(manual.expiresAt).toISOString() : null,
+          }),
+        });
+      } catch {
+        // Presence is opportunistic; the next heartbeat will retry.
+      }
+    }
+
+    void pushPresence();
+    const interval = window.setInterval(() => {
+      if (!cancelled) void pushPresence();
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [presence.automaticStatus, presence.isManual, presence.manualPresence]);
+
+  return null;
 }

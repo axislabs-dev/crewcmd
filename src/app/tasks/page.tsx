@@ -90,6 +90,16 @@ export default function TasksPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || tasks.length === 0) return;
+    const taskId = new URLSearchParams(window.location.search).get("taskId");
+    if (!taskId) return;
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    setSelectedTask(task);
+    setViewMode("table");
+  }, [tasks]);
+
   const counts: Record<TaskStatus, number> = {
     backlog: 0,
     inbox: 0,

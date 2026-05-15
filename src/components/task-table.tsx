@@ -74,7 +74,7 @@ function PinIcon() {
 }
 
 export function TaskTable({ tasks, agents, projects = [], agentsLoading = false, agentsError = null, onTaskUpdate, onTaskDelete, onTaskClick }: TaskTableProps) {
-  const { pinTarget } = useAgentVoiceSession();
+  const { pinTarget, pins, removePin } = useAgentVoiceSession();
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -94,6 +94,11 @@ export function TaskTable({ tasks, agents, projects = [], agentsLoading = false,
   const agentMap = useMemo(() => buildAgentLookup(agents), [agents]);
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const pinTaskToTray = useCallback((task: Task) => {
+    const existingPin = pins.find((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id));
+    if (existingPin) {
+      void removePin(existingPin.id);
+      return;
+    }
     const project = task.projectId ? projectMap.get(task.projectId) : null;
     void pinTarget({
       targetType: "task",
@@ -108,7 +113,7 @@ export function TaskTable({ tasks, agents, projects = [], agentsLoading = false,
         projectName: project?.name,
       },
     });
-  }, [pinTarget, projectMap]);
+  }, [pinTarget, pins, projectMap, removePin]);
   const agentSelectStatus = agentsLoading
     ? "Loading agents..."
     : agentsError
@@ -600,9 +605,13 @@ export function TaskTable({ tasks, agents, projects = [], agentsLoading = false,
                           event.stopPropagation();
                           pinTaskToTray(task);
                         }}
-                        className="ml-auto flex h-6 w-6 items-center justify-center rounded border border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
-                        aria-label={`Pin ${task.title} to tray`}
-                        title="Pin task to tray"
+                        className={`ml-auto flex h-6 w-6 items-center justify-center rounded border transition hover:text-[var(--text-primary)] group-hover:opacity-100 ${
+                          pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id))
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)] opacity-100"
+                            : "border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-0"
+                        }`}
+                        aria-label={`${pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id)) ? "Unpin" : "Pin"} ${task.title} ${pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id)) ? "from" : "to"} tray`}
+                        title={pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id)) ? "Unpin task from tray" : "Pin task to tray"}
                       >
                         <PinIcon />
                       </button>

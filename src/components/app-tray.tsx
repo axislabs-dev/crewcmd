@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -11,6 +11,8 @@ import {
   useRef,
   useState,
 } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { useWorkspace } from "@/components/company-context";
 import {
@@ -19,6 +21,13 @@ import {
   stopNativeVoiceAudio,
 } from "@/lib/native-voice-session";
 import { formatPageContextForPrompt, usePageContextStore } from "@/lib/page-context-store";
+import {
+  DEFAULT_AGENT_VOICE_SETTINGS,
+  isExplicitServerVoice,
+  normalizeAgentVoiceSettings,
+  shouldUseDeviceTts,
+  type AgentVoiceSettings,
+} from "@/lib/tts-voices";
 
 type AgentVoiceState = "idle" | "ready" | "listening" | "hearing" | "processing" | "thinking" | "speaking" | "muted" | "paused" | "error";
 type TrayPinTargetType = "task" | "chat_session" | "chat_thread";
@@ -31,6 +40,7 @@ export type ActiveAgentVoiceSession = {
   sessionKey: string;
   title?: string | null;
   threadSessionKey?: string | null;
+  voiceSettings?: AgentVoiceSettings | null;
 };
 
 export type TrayPin = {
@@ -116,6 +126,23 @@ function blobToBase64(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("Unable to read audio blob"));
     reader.readAsDataURL(blob);
   });
+}
+
+function stripMarkdownForSpeech(markdown: string) {
+  return markdown
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, "$2")
+    .replace(/~~(.*?)~~/g, "$1")
+    .replace(/`{1,3}[^`]*`{1,3}/g, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/^\s*>\s+/gm, "")
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function pinHref(pin: TrayPin) {
@@ -315,6 +342,7 @@ export function useAgentVoiceSession() {
 function ActiveAgentTrayItem() {
   const tray = useAgentVoiceSession();
   const pathname = usePathname();
+  const router = useRouter();
   const { workspace } = useWorkspace();
   const pageContext = usePageContextStore((state) => state.context);
   const [expanded, setExpanded] = useState(false);
@@ -331,17 +359,36 @@ function ActiveAgentTrayItem() {
   if (!active || !tray.visible) return null;
   if (pathname === "/chat" && !expanded) return null;
 
+  const voiceSettings = normalizeAgentVoiceSettings(active.voiceSettings ?? DEFAULT_AGENT_VOICE_SETTINGS);
+
+  const openFullChat = () => {
+    const params = new URLSearchParams({ sessionKey: active.threadSessionKey ?? active.sessionKey });
+    params.set("agent", active.agentCallsign);
+    router.push(`/chat?${params.toString()}`);
+    setExpanded(false);
+  };
+
   const playTrayTTS = async (text: string) => {
-    if (tray.audioMuted || !text.trim()) return;
+    const speechText = stripMarkdownForSpeech(text);
+    if (tray.audioMuted || voiceSettings.enabled === false || !speechText) return;
     tray.setVoiceState("speaking");
     tray.setIsPlayingAudio(true);
     try {
-      const nativeSpeech = await speakNativeVoiceText({ text, playbackRate: 1.15 });
-      if (nativeSpeech) return;
+      const useDeviceSpeech = shouldUseDeviceTts(voiceSettings);
+      const usesExplicitServerVoice = isExplicitServerVoice(voiceSettings);
+      if (isNativeCapacitorApp() && useDeviceSpeech && !usesExplicitServerVoice) {
+        const nativeSpeech = await speakNativeVoiceText({
+          text: speechText,
+          playbackRate: voiceSettings.speed ?? 1.15,
+          voiceId: voiceSettings.voiceId,
+          voiceName: voiceSettings.voiceName,
+        });
+        if (nativeSpeech) return;
+      }
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: speechText, voice: voiceSettings }),
       });
       if (!response.ok) return;
       const blob = await response.blob();
@@ -349,7 +396,7 @@ function ActiveAgentTrayItem() {
         await playNativeVoiceAudio({
           dataBase64: await blobToBase64(blob),
           contentType: blob.type || response.headers.get("Content-Type") || "audio/mpeg",
-          playbackRate: 1.15,
+          playbackRate: voiceSettings.speed ?? 1.15,
         });
         return;
       }
@@ -366,6 +413,7 @@ function ActiveAgentTrayItem() {
           resolve();
         };
         audio.src = url;
+        audio.playbackRate = voiceSettings.speed ?? 1.15;
         void audio.play().catch(() => resolve());
       });
     } finally {
@@ -499,11 +547,18 @@ function ActiveAgentTrayItem() {
                 <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{active.title || active.agentName || active.agentCallsign}</div>
                 <div className="text-xs text-[var(--text-tertiary)]">{tray.voiceState}{tray.systemPinned ? " / active" : " / recent"}</div>
               </div>
-              <button type="button" onClick={() => setExpanded(false)} className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label="Close active agent sheet" title="Close">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={openFullChat} className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label="Open full chat" title="Open full chat">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9.75V4.5h5.25M19.5 14.25v5.25h-5.25M19.5 4.5l-6.75 6.75M4.5 19.5l6.75-6.75" />
+                  </svg>
+                </button>
+                <button type="button" onClick={() => setExpanded(false)} className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label="Close active agent sheet" title="Close">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="flex items-center justify-center gap-2">
               <IconButton
@@ -528,7 +583,11 @@ function ActiveAgentTrayItem() {
                 <div className="px-2 py-6 text-center text-xs text-[var(--text-tertiary)]">Ask about this page or keep talking.</div>
               ) : miniMessages.map((message) => (
                 <div key={message.id} className={`rounded-xl px-3 py-2 text-sm ${message.role === "user" ? "ml-8 bg-[var(--accent-soft)] text-[var(--text-primary)]" : "mr-8 bg-[var(--bg-surface)] text-[var(--text-secondary)]"}`}>
-                  {message.content}
+                  <div className="prose prose-sm max-w-none text-inherit prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-strong:text-[var(--text-primary)] prose-code:rounded prose-code:bg-[var(--bg-surface-hover)] prose-code:px-1 prose-code:text-[var(--accent)] prose-a:text-[var(--accent)]">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               ))}
             </div>

@@ -2057,7 +2057,7 @@ export default function ChatPage() {
   // Sync store → local messages when store changes (new messages from SSE)
   useEffect(() => {
     const unsub = useChatStore.subscribe((state) => {
-      const storeMessages = state.messagesByAgent[activeStoreKey.toLowerCase()] || [];
+      const storeMessages = state.messagesByAgent[activeStoreKeyRef.current.toLowerCase()] || [];
       setMessages((prev) => {
         // Only update if store has messages we don't have
         if (storeMessages.length <= prev.length) {
@@ -3531,6 +3531,9 @@ export default function ChatPage() {
         : gatewaySessionKeyForAgent(respondingAgent);
       const requestStoreKey = chatConversationStoreKey(requestSessionKey, activeChannelId);
       const requestIsVisible = () => activeStoreKeyRef.current === requestStoreKey;
+      if (addressedAgent && activeChannel?.type === "dm") {
+        activeStoreKeyRef.current = requestStoreKey;
+      }
 
       // Send to OpenClaw Gateway — optimistic local message (replaced by server version via SSE)
       const optimisticId = `optimistic-${createClientId()}`;

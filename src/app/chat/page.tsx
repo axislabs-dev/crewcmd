@@ -1361,6 +1361,7 @@ export default function ChatPage() {
       setChannels(nextChannels);
       setActiveChannelId((current) => {
         if (urlChannelId && nextChannels.some((channel) => channel.id === urlChannelId)) return urlChannelId;
+        if (!urlChannelId && (urlAgentCallsign || urlSessionKey)) return null;
         if (current && nextChannels.some((channel) => channel.id === current)) return current;
         return nextChannels.find((channel) => (channel.type ?? "channel") !== "dm")?.id ?? nextChannels[0]?.id ?? null;
       });
@@ -1368,7 +1369,7 @@ export default function ChatPage() {
     } catch {
       setChannelNotice("Could not load channels.");
     }
-  }, [chatCompanyId, chatWorkspaceId, urlChannelId]);
+  }, [chatCompanyId, chatWorkspaceId, urlAgentCallsign, urlChannelId, urlSessionKey]);
 
   useEffect(() => {
     void loadChannels();
@@ -1847,7 +1848,11 @@ export default function ChatPage() {
       setUrlAgentCallsign(params.get("agent")?.toLowerCase() ?? null);
       setUrlSessionKey(params.get("sessionKey"));
       setUrlMessageId(params.get("messageId"));
-      setUrlChannelId(params.get("channelId"));
+      const nextChannelId = params.get("channelId");
+      setUrlChannelId(nextChannelId);
+      if (!nextChannelId && (params.has("sessionKey") || params.has("agent"))) {
+        setActiveChannelId(null);
+      }
       if (params.get("pane") === "chat") {
         setConversationTab("messages");
         setMobileConversationOpen(true);

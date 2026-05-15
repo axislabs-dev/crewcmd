@@ -237,9 +237,10 @@ function isChatPin(pin: TrayPin) {
 }
 
 function chatPinInitials(pin: TrayPin) {
+  const channel = pinMetaString(pin, "channelName") ?? pin.title;
+  if (pinMetaString(pin, "channelId")) return channel.replace(/^#/, "").slice(0, 2).toUpperCase();
   const agent = pinMetaString(pin, "agentId") ?? pinMetaString(pin, "storageAgentId");
   if (agent) return agent.slice(0, 2).toUpperCase();
-  const channel = pinMetaString(pin, "channelName") ?? pin.title;
   return channel.replace(/^#/, "").slice(0, 2).toUpperCase();
 }
 
@@ -885,9 +886,12 @@ function ManualPins() {
   const [miniSending, setMiniSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const activeSessionKey = activeSession?.threadSessionKey ?? activeSession?.sessionKey ?? null;
+  const activeAgentCallsign = activeSession?.agentCallsign.toLowerCase() ?? null;
   const chatPins = pins.filter((pin) => {
     if (!isChatPin(pin)) return false;
     if (!activeSessionVisible || !activeSessionKey) return true;
+    const pinAgent = pinMetaString(pin, "agentId") ?? pinMetaString(pin, "storageAgentId");
+    if (pinAgent && activeAgentCallsign && pinAgent.toLowerCase() === activeAgentCallsign) return false;
     return pin.targetKey !== activeSessionKey && pinMetaString(pin, "threadSessionKey") !== activeSessionKey && pinMetaString(pin, "gatewaySessionKey") !== activeSessionKey;
   });
   const taskPins = pins.filter((pin) => pin.targetType === "task");
@@ -1041,9 +1045,9 @@ function ManualPins() {
   return (
     <>
       {chatPins.length > 0 ? (
-        <div className="ml-auto flex max-w-full flex-row-reverse items-center gap-1.5 lg:flex-col">
+        <div className="group/ml-auto ml-auto flex max-w-full flex-row-reverse items-center gap-0 transition-[gap] hover:gap-1.5 lg:flex-col-reverse">
           {chatPins.slice(0, 5).map((pin) => (
-            <div key={pin.id} className="group relative">
+            <div key={pin.id} className="group relative -mr-3 transition-[margin,transform] hover:z-10 hover:scale-[1.03] group-hover/ml-auto:mr-0 lg:-mb-3 lg:mr-0 lg:group-hover/ml-auto:mb-0">
               <button
                 type="button"
                 onClick={() => {

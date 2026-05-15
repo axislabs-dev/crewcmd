@@ -28,10 +28,10 @@ vi.mock("@/db/schema", () => ({
   projects: Symbol("projects"),
 }));
 
-// Mock requireAuth — default: authorized
-const mockRequireAuth = vi.fn().mockResolvedValue(null);
+// Mock auth — default: authorized
+const mockRequireUserOrRuntimeAuth = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/require-auth", () => ({
-  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
+  requireUserOrRuntimeAuth: (...args: unknown[]) => mockRequireUserOrRuntimeAuth(...args),
 }));
 
 vi.mock("@/lib/workspace", () => ({
@@ -83,7 +83,7 @@ describe("GET /api/projects", () => {
 describe("POST /api/projects", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequireAuth.mockResolvedValue(null);
+    mockRequireUserOrRuntimeAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
     mockGetCompanyIdForWorkspace.mockResolvedValue("co-1");
   });
@@ -106,6 +106,31 @@ describe("POST /api/projects", () => {
     expect(body.folder).toBe("/workspace/gamma");
   });
 
+  it("allows bearer auth to create in an explicit company workspace", async () => {
+    const created = { id: "p4", name: "Runtime Project", description: null, url: null, folder: null, color: "#00f0ff", status: "active", ownerAgentId: null, documents: null };
+    mockReturning.mockResolvedValue([created]);
+
+    const res = await POST(
+      makeRequest("/api/projects", {
+        method: "POST",
+        headers: { Authorization: "Bearer heartbeat-secret" },
+        body: JSON.stringify({ name: "Runtime Project", companyId: "co-1" }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.name).toBe("Runtime Project");
+    expect(mockRequireUserOrRuntimeAuth).toHaveBeenCalledWith(expect.objectContaining({
+      headers: expect.any(Headers),
+    }));
+    expect(mockResolveAccessibleWorkspace).toHaveBeenCalledWith({
+      request: expect.any(NextRequest),
+      explicitWorkspaceId: null,
+      explicitCompanyId: "co-1",
+    });
+  });
+
   it("returns 400 when name is missing", async () => {
     const res = await POST(
       makeRequest("/api/projects", {
@@ -121,7 +146,7 @@ describe("POST /api/projects", () => {
 
   it("returns 401 when not authenticated", async () => {
     const { NextResponse } = await import("next/server");
-    mockRequireAuth.mockResolvedValue(
+    mockRequireUserOrRuntimeAuth.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
 

@@ -3,7 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import type { ProjectStatus } from "@/lib/data";
-import { requireAuth } from "@/lib/require-auth";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import {
   getCompanyIdForWorkspace,
   isHeartbeatBearerRequest,
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = await requireAuth(request);
+  const authError = await requireUserOrRuntimeAuth(request);
   if (authError) return authError;
 
   if (!db) {

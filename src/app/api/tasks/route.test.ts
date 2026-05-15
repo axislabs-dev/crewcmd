@@ -33,9 +33,9 @@ vi.mock("@/db/schema", () => ({
   activityLog: Symbol("activityLog"),
 }));
 
-const mockRequireAuth = vi.fn().mockResolvedValue(null);
+const mockRequireUserOrRuntimeAuth = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/require-auth", () => ({
-  requireAuth: (...a: unknown[]) => mockRequireAuth(...a),
+  requireUserOrRuntimeAuth: (...a: unknown[]) => mockRequireUserOrRuntimeAuth(...a),
 }));
 
 // Mock drizzle-orm operators (used for errorHash dedup)
@@ -109,7 +109,7 @@ describe("GET /api/tasks", () => {
 describe("POST /api/tasks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequireAuth.mockResolvedValue(null);
+    mockRequireUserOrRuntimeAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
     mockGetCompanyIdForWorkspace.mockResolvedValue("co-1");
   });
@@ -145,7 +145,7 @@ describe("POST /api/tasks", () => {
 
   it("returns 401 when not authenticated", async () => {
     const { NextResponse } = await import("next/server");
-    mockRequireAuth.mockResolvedValue(
+    mockRequireUserOrRuntimeAuth.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
 
@@ -159,5 +159,21 @@ describe("POST /api/tasks", () => {
 
     expect(res.status).toBe(401);
     expect(body.error).toBe("Unauthorized");
+  });
+
+  it("uses explicit user-or-runtime auth for task creation", async () => {
+    const created = { id: "t3", title: "Runtime task", status: "inbox", priority: "medium" };
+    mockReturning.mockResolvedValue([created]);
+
+    const res = await POST(
+      makeRequest("/api/tasks", {
+        method: "POST",
+        headers: { authorization: "Bearer heartbeat-secret" },
+        body: JSON.stringify({ title: "Runtime task", workspaceId: "ws-1" }),
+      })
+    );
+
+    expect(res.status).toBe(201);
+    expect(mockRequireUserOrRuntimeAuth).toHaveBeenCalledTimes(1);
   });
 });

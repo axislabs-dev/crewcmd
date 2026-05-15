@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
-import { exec } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -184,39 +184,34 @@ interface TTSBinInfo {
 async function findLocalTTSBin(): Promise<TTSBinInfo | null> {
   if (ttsBinCache !== undefined) return ttsBinCache;
 
-  const result = await new Promise<TTSBinInfo | null>((resolve) => {
-    // Check piper first (neural TTS, good quality)
-    exec("which piper", (err, stdout) => {
-      if (!err && stdout.trim()) {
-        resolve({ path: stdout.trim(), name: "piper" });
-        return;
-      }
-
-      // macOS built-in
-      exec("which say", (err2, stdout2) => {
-        if (!err2 && stdout2.trim()) {
-          resolve({ path: stdout2.trim(), name: "say" });
-          return;
-        }
-
-        // Linux fallback
-        exec("which espeak-ng || which espeak", (err3, stdout3) => {
-          if (!err3 && stdout3.trim()) {
-            const bin = stdout3.trim().split("\n")[0];
-            resolve({ path: bin, name: bin.includes("espeak-ng") ? "espeak-ng" : "espeak" });
-            return;
-          }
-          resolve(null);
-        });
-      });
-    });
-  });
+  const piper = await findExecutable("piper");
+  const say = piper ? null : await findExecutable("say");
+  const espeakNg = piper || say ? null : await findExecutable("espeak-ng");
+  const espeak = piper || say || espeakNg ? null : await findExecutable("espeak");
+  const result = piper
+    ? { path: piper, name: "piper" }
+    : say
+      ? { path: say, name: "say" }
+      : espeakNg
+        ? { path: espeakNg, name: "espeak-ng" }
+        : espeak
+          ? { path: espeak, name: "espeak" }
+          : null;
 
   ttsBinCache = result;
   return result;
 }
 
 let ttsBinCache: TTSBinInfo | null | undefined = undefined;
+
+async function findExecutable(name: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile("which", [name], (error, stdout) => {
+      const path = stdout.trim().split("\n")[0];
+      resolve(error || !path ? null : path);
+    });
+  });
+}
 
 /**
  * Try local TTS CLI.
@@ -250,33 +245,31 @@ async function tryLocalTTS(text: string, voice?: AgentVoiceSettings): Promise<Re
       .replace(/([;:])\s+/g, "$1 [[slnc 100]] ");
   }
 
-  // Sanitize text for shell (escape single quotes)
-  const safeText = processed.replace(/'/g, "'\\''");
-
   try {
-    let cmd: string;
+    let argv: string[];
+    let stdin: string | undefined;
     switch (bin.name) {
       case "say":
         // macOS: -o outputs to file, --data-format=LEI16@44100 forces 44.1kHz WAV
         // -r 195 slightly slower for natural pacing; uses system default voice (works on any Mac)
-        cmd = `'${bin.path}' -r ${Math.round(195 * clampSpeed(voice?.speed))} ${voice?.provider === "say" && voice.voiceId ? `-v '${voice.voiceId.replace(/'/g, "'\\''")}' ` : ""}--data-format=LEI16@44100 -o '${tempPath}' '${safeText}'`;
+        argv = ["-r", String(Math.round(195 * clampSpeed(voice?.speed)))];
+        if (voice?.provider === "say" && voice.voiceId) {
+          argv.push("-v", voice.voiceId);
+        }
+        argv.push("--data-format=LEI16@44100", "-o", tempPath, processed);
         break;
       case "piper":
         // piper reads from stdin
-        cmd = `echo '${safeText}' | '${bin.path}' --output_file '${tempPath}'`;
+        argv = ["--output_file", tempPath];
+        stdin = processed;
         break;
       default:
         // espeak / espeak-ng
-        cmd = `'${bin.path}' -w '${tempPath}' '${safeText}'`;
+        argv = ["-w", tempPath, processed];
         break;
     }
 
-    await new Promise<void>((resolve, reject) => {
-      exec(cmd, { timeout: 30000 }, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
+    await runLocalTTSCommand(bin.path, argv, stdin);
 
     const audioData = await readFile(tempPath);
     await unlink(tempPath).catch(() => {});
@@ -293,4 +286,35 @@ async function tryLocalTTS(text: string, voice?: AgentVoiceSettings): Promise<Re
     await unlink(tempPath).catch(() => {});
     return null;
   }
+}
+
+async function runLocalTTSCommand(command: string, argv: string[], stdin?: string): Promise<void> {
+  if (stdin === undefined) {
+    await new Promise<void>((resolve, reject) => {
+      execFile(command, argv, { timeout: 30000 }, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, argv, { stdio: ["pipe", "ignore", "ignore"] });
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(new Error("Local TTS command timed out"));
+    }, 30000);
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) resolve();
+      else reject(new Error(`Local TTS command exited with code ${code}`));
+    });
+    child.stdin.end(stdin);
+  });
 }

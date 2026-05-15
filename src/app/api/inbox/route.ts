@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db, withRetry } from "@/db";
-import { requireAuth } from "@/lib/require-auth";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import type { InboxMessage } from "@/db/schema-inbox";
 import { normalizeInboxMessage, normalizeInboxMessages } from "@/lib/inbox-response";
 import { extractSqlRows } from "@/lib/sql-result";
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
  * Body: { workspaceId?, companyId?, fromAgentId, toUserId?, toAgentId?, type, priority, title, body, context?, actions? }
  */
 export async function POST(request: NextRequest) {
-  const authError = await requireAuth(request);
+  const authError = await requireUserOrRuntimeAuth(request);
   if (authError) return authError;
 
   if (!db) {

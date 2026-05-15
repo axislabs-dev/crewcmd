@@ -349,7 +349,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <aside className="sticky top-0 z-30 hidden h-screen w-24 min-w-24 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
+      <aside className="sticky top-0 z-30 hidden h-screen w-20 min-w-20 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 px-2 py-2 shadow-[0_18px_54px_rgba(2,6,23,0.16)] backdrop-blur-xl lg:flex">
         <div className="flex justify-center rounded-2xl px-1 py-3">
           <BrandLogo size="md" />
         </div>

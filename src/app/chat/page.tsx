@@ -316,6 +316,7 @@ function threadSessionSuffix(parentSessionKey: string, sessionKey: string) {
 
 type VoiceMode = "off" | "agent";
 type AgentOverlayMode = "transcript" | "immersive";
+type ActiveChatMode = "chat" | "voice" | "hybrid";
 
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
@@ -1152,6 +1153,7 @@ export default function ChatPage() {
   const [agentModeSessionKey, setAgentModeSessionKey] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null);
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
+  const [activeChatMode, setActiveChatMode] = useState<ActiveChatMode>("chat");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [speakResponses, setSpeakResponses] = useState(false);
@@ -2101,6 +2103,7 @@ export default function ChatPage() {
     setThreadEvents([]);
     if (closingThread && agentModeSessionKey === closingThread.sessionKey) {
       setVoiceMode("off");
+      setActiveChatMode("chat");
       setAgentModeSessionKey(null);
       setAgentMicMuted(false);
       setAgentAudioMuted(false);
@@ -4410,10 +4413,34 @@ export default function ChatPage() {
     [stopAllAudio]
   );
 
+  const switchActiveChatMode = useCallback((mode: ActiveChatMode) => {
+    setActiveChatMode(mode);
+    if (mode === "chat") {
+      stopAllAudio();
+      setVoiceMode("off");
+      setAgentModeSessionKey(null);
+      setAgentOverlayMode("transcript");
+      setAgentMicMuted(false);
+      setAgentAudioMuted(false);
+      return;
+    }
+    if (!isNativeCapacitorApp() && audioRef.current) {
+      audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      audioRef.current.play().catch(() => {});
+    }
+    setAgentMicMuted(false);
+    setAgentAudioMuted(false);
+    setAgentModeSessionKey(activeThread?.sessionKey ?? activeSessionKey);
+    setVoiceMode("agent");
+    setSpeakResponses(true);
+    setAgentOverlayMode(mode === "voice" ? "immersive" : "transcript");
+  }, [activeSessionKey, activeThread?.sessionKey, stopAllAudio]);
+
   useEffect(() => {
     const handleTrayStop = () => {
       stopAllAudio();
       setVoiceMode("off");
+      setActiveChatMode("chat");
       setAgentModeSessionKey(null);
       setAgentMicMuted(false);
       setAgentAudioMuted(false);
@@ -4421,6 +4448,25 @@ export default function ChatPage() {
     window.addEventListener("crewcmd:agent-voice-stop", handleTrayStop);
     return () => window.removeEventListener("crewcmd:agent-voice-stop", handleTrayStop);
   }, [stopAllAudio]);
+
+  const voiceModeRef = useRef(voiceMode);
+  const isPlayingAudioRef = useRef(isPlayingAudio);
+
+  useEffect(() => {
+    voiceModeRef.current = voiceMode;
+  }, [voiceMode]);
+
+  useEffect(() => {
+    isPlayingAudioRef.current = isPlayingAudio;
+  }, [isPlayingAudio]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceModeRef.current === "agent") {
+        setTrayVoiceState(isPlayingAudioRef.current ? "speaking" : "ready");
+      }
+    };
+  }, [setTrayVoiceState]);
 
   useEffect(() => {
     if (voiceMode !== "agent" || !selectedAgent?.callsign) {
@@ -4787,26 +4833,10 @@ export default function ChatPage() {
                   setSpeakResponses(!speakResponses);
                 }}
                 onEnterAgentMode={() => {
-                  if (voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey) {
-                    stopAllAudio();
-                    setVoiceMode("off");
-                    setAgentModeSessionKey(null);
-                    setAgentMicMuted(false);
-                    setAgentAudioMuted(false);
-                    return;
-                  }
-                  if (!isNativeCapacitorApp() && audioRef.current) {
-                    audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                    audioRef.current.play().catch(() => {});
-                  }
-                  setAgentMicMuted(false);
-                  setAgentAudioMuted(false);
-                  setAgentOverlayMode("transcript");
-                  setAgentModeSessionKey(activeThread.sessionKey);
-                  setVoiceMode("agent");
-                  setSpeakResponses(true);
+                  const isThreadVoiceActive = voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey;
+                  switchActiveChatMode(isThreadVoiceActive ? "chat" : "hybrid");
                 }}
-                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread agent mode"}
+                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread hybrid mode"}
               />
             </>
           )}
@@ -5781,6 +5811,25 @@ export default function ChatPage() {
       {/* Input area — Claude-style layout */}
       <div ref={composerDockRef} className={`z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1.5 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${conversationTab === "messages" ? mobileConversationOpen ? "block" : "hidden lg:block" : "hidden"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
+          <div className="mb-2 flex justify-center">
+            <div className="inline-flex rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1 shadow-sm">
+              {(["chat", "voice", "hybrid"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => switchActiveChatMode(mode)}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition ${
+                    activeChatMode === mode
+                      ? "bg-[var(--accent)] text-white shadow-sm"
+                      : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                  }`}
+                  aria-pressed={activeChatMode === mode}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
           <ChatComposer
             value={input}
             onValueChange={setInput}
@@ -5797,27 +5846,9 @@ export default function ChatPage() {
               setSpeakResponses(!speakResponses);
             }}
             onEnterAgentMode={() => {
-              if (voiceMode === "agent") {
-                stopAllAudio();
-                setVoiceMode("off");
-                setAgentModeSessionKey(null);
-                setAgentOverlayMode("transcript");
-                setAgentMicMuted(false);
-                setAgentAudioMuted(false);
-                return;
-              }
-              if (!isNativeCapacitorApp() && audioRef.current) {
-                audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                audioRef.current.play().catch(() => {});
-              }
-              setAgentMicMuted(false);
-              setAgentAudioMuted(false);
-              setAgentOverlayMode("transcript");
-              setAgentModeSessionKey(activeSessionKey);
-              setVoiceMode("agent");
-              setSpeakResponses(true);
+              switchActiveChatMode(voiceMode === "agent" ? "chat" : "hybrid");
             }}
-            agentButtonTitle={voiceMode === "agent" ? "Exit voice mode" : "Enter agent mode (hands-free)"}
+            agentButtonTitle={voiceMode === "agent" ? "Exit agent mode" : "Enter hybrid agent mode"}
             isDragOver={isDragOver}
             onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
             onDragLeave={(event) => { event.preventDefault(); setIsDragOver(false); }}

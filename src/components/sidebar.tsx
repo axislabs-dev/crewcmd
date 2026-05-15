@@ -9,7 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useTheme } from "@/components/theme-provider";
 import { useWorkspace } from "@/components/company-context";
 import { Avatar } from "@/components/avatar";
-import { UserPresenceDot, UserPresenceLine, UserPresenceMenu } from "@/components/user-presence";
+import { UserPresenceDot, UserPresenceLine, UserPresenceMenu, UserPresenceSync } from "@/components/user-presence";
 
 const navSections = [
   {
@@ -352,6 +352,7 @@ export function Sidebar() {
 
   return (
     <>
+      {session?.user ? <UserPresenceSync /> : null}
       {moreOpen && <button type="button" className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden" onClick={() => setMoreOpen(false)} aria-label="Close more menu" />}
 
       <div className={`fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] transition-all duration-200 lg:hidden ${moreOpen ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}>

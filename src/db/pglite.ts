@@ -340,6 +340,18 @@ async function applySchema() {
   // Mobile push and chat run tracking tables
   try {
     await queuedClient.exec(`
+      CREATE TABLE IF NOT EXISTS user_presence (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'active',
+        custom_text TEXT,
+        emoji TEXT,
+        manual_expires_at TIMESTAMPTZ,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await queuedClient.exec(`
       CREATE TABLE IF NOT EXISTS mobile_push_devices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

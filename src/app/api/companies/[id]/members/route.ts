@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { companyMembers, users, companies } from "@/db/schema";
+import { companyMembers, users, companies, userPresence } from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,15 @@ export async function GET(request: NextRequest, { params }: Params) {
       createdAt: companyMembers.createdAt,
       githubUsername: users.githubUsername,
       email: users.email,
+      presenceStatus: userPresence.status,
+      presenceCustomText: userPresence.customText,
+      presenceEmoji: userPresence.emoji,
+      presenceManualExpiresAt: userPresence.manualExpiresAt,
+      presenceLastSeenAt: userPresence.lastSeenAt,
     })
     .from(companyMembers)
     .innerJoin(users, eq(companyMembers.userId, users.id))
+    .leftJoin(userPresence, eq(companyMembers.userId, userPresence.userId))
     .where(eq(companyMembers.companyId, id));
 
   return NextResponse.json(members);

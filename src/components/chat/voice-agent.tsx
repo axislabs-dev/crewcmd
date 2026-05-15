@@ -1051,7 +1051,7 @@ export function VoiceAgent({
         : state === "processing"
           ? Math.min(0.34, 0.18 + visualVolume * 0.32)
           : 0;
-  const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 138 + motionLevel * 38 : 170 + motionLevel * 90;
+  const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 104 + motionLevel * 28 : 170 + motionLevel * 90;
   const orbScale = immersive
     ? 1.22 + motionLevel * (state === "speaking" ? 0.06 : 0.045)
     : 1 + motionLevel * 0.06;
@@ -1082,7 +1082,7 @@ export function VoiceAgent({
           immersive
             ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]"
             : compact
-              ? "h-[10rem] w-[10rem]"
+              ? "h-[7.5rem] w-[7.5rem] sm:h-[8.5rem] sm:w-[8.5rem]"
               : "h-[10rem] w-[10rem] sm:h-[12rem] sm:w-[12rem]"
         }`}
         style={
@@ -1155,7 +1155,7 @@ export function VoiceAgent({
 
         <div
           className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${
-            immersive ? "h-56 w-56 sm:h-72 sm:w-72" : compact ? "h-24 w-24" : "h-20 w-20 sm:h-24 sm:w-24"
+            immersive ? "h-56 w-56 sm:h-72 sm:w-72" : compact ? "h-16 w-16 sm:h-20 sm:w-20" : "h-20 w-20 sm:h-24 sm:w-24"
           } ${
             state === "idle"
               ? "cursor-pointer border-[var(--border-medium)]"

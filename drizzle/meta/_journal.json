@@ -225,6 +225,13 @@
       "when": 1777800000000,
       "tag": "0031_user_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1777900000000,
+      "tag": "0032_tray_pins",
+      "breakpoints": true
     }
   ]
 }

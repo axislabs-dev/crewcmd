@@ -1846,6 +1846,10 @@ export default function ChatPage() {
       setUrlSessionKey(params.get("sessionKey"));
       setUrlMessageId(params.get("messageId"));
       setUrlChannelId(params.get("channelId"));
+      if (params.get("pane") === "chat") {
+        setConversationTab("messages");
+        setMobileConversationOpen(true);
+      }
     };
     applyLocationSearch();
     window.addEventListener("popstate", applyLocationSearch);
@@ -1893,6 +1897,10 @@ export default function ChatPage() {
           setSelectedAgent(restoredAgent);
           if (targetSessionKey && (urlSessionKey || !isMessageThreadSessionKey(targetSessionKey))) {
             selectSession(targetSessionKey);
+          }
+          if (urlAgentCallsign || urlSessionKey) {
+            setConversationTab("messages");
+            setMobileConversationOpen(true);
           }
           return;
         }

@@ -31,7 +31,7 @@ import {
 
 type AgentVoiceState = "idle" | "ready" | "listening" | "hearing" | "processing" | "thinking" | "speaking" | "muted" | "paused" | "error";
 type TrayPinTargetType = "task" | "chat_session" | "chat_thread";
-type MiniChatMessage = { id: string; role: "user" | "assistant"; content: string };
+type MiniChatMessage = { id: string; role: "user" | "assistant" | "tool"; content: string };
 
 export type ActiveAgentVoiceSession = {
   agentCallsign: string;
@@ -67,6 +67,7 @@ type AgentVoiceSessionContextValue = {
   micMuted: boolean;
   audioMuted: boolean;
   isPlayingAudio: boolean;
+  voiceLevel: number;
   systemPinned: boolean;
   userPinned: boolean;
   visible: boolean;
@@ -76,6 +77,7 @@ type AgentVoiceSessionContextValue = {
   setMicMuted: (muted: boolean) => void;
   setAudioMuted: (muted: boolean) => void;
   setIsPlayingAudio: (playing: boolean) => void;
+  setVoiceLevel: (level: number) => void;
   setUserPinned: (pinned: boolean) => void;
   stopSession: () => void;
   pinTarget: (input: PinTargetInput) => Promise<TrayPin | null>;
@@ -92,6 +94,10 @@ function activeAgentStorageKey(workspaceId?: string | null, sessionKey?: string 
 
 function isActiveState(state: AgentVoiceState) {
   return state === "ready" || state === "listening" || state === "hearing" || state === "processing" || state === "thinking" || state === "speaking" || state === "muted";
+}
+
+function clampVoiceLevel(level: number) {
+  return Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
 }
 
 function createMiniChatId() {
@@ -145,6 +151,42 @@ function stripMarkdownForSpeech(markdown: string) {
     .trim();
 }
 
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function miniProgressContent(parsed: unknown) {
+  const record = asRecord(parsed);
+  if (!record || record.type !== "chat_progress") return null;
+  const tool = asRecord(record.activeTool);
+  if (tool) {
+    const name = firstString(tool.name) ?? "Tool";
+    const status = firstString(tool.status, record.event) ?? "working";
+    const detail = firstString(tool.detail);
+    return detail ? `${name}: ${status}\n${detail}` : `${name}: ${status}`;
+  }
+  const checkpoint = asRecord(record.checkpoint);
+  if (checkpoint) {
+    const title = firstString(checkpoint.title) ?? "Checkpoint";
+    const summary = firstString(checkpoint.summary, checkpoint.detail);
+    return summary ? `${title}\n${summary}` : title;
+  }
+  const event = firstString(record.event);
+  if (event === "run_started") return "Agent started";
+  if (event === "run_completed") return "Agent completed";
+  if (event === "run_error") return firstString(record.error) ?? "Agent hit an error";
+  return null;
+}
+
 function pinHref(pin: TrayPin) {
   const metadata = pin.metadata ?? {};
   if (pin.targetType === "task") return `/tasks?taskId=${encodeURIComponent(pin.targetId ?? pin.targetKey)}`;
@@ -169,6 +211,7 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
   const [micMuted, setMicMuted] = useState(false);
   const [audioMuted, setAudioMuted] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [voiceLevel, setVoiceLevelState] = useState(0);
   const [userPinned, setUserPinnedState] = useState(false);
   const [inactiveVisible, setInactiveVisible] = useState(false);
   const [pins, setPins] = useState<TrayPin[]>([]);
@@ -236,6 +279,7 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
     } else {
       setVoiceState("idle");
       setIsPlayingAudio(false);
+      setVoiceLevelState(0);
       setMicMuted(false);
       setAudioMuted(false);
     }
@@ -282,9 +326,14 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
     }
     setVoiceState("idle");
     setIsPlayingAudio(false);
+    setVoiceLevelState(0);
     setMicMuted(false);
     setAudioMuted(false);
     setActiveSessionState(null);
+  }, []);
+
+  const setVoiceLevel = useCallback((level: number) => {
+    setVoiceLevelState(clampVoiceLevel(level));
   }, []);
 
   const value = useMemo<AgentVoiceSessionContextValue>(() => ({
@@ -293,6 +342,7 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
     micMuted,
     audioMuted,
     isPlayingAudio,
+    voiceLevel,
     systemPinned,
     userPinned,
     visible,
@@ -302,6 +352,7 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
     setMicMuted,
     setAudioMuted,
     setIsPlayingAudio,
+    setVoiceLevel,
     setUserPinned,
     stopSession,
     pinTarget,
@@ -318,10 +369,12 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
     removePin,
     setActiveSession,
     setUserPinned,
+    setVoiceLevel,
     stopSession,
     systemPinned,
     userPinned,
     visible,
+    voiceLevel,
     voiceState,
   ]);
 
@@ -364,6 +417,7 @@ function ActiveAgentTrayItem() {
   const openFullChat = () => {
     const params = new URLSearchParams({ sessionKey: active.threadSessionKey ?? active.sessionKey });
     params.set("agent", active.agentCallsign);
+    params.set("pane", "chat");
     router.push(`/chat?${params.toString()}`);
     setExpanded(false);
   };
@@ -468,6 +522,17 @@ function ActiveAgentTrayItem() {
         if (data === "[DONE]") return;
         try {
           const parsed = JSON.parse(data);
+          const progressContent = miniProgressContent(parsed);
+          if (progressContent) {
+            setMiniMessages((current) => {
+              const last = current.at(-1);
+              if (last?.role === "tool") {
+                return [...current.slice(0, -1), { ...last, content: progressContent }];
+              }
+              return [...current, { id: createMiniChatId(), role: "tool", content: progressContent }];
+            });
+            return;
+          }
           const delta = parsed.choices?.[0]?.delta?.content;
           if (typeof delta === "string") content += delta;
         } catch {
@@ -516,6 +581,17 @@ function ActiveAgentTrayItem() {
       : tray.voiceState === "ready"
         ? "var(--text-tertiary)"
         : active.agentColor ?? "var(--accent)";
+  const visualActor = tray.isPlayingAudio || tray.voiceState === "speaking" ? "agent" : "user";
+  const visualTone = visualActor === "agent" ? (active.agentColor ?? "var(--accent)") : "var(--voice-listening, #d9b96e)";
+  const visualLevel = tray.isPlayingAudio
+    ? Math.max(tray.voiceLevel, 0.24)
+    : tray.voiceState === "listening" || tray.voiceState === "hearing"
+      ? Math.max(tray.voiceLevel, 0.08)
+      : 0;
+  const visualBars = [0.45, 0.78, 0.58, 0.92].map((weight, index) => {
+    const lift = tray.isPlayingAudio ? 0.28 : 0.16;
+    return Math.max(0.18, Math.min(1, visualLevel * weight + lift + index * 0.035));
+  });
 
   return (
     <>
@@ -532,9 +608,16 @@ function ActiveAgentTrayItem() {
         </span>
         {(tray.voiceState === "listening" || tray.voiceState === "hearing" || tray.voiceState === "speaking") ? (
           <span className="absolute -bottom-0.5 flex h-4 items-end gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5" aria-hidden="true">
-            <span className="h-1.5 w-0.5 rounded-full bg-[var(--accent)]" />
-            <span className="h-2.5 w-0.5 rounded-full bg-[var(--accent)]" />
-            <span className="h-1 w-0.5 rounded-full bg-[var(--accent)]" />
+            {visualBars.map((bar, index) => (
+              <span
+                key={index}
+                className={`w-0.5 rounded-full transition-[height,background-color] duration-100 ${tray.isPlayingAudio ? "animate-pulse" : ""}`}
+                style={{
+                  height: `${5 + bar * 9}px`,
+                  backgroundColor: visualTone,
+                }}
+              />
+            ))}
           </span>
         ) : null}
       </button>
@@ -582,7 +665,13 @@ function ActiveAgentTrayItem() {
               {miniMessages.length === 0 ? (
                 <div className="px-2 py-6 text-center text-xs text-[var(--text-tertiary)]">Ask about this page or keep talking.</div>
               ) : miniMessages.map((message) => (
-                <div key={message.id} className={`rounded-xl px-3 py-2 text-sm ${message.role === "user" ? "ml-8 bg-[var(--accent-soft)] text-[var(--text-primary)]" : "mr-8 bg-[var(--bg-surface)] text-[var(--text-secondary)]"}`}>
+                <div key={message.id} className={`rounded-xl px-3 py-2 text-sm ${
+                  message.role === "user"
+                    ? "ml-8 bg-[var(--accent-soft)] text-[var(--text-primary)]"
+                    : message.role === "tool"
+                      ? "mx-4 border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--text-tertiary)]"
+                      : "mr-8 bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+                }`}>
                   <div className="prose prose-sm max-w-none text-inherit prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-strong:text-[var(--text-primary)] prose-code:rounded prose-code:bg-[var(--bg-surface-hover)] prose-code:px-1 prose-code:text-[var(--accent)] prose-a:text-[var(--accent)]">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {message.content}
@@ -628,6 +717,7 @@ function ActiveAgentTrayItem() {
             isAgentMuted={tray.audioMuted}
             onMicMutedChange={tray.setMicMuted}
             onAgentMutedChange={tray.setAudioMuted}
+            onVoiceLevel={tray.setVoiceLevel}
             agent={active.agentCallsign}
             gatewayAgent={active.agentCallsign}
             companyId={workspace?.companyId ?? undefined}

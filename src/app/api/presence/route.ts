@@ -6,7 +6,7 @@ import { resolveCurrentUser } from "@/lib/resolve-user";
 
 export const dynamic = "force-dynamic";
 
-const VALID_STATUSES = new Set(["active", "focus", "meeting", "away", "sleep"]);
+const VALID_STATUSES = new Set(["active", "focus", "meeting", "away", "sick", "sleep"]);
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";

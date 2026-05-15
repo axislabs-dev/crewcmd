@@ -111,7 +111,7 @@ export default function LaterPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] flex-col overflow-hidden bg-[var(--bg-primary)] lg:h-dvh">
+    <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height)_-_var(--mobile-safe-top))] flex-col overflow-hidden bg-[var(--bg-primary)] lg:h-dvh">
       <header className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/95 px-4 py-4 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
           <div>

@@ -4458,7 +4458,7 @@ export default function ChatPage() {
       : `Message ${agentCallsign}...`;
 
   return (
-    <div className="relative flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
+    <div className="relative flex h-[calc(100dvh_-_var(--mobile-app-bar-height)_-_var(--mobile-safe-top))] overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 

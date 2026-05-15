@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -11,11 +11,18 @@ import {
   useRef,
   useState,
 } from "react";
+import { VoiceAgent } from "@/components/chat/voice-agent";
 import { useWorkspace } from "@/components/company-context";
-import { stopNativeVoiceAudio } from "@/lib/native-voice-session";
+import {
+  playNativeVoiceAudio,
+  speakNativeVoiceText,
+  stopNativeVoiceAudio,
+} from "@/lib/native-voice-session";
+import { formatPageContextForPrompt, usePageContextStore } from "@/lib/page-context-store";
 
 type AgentVoiceState = "idle" | "ready" | "listening" | "hearing" | "processing" | "thinking" | "speaking" | "muted" | "paused" | "error";
 type TrayPinTargetType = "task" | "chat_session" | "chat_thread";
+type MiniChatMessage = { id: string; role: "user" | "assistant"; content: string };
 
 export type ActiveAgentVoiceSession = {
   agentCallsign: string;
@@ -75,6 +82,40 @@ function activeAgentStorageKey(workspaceId?: string | null, sessionKey?: string 
 
 function isActiveState(state: AgentVoiceState) {
   return state === "ready" || state === "listening" || state === "hearing" || state === "processing" || state === "thinking" || state === "speaking" || state === "muted";
+}
+
+function createMiniChatId() {
+  return `tray-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isNativeCapacitorApp() {
+  if (typeof window === "undefined") return false;
+  const capacitor = (window as Window & {
+    Capacitor?: {
+      getPlatform?: () => string;
+      isNativePlatform?: () => boolean;
+    };
+  }).Capacitor;
+  if (!capacitor) return false;
+  if (capacitor.isNativePlatform?.()) return true;
+  const platform = capacitor.getPlatform?.();
+  return platform === "ios" || platform === "android";
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unable to read audio blob"));
+        return;
+      }
+      resolve(result.split(",")[1] ?? "");
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read audio blob"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function pinHref(pin: TrayPin) {
@@ -274,18 +315,151 @@ export function useAgentVoiceSession() {
 function ActiveAgentTrayItem() {
   const tray = useAgentVoiceSession();
   const pathname = usePathname();
-  const router = useRouter();
+  const { workspace } = useWorkspace();
+  const pageContext = usePageContextStore((state) => state.context);
   const [expanded, setExpanded] = useState(false);
+  const [miniInput, setMiniInput] = useState("");
+  const [miniMessages, setMiniMessages] = useState<MiniChatMessage[]>([]);
+  const [miniSending, setMiniSending] = useState(false);
   const active = tray.activeSession;
+
+  useEffect(() => {
+    if (!active || pathname === "/chat" || !tray.systemPinned || tray.voiceState !== "ready") return;
+    tray.setVoiceState("listening");
+  }, [active, pathname, tray]);
+
   if (!active || !tray.visible) return null;
   if (pathname === "/chat" && !expanded) return null;
 
-  const openChat = () => {
-    const params = new URLSearchParams({ sessionKey: active.threadSessionKey ?? active.sessionKey });
-    params.set("agent", active.agentCallsign);
-    router.push(`/chat?${params.toString()}`);
-    setExpanded(false);
+  const playTrayTTS = async (text: string) => {
+    if (tray.audioMuted || !text.trim()) return;
+    tray.setVoiceState("speaking");
+    tray.setIsPlayingAudio(true);
+    try {
+      const nativeSpeech = await speakNativeVoiceText({ text, playbackRate: 1.15 });
+      if (nativeSpeech) return;
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) return;
+      const blob = await response.blob();
+      if (isNativeCapacitorApp()) {
+        await playNativeVoiceAudio({
+          dataBase64: await blobToBase64(blob),
+          contentType: blob.type || response.headers.get("Content-Type") || "audio/mpeg",
+          playbackRate: 1.15,
+        });
+        return;
+      }
+      const audio = document.querySelector<HTMLAudioElement>("[data-agent-voice-session-audio]");
+      if (!audio) return;
+      const url = URL.createObjectURL(blob);
+      await new Promise<void>((resolve) => {
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audio.src = url;
+        void audio.play().catch(() => resolve());
+      });
+    } finally {
+      tray.setIsPlayingAudio(false);
+      tray.setVoiceState(tray.micMuted ? "muted" : "listening");
+    }
   };
+
+  const sendMiniMessage = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || miniSending) return;
+    setMiniInput("");
+    setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "user", content: trimmed }]);
+    setMiniSending(true);
+    tray.setVoiceState("thinking");
+    try {
+      const pageContextPrompt = formatPageContextForPrompt(pageContext);
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: "You are replying through the compact CrewCMD tray. Keep the answer concise and useful." },
+            ...(pageContextPrompt ? [{ role: "system", content: pageContextPrompt }] : []),
+            ...miniMessages.slice(-8).map((message) => ({ role: message.role, content: message.content })),
+            { role: "user", content: trimmed },
+          ],
+          agent: active.agentCallsign,
+          gatewayAgent: active.agentCallsign,
+          companyId: workspace?.companyId,
+          workspaceId: workspace?.id,
+          pageContext,
+          sessionKey: active.threadSessionKey ?? active.sessionKey,
+          agentMode: true,
+          clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
+          notifyOnCompletion: true,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      let content = "";
+      const handleFrame = (frame: string) => {
+        const dataLines = frame
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6));
+        if (dataLines.length === 0) return;
+        const data = dataLines.join("\n");
+        if (data === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (typeof delta === "string") content += delta;
+        } catch {
+          // Ignore progress/meta frames that are not model deltas.
+        }
+      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        const frames = sseBuffer.split("\n\n");
+        sseBuffer = frames.pop() ?? "";
+        for (const frame of frames) handleFrame(frame);
+      }
+      if (sseBuffer.trim()) handleFrame(sseBuffer);
+      const answer = content.trim();
+      if (answer) {
+        setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "assistant", content: answer }]);
+        await playTrayTTS(answer);
+      }
+    } catch {
+      tray.setVoiceState("error");
+      setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "assistant", content: "I could not send that from the tray. Try again from the full chat." }]);
+    } finally {
+      setMiniSending(false);
+      if (tray.voiceState !== "error") tray.setVoiceState(tray.micMuted ? "muted" : "listening");
+    }
+  };
+
+  const interruptTrayAudio = () => {
+    window.speechSynthesis?.cancel();
+    void stopNativeVoiceAudio().catch(() => {});
+    const audio = document.querySelector<HTMLAudioElement>("[data-agent-voice-session-audio]");
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    tray.setIsPlayingAudio(false);
+  };
+
   const pinnedLabel = tray.userPinned ? "Unpin active agent" : "Pin active agent";
   const stateTone = tray.voiceState === "speaking"
     ? "var(--accent)"
@@ -349,12 +523,59 @@ function ActiveAgentTrayItem() {
               <IconButton active={tray.userPinned} label={pinnedLabel} onClick={() => tray.setUserPinned(!tray.userPinned)} icon="pin" />
               <IconButton danger label="Stop active agent" onClick={tray.stopSession} icon="stop" />
             </div>
-            <button type="button" onClick={openChat} className="mt-3 w-full rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white">
-              Open chat
-            </button>
+            <div className="mt-4 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/70 p-2">
+              {miniMessages.length === 0 ? (
+                <div className="px-2 py-6 text-center text-xs text-[var(--text-tertiary)]">Ask about this page or keep talking.</div>
+              ) : miniMessages.map((message) => (
+                <div key={message.id} className={`rounded-xl px-3 py-2 text-sm ${message.role === "user" ? "ml-8 bg-[var(--accent-soft)] text-[var(--text-primary)]" : "mr-8 bg-[var(--bg-surface)] text-[var(--text-secondary)]"}`}>
+                  {message.content}
+                </div>
+              ))}
+            </div>
+            <form
+              className="mt-3 flex items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void sendMiniMessage(miniInput);
+              }}
+            >
+              <textarea
+                value={miniInput}
+                onChange={(event) => setMiniInput(event.target.value)}
+                rows={1}
+                placeholder={`Message ${active.agentCallsign.toUpperCase()}...`}
+                className="min-h-10 flex-1 resize-none rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)]"
+              />
+              <button type="submit" disabled={miniSending || !miniInput.trim()} className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white disabled:opacity-45" aria-label="Send tray message">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                </svg>
+              </button>
+            </form>
           </div>
         </div>
       )}
+      {pathname !== "/chat" && tray.systemPinned ? (
+        <div className="pointer-events-none fixed h-px w-px overflow-hidden opacity-0" aria-hidden="true">
+          <VoiceAgent
+            onTranscript={(text) => void sendMiniMessage(text)}
+            isPlayingAudio={tray.isPlayingAudio}
+            onInterrupt={interruptTrayAudio}
+            isLoading={miniSending || tray.voiceState === "thinking" || tray.voiceState === "processing"}
+            accentColor={active.agentColor ?? undefined}
+            autoActivate
+            compact
+            isMicMuted={tray.micMuted}
+            isAgentMuted={tray.audioMuted}
+            onMicMutedChange={tray.setMicMuted}
+            onAgentMutedChange={tray.setAudioMuted}
+            agent={active.agentCallsign}
+            gatewayAgent={active.agentCallsign}
+            companyId={workspace?.companyId ?? undefined}
+            sessionKey={active.threadSessionKey ?? active.sessionKey}
+          />
+        </div>
+      ) : null}
     </>
   );
 }

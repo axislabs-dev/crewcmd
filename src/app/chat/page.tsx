@@ -316,7 +316,6 @@ function threadSessionSuffix(parentSessionKey: string, sessionKey: string) {
 
 type VoiceMode = "off" | "agent";
 type AgentOverlayMode = "transcript" | "immersive";
-type ActiveChatMode = "chat" | "voice" | "hybrid";
 
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
@@ -1153,7 +1152,6 @@ export default function ChatPage() {
   const [agentModeSessionKey, setAgentModeSessionKey] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null);
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
-  const [activeChatMode, setActiveChatMode] = useState<ActiveChatMode>("chat");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [speakResponses, setSpeakResponses] = useState(false);
@@ -2103,7 +2101,6 @@ export default function ChatPage() {
     setThreadEvents([]);
     if (closingThread && agentModeSessionKey === closingThread.sessionKey) {
       setVoiceMode("off");
-      setActiveChatMode("chat");
       setAgentModeSessionKey(null);
       setAgentMicMuted(false);
       setAgentAudioMuted(false);
@@ -4413,41 +4410,35 @@ export default function ChatPage() {
     [stopAllAudio]
   );
 
-  const switchActiveChatMode = useCallback((mode: ActiveChatMode) => {
-    setActiveChatMode(mode);
-    if (mode === "chat") {
-      stopAllAudio();
-      setVoiceMode("off");
-      setAgentModeSessionKey(null);
-      setAgentOverlayMode("transcript");
-      setAgentMicMuted(false);
-      setAgentAudioMuted(false);
-      return;
-    }
+  const enterAgentMode = useCallback((sessionKey: string, overlayMode: AgentOverlayMode = "transcript") => {
     if (!isNativeCapacitorApp() && audioRef.current) {
       audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
       audioRef.current.play().catch(() => {});
     }
     setAgentMicMuted(false);
     setAgentAudioMuted(false);
-    setAgentModeSessionKey(activeThread?.sessionKey ?? activeSessionKey);
+    setAgentModeSessionKey(sessionKey);
     setVoiceMode("agent");
     setSpeakResponses(true);
-    setAgentOverlayMode(mode === "voice" ? "immersive" : "transcript");
-  }, [activeSessionKey, activeThread?.sessionKey, stopAllAudio]);
+    setAgentOverlayMode(overlayMode);
+  }, []);
+
+  const exitAgentMode = useCallback(() => {
+    stopAllAudio();
+    setVoiceMode("off");
+    setAgentModeSessionKey(null);
+    setAgentOverlayMode("transcript");
+    setAgentMicMuted(false);
+    setAgentAudioMuted(false);
+  }, [stopAllAudio]);
 
   useEffect(() => {
     const handleTrayStop = () => {
-      stopAllAudio();
-      setVoiceMode("off");
-      setActiveChatMode("chat");
-      setAgentModeSessionKey(null);
-      setAgentMicMuted(false);
-      setAgentAudioMuted(false);
+      exitAgentMode();
     };
     window.addEventListener("crewcmd:agent-voice-stop", handleTrayStop);
     return () => window.removeEventListener("crewcmd:agent-voice-stop", handleTrayStop);
-  }, [stopAllAudio]);
+  }, [exitAgentMode]);
 
   const voiceModeRef = useRef(voiceMode);
   const isPlayingAudioRef = useRef(isPlayingAudio);
@@ -4744,11 +4735,13 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => void pinActiveConversationToTray()}
-              className="hidden h-8 items-center rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--control-bg)] px-3 text-[11px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] sm:flex"
+              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--control-bg)] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
               aria-label="Pin conversation to tray"
               title="Pin conversation to tray"
             >
-              Pin
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 4.5 19.5 9.75m-10.5 0L4.5 14.25l5.25 5.25 4.5-4.5m-5.25-5.25 5.25 5.25m-5.25-5.25 3-3a2.121 2.121 0 0 1 3 0l2.25 2.25a2.121 2.121 0 0 1 0 3l-3 3" />
+              </svg>
             </button>
             <CompanySwitcher compact className="w-36 sm:w-40 lg:hidden" />
           </div>
@@ -4834,9 +4827,13 @@ export default function ChatPage() {
                 }}
                 onEnterAgentMode={() => {
                   const isThreadVoiceActive = voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey;
-                  switchActiveChatMode(isThreadVoiceActive ? "chat" : "hybrid");
+                  if (isThreadVoiceActive) {
+                    exitAgentMode();
+                  } else {
+                    enterAgentMode(activeThread.sessionKey);
+                  }
                 }}
-                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread hybrid mode"}
+                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread agent mode"}
               />
             </>
           )}
@@ -5811,25 +5808,6 @@ export default function ChatPage() {
       {/* Input area — Claude-style layout */}
       <div ref={composerDockRef} className={`z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1.5 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${conversationTab === "messages" ? mobileConversationOpen ? "block" : "hidden lg:block" : "hidden"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
-          <div className="mb-2 flex justify-center">
-            <div className="inline-flex rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1 shadow-sm">
-              {(["chat", "voice", "hybrid"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => switchActiveChatMode(mode)}
-                  className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition ${
-                    activeChatMode === mode
-                      ? "bg-[var(--accent)] text-white shadow-sm"
-                      : "text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                  }`}
-                  aria-pressed={activeChatMode === mode}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          </div>
           <ChatComposer
             value={input}
             onValueChange={setInput}
@@ -5846,9 +5824,13 @@ export default function ChatPage() {
               setSpeakResponses(!speakResponses);
             }}
             onEnterAgentMode={() => {
-              switchActiveChatMode(voiceMode === "agent" ? "chat" : "hybrid");
+              if (voiceMode === "agent") {
+                exitAgentMode();
+              } else {
+                enterAgentMode(activeSessionKey);
+              }
             }}
-            agentButtonTitle={voiceMode === "agent" ? "Exit agent mode" : "Enter hybrid agent mode"}
+            agentButtonTitle={voiceMode === "agent" ? "Exit agent mode" : "Enter agent mode"}
             isDragOver={isDragOver}
             onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
             onDragLeave={(event) => { event.preventDefault(); setIsDragOver(false); }}

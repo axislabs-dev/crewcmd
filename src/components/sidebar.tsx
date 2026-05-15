@@ -9,7 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useTheme } from "@/components/theme-provider";
 import { useWorkspace } from "@/components/company-context";
 import { Avatar } from "@/components/avatar";
-import { UserPresenceDot, UserPresenceLine } from "@/components/user-presence";
+import { UserPresenceDot, UserPresenceLine, UserPresenceMenu } from "@/components/user-presence";
 
 const navSections = [
   {
@@ -170,6 +170,7 @@ function BrandName() {
 export function Sidebar() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
   const { data: session } = useSession();
   const { workspace } = useWorkspace();
   const { theme, setTheme } = useTheme();
@@ -256,17 +257,28 @@ export function Sidebar() {
     if (!session?.user) return null;
     const username = (session.user as Record<string, unknown>).username as string | undefined;
     return (
-      <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-[var(--bg-surface-hover)]">
-        <div className="relative shrink-0">
-          <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
-          <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setPresenceMenuOpen((open) => !open)}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
+          aria-label="Change status"
+          aria-expanded={presenceMenuOpen}
+        >
+          <div className="relative shrink-0">
+            <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
+            <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
+            <UserPresenceLine />
+            {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
+          </div>
+        </button>
+        <div className={`absolute bottom-full left-0 z-50 mb-2 ${presenceMenuOpen ? "block" : "hidden"}`}>
+          <UserPresenceMenu onClose={() => setPresenceMenuOpen(false)} />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
-          <UserPresenceLine />
-          {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
-        </div>
-      </Link>
+      </div>
     );
   };
 
@@ -401,12 +413,22 @@ export function Sidebar() {
         </nav>
         <div className="mx-2 border-t border-[var(--border-subtle)] px-2 py-3">
           <div className="flex flex-col items-center gap-2">
-            <Link href="/settings" title="Settings" aria-label="Settings" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]">
+            <button
+              type="button"
+              onClick={() => setPresenceMenuOpen((open) => !open)}
+              title="Change status"
+              aria-label="Change status"
+              aria-expanded={presenceMenuOpen}
+              className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]"
+            >
               <div className="relative">
                 <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
                 {session?.user ? <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" /> : null}
               </div>
-            </Link>
+            </button>
+            <div className={`absolute bottom-16 left-4 z-50 ${presenceMenuOpen ? "block" : "hidden"}`}>
+              <UserPresenceMenu onClose={() => setPresenceMenuOpen(false)} />
+            </div>
             <CompactThemeButton />
           </div>
         </div>

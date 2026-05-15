@@ -5474,6 +5474,9 @@ export default function ChatPage() {
                     isSaved={Boolean(savedByMessageId[msg.id])}
                     threadReplyCount={threadReplies.length}
                     threadReplies={threadReplies}
+                    threadUserAvatarUrl={userAvatarUrl}
+                    threadAssistantAvatarUrl={assistantAvatarUrl}
+                    threadAssistantEmoji={agentEmoji}
                     voiceSettings={resolvedVoiceSettings}
                   />
                 )}

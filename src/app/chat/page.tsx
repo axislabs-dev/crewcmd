@@ -1160,6 +1160,7 @@ export default function ChatPage() {
   const [urlAgentCallsign, setUrlAgentCallsign] = useState<string | null>(null);
   const [urlSessionKey, setUrlSessionKey] = useState<string | null>(null);
   const [urlMessageId, setUrlMessageId] = useState<string | null>(null);
+  const [urlChannelId, setUrlChannelId] = useState<string | null>(null);
   const [activeIdentityProfile, setActiveIdentityProfile] = useState<ChatIdentityProfile | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
@@ -1329,6 +1330,7 @@ export default function ChatPage() {
       const nextChannels = data.channels ?? [];
       setChannels(nextChannels);
       setActiveChannelId((current) => {
+        if (urlChannelId && nextChannels.some((channel) => channel.id === urlChannelId)) return urlChannelId;
         if (current && nextChannels.some((channel) => channel.id === current)) return current;
         return nextChannels.find((channel) => (channel.type ?? "channel") !== "dm")?.id ?? nextChannels[0]?.id ?? null;
       });
@@ -1336,7 +1338,7 @@ export default function ChatPage() {
     } catch {
       setChannelNotice("Could not load channels.");
     }
-  }, [chatCompanyId, chatWorkspaceId]);
+  }, [chatCompanyId, chatWorkspaceId, urlChannelId]);
 
   useEffect(() => {
     void loadChannels();
@@ -1815,6 +1817,7 @@ export default function ChatPage() {
       setUrlAgentCallsign(params.get("agent")?.toLowerCase() ?? null);
       setUrlSessionKey(params.get("sessionKey"));
       setUrlMessageId(params.get("messageId"));
+      setUrlChannelId(params.get("channelId"));
     };
     applyLocationSearch();
     window.addEventListener("popstate", applyLocationSearch);

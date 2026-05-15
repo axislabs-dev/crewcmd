@@ -19,6 +19,11 @@ interface Member {
   githubUsername: string;
   email: string | null;
   createdAt: string;
+  presenceStatus: string | null;
+  presenceCustomText: string | null;
+  presenceEmoji: string | null;
+  presenceManualExpiresAt: string | null;
+  presenceLastSeenAt: string | null;
 }
 
 interface ProviderKey {
@@ -53,6 +58,31 @@ const PROVIDER_INFO: Record<string, { label: string; placeholder: string }> = {
   google: { label: "Google", placeholder: "AIza..." },
   openrouter: { label: "OpenRouter", placeholder: "sk-or-v1-..." },
 };
+
+function resolveMemberPresence(member: Member) {
+  const lastSeenAt = member.presenceLastSeenAt ? new Date(member.presenceLastSeenAt) : null;
+  const manualExpiresAt = member.presenceManualExpiresAt ? new Date(member.presenceManualExpiresAt) : null;
+  const offline = !lastSeenAt || Date.now() - lastSeenAt.getTime() > 90_000;
+  const manualExpired = manualExpiresAt ? manualExpiresAt.getTime() <= Date.now() : false;
+  const status = offline ? "offline" : manualExpired ? "active" : member.presenceStatus ?? "active";
+  const label = offline
+    ? "Offline"
+    : manualExpired || !member.presenceCustomText
+      ? status === "meeting"
+        ? "In a meeting"
+        : status[0].toUpperCase() + status.slice(1)
+      : member.presenceCustomText;
+  const dotClass = {
+    active: "bg-emerald-400",
+    focus: "bg-violet-300",
+    meeting: "bg-cyan-300",
+    away: "bg-amber-300",
+    sleep: "bg-sky-300",
+    offline: "bg-[var(--text-tertiary)]",
+  }[status] ?? "bg-[var(--text-tertiary)]";
+
+  return { label, emoji: offline || manualExpired ? null : member.presenceEmoji, dotClass };
+}
 
 export default function CompanySettingsPage() {
   const [company, setCompany] = useState<Company | null>(null);
@@ -167,6 +197,17 @@ export default function CompanySettingsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    const interval = window.setInterval(async () => {
+      const companyId = getActiveCompanyId();
+      if (!companyId) return;
+      const res = await fetch(`/api/companies/${companyId}/members`, { cache: "no-store" });
+      if (res.ok) setMembers(await res.json());
+    }, 30_000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (isOwnerOrAdmin) {
@@ -683,10 +724,7 @@ export default function CompanySettingsPage() {
         {/* Member list */}
         <div className="mt-4 space-y-2">
           {members.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
-            >
+            <div key={m.id} className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-surface-hover)] font-mono text-xs text-[var(--text-secondary)]">
                   {(m.email || m.githubUsername || "?")[0]?.toUpperCase()}
@@ -696,6 +734,10 @@ export default function CompanySettingsPage() {
                   {m.githubUsername && m.email && (
                     <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{m.githubUsername}</p>
                   )}
+                  <p className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+                    <span className={`h-1.5 w-1.5 rounded-full ${resolveMemberPresence(m).dotClass}`} />
+                    <span>{resolveMemberPresence(m).emoji ? `${resolveMemberPresence(m).emoji} ` : null}{resolveMemberPresence(m).label}</span>
+                  </p>
                 </div>
                 {roleBadge(m.role)}
               </div>

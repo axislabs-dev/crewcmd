@@ -7,6 +7,7 @@ import { TaskBoard } from "@/components/task-board";
 import { TaskTable } from "@/components/task-table";
 import { getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
 import { useWorkspace } from "@/components/company-context";
+import { usePageContextStore } from "@/lib/page-context-store";
 
 interface Project {
   id: string;
@@ -20,6 +21,8 @@ const VIEW_STORAGE_KEY = "mc_task_view";
 
 export default function TasksPage() {
   const { workspace, loading: workspaceLoading } = useWorkspace();
+  const setPageContext = usePageContextStore((state) => state.setContext);
+  const clearPageContext = usePageContextStore((state) => state.clearContext);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -115,6 +118,16 @@ export default function TasksPage() {
       : projectFilter === "none"
       ? tasks.filter((t) => !t.projectId)
       : tasks.filter((t) => t.projectId === projectFilter);
+
+  useEffect(() => {
+    setPageContext({
+      route: "/tasks",
+      surface: "tasks",
+      entityIds: { taskId: selectedTask?.id ?? null },
+      visibleIds: boardTasks.slice(0, 20).map((task) => task.id),
+    });
+    return () => clearPageContext("tasks");
+  }, [boardTasks, clearPageContext, selectedTask?.id, setPageContext]);
 
   const agentStatusMessage = agentsLoading
     ? "Loading assignable agents…"

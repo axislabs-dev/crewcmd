@@ -1206,6 +1206,28 @@ export const savedItems = pgTable("saved_items", {
   userSourceUnique: unique().on(table.userId, table.sourceType, table.sourceId),
 }));
 
+export const trayPins = pgTable("tray_pins", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: uuid("target_id"),
+  targetKey: text("target_key").notNull(),
+  title: text("title").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  sortIndex: integer("sort_index").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userTargetUnique: unique().on(table.userId, table.targetType, table.targetKey),
+  userScopeIdx: index("tray_pins_user_scope_idx").on(table.userId, table.workspaceId, table.companyId),
+}));
+
 // ─── Invite Tokens ────────────────────────────────────────────────
 
 export const inviteTokens = pgTable("invite_tokens", {

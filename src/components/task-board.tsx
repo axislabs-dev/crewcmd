@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Task, Agent, TaskStatus, TimeEntry } from "@/lib/data";
 import { buildAgentLookup, getUnknownAgentOption, resolveAssignedAgentValue } from "@/lib/agent-lookup";
+import { useAgentVoiceSession } from "@/components/app-tray";
 
 interface ProjectDoc {
   name: string;
@@ -61,6 +62,7 @@ const priorityStyles: Record<string, string> = {
 };
 
 export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
+  const { pinTarget } = useAgentVoiceSession();
   const [boardTasks, setBoardTasks] = useState<Task[]>(initialTasks);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -1718,7 +1720,7 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                         // Only open detail if we weren't dragging
                         if (!dragRef.current?.isDragging) openTaskDetail(task);
                       }}
-                      className={`cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2.5 transition-all duration-200 hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)] ${
+                      className={`group cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2.5 transition-all duration-200 hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)] ${
                         isDragging ? "opacity-40" : ""
                       } ${isDragOver ? "border-neo/50 bg-[var(--accent-soft)] ring-1 ring-neo/30" : ""}`}
                       style={{ touchAction: "none" }}
@@ -1755,6 +1757,27 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                             {task.title}
                           </p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void pinTarget({
+                              targetType: "task",
+                              targetId: task.id,
+                              title: task.title,
+                              metadata: {
+                                shortId: task.shortId,
+                                status: task.status,
+                                priority: task.priority,
+                              },
+                            });
+                          }}
+                          className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[8px] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
+                          aria-label={`Pin ${task.title} to tray`}
+                          title="Pin task to tray"
+                        >
+                          Pin
+                        </button>
                       </div>
 
                       <div className="flex items-center justify-between">

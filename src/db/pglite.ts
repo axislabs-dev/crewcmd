@@ -179,6 +179,27 @@ async function applySchema() {
         UNIQUE(user_id, source_type, source_id)
       )
     `);
+    await queuedClient.exec(`
+      CREATE TABLE IF NOT EXISTS tray_pins (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+        workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        target_type TEXT NOT NULL,
+        target_id UUID,
+        target_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        metadata JSONB,
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, target_type, target_key)
+      )
+    `);
+    await queuedClient.exec(`
+      CREATE INDEX IF NOT EXISTS tray_pins_user_scope_idx
+        ON tray_pins(user_id, workspace_id, company_id)
+    `);
   } catch { /* tables may already exist */ }
 
   // Skills tables

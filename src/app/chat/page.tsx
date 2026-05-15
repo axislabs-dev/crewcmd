@@ -412,6 +412,7 @@ function ChatComposer({
   onDragOver,
   onDragLeave,
   onDrop,
+  agentPanel,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -433,6 +434,7 @@ function ChatComposer({
   onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+  agentPanel?: React.ReactNode;
 }) {
   const [draft, setDraft] = useState(value);
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -474,7 +476,7 @@ function ChatComposer({
         }}
       />
       <div
-        className={`relative rounded-[var(--radius-panel)] border bg-[var(--bg-surface)] transition-colors focus-within:border-[var(--control-border-focus)] focus-within:bg-[var(--bg-surface-hover)] ${
+        className={`relative rounded-[28px] border bg-[var(--bg-surface)] transition-colors focus-within:border-[var(--control-border-focus)] focus-within:bg-[var(--bg-surface-hover)] lg:rounded-[var(--radius-panel)] ${
           isDragOver
             ? "border-[var(--accent)] bg-[var(--accent-soft)]"
             : "border-[var(--border-medium)]"
@@ -501,6 +503,12 @@ function ChatComposer({
             <span className="text-[12px] text-[var(--accent)]">Drop files to attach</span>
           </div>
         )}
+
+        {agentPanel ? (
+          <div className="px-2 pt-2">
+            {agentPanel}
+          </div>
+        ) : null}
 
         <textarea
           value={draft}
@@ -5297,7 +5305,7 @@ export default function ChatPage() {
         </div>
       )}
       {/* Messages area */}
-      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto px-4 py-4 lg:px-6" style={{ WebkitOverflowScrolling: "touch" }}>
         <div className="mx-auto max-w-3xl space-y-4">
           {transcriptItems.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -5456,71 +5464,52 @@ export default function ChatPage() {
       </div>
 
       {/* Voice surface: inline by default, immersive only when expanded. */}
-      {voiceMode === "agent" && !activeThread && (
+      {voiceMode === "agent" && !activeThread && agentOverlayMode === "immersive" && (
         <div
-          className={
-            agentOverlayMode === "immersive"
-              ? "fixed inset-0 z-[90] overflow-hidden"
-              : `absolute inset-x-3 bottom-[5.75rem] z-20 max-h-[min(18rem,46dvh)] overflow-hidden rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-primary)]/88 px-2 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:shrink-0 lg:overflow-visible lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-3 lg:pb-0 lg:pt-2 lg:shadow-none sm:px-4 ${mobileConversationOpen ? "block" : "hidden lg:block"}`
-          }
+          className="fixed inset-0 z-[90] overflow-hidden"
           style={{
             color: "var(--text-primary)",
-            background:
-              agentOverlayMode === "immersive"
-                ? "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))"
-                : undefined,
+            background: "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))",
           }}
         >
-          {agentOverlayMode === "immersive" ? (
-            <div
-              className="absolute inset-0 opacity-60"
-              style={{
-                backgroundImage: [
-                  "linear-gradient(var(--voice-overlay-grid) 1px, transparent 1px)",
-                  "linear-gradient(90deg, var(--voice-overlay-grid-soft) 1px, transparent 1px)",
-                ].join(", "),
-                backgroundSize: "44px 44px",
-              }}
-            />
-          ) : null}
-          <div className={agentOverlayMode === "immersive" ? "relative flex h-full flex-col justify-center" : "relative"}>
-            {agentOverlayMode === "immersive" ? (
-              <div className="absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 flex gap-2 sm:right-6">
-                <button
-                  onClick={() => setVoicePickerOpen(true)}
-                  title="Choose voice"
-                  aria-label="Choose voice"
-                  className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
-                >
-                  <VoicePersonIcon />
-                </button>
-                <button
-                  onClick={() => setAgentOverlayMode("transcript")}
-                  title="Return to chat"
-                  aria-label="Return to chat"
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5H5.25A.75.75 0 0 0 4.5 5.25V9m10.5-4.5h3.75a.75.75 0 0 1 .75.75V9M9 19.5H5.25a.75.75 0 0 1-.75-.75V15m10.5 4.5h3.75a.75.75 0 0 0 .75-.75V15M8.25 8.25l-3.75-3.75m15 0-3.75 3.75m-7.5 7.5-3.75 3.75m15 0-3.75-3.75" />
-                  </svg>
-                </button>
-              </div>
-            ) : null}
+          <div
+            className="absolute inset-0 opacity-60"
+            style={{
+              backgroundImage: [
+                "linear-gradient(var(--voice-overlay-grid) 1px, transparent 1px)",
+                "linear-gradient(90deg, var(--voice-overlay-grid-soft) 1px, transparent 1px)",
+              ].join(", "),
+              backgroundSize: "44px 44px",
+            }}
+          />
+          <div className="relative flex h-full flex-col justify-center">
+            <div className="absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 flex gap-2 sm:right-6">
+              <button
+                onClick={() => setVoicePickerOpen(true)}
+                title="Choose voice"
+                aria-label="Choose voice"
+                className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+              >
+                <VoicePersonIcon />
+              </button>
+              <button
+                onClick={() => setAgentOverlayMode("transcript")}
+                title="Return to chat"
+                aria-label="Return to chat"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] shadow-[var(--theme-shadow)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5H5.25A.75.75 0 0 0 4.5 5.25V9m10.5-4.5h3.75a.75.75 0 0 1 .75.75V9M9 19.5H5.25a.75.75 0 0 1-.75-.75V15m10.5 4.5h3.75a.75.75 0 0 0 .75-.75V15M8.25 8.25l-3.75-3.75m15 0-3.75 3.75m-7.5 7.5-3.75 3.75m15 0-3.75-3.75" />
+                </svg>
+              </button>
+            </div>
 
             <div
-              className={
-                agentOverlayMode === "immersive"
-                  ? "flex flex-1 items-center px-4 pb-3 sm:px-6"
-                  : ""
-              }
+              className="flex flex-1 items-center px-4 pb-3 sm:px-6"
             >
-              <div className={agentOverlayMode === "immersive" ? "mx-auto w-full max-w-none px-0 py-0" : "mx-auto max-w-3xl"}>
+              <div className="mx-auto w-full max-w-none px-0 py-0">
                 <div
-                  className={
-                    agentOverlayMode === "immersive"
-                      ? "flex flex-col items-center gap-2"
-                      : "relative mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl"
-                  }
+                  className="flex flex-col items-center gap-2"
                 >
                   <VoiceAgent
                     onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
@@ -5529,8 +5518,7 @@ export default function ChatPage() {
                     isLoading={isLoading}
                     accentColor={agentColor}
                     autoActivate
-                    immersive={agentOverlayMode === "immersive"}
-                    compact={agentOverlayMode === "transcript"}
+                    immersive
                     isMicMuted={agentMicMuted}
                     isAgentMuted={agentAudioMuted}
                     onMicMutedChange={setAgentMicMuted}
@@ -5542,28 +5530,6 @@ export default function ChatPage() {
                       ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                       : gatewaySessionKeyForAgent(selectedAgent)}
                   />
-                  {agentOverlayMode === "transcript" ? (
-                    <div className="absolute right-2 top-2 flex items-center gap-1">
-                      <button
-                        onClick={() => setVoicePickerOpen(true)}
-                        title="Choose voice"
-                        aria-label="Choose voice"
-                        className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
-                      >
-                        <VoicePersonIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setAgentOverlayMode("immersive")}
-                        title="Enter fullscreen visual mode"
-                        aria-label="Enter fullscreen visual mode"
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9V5.25A1.5 1.5 0 0 1 5.25 3.75H9m6 0h3.75A1.5 1.5 0 0 1 20.25 5.25V9m0 6v3.75a1.5 1.5 0 0 1-1.5 1.5H15m-6 0H5.25a1.5 1.5 0 0 1-1.5-1.5V15" />
-                        </svg>
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
               </div>
             </div>
@@ -5584,7 +5550,7 @@ export default function ChatPage() {
       />
 
       {/* Input area — Claude-style layout */}
-      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
+      <div className={`shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           <ChatComposer
             value={input}
@@ -5631,6 +5597,49 @@ export default function ChatPage() {
               setIsDragOver(false);
               if (event.dataTransfer.files.length) addFiles(event.dataTransfer.files);
             }}
+            agentPanel={voiceMode === "agent" && !activeThread && agentOverlayMode === "transcript" ? (
+              <div className="relative rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
+                <VoiceAgent
+                  onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
+                  isPlayingAudio={isPlayingAudio}
+                  onInterrupt={interruptAudio}
+                  isLoading={isLoading}
+                  accentColor={agentColor}
+                  autoActivate
+                  compact
+                  isMicMuted={agentMicMuted}
+                  isAgentMuted={agentAudioMuted}
+                  onMicMutedChange={setAgentMicMuted}
+                  onAgentMutedChange={handleAgentAudioMutedChange}
+                  agent={selectedAgent?.callsign}
+                  gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
+                  companyId={company?.id}
+                  sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+                    ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+                    : gatewaySessionKeyForAgent(selectedAgent)}
+                />
+                <div className="absolute right-2 top-2 flex items-center gap-1">
+                  <button
+                    onClick={() => setVoicePickerOpen(true)}
+                    title="Choose voice"
+                    aria-label="Choose voice"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+                  >
+                    <VoicePersonIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setAgentOverlayMode("immersive")}
+                    title="Enter fullscreen visual mode"
+                    aria-label="Enter fullscreen visual mode"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9V5.25A1.5 1.5 0 0 1 5.25 3.75H9m6 0h3.75A1.5 1.5 0 0 1 20.25 5.25V9m0 6v3.75a1.5 1.5 0 0 1-1.5 1.5H15m-6 0H5.25a1.5 1.5 0 0 1-1.5-1.5V15" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : null}
           />
         </div>
         </div>

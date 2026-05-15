@@ -303,21 +303,19 @@ export function Sidebar() {
 
   const mobilePrimaryItems = [
     { href: "/chat", label: "Chat", icon: navSections[0].items[0].icon },
-    { href: "/chat", label: "DMs", icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3.75h4.5m-7.5 7.5 3.2-1.28A9.85 9.85 0 0 0 12 19.5c4.97 0 9-3.358 9-7.5s-4.03-7.5-9-7.5-9 3.358-9 7.5c0 1.74.712 3.342 1.905 4.615L4.5 19.5Z" />
-      </svg>
-    ) },
-    { href: "/inbox", label: "Activity", icon: navSections[0].items[1].icon },
+    { href: "/inbox", label: "Inbox", icon: navSections[0].items[1].icon },
+    { href: "/tasks", label: "Tasks", icon: navSections[1].items[0].icon },
   ];
 
   const MobileNavButton = ({ item }: { item: { href: string; label: string; icon: React.ReactNode } }) => {
     const active =
       item.label === "Chat"
         ? pathname.startsWith("/chat")
-        : item.label === "Activity"
+        : item.label === "Inbox"
           ? pathname.startsWith("/inbox")
-          : false;
+          : item.label === "Tasks"
+            ? pathname.startsWith("/tasks")
+            : false;
     return (
       <Link
         href={item.href}

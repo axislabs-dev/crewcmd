@@ -19,6 +19,7 @@ import {
   playNativeVoiceAudio,
   speakNativeVoiceText,
   stopNativeVoiceAudio,
+  updateNativeVoiceSessionStatus,
 } from "@/lib/native-voice-session";
 import { formatPageContextForPrompt, usePageContextStore } from "@/lib/page-context-store";
 import {
@@ -87,6 +88,8 @@ type AgentVoiceSessionContextValue = {
 
 const AgentVoiceSessionContext = createContext<AgentVoiceSessionContextValue | null>(null);
 const INACTIVE_TRAY_GRACE_MS = 30_000;
+const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
+const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
 
 function activeAgentStorageKey(workspaceId?: string | null, sessionKey?: string | null) {
   return `crewcmd.tray.activeAgentPinned.${workspaceId ?? "global"}.${sessionKey ?? "none"}`;
@@ -402,12 +405,49 @@ function ActiveAgentTrayItem() {
   const [miniInput, setMiniInput] = useState("");
   const [miniMessages, setMiniMessages] = useState<MiniChatMessage[]>([]);
   const [miniSending, setMiniSending] = useState(false);
+  const lastNativeStatusRef = useRef({ at: 0, key: "" });
   const active = tray.activeSession;
 
   useEffect(() => {
     if (!active || pathname === "/chat" || !tray.systemPinned || tray.voiceState !== "ready") return;
     tray.setVoiceState("listening");
   }, [active, pathname, tray]);
+
+  const nativeActor = tray.isPlayingAudio || tray.voiceState === "speaking" || tray.voiceState === "thinking" || tray.voiceState === "processing"
+    ? "agent"
+    : tray.voiceState === "listening" || tray.voiceState === "hearing"
+      ? "user"
+      : "system";
+  useEffect(() => {
+    if (!active || !tray.visible || !isNativeCapacitorApp()) return;
+    const levelBucket = Math.round(tray.voiceLevel * 20);
+    const key = [
+      tray.voiceState,
+      nativeActor,
+      levelBucket,
+      tray.systemPinned ? "active" : "recent",
+      active.agentCallsign,
+      active.title ?? active.agentName ?? "",
+    ].join(":");
+    const now = Date.now();
+    if (lastNativeStatusRef.current.key === key && now - lastNativeStatusRef.current.at < 250) return;
+    lastNativeStatusRef.current = { at: now, key };
+    void updateNativeVoiceSessionStatus({
+      state: tray.voiceState,
+      active: tray.systemPinned,
+      actor: nativeActor,
+      level: tray.voiceLevel,
+      agentCallsign: active.agentCallsign,
+      title: active.title ?? active.agentName ?? active.agentCallsign,
+    }).catch(() => {});
+  }, [
+    active,
+    nativeActor,
+    tray.systemPinned,
+    tray.visible,
+    tray.voiceLevel,
+    tray.voiceState,
+  ]);
 
   if (!active || !tray.visible) return null;
   if (pathname === "/chat" && !expanded) return null;
@@ -418,6 +458,8 @@ function ActiveAgentTrayItem() {
     const params = new URLSearchParams({ sessionKey: active.threadSessionKey ?? active.sessionKey });
     params.set("agent", active.agentCallsign);
     params.set("pane", "chat");
+    window.localStorage.setItem(CHAT_AGENT_STORAGE_KEY, active.agentCallsign.toLowerCase());
+    window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, active.threadSessionKey ?? active.sessionKey);
     router.push(`/chat?${params.toString()}`);
     setExpanded(false);
   };
@@ -576,15 +618,19 @@ function ActiveAgentTrayItem() {
   const pinnedLabel = tray.userPinned ? "Unpin active agent" : "Pin active agent";
   const stateTone = tray.voiceState === "speaking"
     ? "var(--accent)"
+    : tray.voiceState === "thinking" || tray.voiceState === "processing"
+      ? active.agentColor ?? "var(--accent)"
     : tray.voiceState === "error" || tray.voiceState === "paused"
       ? "var(--danger)"
       : tray.voiceState === "ready"
         ? "var(--text-tertiary)"
         : active.agentColor ?? "var(--accent)";
-  const visualActor = tray.isPlayingAudio || tray.voiceState === "speaking" ? "agent" : "user";
+  const visualActor = nativeActor === "agent" ? "agent" : "user";
   const visualTone = visualActor === "agent" ? (active.agentColor ?? "var(--accent)") : "var(--voice-listening, #d9b96e)";
   const visualLevel = tray.isPlayingAudio
     ? Math.max(tray.voiceLevel, 0.24)
+    : tray.voiceState === "thinking" || tray.voiceState === "processing"
+      ? 0.32
     : tray.voiceState === "listening" || tray.voiceState === "hearing"
       ? Math.max(tray.voiceLevel, 0.08)
       : 0;
@@ -606,12 +652,12 @@ function ActiveAgentTrayItem() {
         <span className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: active.agentColor ?? "var(--accent)" }}>
             {active.agentCallsign.slice(0, 2).toUpperCase()}
         </span>
-        {(tray.voiceState === "listening" || tray.voiceState === "hearing" || tray.voiceState === "speaking") ? (
+        {(tray.voiceState === "listening" || tray.voiceState === "hearing" || tray.voiceState === "thinking" || tray.voiceState === "processing" || tray.voiceState === "speaking") ? (
           <span className="absolute -bottom-0.5 flex h-4 items-end gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5" aria-hidden="true">
             {visualBars.map((bar, index) => (
               <span
                 key={index}
-                className={`w-0.5 rounded-full transition-[height,background-color] duration-100 ${tray.isPlayingAudio ? "animate-pulse" : ""}`}
+                className={`w-0.5 rounded-full transition-[height,background-color] duration-100 ${nativeActor === "agent" ? "animate-pulse" : ""}`}
                 style={{
                   height: `${5 + bar * 9}px`,
                   backgroundColor: visualTone,

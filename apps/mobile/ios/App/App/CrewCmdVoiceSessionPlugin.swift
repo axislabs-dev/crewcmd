@@ -11,6 +11,12 @@ private enum CrewCmdVoiceState: String {
     case error
 }
 
+private enum CrewCmdVoiceUiActor: String {
+    case user
+    case agent
+    case system
+}
+
 @objc(CrewCmdVoiceSessionPlugin)
 public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
     public let identifier = "CrewCmdVoiceSessionPlugin"
@@ -23,6 +29,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         CAPPluginMethod(name: "playAudio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "speakText", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopAudio", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise)
     ]
 
@@ -63,6 +70,11 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var playbackSuppressionUntil: TimeInterval = 0
     private var noiseFloorRms: Double = 0
     private var lastRouteRecoveryAt: TimeInterval = 0
+    private var uiState = "idle"
+    private var uiActor: CrewCmdVoiceUiActor = .system
+    private var uiLevel: Double = 0
+    private var uiTitle: String?
+    private var uiAgentCallsign: String?
 
     private let baseSilenceThreshold = 0.006
     private let speechStartMs = 250.0
@@ -177,6 +189,27 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
     @objc func status(_ call: CAPPluginCall) {
         call.resolve(statusPayload())
+    }
+
+    @objc func updateStatus(_ call: CAPPluginCall) {
+        captureQueue.async {
+            self.uiState = call.getString("state") ?? self.uiState
+            self.uiLevel = max(0, min(1, call.getDouble("level") ?? self.uiLevel))
+            if let rawActor = call.getString("actor"), let actor = CrewCmdVoiceUiActor(rawValue: rawActor) {
+                self.uiActor = actor
+            }
+            if let title = call.getString("title") {
+                self.uiTitle = title
+            }
+            if let agentCallsign = call.getString("agentCallsign") {
+                self.uiAgentCallsign = agentCallsign
+            }
+
+            self.notifyDiagnostic("native.ui-state.updated", detail: self.uiStateDetail(activeOverride: call.getBool("active")))
+            DispatchQueue.main.async {
+                call.resolve(self.statusPayload())
+            }
+        }
     }
 
     @objc func playAudio(_ call: CAPPluginCall) {
@@ -1131,7 +1164,12 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "audioPlaying": audioPlayer?.isPlaying ?? false,
             "speechSpeaking": speechSynthesizer.isSpeaking,
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull(),
-            "applicationState": currentApplicationStateName()
+            "applicationState": currentApplicationStateName(),
+            "uiState": uiState,
+            "uiActor": uiActor.rawValue,
+            "uiLevel": uiLevel,
+            "uiTitle": uiTitle ?? NSNull(),
+            "uiAgentCallsign": uiAgentCallsign ?? NSNull()
         ]
     }
 
@@ -1161,6 +1199,18 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             "engineRunning": audioEngine.isRunning,
             "applicationState": currentApplicationStateName(),
             "lastAudioBufferAt": lastAudioBufferAt ?? NSNull()
+        ]
+    }
+
+    private func uiStateDetail(activeOverride: Bool? = nil) -> [String: Any] {
+        return [
+            "active": activeOverride ?? active,
+            "state": uiState,
+            "actor": uiActor.rawValue,
+            "level": uiLevel,
+            "title": uiTitle ?? NSNull(),
+            "agentCallsign": uiAgentCallsign ?? NSNull(),
+            "applicationState": currentApplicationStateName()
         ]
     }
 

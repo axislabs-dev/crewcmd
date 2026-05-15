@@ -232,6 +232,17 @@ function pinShortLabel(pin: TrayPin) {
   return pinMetaString(pin, "agentId")?.slice(0, 2).toUpperCase() ?? "CH";
 }
 
+function isChatPin(pin: TrayPin) {
+  return pin.targetType === "chat_session" || pin.targetType === "chat_thread";
+}
+
+function chatPinInitials(pin: TrayPin) {
+  const agent = pinMetaString(pin, "agentId") ?? pinMetaString(pin, "storageAgentId");
+  if (agent) return agent.slice(0, 2).toUpperCase();
+  const channel = pinMetaString(pin, "channelName") ?? pin.title;
+  return channel.replace(/^#/, "").slice(0, 2).toUpperCase();
+}
+
 export function AgentVoiceSessionProvider({ children }: { children: React.ReactNode }) {
   const { workspace } = useWorkspace();
   const [activeSession, setActiveSessionState] = useState<ActiveAgentVoiceSession | null>(null);
@@ -864,7 +875,7 @@ function ControlIcon({ icon }: { icon: "mic" | "mic-off" | "volume" | "volume-of
 }
 
 function ManualPins() {
-  const { pins, removePin, refreshPins } = useAgentVoiceSession();
+  const { activeSession, visible: activeSessionVisible, pins, removePin, refreshPins } = useAgentVoiceSession();
   const { workspace } = useWorkspace();
   const pageContext = usePageContextStore((state) => state.context);
   const [activeTaskPin, setActiveTaskPin] = useState<TrayPin | null>(null);
@@ -873,7 +884,14 @@ function ManualPins() {
   const [miniInput, setMiniInput] = useState("");
   const [miniSending, setMiniSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  if (pins.length === 0) return null;
+  const activeSessionKey = activeSession?.threadSessionKey ?? activeSession?.sessionKey ?? null;
+  const chatPins = pins.filter((pin) => {
+    if (!isChatPin(pin)) return false;
+    if (!activeSessionVisible || !activeSessionKey) return true;
+    return pin.targetKey !== activeSessionKey && pinMetaString(pin, "threadSessionKey") !== activeSessionKey && pinMetaString(pin, "gatewaySessionKey") !== activeSessionKey;
+  });
+  const taskPins = pins.filter((pin) => pin.targetType === "task");
+  if (chatPins.length === 0 && taskPins.length === 0) return null;
 
   const updateTaskStatus = async (pin: TrayPin, status: string) => {
     const taskId = pin.targetId ?? pin.targetKey;
@@ -1018,55 +1036,63 @@ function ManualPins() {
     }
   };
 
-  const visiblePins = pins.slice(0, 5);
+  const visiblePins = taskPins.slice(0, 3);
 
   return (
     <>
-      <div className="ml-auto flex max-w-full gap-1.5 overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-2 shadow-lg">
-        {visiblePins.map((pin) => {
-          const content = (
-            <>
-              <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5 font-mono text-[8px] text-[var(--text-tertiary)]">
-                {pinShortLabel(pin)}
-              </span>
-              <span className="max-w-32 truncate text-xs font-medium text-[var(--text-secondary)]">{pin.title}</span>
-            </>
-          );
-          return (
-            <div key={pin.id} className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--bg-surface)] px-2 py-1">
-              {pin.targetType === "task" ? (
-                <button type="button" onClick={() => setActiveTaskPin(pin)} className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]" title={pin.title}>
-                  {content}
-                </button>
-              ) : pin.targetType === "chat_session" || pin.targetType === "chat_thread" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveChatPin(pin);
-                    setMiniMessages([]);
-                  }}
-                  className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]"
-                  title={pin.title}
-                >
-                  {content}
-                </button>
-              ) : (
-                <Link href={pinHref(pin)} className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]" title={pin.title}>
-                  {content}
-                </Link>
-              )}
-              <button type="button" onClick={() => void removePin(pin.id)} className="flex h-5 w-5 items-center justify-center rounded text-[11px] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label={`Remove ${pin.title} from tray`}>
+      {chatPins.length > 0 ? (
+        <div className="ml-auto flex max-w-full flex-row-reverse items-center gap-1.5 lg:flex-col">
+          {chatPins.slice(0, 5).map((pin) => (
+            <div key={pin.id} className="group relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveChatPin(pin);
+                  setMiniMessages([]);
+                }}
+                className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-[color-mix(in_srgb,var(--accent)_72%,white_10%)] bg-[var(--accent)] text-xs font-bold text-white shadow-2xl transition hover:scale-[1.03]"
+                title={pin.title}
+                aria-label={`Open pinned chat ${pin.title}`}
+              >
+                {chatPinInitials(pin)}
+              </button>
+              <button type="button" onClick={() => void removePin(pin.id)} className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[10px] text-[var(--text-tertiary)] opacity-0 shadow transition hover:text-[var(--text-primary)] group-hover:opacity-100" aria-label={`Remove ${pin.title} from tray`}>
                 x
               </button>
             </div>
-          );
-        })}
-        {pins.length > visiblePins.length ? (
-          <div className="flex shrink-0 items-center rounded-md bg-[var(--bg-surface)] px-2 py-1 text-xs font-semibold text-[var(--text-tertiary)]">
-            +{pins.length - visiblePins.length}
-          </div>
-        ) : null}
-      </div>
+          ))}
+        </div>
+      ) : null}
+
+      {visiblePins.length > 0 ? (
+        <div className="ml-auto flex max-w-[min(28rem,calc(100vw-1.5rem))] gap-1.5 overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-2 shadow-lg lg:max-w-[18rem]">
+          {visiblePins.map((pin) => {
+            const content = (
+              <>
+                <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5 font-mono text-[8px] text-[var(--text-tertiary)]">
+                  {pinShortLabel(pin)}
+                </span>
+                <span className="max-w-32 truncate text-xs font-medium text-[var(--text-secondary)] lg:max-w-24">{pin.title}</span>
+              </>
+            );
+            return (
+              <div key={pin.id} className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--bg-surface)] px-2 py-1">
+                <button type="button" onClick={() => setActiveTaskPin(pin)} className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]" title={pin.title}>
+                  {content}
+                </button>
+                <button type="button" onClick={() => void removePin(pin.id)} className="flex h-5 w-5 items-center justify-center rounded text-[11px] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]" aria-label={`Remove ${pin.title} from tray`}>
+                  x
+                </button>
+              </div>
+            );
+          })}
+          {taskPins.length > visiblePins.length ? (
+            <div className="flex shrink-0 items-center rounded-md bg-[var(--bg-surface)] px-2 py-1 text-xs font-semibold text-[var(--text-tertiary)]">
+              +{taskPins.length - visiblePins.length}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {activeTaskPin ? (
         <div className="fixed inset-0 z-[76] flex items-end bg-black/30 lg:items-center lg:justify-end" onClick={() => setActiveTaskPin(null)}>
@@ -1181,8 +1207,9 @@ function ManualPins() {
 export function AppTray() {
   const pathname = usePathname();
   if (pathname === "/" || pathname === "/access-denied" || pathname.startsWith("/invite/")) return null;
+  const desktopBottom = pathname === "/chat" ? "lg:bottom-28" : "lg:bottom-4";
   return (
-    <div className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--mobile-app-bar-height)+0.5rem)] z-[55] flex flex-col items-stretch gap-2 lg:bottom-auto lg:left-auto lg:right-4 lg:top-4 lg:w-[min(34rem,calc(100vw-7rem))]">
+    <div className={`pointer-events-none fixed inset-x-3 bottom-[calc(var(--mobile-app-bar-height)+0.5rem)] z-[55] flex flex-col items-stretch gap-2 lg:inset-x-auto ${desktopBottom} lg:right-4 lg:w-auto lg:max-w-[20rem]`}>
       <div className="pointer-events-auto flex flex-col gap-2 lg:items-end">
         <ActiveAgentTrayItem />
         <ManualPins />

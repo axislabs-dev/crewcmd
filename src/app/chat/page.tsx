@@ -2242,10 +2242,9 @@ export default function ChatPage() {
       if (!membership) return false;
       if (!speakingRoles.has(membership.role)) return false;
       if (!speakingModes.has(membership.agentParticipationMode ?? "mention_only")) return false;
-      if (!chatCompanyId) return true;
-      return agent.ownerType === "company" && agent.ownerCompanyId === chatCompanyId;
+      return true;
     });
-  }, [activeChannel, agents, channelAgentMemberById, chatCompanyId]);
+  }, [activeChannel, agents, channelAgentMemberById]);
   const visibleMessages = useMemo(
     () => uniqueMessagesById(
       messages.filter(isVisibleChatMessage)
@@ -3393,12 +3392,12 @@ export default function ChatPage() {
             fetch("/api/chat/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ agentId: agentCallsign, companyId: chatCompanyId, workspaceId: chatWorkspaceId, channelId: activeChannelId, role: "user", content: trimmed }),
+              body: JSON.stringify({ agentId: agentCallsign, companyId: chatCompanyId, workspaceId: chatWorkspaceId, channelId: activeChannelId, gatewaySessionKey: activeSessionKey, role: "user", content: trimmed }),
             }).catch(() => {});
             fetch("/api/chat/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ agentId: agentCallsign, companyId: chatCompanyId, workspaceId: chatWorkspaceId, channelId: activeChannelId, role: "assistant", content: assistantContent }),
+              body: JSON.stringify({ agentId: agentCallsign, companyId: chatCompanyId, workspaceId: chatWorkspaceId, channelId: activeChannelId, gatewaySessionKey: activeSessionKey, role: "assistant", content: assistantContent }),
             }).catch(() => {});
           }
         } catch {
@@ -3524,6 +3523,7 @@ export default function ChatPage() {
                 companyId: chatCompanyId,
                 workspaceId: chatWorkspaceId,
                 channelId: activeChannelId,
+                gatewaySessionKey: requestSessionKey,
                 role: "user",
                 content: userMsg.content,
                 metadata,

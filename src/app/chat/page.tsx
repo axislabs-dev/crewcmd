@@ -2156,15 +2156,11 @@ export default function ChatPage() {
     return unsub;
   }, [activeStoreKey]);
 
-  // Check if user is near bottom of scroll container
+  // Check if user is near bottom of the message viewport.
   const isNearBottom = useCallback(() => {
     const el = scrollContainerRef.current;
-    if (el && el.scrollHeight > el.clientHeight + 2) {
-      return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    }
-    if (typeof window === "undefined" || typeof document === "undefined") return true;
-    const page = document.scrollingElement ?? document.documentElement;
-    return page.scrollHeight - window.scrollY - window.innerHeight < 120;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
 
   // Track whether user was at bottom before new content arrives
@@ -2174,13 +2170,11 @@ export default function ChatPage() {
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    const useWindowScroll = el.scrollHeight <= el.clientHeight + 2;
     const trackPosition = () => {
       wasAtBottomRef.current = isNearBottom();
     };
-    const target: HTMLElement | Window = useWindowScroll ? window : el;
-    target.addEventListener("scroll", trackPosition, { passive: true });
-    return () => target.removeEventListener("scroll", trackPosition);
+    el.addEventListener("scroll", trackPosition, { passive: true });
+    return () => el.removeEventListener("scroll", trackPosition);
   }, [isNearBottom, voiceMode]);
 
   // Auto-scroll to bottom when new content arrives (if user was already at bottom)
@@ -2194,13 +2188,11 @@ export default function ChatPage() {
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    const useWindowScroll = el.scrollHeight <= el.clientHeight + 2;
     const handleScroll = () => {
       setShowScrollButton(!isNearBottom());
     };
-    const target: HTMLElement | Window = useWindowScroll ? window : el;
-    target.addEventListener("scroll", handleScroll, { passive: true });
-    return () => target.removeEventListener("scroll", handleScroll);
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
   }, [isNearBottom, voiceMode]);
 
   // Scroll to bottom on initial load / session switch / navigate back
@@ -2237,7 +2229,6 @@ export default function ChatPage() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-        composerDockRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
       });
     });
   }, [activeThread, agentOverlayMode, voiceMode]);
@@ -4486,7 +4477,7 @@ export default function ChatPage() {
       : `Message ${agentCallsign}...`;
 
   return (
-    <div className="relative flex min-h-[calc(100dvh_-_var(--mobile-app-bar-height)_-_var(--mobile-safe-top))] flex-col lg:h-dvh lg:min-h-0 lg:overflow-hidden">
+    <div className="fixed inset-x-0 bottom-[var(--mobile-app-bar-height)] top-[var(--mobile-safe-top)] z-0 flex min-h-0 flex-col overflow-hidden bg-[var(--bg-primary)] lg:relative lg:inset-auto lg:bottom-auto lg:top-auto lg:h-dvh">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
@@ -5242,7 +5233,7 @@ export default function ChatPage() {
           </div>
         </aside>
 
-        <div className={`relative min-w-0 flex-1 flex-col ${mobileConversationOpen ? "flex" : "hidden lg:flex"}`}>
+        <div className={`relative min-h-0 min-w-0 flex-1 flex-col ${mobileConversationOpen ? "flex" : "hidden lg:flex"}`}>
       {threadListOpen && (
         <div className="absolute inset-0 z-30 overflow-y-auto bg-[var(--bg-primary)] px-4 py-4 lg:px-6">
           <div className="mx-auto max-w-4xl">
@@ -5325,7 +5316,7 @@ export default function ChatPage() {
         </div>
       )}
       {/* Messages area */}
-      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 touch-pan-y px-4 py-4 lg:overflow-y-auto lg:px-6" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
+      <div ref={scrollContainerRef} className="relative min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto px-4 py-4 lg:px-6" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", overscrollBehaviorY: "contain" }}>
         <div className="mx-auto max-w-3xl space-y-4">
           {transcriptItems.length === 0 && !streamingContent && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -5570,7 +5561,7 @@ export default function ChatPage() {
       />
 
       {/* Input area — Claude-style layout */}
-      <div ref={composerDockRef} className={`sticky bottom-[var(--mobile-app-bar-height)] z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1 pt-1.5 sm:px-4 lg:static lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
+      <div ref={composerDockRef} className={`z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1.5 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${mobileConversationOpen ? "block" : "hidden lg:block"} ${isPaused ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-3xl">
           <ChatComposer
             value={input}

@@ -1,39 +1,14 @@
-import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { getHeartbeatSecret } from "@/lib/heartbeat-secret";
 
 /**
  * Resolve the current authenticated user from the session.
  * Tries by user id first (credentials auth), then by email, then by githubUsername (legacy).
- * Also handles system/API auth via HEARTBEAT_SECRET - returns a system user.
  */
-export async function resolveCurrentUser(request?: Request | NextRequest) {
+export async function resolveCurrentUser(_request?: Request) {
   if (!db) return null;
-
-  // Handle system/API auth via HEARTBEAT_SECRET
-  const authHeader = request?.headers?.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    const expectedToken = await getHeartbeatSecret();
-    if (token === expectedToken) {
-      // Return a system user for API auth
-      return {
-        id: "00000000-0000-0000-0000-000000000001",
-        email: "system@axislabs.dev",
-        name: "System",
-        role: "super_admin" as const,
-        githubUsername: null,
-        githubId: null,
-        passwordHash: null,
-        avatarUrl: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }
-  }
 
   const session = await auth();
   if (!session?.user) return null;

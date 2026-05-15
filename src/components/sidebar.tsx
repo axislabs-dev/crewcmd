@@ -274,9 +274,36 @@ export function Sidebar() {
     </div>
   );
 
-  const UserInfo = () => {
+  const UserInfo = ({ enableStatusMenu = true }: { enableStatusMenu?: boolean } = {}) => {
     if (!session?.user) return null;
     const username = (session.user as Record<string, unknown>).username as string | undefined;
+    const content = (
+      <>
+        <div className="relative shrink-0">
+          <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
+          <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
+          <UserPresenceLine />
+          {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
+        </div>
+      </>
+    );
+
+    if (!enableStatusMenu) {
+      return (
+        <Link
+          href="/settings"
+          onClick={() => setMoreOpen(false)}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--bg-surface-hover)]"
+          aria-label="Open profile settings"
+        >
+          {content}
+        </Link>
+      );
+    }
+
     return (
       <div className="relative" data-presence-menu-root>
         <button
@@ -286,15 +313,7 @@ export function Sidebar() {
           aria-label="Change status"
           aria-expanded={presenceMenuOpen}
         >
-          <div className="relative shrink-0">
-            <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
-            <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
-            <UserPresenceLine />
-            {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
-          </div>
+          {content}
         </button>
         <div className={`fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[70] lg:absolute lg:inset-auto lg:bottom-full lg:left-0 lg:mb-2 ${presenceMenuOpen ? "block" : "hidden"}`}>
           <UserPresenceMenu onClose={() => setPresenceMenuOpen(false)} />
@@ -357,7 +376,10 @@ export function Sidebar() {
     return (
       <Link
         href={item.href}
-        onClick={() => setMoreOpen(false)}
+        onClick={() => {
+          setMoreOpen(false);
+          setPresenceMenuOpen(false);
+        }}
         aria-label={item.label}
         className={`flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-full text-[11px] font-semibold transition ${
           active
@@ -368,6 +390,35 @@ export function Sidebar() {
         <span className={active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>{item.icon}</span>
         <span>{item.label}</span>
       </Link>
+    );
+  };
+
+  const MobilePresenceButton = () => {
+    if (!session?.user) return null;
+    return (
+      <div className="relative flex min-w-0 flex-1" data-presence-menu-root>
+        <button
+          type="button"
+          onClick={() => {
+            setMoreOpen(false);
+            setPresenceMenuOpen((open) => !open);
+          }}
+          className={`flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-full text-[11px] font-semibold transition ${
+            presenceMenuOpen ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+          aria-label="Change status"
+          aria-expanded={presenceMenuOpen}
+        >
+          <span className="relative">
+            <Avatar src={session.user.image} alt={session.user.name || session.user.email || "User"} size="sm" />
+            <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
+          </span>
+          <span>Me</span>
+        </button>
+        <div className={`fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[70] ${presenceMenuOpen ? "block" : "hidden"}`}>
+          <UserPresenceMenu onClose={() => setPresenceMenuOpen(false)} />
+        </div>
+      </div>
     );
   };
 
@@ -398,7 +449,7 @@ export function Sidebar() {
           <NavList onClick={() => setMoreOpen(false)} />
         </nav>
         <div className="shrink-0 border-t border-[var(--border-subtle)] px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <UserInfo />
+          <UserInfo enableStatusMenu={false} />
           <SignOutButton />
           <ThemeToggle />
           <span className="block px-3 pt-2 font-mono text-[11px] tracking-wider text-[var(--text-tertiary)]">CREWCMD v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.1"}</span>
@@ -410,7 +461,10 @@ export function Sidebar() {
           {mobilePrimaryItems.map((item) => <MobileNavButton key={item.label} item={item} />)}
           <button
             type="button"
-            onClick={() => setMoreOpen((open) => !open)}
+            onClick={() => {
+              setPresenceMenuOpen(false);
+              setMoreOpen((open) => !open);
+            }}
             className={`flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-full text-[11px] font-semibold transition ${
               moreOpen ? "bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
@@ -422,6 +476,7 @@ export function Sidebar() {
             </svg>
             <span>More</span>
           </button>
+          <MobilePresenceButton />
         </div>
       </nav>
 

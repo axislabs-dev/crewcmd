@@ -6,6 +6,7 @@ import { validateSkillConfigSecretRefs } from "@/lib/service-secrets";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 import { resolveRuntimeWorkspace } from "@/lib/workspace";
+import { canReadAgent, canUpdateAgent, getAgentAccessContext } from "@/lib/agent-access";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
+    const access = await getAgentAccessContext();
+    if (!canReadAgent(agent, access)) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    }
 
     const rows = await withRetry(() =>
       db!.select().from(schema.agentSkills).where(eq(schema.agentSkills.agentId, agent.id))
@@ -82,6 +87,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const agent = await findAgent(callsign);
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    }
+    const access = await getAgentAccessContext();
+    if (!canUpdateAgent(agent, access)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();

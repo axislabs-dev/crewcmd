@@ -1128,6 +1128,7 @@ export default function ChatPage() {
     setVoiceState: setTrayVoiceState,
     pinTarget: pinTrayTarget,
   } = useAgentVoiceSession();
+  const hasTrayActiveSession = Boolean(trayActiveSession);
   const storeMarkRead = useChatStore((s) => s.markRead);
   const {
     selectedSessionKey,
@@ -4418,7 +4419,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (voiceMode !== "agent" || !selectedAgent?.callsign) {
-      if (trayActiveSession) setTrayVoiceState("idle");
+      if (hasTrayActiveSession) setTrayVoiceState("idle");
       return;
     }
 
@@ -4438,9 +4439,9 @@ export default function ChatPage() {
     selectedAgent?.callsign,
     selectedAgent?.color,
     selectedAgent?.name,
+    hasTrayActiveSession,
     setTrayActiveSession,
     setTrayVoiceState,
-    trayActiveSession?.sessionKey,
     voiceMode,
   ]);
 

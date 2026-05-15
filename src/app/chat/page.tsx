@@ -3676,6 +3676,7 @@ export default function ChatPage() {
           }
         : null;
       let fullContent = "";
+      let assistantMessageId: string | null = null;
 
       const chatMessages = [
         ...(shouldSpeakResponses
@@ -3794,6 +3795,11 @@ export default function ChatPage() {
               return;
             }
 
+            if (parsed.type === "meta" && parsed.role === "assistant" && typeof parsed.messageId === "string") {
+              assistantMessageId = parsed.messageId;
+              return;
+            }
+
             const delta = parsed.choices?.[0]?.delta?.content;
             if (delta) {
               if (!firstDeltaSeenRef.current) {
@@ -3859,7 +3865,7 @@ export default function ChatPage() {
         if (fullContent.trim()) {
           // Parse task references and inject inline card markers
           const enrichedContent = injectTaskCardMarkers(fullContent, parseTaskReferences(fullContent));
-          const assistantId = createClientId();
+          const assistantId = assistantMessageId ?? createClientId();
           const assistantMsg: Message = {
             id: assistantId,
             role: "assistant",

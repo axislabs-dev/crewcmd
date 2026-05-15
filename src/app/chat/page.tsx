@@ -1506,6 +1506,33 @@ export default function ChatPage() {
     }
   }, [activeChannelId, channelAgentInvites, channelUserInvites, loadChannels]);
 
+  const archiveActiveDm = useCallback(async () => {
+    const channel = channels.find((item) => item.id === activeChannelId);
+    if (!activeChannelId || channel?.type !== "dm") return;
+    try {
+      const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        setChannelNotice(data.error ?? "Could not archive DM.");
+        return;
+      }
+      setActiveChannelId(null);
+      activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), null);
+      selectSession(null);
+      setMessages([]);
+      setPins([]);
+      setChannelPanelOpen(false);
+      setActiveThread(null);
+      setThreadMessages([]);
+      await loadChannels();
+      setChannelNotice(null);
+    } catch {
+      setChannelNotice("Could not archive DM.");
+    }
+  }, [activeChannelId, channels, loadChannels, selectSession, selectedAgent]);
+
   const selectChannel = useCallback((channelId: string | null) => {
     setActiveChannelId(channelId);
     activeStoreKeyRef.current = chatConversationStoreKey(gatewaySessionKeyForAgent(selectedAgent), channelId);
@@ -3531,7 +3558,7 @@ export default function ChatPage() {
         : gatewaySessionKeyForAgent(respondingAgent);
       const requestStoreKey = chatConversationStoreKey(requestSessionKey, activeChannelId);
       const requestIsVisible = () => activeStoreKeyRef.current === requestStoreKey;
-      if (addressedAgent && activeChannel?.type === "dm") {
+      if (activeChannelId) {
         activeStoreKeyRef.current = requestStoreKey;
       }
 
@@ -5105,18 +5132,29 @@ export default function ChatPage() {
                         ))}
                       </div>
                       {activeChannel.canManage ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setChannelInviteSearch("");
-                            setChannelUserInvites([]);
-                            setChannelAgentInvites([]);
-                            setChannelInviteOpen(true);
-                          }}
-                          className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
-                        >
-                          Invite members
-                        </button>
+                        <div className="grid gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChannelInviteSearch("");
+                              setChannelUserInvites([]);
+                              setChannelAgentInvites([]);
+                              setChannelInviteOpen(true);
+                            }}
+                            className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+                          >
+                            Invite members
+                          </button>
+                          {activeChannel.type === "dm" ? (
+                            <button
+                              type="button"
+                              onClick={() => void archiveActiveDm()}
+                              className="w-full rounded-lg border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] font-semibold text-red-500 transition hover:border-red-500/45 hover:bg-red-500/10"
+                            >
+                              Archive DM
+                            </button>
+                          ) : null}
+                        </div>
                       ) : (
                         <div className="text-[11px] text-[var(--text-tertiary)]">Only channel admins can manage membership.</div>
                       )}

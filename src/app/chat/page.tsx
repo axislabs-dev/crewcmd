@@ -45,6 +45,7 @@ import {
   type AgentVoiceSettings,
 } from "@/lib/tts-voices";
 import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
+import { formatPageContextForPrompt, usePageContextStore } from "@/lib/page-context-store";
 
 const SAVED_MESSAGES_REQUEST_CHUNK_SIZE = 25;
 
@@ -1132,6 +1133,7 @@ export default function ChatPage() {
     selectedSessionKey,
     selectSession,
   } = useSessionBrowserStore();
+  const pageContext = usePageContextStore((state) => state.context);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -3734,10 +3736,12 @@ export default function ChatPage() {
       let fullContent = "";
       let assistantMessageId: string | null = null;
 
+      const pageContextPrompt = formatPageContextForPrompt(pageContext);
       const chatMessages = [
         ...(shouldSpeakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
+        ...(pageContextPrompt ? [{ role: "system" as const, content: pageContextPrompt }] : []),
         ...visibleMessages
           .filter((m) => !m.id.startsWith("queued-"))
           .map((m) => ({ role: m.role, content: m.content })),
@@ -3769,8 +3773,9 @@ export default function ChatPage() {
             companyId: chatCompanyId,
             workspaceId: chatWorkspaceId,
             channelId: activeChannelId,
-            metadata,
-            sessionKey: requestSessionKey,
+          metadata,
+          pageContext,
+          sessionKey: requestSessionKey,
             agentMode: voiceMode === "agent",
             clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
             notifyOnCompletion: true,
@@ -4078,7 +4083,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode, pageContext]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -4172,6 +4177,9 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
+            ...(formatPageContextForPrompt(pageContext)
+              ? [{ role: "system", content: formatPageContextForPrompt(pageContext)! }]
+              : []),
             ...thread.contextMessages.map((message) => ({ role: message.role, content: message.content })),
             ...threadMessages
               .filter((message) => !message.id.startsWith("queued-"))
@@ -4191,6 +4199,7 @@ export default function ChatPage() {
           companyId: chatCompanyId,
           workspaceId: chatWorkspaceId,
           metadata,
+          pageContext,
           sessionKey: thread.sessionKey,
           clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
           notifyOnCompletion: true,
@@ -4361,7 +4370,7 @@ export default function ChatPage() {
         }, 0);
       }
     }
-  }, [activeThread, agentAudioMuted, agentModeSessionKey, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
+  }, [activeThread, agentAudioMuted, agentModeSessionKey, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, pageContext, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {

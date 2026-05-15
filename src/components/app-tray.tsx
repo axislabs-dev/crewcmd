@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { useWorkspace } from "@/components/company-context";
+import { stopNativeVoiceAudio } from "@/lib/native-voice-session";
 
 type AgentVoiceState = "idle" | "listening" | "thinking" | "speaking" | "muted" | "error";
 type TrayPinTargetType = "task" | "chat_session" | "chat_thread";
@@ -203,6 +204,14 @@ export function AgentVoiceSessionProvider({ children }: { children: React.ReactN
 
   const stopSession = useCallback(() => {
     window.dispatchEvent(new CustomEvent("crewcmd:agent-voice-stop"));
+    window.speechSynthesis?.cancel();
+    void stopNativeVoiceAudio().catch(() => {});
+    const audio = document.querySelector<HTMLAudioElement>("[data-agent-voice-session-audio]");
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.removeAttribute("src");
+    }
     setVoiceState("idle");
     setIsPlayingAudio(false);
     setMicMuted(false);

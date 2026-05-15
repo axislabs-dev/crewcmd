@@ -1257,6 +1257,11 @@ export default function ChatPage() {
   const spokenSentencesRef = useRef<number>(0);
   const prefetchedAudioRef = useRef<{ text: string; url: string } | null>(null);
 
+  useEffect(() => {
+    const sharedAudio = document.querySelector<HTMLAudioElement>("[data-agent-voice-session-audio]");
+    if (sharedAudio) audioRef.current = sharedAudio;
+  }, []);
+
   const revokeAudioObjectUrl = useCallback((url: string | null, reason: string) => {
     if (!url) return;
     URL.revokeObjectURL(url);
@@ -4627,9 +4632,6 @@ export default function ChatPage() {
 
   return (
     <div className="fixed inset-x-0 bottom-[var(--mobile-app-bar-height)] top-[var(--mobile-safe-top)] z-0 flex min-h-0 flex-col overflow-hidden bg-[var(--bg-primary)] lg:relative lg:inset-auto lg:bottom-auto lg:top-auto lg:h-dvh">
-      {/* Hidden audio element for TTS */}
-      <audio ref={audioRef} className="hidden" />
-
       {/* Header */}
       <div className={`sticky top-0 z-40 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6 ${mobileConversationOpen ? "block" : "hidden lg:block"}`}>
         <div className="flex items-center justify-between">

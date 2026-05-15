@@ -124,6 +124,8 @@ export function VoiceAgent({
   const diagnosticSessionRef = useRef<string | null>(null);
   const vadStartedAtRef = useRef<number>(0);
   const vadFrameCountRef = useRef(0);
+  const lastVolumeLevelRef = useRef(0);
+  const lastVolumeLevelAtRef = useRef(0);
 
   // VAD timing refs
   const speechStartTimeRef = useRef<number>(0);
@@ -138,6 +140,20 @@ export function VoiceAgent({
   useEffect(() => {
     onVoiceLevel?.(volumeLevel);
   }, [onVoiceLevel, volumeLevel]);
+
+  const updateVolumeLevel = useCallback((nextLevel: number) => {
+    const normalized = Math.max(0, Math.min(1, Number.isFinite(nextLevel) ? nextLevel : 0));
+    const now = Date.now();
+    if (
+      now - lastVolumeLevelAtRef.current < 50 &&
+      Math.abs(normalized - lastVolumeLevelRef.current) < 0.035
+    ) {
+      return;
+    }
+    lastVolumeLevelAtRef.current = now;
+    lastVolumeLevelRef.current = normalized;
+    setVolumeLevel(normalized);
+  }, []);
 
   const recordVoiceBreadcrumb = useCallback((
     event: string,
@@ -329,7 +345,7 @@ export function VoiceAgent({
       const rms = Math.sqrt(sum / dataArray.length);
 
       if (isMicMuted) {
-        setVolumeLevel(0);
+        updateVolumeLevel(0);
         speechStartTimeRef.current = 0;
         silenceStartTimeRef.current = 0;
         rafRef.current = requestAnimationFrame(tick);
@@ -341,9 +357,9 @@ export function VoiceAgent({
       if (isPlayingAudio) {
         const t = Date.now() / 1000;
         const pulse = 0.3 + 0.25 * Math.sin(t * 2.5) + 0.15 * Math.sin(t * 4.1) + 0.1 * Math.sin(t * 7.3);
-        setVolumeLevel(Math.min(pulse, 1));
+        updateVolumeLevel(pulse);
       } else {
-        setVolumeLevel(Math.min(rms * 10, 1)); // normalize for UI
+        updateVolumeLevel(rms * 10); // normalize for UI
       }
 
       const now = Date.now();
@@ -384,7 +400,7 @@ export function VoiceAgent({
     };
 
     rafRef.current = requestAnimationFrame(tick);
-  }, [isMicMuted, isPlayingAudio, onInterrupt, startRecording, stopRecording]);
+  }, [isMicMuted, isPlayingAudio, onInterrupt, startRecording, stopRecording, updateVolumeLevel]);
 
   // Screen Wake Lock — keeps screen on during agent mode (mobile)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);

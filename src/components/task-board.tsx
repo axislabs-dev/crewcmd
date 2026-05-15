@@ -70,7 +70,7 @@ function PinIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
 }
 
 export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
-  const { pinTarget } = useAgentVoiceSession();
+  const { pinTarget, pins, removePin } = useAgentVoiceSession();
   const [boardTasks, setBoardTasks] = useState<Task[]>(initialTasks);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -352,6 +352,11 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
 
   const pinTaskToTray = useCallback((task: Task) => {
+    const existingPin = pins.find((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id));
+    if (existingPin) {
+      void removePin(existingPin.id);
+      return;
+    }
     const project = task.projectId ? projectMap.get(task.projectId) : null;
     void pinTarget({
       targetType: "task",
@@ -366,7 +371,7 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
         projectName: project?.name,
       },
     });
-  }, [pinTarget, projectMap]);
+  }, [pinTarget, pins, projectMap, removePin]);
 
   const agentSelectStatus = agentsLoading
     ? "Loading agents..."
@@ -954,9 +959,13 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                 )}
                 <button
                   onClick={() => pinTaskToTray(selectedTask)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-medium)] text-[var(--text-tertiary)] transition-colors hover:text-neo"
-                  aria-label={`Pin ${selectedTask.title} to tray`}
-                  title="Pin task to tray"
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:text-neo ${
+                    pins.some((pin) => pin.targetType === "task" && (pin.targetId === selectedTask.id || pin.targetKey === selectedTask.id))
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "border-[var(--border-medium)] text-[var(--text-tertiary)]"
+                  }`}
+                  aria-label={`${pins.some((pin) => pin.targetType === "task" && (pin.targetId === selectedTask.id || pin.targetKey === selectedTask.id)) ? "Unpin" : "Pin"} ${selectedTask.title} ${pins.some((pin) => pin.targetType === "task" && (pin.targetId === selectedTask.id || pin.targetKey === selectedTask.id)) ? "from" : "to"} tray`}
+                  title={pins.some((pin) => pin.targetType === "task" && (pin.targetId === selectedTask.id || pin.targetKey === selectedTask.id)) ? "Unpin task from tray" : "Pin task to tray"}
                 >
                   <PinIcon />
                 </button>
@@ -1796,9 +1805,13 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                             event.stopPropagation();
                             pinTaskToTray(task);
                           }}
-                          className="flex h-6 w-6 items-center justify-center rounded border border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
-                          aria-label={`Pin ${task.title} to tray`}
-                          title="Pin task to tray"
+                          className={`flex h-6 w-6 items-center justify-center rounded border transition hover:text-[var(--text-primary)] group-hover:opacity-100 ${
+                            pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id))
+                              ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)] opacity-100"
+                              : "border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-0"
+                          }`}
+                          aria-label={`${pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id)) ? "Unpin" : "Pin"} ${task.title} ${pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id)) ? "from" : "to"} tray`}
+                          title={pins.some((pin) => pin.targetType === "task" && (pin.targetId === task.id || pin.targetKey === task.id)) ? "Unpin task from tray" : "Pin task to tray"}
                         >
                           <PinIcon className="h-3 w-3" />
                         </button>

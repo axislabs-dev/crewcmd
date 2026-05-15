@@ -860,7 +860,13 @@ function ControlIcon({ icon }: { icon: "mic" | "mic-off" | "volume" | "volume-of
 
 function ManualPins() {
   const { pins, removePin, refreshPins } = useAgentVoiceSession();
+  const { workspace } = useWorkspace();
+  const pageContext = usePageContextStore((state) => state.context);
   const [activeTaskPin, setActiveTaskPin] = useState<TrayPin | null>(null);
+  const [activeChatPin, setActiveChatPin] = useState<TrayPin | null>(null);
+  const [miniMessages, setMiniMessages] = useState<MiniChatMessage[]>([]);
+  const [miniInput, setMiniInput] = useState("");
+  const [miniSending, setMiniSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   if (pins.length === 0) return null;
 
@@ -888,6 +894,93 @@ function ManualPins() {
     }
   };
 
+  const sendPinnedChatMessage = async (pin: TrayPin, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || miniSending) return;
+    setMiniInput("");
+    setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "user", content: trimmed }]);
+    setMiniSending(true);
+    try {
+      const metadata = pin.metadata ?? {};
+      const agent = typeof metadata.agentId === "string" && metadata.agentId ? metadata.agentId : undefined;
+      const sessionKey = pin.targetType === "chat_thread"
+        ? (typeof metadata.threadSessionKey === "string" && metadata.threadSessionKey ? metadata.threadSessionKey : pin.targetKey)
+        : (typeof metadata.gatewaySessionKey === "string" && metadata.gatewaySessionKey ? metadata.gatewaySessionKey : pin.targetKey);
+      const pageContextPrompt = formatPageContextForPrompt(pageContext);
+      const recentMessages = miniMessages
+        .slice(-8)
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => ({ role: message.role, content: message.content }));
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: "You are replying through a compact pinned chat tray. Keep the answer concise and useful." },
+            ...(pageContextPrompt ? [{ role: "system", content: pageContextPrompt }] : []),
+            ...recentMessages,
+            { role: "user", content: trimmed },
+          ],
+          agent,
+          gatewayAgent: agent,
+          companyId: workspace?.companyId,
+          workspaceId: workspace?.id,
+          pageContext,
+          sessionKey,
+          agentMode: Boolean(agent),
+          clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
+          notifyOnCompletion: true,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      let content = "";
+      const handleFrame = (frame: string) => {
+        const dataLines = frame
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6));
+        if (dataLines.length === 0) return;
+        const data = dataLines.join("\n");
+        if (data === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(data);
+          const progressContent = miniProgressContent(parsed);
+          if (progressContent) {
+            setMiniMessages((current) => {
+              const last = current.at(-1);
+              if (last?.role === "tool") return [...current.slice(0, -1), { ...last, content: progressContent }];
+              return [...current, { id: createMiniChatId(), role: "tool", content: progressContent }];
+            });
+            return;
+          }
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (typeof delta === "string") content += delta;
+        } catch {
+          // Ignore progress/meta frames that are not model deltas.
+        }
+      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        const frames = sseBuffer.split("\n\n");
+        sseBuffer = frames.pop() ?? "";
+        for (const frame of frames) handleFrame(frame);
+      }
+      if (sseBuffer.trim()) handleFrame(sseBuffer);
+      const answer = content.trim();
+      if (answer) setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "assistant", content: answer }]);
+    } catch {
+      setMiniMessages((current) => [...current, { id: createMiniChatId(), role: "assistant", content: "I could not send that from the tray. Open the full chat and try again." }]);
+    } finally {
+      setMiniSending(false);
+    }
+  };
+
   const visiblePins = pins.slice(0, 5);
 
   return (
@@ -906,6 +999,18 @@ function ManualPins() {
             <div key={pin.id} className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--bg-surface)] px-2 py-1">
               {pin.targetType === "task" ? (
                 <button type="button" onClick={() => setActiveTaskPin(pin)} className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]" title={pin.title}>
+                  {content}
+                </button>
+              ) : pin.targetType === "chat_session" || pin.targetType === "chat_thread" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveChatPin(pin);
+                    setMiniMessages([]);
+                  }}
+                  className="flex min-w-0 items-center gap-1.5 hover:text-[var(--text-primary)]"
+                  title={pin.title}
+                >
                   {content}
                 </button>
               ) : (
@@ -963,6 +1068,72 @@ function ManualPins() {
                 Unpin
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeChatPin ? (
+        <div className="fixed inset-0 z-[76] flex items-end bg-black/30 lg:items-center lg:justify-end" onClick={() => setActiveChatPin(null)}>
+          <div className="w-full rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 shadow-2xl lg:mr-6 lg:max-w-md lg:rounded-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">{pinShortLabel(activeChatPin)}</div>
+                <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">{activeChatPin.title}</h3>
+                <p className="mt-1 text-xs text-[var(--text-tertiary)]">Pinned chat</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Link href={pinHref(activeChatPin)} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label="Open full chat" title="Open full chat">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9.75V4.5h5.25M19.5 14.25v5.25h-5.25M19.5 4.5l-6.75 6.75M4.5 19.5l6.75-6.75" />
+                  </svg>
+                </Link>
+                <button type="button" onClick={() => setActiveChatPin(null)} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)]" aria-label="Close pinned chat">
+                  x
+                </button>
+              </div>
+            </div>
+            <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)]/70 p-2">
+              {miniMessages.length === 0 ? (
+                <div className="px-2 py-8 text-center text-xs text-[var(--text-tertiary)]">Ask this chat about the page you are viewing.</div>
+              ) : miniMessages.map((message) => (
+                <div key={message.id} className={`rounded-xl px-3 py-2 text-sm ${
+                  message.role === "user"
+                    ? "ml-8 bg-[var(--accent-soft)] text-[var(--text-primary)]"
+                    : message.role === "tool"
+                      ? "mx-4 border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--text-tertiary)]"
+                      : "mr-8 bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+                }`}>
+                  <div className="prose prose-sm max-w-none text-inherit prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-strong:text-[var(--text-primary)] prose-code:rounded prose-code:bg-[var(--bg-surface-hover)] prose-code:px-1 prose-code:text-[var(--accent)] prose-a:text-[var(--accent)]">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <form
+              className="mt-3 flex items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void sendPinnedChatMessage(activeChatPin, miniInput);
+              }}
+            >
+              <textarea
+                value={miniInput}
+                onChange={(event) => setMiniInput(event.target.value)}
+                rows={1}
+                placeholder={`Message ${activeChatPin.title}...`}
+                className="min-h-10 flex-1 resize-none rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)]"
+              />
+              <button type="submit" disabled={miniSending || !miniInput.trim()} className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white disabled:opacity-45" aria-label="Send pinned chat message">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                </svg>
+              </button>
+            </form>
+            <button type="button" onClick={() => void removePin(activeChatPin.id).then(() => setActiveChatPin(null))} className="mt-3 w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+              Unpin chat
+            </button>
           </div>
         </div>
       ) : null}

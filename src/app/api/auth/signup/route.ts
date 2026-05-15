@@ -4,6 +4,61 @@ import { users, inviteTokens } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
+const SIGNUP_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const SIGNUP_RATE_LIMIT_MAX = 10;
+
+type SignupAttempt = {
+  count: number;
+  resetAt: number;
+};
+
+declare global {
+  var crewCmdSignupAttempts: Map<string, SignupAttempt> | undefined;
+}
+
+function getSignupAttempts() {
+  globalThis.crewCmdSignupAttempts ??= new Map();
+  return globalThis.crewCmdSignupAttempts;
+}
+
+function getRateLimitKey(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwardedFor
+    || request.headers.get("cf-connecting-ip")?.trim()
+    || request.headers.get("x-real-ip")?.trim()
+    || "unknown";
+}
+
+function checkSignupRateLimit(request: Request) {
+  const now = Date.now();
+  const attempts = getSignupAttempts();
+  const key = getRateLimitKey(request);
+  const current = attempts.get(key);
+
+  if (!current || current.resetAt <= now) {
+    attempts.set(key, { count: 1, resetAt: now + SIGNUP_RATE_LIMIT_WINDOW_MS });
+    return null;
+  }
+
+  if (current.count >= SIGNUP_RATE_LIMIT_MAX) {
+    const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+    return NextResponse.json(
+      { error: "Too many signup attempts. Try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(retryAfter) },
+      }
+    );
+  }
+
+  current.count += 1;
+  return null;
+}
+
+export function resetSignupRateLimitForTests() {
+  getSignupAttempts().clear();
+}
+
 async function ensurePgliteReady() {
   if (process.env.DATABASE_URL) return;
   const { migrationPromise } = await import("@/db/pglite");
@@ -12,6 +67,9 @@ async function ensurePgliteReady() {
 
 export async function POST(request: Request) {
   try {
+    const rateLimitError = checkSignupRateLimit(request);
+    if (rateLimitError) return rateLimitError;
+
     await ensurePgliteReady();
     const { name, email, password, inviteToken } = await request.json();
 

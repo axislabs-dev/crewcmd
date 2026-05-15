@@ -1211,9 +1211,12 @@ function ManualPins() {
 export function AppTray() {
   const pathname = usePathname();
   if (pathname === "/" || pathname === "/access-denied" || pathname.startsWith("/invite/")) return null;
+  const mobileBottom = pathname === "/chat"
+    ? "bottom-[calc(var(--mobile-app-bar-height)+7.25rem)]"
+    : "bottom-[calc(var(--mobile-app-bar-height)+0.5rem)]";
   const desktopBottom = pathname === "/chat" ? "lg:bottom-28" : "lg:bottom-4";
   return (
-    <div className={`pointer-events-none fixed inset-x-3 bottom-[calc(var(--mobile-app-bar-height)+0.5rem)] z-[55] flex flex-col items-stretch gap-2 lg:inset-x-auto ${desktopBottom} lg:right-4 lg:w-auto lg:max-w-[20rem]`}>
+    <div className={`pointer-events-none fixed inset-x-3 ${mobileBottom} z-[55] flex flex-col items-stretch gap-2 lg:inset-x-auto ${desktopBottom} lg:right-4 lg:w-auto lg:max-w-[20rem]`}>
       <div className="pointer-events-auto flex flex-col gap-2 lg:items-end">
         <ActiveAgentTrayItem />
         <ManualPins />

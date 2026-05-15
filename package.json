@@ -51,8 +51,8 @@
     "@xyflow/react": "^12.10.2",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
-    "drizzle-orm": "^0.38.3",
-    "next": "^16.1.6",
+    "drizzle-orm": "^0.45.2",
+    "next": "^16.2.6",
     "next-auth": "^5.0.0-beta.30",
     "postgres": "^3.4.8",
     "react": "^19.0.0",
@@ -76,7 +76,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "playwright": "^1.59.1",
-    "postcss": "^8.5.0",
+    "postcss": "^8.5.14",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
@@ -86,5 +86,10 @@
     "*.{ts,tsx}": [
       "bash -c 'npx tsc --noEmit'"
     ]
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.14"
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { writeFile, unlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -108,8 +108,9 @@ async function tryLocalWhisper(
     // Convert webm/ogg to wav for reliable whisper processing
     const wavPath = tempAudioPath.replace(/\.[^.]+$/, ".wav");
     const converted = await new Promise<boolean>((resolve) => {
-      exec(
-        `ffmpeg -y -i "${tempAudioPath}" -ar 16000 -ac 1 -c:a pcm_s16le "${wavPath}" 2>/dev/null`,
+      execFile(
+        "ffmpeg",
+        ["-y", "-i", tempAudioPath, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wavPath],
         { timeout: 10000 },
         (error) => resolve(!error)
       );
@@ -121,10 +122,10 @@ async function tryLocalWhisper(
     const text = await new Promise<string | null>((resolve) => {
       // Use base model for speed. Output as plain text.
       const args = whisperBin.type === "cpp"
-        ? `"${whisperBin.path}" -m "${whisperBin.modelPath}" -f "${inputPath}" --no-timestamps -otxt -of "${outputPath}"`
-        : `"${whisperBin.path}" "${inputPath}" --model base --language en --output_format txt --output_dir "${tmpdir()}"`;
+        ? ["-m", whisperBin.modelPath || "", "-f", inputPath, "--no-timestamps", "-otxt", "-of", outputPath]
+        : [inputPath, "--model", "base", "--language", "en", "--output_format", "txt", "--output_dir", tmpdir()];
 
-      exec(args, { timeout: 30000 }, async (error) => {
+      execFile(whisperBin.path, args, { timeout: 30000 }, async (error) => {
         if (error) {
           console.error("[api/stt] Local whisper error:", error.message);
           resolve(null);
@@ -170,51 +171,39 @@ async function findWhisperBin(): Promise<WhisperBinInfo | null> {
   // Cache the result
   if (whisperBinCache !== undefined) return whisperBinCache;
 
-  const result = await new Promise<WhisperBinInfo | null>((resolve) => {
-    // Check whisper-cpp first
-    exec("which whisper-cpp", (err, stdout) => {
-      if (!err && stdout.trim()) {
-        // Find a model file for whisper-cpp
-        const modelPaths = [
-          join(process.env.HOME || "", ".cache", "whisper-cpp", "ggml-base.en.bin"),
-          join(process.env.HOME || "", ".cache", "whisper-cpp", "ggml-base.bin"),
-          "/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin",
-          "/usr/local/share/whisper-cpp/models/ggml-base.en.bin",
-        ];
-        // For now, just check python whisper which we know exists
-        exec("which whisper", (err2, stdout2) => {
-          if (!err2 && stdout2.trim()) {
-            resolve({ path: stdout2.trim(), type: "python" });
-            return;
-          }
-          // Try cpp with model
-          for (const mp of modelPaths) {
-            try {
-              resolve({ path: stdout.trim(), type: "cpp", modelPath: mp });
-              return;
-            } catch { /* continue */ }
-          }
-          resolve(null);
-        });
-        return;
-      }
+  const whisperCppPath = await findExecutable("whisper-cpp");
+  if (whisperCppPath) {
+    const modelPaths = [
+      join(process.env.HOME || "", ".cache", "whisper-cpp", "ggml-base.en.bin"),
+      join(process.env.HOME || "", ".cache", "whisper-cpp", "ggml-base.bin"),
+      "/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin",
+      "/usr/local/share/whisper-cpp/models/ggml-base.en.bin",
+    ];
+    const whisperPath = await findExecutable("whisper");
+    const result = whisperPath
+      ? { path: whisperPath, type: "python" as const }
+      : { path: whisperCppPath, type: "cpp" as const, modelPath: modelPaths[0] };
+    whisperBinCache = result;
+    return result;
+  }
 
-      // Check python whisper
-      exec("which whisper", (err2, stdout2) => {
-        if (!err2 && stdout2.trim()) {
-          resolve({ path: stdout2.trim(), type: "python" });
-          return;
-        }
-        resolve(null);
-      });
-    });
-  });
+  const whisperPath = await findExecutable("whisper");
+  const result = whisperPath ? { path: whisperPath, type: "python" as const } : null;
 
   whisperBinCache = result;
   return result;
 }
 
 let whisperBinCache: WhisperBinInfo | null | undefined = undefined;
+
+async function findExecutable(name: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile("which", [name], (error, stdout) => {
+      const path = stdout.trim().split("\n")[0];
+      resolve(error || !path ? null : path);
+    });
+  });
+}
 
 /**
  * Try OpenAI Whisper API.

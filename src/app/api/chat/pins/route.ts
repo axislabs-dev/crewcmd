@@ -137,7 +137,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Message not found in workspace scope" }, { status: 404 });
   }
 
-  const [pin] = await withRetry(() =>
+  const [existingPin] = await withRetry(() =>
+    db!.select().from(chatMessagePins)
+      .where(eq(chatMessagePins.messageId, message.id))
+      .limit(1)
+  );
+  if (existingPin) return NextResponse.json({ pin: existingPin });
+
+  let [pin] = await withRetry(() =>
     db!.insert(chatMessagePins)
       .values({
         companyId: message.companyId,
@@ -146,12 +153,17 @@ export async function POST(request: NextRequest) {
         messageId: message.id,
         pinnedByUserId: userId ?? null,
       })
-      .onConflictDoUpdate({
-        target: chatMessagePins.messageId,
-        set: { pinnedByUserId: userId ?? null },
-      })
+      .onConflictDoNothing({ target: chatMessagePins.messageId })
       .returning()
   );
+  if (!pin) {
+    [pin] = await withRetry(() =>
+      db!.select().from(chatMessagePins)
+        .where(eq(chatMessagePins.messageId, message.id))
+        .limit(1)
+    );
+  }
+  if (!pin) return NextResponse.json({ error: "Failed to create pin" }, { status: 500 });
 
   const sessionPins = await withRetry(() =>
     db!.select({ id: chatMessagePins.id }).from(chatMessagePins)
@@ -174,24 +186,33 @@ export async function DELETE(request: NextRequest) {
   if (authError) return authError;
   if (!db) return NextResponse.json({ error: "Database not initialized" }, { status: 500 });
 
+  const session = await auth();
+  const userId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
+  if (!userId) return NextResponse.json({ error: "User session required" }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
   const messageId = searchParams.get("messageId");
   if (!messageId) return NextResponse.json({ error: "messageId is required" }, { status: 400 });
 
-  const [message] = await withRetry(() =>
+  const [pin] = await withRetry(() =>
     db!.select({
-      id: chatMessages.id,
+      id: chatMessagePins.id,
+      pinnedByUserId: chatMessagePins.pinnedByUserId,
+      messageId: chatMessagePins.messageId,
       companyId: chatSessions.companyId,
       workspaceId: chatSessions.workspaceId,
       channelId: chatSessions.channelId,
     })
-      .from(chatMessages)
-      .innerJoin(chatSessions, eq(chatMessages.sessionId, chatSessions.id))
-      .where(eq(chatMessages.id, messageId))
+      .from(chatMessagePins)
+      .innerJoin(chatMessages, eq(chatMessagePins.messageId, chatMessages.id))
+      .innerJoin(chatSessions, eq(chatMessagePins.sessionId, chatSessions.id))
+      .where(eq(chatMessagePins.messageId, messageId))
       .limit(1)
   );
 
-  if (message && !(await canAccessChatSession(request, message))) return forbiddenResponse();
+  if (!pin) return NextResponse.json({ deleted: 0 });
+  if (!(await canAccessChatSession(request, pin))) return forbiddenResponse();
+  if (pin.pinnedByUserId !== userId) return forbiddenResponse();
 
   const deleted = await withRetry(() =>
     db!.delete(chatMessagePins)

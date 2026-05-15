@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useTheme } from "@/components/theme-provider";
 import { useWorkspace } from "@/components/company-context";
 import { Avatar } from "@/components/avatar";
+import { UserPresenceDot, UserPresenceLine } from "@/components/user-presence";
 
 const navSections = [
   {
@@ -256,9 +257,13 @@ export function Sidebar() {
     const username = (session.user as Record<string, unknown>).username as string | undefined;
     return (
       <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-[var(--bg-surface-hover)]">
-        <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
+        <div className="relative shrink-0">
+          <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
+          <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
+        </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
+          <UserPresenceLine />
           {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
         </div>
       </Link>
@@ -397,7 +402,10 @@ export function Sidebar() {
         <div className="mx-2 border-t border-[var(--border-subtle)] px-2 py-3">
           <div className="flex flex-col items-center gap-2">
             <Link href="/settings" title="Settings" aria-label="Settings" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]">
-              <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
+              <div className="relative">
+                <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
+                {session?.user ? <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" /> : null}
+              </div>
             </Link>
             <CompactThemeButton />
           </div>

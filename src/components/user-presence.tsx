@@ -5,6 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 export type UserPresenceStatus = "active" | "focus" | "meeting" | "away" | "sleep" | "offline";
 type ManualPresenceStatus = Exclude<UserPresenceStatus, "offline">;
 
+interface StatusOption {
+  status: ManualPresenceStatus;
+  label: string;
+  emoji: string;
+  expiresInMs: number | null;
+}
+
 interface ManualPresence {
   status: ManualPresenceStatus;
   text: string;
@@ -23,13 +30,21 @@ const AWAY_AFTER_MS = 5 * 60 * 1000;
 const SLEEP_AFTER_MS = 30 * 60 * 1000;
 
 const STORAGE_KEY = "crewcmd.user-presence";
+const FOCUS_DEFAULT_MS = 60 * 60 * 1000;
 
-const statusOptions: Array<{ status: ManualPresenceStatus; label: string; emoji: string; expiresInMs: number | null }> = [
+const statusOptions: StatusOption[] = [
   { status: "active", label: "Active", emoji: "🟢", expiresInMs: null },
-  { status: "focus", label: "Focus", emoji: "🎧", expiresInMs: 2 * 60 * 60 * 1000 },
+  { status: "focus", label: "Focus", emoji: "🎧", expiresInMs: FOCUS_DEFAULT_MS },
   { status: "meeting", label: "In a meeting", emoji: "📅", expiresInMs: 60 * 60 * 1000 },
   { status: "away", label: "Away", emoji: "☕", expiresInMs: 30 * 60 * 1000 },
   { status: "sleep", label: "Sleep", emoji: "🌙", expiresInMs: null },
+];
+
+const customDurations = [
+  { label: "30m", value: 30 * 60 * 1000 },
+  { label: "1h", value: FOCUS_DEFAULT_MS },
+  { label: "2h", value: 2 * 60 * 60 * 1000 },
+  { label: "Keep", value: null },
 ];
 
 const presenceMeta: Record<UserPresenceStatus, { label: string; detail: string; dotClass: string; badgeClass: string }> = {
@@ -101,6 +116,22 @@ function writeManualPresence(presence: ManualPresence | null) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(presence));
+}
+
+function formatDuration(ms: number | null) {
+  if (ms === null) return "Keep";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = minutes / 60;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
+}
+
+function formatExpiry(expiresAt: number | null) {
+  if (!expiresAt) return "doesn't clear";
+  const minutes = Math.max(1, Math.round((expiresAt - Date.now()) / 60_000));
+  if (minutes < 60) return `clears in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  return `clears in ${hours}h`;
 }
 
 export function resolveUserPresenceStatus({ now, lastActiveAt, isVisible, isOnline }: PresenceStateInput): UserPresenceStatus {
@@ -214,9 +245,11 @@ export function useUserPresenceStatus() {
       automaticStatus,
       text,
       emoji,
+      expiryLabel: manualIsActive ? formatExpiry(manualPresence!.expiresAt) : "automatic",
       isManual: manualIsActive,
       manualPresence,
       options: statusOptions,
+      customDurations,
       setManualPresence,
       clearManualPresence,
       ...meta,
@@ -263,13 +296,16 @@ export function UserPresenceLine({ className = "" }: { className?: string }) {
 export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
   const presence = useUserPresenceStatus();
   const [customText, setCustomText] = useState(presence.isManual ? presence.text : "");
+  const [customDuration, setCustomDuration] = useState<number | null>(FOCUS_DEFAULT_MS);
 
   return (
-    <div className="w-72 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 shadow-2xl shadow-black/30">
+    <div className="w-72 rounded-2xl border border-[var(--border-subtle)] bg-white p-3 shadow-2xl shadow-black/25 dark:bg-[#171b20]">
       <div className="flex items-center justify-between gap-3 px-1 pb-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[var(--text-primary)]">Set a status</p>
-          <p className="truncate text-xs text-[var(--text-tertiary)]">Now: {presence.emoji ? `${presence.emoji} ` : null}{presence.text}</p>
+          <p className="truncate text-xs text-[var(--text-tertiary)]">
+            Now: {presence.emoji ? `${presence.emoji} ` : null}{presence.text} · {presence.expiryLabel}
+          </p>
         </div>
         {presence.isManual ? (
           <button
@@ -300,7 +336,7 @@ export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
               <span className="text-base">{option.emoji}</span>
               <span className="truncate">{option.label}</span>
             </span>
-            <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">{option.expiresInMs ? "Auto clears" : "Keep"}</span>
+            <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">{formatDuration(option.expiresInMs)}</span>
           </button>
         ))}
       </div>
@@ -309,7 +345,7 @@ export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
         className="mt-3 border-t border-[var(--border-subtle)] pt-3"
         onSubmit={(event) => {
           event.preventDefault();
-          presence.setManualPresence("focus", customText, 2 * 60 * 60 * 1000);
+          presence.setManualPresence("focus", customText, customDuration);
           onClose?.();
         }}
       >
@@ -322,6 +358,22 @@ export function UserPresenceMenu({ onClose }: { onClose?: () => void }) {
             className="w-full rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
           />
         </label>
+        <div className="mt-2 grid grid-cols-4 gap-1">
+          {presence.customDurations.map((duration) => (
+            <button
+              key={duration.label}
+              type="button"
+              onClick={() => setCustomDuration(duration.value)}
+              className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition ${
+                customDuration === duration.value
+                  ? "border-[var(--accent-medium)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                  : "border-[var(--border-medium)] text-[var(--text-tertiary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              {duration.label}
+            </button>
+          ))}
+        </div>
         <button
           type="submit"
           disabled={!customText.trim()}

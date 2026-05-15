@@ -70,6 +70,8 @@ function resolveMemberPresence(member: Member) {
     : manualExpired || !member.presenceCustomText
       ? status === "meeting"
         ? "In a meeting"
+        : status === "sick"
+          ? "Sick day"
         : status[0].toUpperCase() + status.slice(1)
       : member.presenceCustomText;
   const dotClass = {
@@ -77,6 +79,7 @@ function resolveMemberPresence(member: Member) {
     focus: "bg-violet-300",
     meeting: "bg-cyan-300",
     away: "bg-amber-300",
+    sick: "bg-rose-300",
     sleep: "bg-sky-300",
     offline: "bg-[var(--text-tertiary)]",
   }[status] ?? "bg-[var(--text-tertiary)]";

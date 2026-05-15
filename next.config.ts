@@ -71,6 +71,14 @@ function getDevOrigins(): string[] {
   return [...origins];
 }
 
+const productionSecurityHeaders = [
+  { key: "Strict-Transport-Security", value: "max-age=31536000" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+];
+
 const nextConfig: NextConfig = {
   // Standalone output bundles node_modules into .next/standalone for Docker
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
@@ -78,6 +86,18 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version || "0.1.0",
   },
+  ...(process.env.NODE_ENV === "production"
+    ? {
+        async headers() {
+          return [
+            {
+              source: "/:path*",
+              headers: productionSecurityHeaders,
+            },
+          ];
+        },
+      }
+    : {}),
 };
 
 export default nextConfig;

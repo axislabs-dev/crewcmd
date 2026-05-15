@@ -10,6 +10,7 @@ import { VoiceAgent } from "@/components/chat/voice-agent";
 import { ChatThreadDrawer } from "@/components/chat/thread-drawer";
 import { VoiceSelectModal } from "@/components/voice-select-modal";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
+import { useAgentVoiceSession } from "@/components/app-tray";
 import {
   ExecutionProgressPanel,
   type ExecutionProgressEvent,
@@ -44,6 +45,7 @@ import {
   type AgentVoiceSettings,
 } from "@/lib/tts-voices";
 import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
+import { formatPageContextForPrompt, usePageContextStore } from "@/lib/page-context-store";
 
 const SAVED_MESSAGES_REQUEST_CHUNK_SIZE = 25;
 
@@ -1115,11 +1117,24 @@ export default function ChatPage() {
   const chatWorkspaceId = workspace?.id ?? null;
   const chatScopeKey = chatCompanyId ?? chatWorkspaceId ?? "preview";
   const currentUserId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
+  const {
+    activeSession: trayActiveSession,
+    audioMuted: trayAudioMuted,
+    micMuted: trayMicMuted,
+    setActiveSession: setTrayActiveSession,
+    setAudioMuted: setTrayAudioMuted,
+    setIsPlayingAudio: setTrayIsPlayingAudio,
+    setMicMuted: setTrayMicMuted,
+    setVoiceState: setTrayVoiceState,
+    pinTarget: pinTrayTarget,
+  } = useAgentVoiceSession();
+  const hasTrayActiveSession = Boolean(trayActiveSession);
   const storeMarkRead = useChatStore((s) => s.markRead);
   const {
     selectedSessionKey,
     selectSession,
   } = useSessionBrowserStore();
+  const pageContext = usePageContextStore((state) => state.context);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -1241,6 +1256,11 @@ export default function ChatPage() {
   const isSpeakingQueueRef = useRef(false);
   const spokenSentencesRef = useRef<number>(0);
   const prefetchedAudioRef = useRef<{ text: string; url: string } | null>(null);
+
+  useEffect(() => {
+    const sharedAudio = document.querySelector<HTMLAudioElement>("[data-agent-voice-session-audio]");
+    if (sharedAudio) audioRef.current = sharedAudio;
+  }, []);
 
   const revokeAudioObjectUrl = useCallback((url: string | null, reason: string) => {
     if (!url) return;
@@ -1826,6 +1846,10 @@ export default function ChatPage() {
       setUrlSessionKey(params.get("sessionKey"));
       setUrlMessageId(params.get("messageId"));
       setUrlChannelId(params.get("channelId"));
+      if (params.get("pane") === "chat") {
+        setConversationTab("messages");
+        setMobileConversationOpen(true);
+      }
     };
     applyLocationSearch();
     window.addEventListener("popstate", applyLocationSearch);
@@ -1873,6 +1897,10 @@ export default function ChatPage() {
           setSelectedAgent(restoredAgent);
           if (targetSessionKey && (urlSessionKey || !isMessageThreadSessionKey(targetSessionKey))) {
             selectSession(targetSessionKey);
+          }
+          if (urlAgentCallsign || urlSessionKey) {
+            setConversationTab("messages");
+            setMobileConversationOpen(true);
           }
           return;
         }
@@ -2789,10 +2817,6 @@ export default function ChatPage() {
     activeAudioKindRef.current = null;
     setIsPlayingAudio(false);
   }, [recordTtsBreadcrumb, revokeAudioObjectUrl]);
-
-  useEffect(() => {
-    return () => stopAllAudio();
-  }, [stopAllAudio]);
 
   const markFirstAudioStarted = useCallback((provider: "browser" | "server" | "native") => {
     const metrics = voiceLatencyRef.current;
@@ -3726,10 +3750,12 @@ export default function ChatPage() {
       let fullContent = "";
       let assistantMessageId: string | null = null;
 
+      const pageContextPrompt = formatPageContextForPrompt(pageContext);
       const chatMessages = [
         ...(shouldSpeakResponses
           ? [{ role: "system" as const, content: VOICE_SYSTEM_PROMPT }]
           : []),
+        ...(pageContextPrompt ? [{ role: "system" as const, content: pageContextPrompt }] : []),
         ...visibleMessages
           .filter((m) => !m.id.startsWith("queued-"))
           .map((m) => ({ role: m.role, content: m.content })),
@@ -3761,8 +3787,9 @@ export default function ChatPage() {
             companyId: chatCompanyId,
             workspaceId: chatWorkspaceId,
             channelId: activeChannelId,
-            metadata,
-            sessionKey: requestSessionKey,
+          metadata,
+          pageContext,
+          sessionKey: requestSessionKey,
             agentMode: voiceMode === "agent",
             clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
             notifyOnCompletion: true,
@@ -4070,7 +4097,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode, pageContext]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -4164,6 +4191,9 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
+            ...(formatPageContextForPrompt(pageContext)
+              ? [{ role: "system", content: formatPageContextForPrompt(pageContext)! }]
+              : []),
             ...thread.contextMessages.map((message) => ({ role: message.role, content: message.content })),
             ...threadMessages
               .filter((message) => !message.id.startsWith("queued-"))
@@ -4183,6 +4213,7 @@ export default function ChatPage() {
           companyId: chatCompanyId,
           workspaceId: chatWorkspaceId,
           metadata,
+          pageContext,
           sessionKey: thread.sessionKey,
           clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
           notifyOnCompletion: true,
@@ -4353,7 +4384,7 @@ export default function ChatPage() {
         }, 0);
       }
     }
-  }, [activeThread, agentAudioMuted, agentModeSessionKey, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
+  }, [activeThread, agentAudioMuted, agentModeSessionKey, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, pageContext, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {
@@ -4386,6 +4417,128 @@ export default function ChatPage() {
     },
     [stopAllAudio]
   );
+
+  const enterAgentMode = useCallback((sessionKey: string, overlayMode: AgentOverlayMode = "transcript") => {
+    if (!isNativeCapacitorApp() && audioRef.current) {
+      audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      audioRef.current.play().catch(() => {});
+    }
+    setAgentMicMuted(false);
+    setAgentAudioMuted(false);
+    setAgentModeSessionKey(sessionKey);
+    setVoiceMode("agent");
+    setSpeakResponses(true);
+    setAgentOverlayMode(overlayMode);
+  }, []);
+
+  const exitAgentMode = useCallback(() => {
+    stopAllAudio();
+    setVoiceMode("off");
+    setAgentModeSessionKey(null);
+    setAgentOverlayMode("transcript");
+    setAgentMicMuted(false);
+    setAgentAudioMuted(false);
+  }, [stopAllAudio]);
+
+  useEffect(() => {
+    const handleTrayStop = () => {
+      exitAgentMode();
+    };
+    window.addEventListener("crewcmd:agent-voice-stop", handleTrayStop);
+    return () => window.removeEventListener("crewcmd:agent-voice-stop", handleTrayStop);
+  }, [exitAgentMode]);
+
+  const voiceModeRef = useRef(voiceMode);
+  const isPlayingAudioRef = useRef(isPlayingAudio);
+
+  useEffect(() => {
+    voiceModeRef.current = voiceMode;
+  }, [voiceMode]);
+
+  useEffect(() => {
+    isPlayingAudioRef.current = isPlayingAudio;
+  }, [isPlayingAudio]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceModeRef.current === "agent") {
+        setTrayVoiceState(isPlayingAudioRef.current ? "speaking" : "ready");
+      }
+    };
+  }, [setTrayVoiceState]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent" || !selectedAgent?.callsign) {
+      if (hasTrayActiveSession) setTrayVoiceState("idle");
+      return;
+    }
+
+    const sessionKey = agentModeSessionKey ?? activeSessionKey;
+    setTrayActiveSession({
+      agentCallsign: selectedAgent.callsign,
+      agentName: selectedAgent.name,
+      agentColor: selectedAgent.color,
+      sessionKey,
+      threadSessionKey: activeThread?.sessionKey ?? null,
+      title: activeThread ? `${selectedAgent.callsign.toUpperCase()} thread` : selectedAgent.name ?? selectedAgent.callsign,
+      voiceSettings: resolvedVoiceSettings,
+    });
+  }, [
+    activeSessionKey,
+    activeThread,
+    agentModeSessionKey,
+    selectedAgent?.callsign,
+    selectedAgent?.color,
+    selectedAgent?.name,
+    hasTrayActiveSession,
+    resolvedVoiceSettings,
+    setTrayActiveSession,
+    setTrayVoiceState,
+    voiceMode,
+  ]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent") return;
+    setTrayIsPlayingAudio(isPlayingAudio);
+    setTrayMicMuted(agentMicMuted);
+    setTrayAudioMuted(agentAudioMuted);
+    if (agentMicMuted) {
+      setTrayVoiceState("muted");
+    } else if (isPlayingAudio) {
+      setTrayVoiceState("speaking");
+    } else if (isLoading || isThreadLoading) {
+      setTrayVoiceState("thinking");
+    } else {
+      setTrayVoiceState("listening");
+    }
+  }, [
+    agentAudioMuted,
+    agentMicMuted,
+    isLoading,
+    isPlayingAudio,
+    isThreadLoading,
+    setTrayAudioMuted,
+    setTrayIsPlayingAudio,
+    setTrayMicMuted,
+    setTrayVoiceState,
+    voiceMode,
+  ]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent") return;
+    if (trayMicMuted !== agentMicMuted) setAgentMicMuted(trayMicMuted);
+    if (trayAudioMuted !== agentAudioMuted) {
+      if (trayAudioMuted) stopAllAudio();
+      setAgentAudioMuted(trayAudioMuted);
+    }
+  }, [
+    agentAudioMuted,
+    agentMicMuted,
+    stopAllAudio,
+    trayAudioMuted,
+    trayMicMuted,
+    voiceMode,
+  ]);
 
   const removePin = useCallback(async (messageId: string) => {
     const res = await fetch(`/api/chat/pins?messageId=${encodeURIComponent(messageId)}`, { method: "DELETE" });
@@ -4511,12 +4664,21 @@ export default function ChatPage() {
     : activeChannel
       ? `Message ${activeChannel.type === "dm" ? activeChannel.name ?? "DM" : `#${activeChannel.name ?? "channel"}`}...`
       : `Message ${agentCallsign}...`;
+  const pinActiveConversationToTray = useCallback(async () => {
+    await pinTrayTarget({
+      targetType: activeThread ? "chat_thread" : "chat_session",
+      targetKey: activeThread?.sessionKey ?? activeSessionKey,
+      title: activeThread ? `${activeConversationLabel} thread` : activeConversationLabel,
+      metadata: {
+        agentId: selectedAgent?.callsign ?? null,
+        gatewaySessionKey: activeThread ? null : activeSessionKey,
+        threadSessionKey: activeThread?.sessionKey ?? null,
+      },
+    });
+  }, [activeConversationLabel, activeSessionKey, activeThread, pinTrayTarget, selectedAgent?.callsign]);
 
   return (
     <div className="fixed inset-x-0 bottom-[var(--mobile-app-bar-height)] top-[var(--mobile-safe-top)] z-0 flex min-h-0 flex-col overflow-hidden bg-[var(--bg-primary)] lg:relative lg:inset-auto lg:bottom-auto lg:top-auto lg:h-dvh">
-      {/* Hidden audio element for TTS */}
-      <audio ref={audioRef} className="hidden" />
-
       {/* Header */}
       <div className={`sticky top-0 z-40 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6 ${mobileConversationOpen ? "block" : "hidden lg:block"}`}>
         <div className="flex items-center justify-between">
@@ -4580,6 +4742,17 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void pinActiveConversationToTray()}
+              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--control-bg)] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+              aria-label="Pin conversation to tray"
+              title="Pin conversation to tray"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 4.5 19.5 9.75m-10.5 0L4.5 14.25l5.25 5.25 4.5-4.5m-5.25-5.25 5.25 5.25m-5.25-5.25 3-3a2.121 2.121 0 0 1 3 0l2.25 2.25a2.121 2.121 0 0 1 0 3l-3 3" />
+              </svg>
+            </button>
             <CompanySwitcher compact className="w-36 sm:w-40 lg:hidden" />
           </div>
         </div>
@@ -4663,24 +4836,12 @@ export default function ChatPage() {
                   setSpeakResponses(!speakResponses);
                 }}
                 onEnterAgentMode={() => {
-                  if (voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey) {
-                    stopAllAudio();
-                    setVoiceMode("off");
-                    setAgentModeSessionKey(null);
-                    setAgentMicMuted(false);
-                    setAgentAudioMuted(false);
-                    return;
+                  const isThreadVoiceActive = voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey;
+                  if (isThreadVoiceActive) {
+                    exitAgentMode();
+                  } else {
+                    enterAgentMode(activeThread.sessionKey);
                   }
-                  if (!isNativeCapacitorApp() && audioRef.current) {
-                    audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                    audioRef.current.play().catch(() => {});
-                  }
-                  setAgentMicMuted(false);
-                  setAgentAudioMuted(false);
-                  setAgentOverlayMode("transcript");
-                  setAgentModeSessionKey(activeThread.sessionKey);
-                  setVoiceMode("agent");
-                  setSpeakResponses(true);
                 }}
                 agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread agent mode"}
               />
@@ -5474,6 +5635,9 @@ export default function ChatPage() {
                     isSaved={Boolean(savedByMessageId[msg.id])}
                     threadReplyCount={threadReplies.length}
                     threadReplies={threadReplies}
+                    threadUserAvatarUrl={userAvatarUrl}
+                    threadAssistantAvatarUrl={assistantAvatarUrl}
+                    threadAssistantEmoji={agentEmoji}
                     voiceSettings={resolvedVoiceSettings}
                   />
                 )}
@@ -5671,26 +5835,12 @@ export default function ChatPage() {
             }}
             onEnterAgentMode={() => {
               if (voiceMode === "agent") {
-                stopAllAudio();
-                setVoiceMode("off");
-                setAgentModeSessionKey(null);
-                setAgentOverlayMode("transcript");
-                setAgentMicMuted(false);
-                setAgentAudioMuted(false);
-                return;
+                exitAgentMode();
+              } else {
+                enterAgentMode(activeSessionKey);
               }
-              if (!isNativeCapacitorApp() && audioRef.current) {
-                audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                audioRef.current.play().catch(() => {});
-              }
-              setAgentMicMuted(false);
-              setAgentAudioMuted(false);
-              setAgentOverlayMode("transcript");
-              setAgentModeSessionKey(activeSessionKey);
-              setVoiceMode("agent");
-              setSpeakResponses(true);
             }}
-            agentButtonTitle={voiceMode === "agent" ? "Exit voice mode" : "Enter agent mode (hands-free)"}
+            agentButtonTitle={voiceMode === "agent" ? "Exit agent mode" : "Enter agent mode"}
             isDragOver={isDragOver}
             onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
             onDragLeave={(event) => { event.preventDefault(); setIsDragOver(false); }}

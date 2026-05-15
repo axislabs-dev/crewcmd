@@ -39,6 +39,7 @@ interface VoiceAgentProps {
   isAgentMuted?: boolean;
   onMicMutedChange?: (muted: boolean) => void;
   onAgentMutedChange?: (muted: boolean) => void;
+  onVoiceLevel?: (level: number) => void;
   agent?: string;
   gatewayAgent?: string;
   companyId?: string;
@@ -100,6 +101,7 @@ export function VoiceAgent({
   isAgentMuted = false,
   onMicMutedChange,
   onAgentMutedChange,
+  onVoiceLevel,
   agent,
   gatewayAgent,
   companyId,
@@ -132,6 +134,10 @@ export function VoiceAgent({
   const nativeVoiceSessionIdRef = useRef<string | null>(null);
   const nativeSessionActiveRef = useRef(false);
   const deactivateRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    onVoiceLevel?.(volumeLevel);
+  }, [onVoiceLevel, volumeLevel]);
 
   const recordVoiceBreadcrumb = useCallback((
     event: string,

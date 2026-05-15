@@ -1,6 +1,8 @@
 import { createAgentModeSessionId, publishAgentModeDiagnostic } from "@/lib/agent-mode-diagnostics";
 
 export type NativeVoiceSessionState = "idle" | "listening" | "recording" | "transcribing" | "error";
+export type NativeVoiceSessionUiState = "idle" | "ready" | "listening" | "hearing" | "processing" | "thinking" | "speaking" | "muted" | "paused" | "error";
+export type NativeVoiceSessionActor = "user" | "agent" | "system";
 
 export type NativeVoiceSessionStatus = {
   active: boolean;
@@ -52,6 +54,15 @@ export type NativeVoiceSpeechOptions = {
   language?: string;
 };
 
+export type NativeVoiceStatusUpdateOptions = {
+  state: NativeVoiceSessionUiState;
+  active?: boolean;
+  actor?: NativeVoiceSessionActor;
+  level?: number;
+  agentCallsign?: string;
+  title?: string;
+};
+
 type NativePluginHandle = { remove: () => Promise<void> };
 
 type NativeVoiceSessionPlugin = {
@@ -62,6 +73,7 @@ type NativeVoiceSessionPlugin = {
   playAudio?: (options: NativeVoiceAudioPlaybackOptions) => Promise<NativeVoiceSessionStatus>;
   speakText?: (options: NativeVoiceSpeechOptions) => Promise<NativeVoiceSessionStatus>;
   stopAudio?: () => Promise<NativeVoiceSessionStatus>;
+  updateStatus?: (options: NativeVoiceStatusUpdateOptions) => Promise<NativeVoiceSessionStatus>;
   status?: () => Promise<NativeVoiceSessionStatus>;
   addListener?: (eventName: string, listenerFunc: (event: Record<string, unknown>) => void) => Promise<NativePluginHandle>;
 };
@@ -259,6 +271,15 @@ export async function stopNativeVoiceAudio() {
   const plugin = getNativeVoiceSessionPlugin();
   if (!plugin?.stopAudio) return null;
   return plugin.stopAudio();
+}
+
+export async function updateNativeVoiceSessionStatus(options: NativeVoiceStatusUpdateOptions) {
+  const plugin = getNativeVoiceSessionPlugin();
+  if (!plugin?.updateStatus) return null;
+  return plugin.updateStatus({
+    ...options,
+    level: typeof options.level === "number" ? Math.max(0, Math.min(1, options.level)) : undefined,
+  });
 }
 
 export async function addNativeVoiceSessionListener(

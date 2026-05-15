@@ -1160,13 +1160,16 @@ export default function ChatPage() {
   const [dmAgentInvites, setDmAgentInvites] = useState<string[]>([]);
   const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [channelCreateOpen, setChannelCreateOpen] = useState(false);
+  const [channelInviteOpen, setChannelInviteOpen] = useState(false);
+  const [channelInviteSearch, setChannelInviteSearch] = useState("");
+  const [channelUserInvites, setChannelUserInvites] = useState<string[]>([]);
+  const [channelAgentInvites, setChannelAgentInvites] = useState<PendingAgentInvite[]>([]);
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelPurpose, setNewChannelPurpose] = useState("");
   const [newChannelVisibility, setNewChannelVisibility] = useState<"restricted" | "private">("restricted");
   const [companyMembers, setCompanyMembers] = useState<CompanyMemberOption[]>([]);
   const [newChannelUserInvites, setNewChannelUserInvites] = useState<string[]>([]);
   const [newChannelAgentInvites, setNewChannelAgentInvites] = useState<PendingAgentInvite[]>([]);
-  const [memberUserId, setMemberUserId] = useState("");
   const [channelNotice, setChannelNotice] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1468,25 +1471,40 @@ export default function ChatPage() {
     }
   }, [agents, chatCompanyId, chatWorkspaceId, companyMembers, dmAgentInvites, dmUserInvites, loadChannels, selectSession, selectedAgent]);
 
-  const addChannelMember = useCallback(async () => {
-    if (!activeChannelId || !memberUserId.trim()) return;
+  const inviteChannelMembers = useCallback(async () => {
+    if (!activeChannelId || (channelUserInvites.length === 0 && channelAgentInvites.length === 0)) return;
     try {
-      const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelId)}/members`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: memberUserId.trim(), role: "member" }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as { error?: string };
-        setChannelNotice(data.error ?? "Could not add member.");
-        return;
+      for (const userId of channelUserInvites) {
+        const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelId)}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memberType: "user", userId, role: "member" }),
+        });
+        if (!res.ok) throw new Error("Could not invite user.");
       }
-      setMemberUserId("");
+      for (const invite of channelAgentInvites) {
+        const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelId)}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberType: "agent",
+            agentId: invite.agentId,
+            role: "member",
+            agentParticipationMode: invite.mode,
+          }),
+        });
+        if (!res.ok) throw new Error("Could not invite agent.");
+      }
+      setChannelUserInvites([]);
+      setChannelAgentInvites([]);
+      setChannelInviteSearch("");
+      setChannelInviteOpen(false);
       await loadChannels();
-    } catch {
-      setChannelNotice("Could not add member.");
+      setChannelNotice(null);
+    } catch (error) {
+      setChannelNotice(error instanceof Error ? error.message : "Could not invite members.");
     }
-  }, [activeChannelId, loadChannels, memberUserId]);
+  }, [activeChannelId, channelAgentInvites, channelUserInvites, loadChannels]);
 
   const selectChannel = useCallback((channelId: string | null) => {
     setActiveChannelId(channelId);
@@ -2376,6 +2394,39 @@ export default function ChatPage() {
       : companyMembers;
     return candidates.slice(0, 12);
   }, [companyMembers, dmSearch]);
+  const existingChannelUserIds = useMemo(
+    () => new Set(activeChannelMembers.flatMap((member) => member.memberType === "user" && member.userId ? [member.userId] : [])),
+    [activeChannelMembers]
+  );
+  const existingChannelAgentIds = useMemo(
+    () => new Set(activeChannelMembers.flatMap((member) => member.memberType === "agent" && member.agentId ? [member.agentId] : [])),
+    [activeChannelMembers]
+  );
+  const channelInviteHumanResults = useMemo(() => {
+    const query = channelInviteSearch.trim().toLowerCase();
+    const candidates = companyMembers.filter((member) => !existingChannelUserIds.has(member.userId));
+    const filtered = query
+      ? candidates.filter((member) => [
+          member.email,
+          member.githubUsername,
+          member.role,
+        ].some((value) => value?.toLowerCase().includes(query)))
+      : candidates;
+    return filtered.slice(0, 12);
+  }, [channelInviteSearch, companyMembers, existingChannelUserIds]);
+  const channelInviteAgentResults = useMemo(() => {
+    const query = channelInviteSearch.trim().toLowerCase();
+    const candidates = agents.filter((agent) => !existingChannelAgentIds.has(agent.id));
+    const filtered = query
+      ? candidates.filter((agent) => [
+          agent.callsign,
+          agent.name,
+          agent.title,
+          agent.role,
+        ].some((value) => value?.toLowerCase().includes(query)))
+      : candidates;
+    return filtered.slice(0, 12);
+  }, [agents, channelInviteSearch, existingChannelAgentIds]);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -4641,6 +4692,140 @@ export default function ChatPage() {
         </div>
       )}
 
+      {channelInviteOpen && activeChannel && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 px-4 pt-[max(4rem,var(--mobile-safe-top))] backdrop-blur-sm">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void inviteChannelMembers();
+            }}
+            className="w-full max-w-xl rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] p-4 shadow-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-semibold text-[var(--text-primary)]">Invite to {activeChannel.type === "dm" ? activeChannel.name ?? "DM" : `#${activeChannel.name ?? "channel"}`}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setChannelInviteOpen(false);
+                  setChannelInviteSearch("");
+                  setChannelUserInvites([]);
+                  setChannelAgentInvites([]);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                aria-label="Close invite members"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+              To
+              <input
+                autoFocus
+                value={channelInviteSearch}
+                onChange={(event) => setChannelInviteSearch(event.target.value)}
+                placeholder="Search people or agents"
+                className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+              />
+            </label>
+            <div className="mt-3 grid max-h-[min(30rem,60vh)] gap-3 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3">
+              <div className="grid gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Humans</div>
+                {channelInviteHumanResults.length === 0 ? (
+                  <div className="text-[12px] text-[var(--text-tertiary)]">No humans to invite.</div>
+                ) : channelInviteHumanResults.map((member) => (
+                  <label key={member.userId} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[12px] transition hover:bg-[var(--bg-surface-hover)]">
+                    <input
+                      type="checkbox"
+                      checked={channelUserInvites.includes(member.userId)}
+                      onChange={(event) => {
+                        setChannelUserInvites((current) => event.target.checked
+                          ? [...current, member.userId]
+                          : current.filter((id) => id !== member.userId));
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">{member.email ?? member.githubUsername ?? member.userId}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="grid gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Agents</div>
+                {channelInviteAgentResults.length === 0 ? (
+                  <div className="text-[12px] text-[var(--text-tertiary)]">No agents to invite.</div>
+                ) : channelInviteAgentResults.map((agent) => {
+                  const invite = channelAgentInvites.find((item) => item.agentId === agent.id);
+                  const mode = invite?.mode ?? "mention_only";
+                  return (
+                    <div key={agent.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[12px] transition hover:bg-[var(--bg-surface-hover)]">
+                      <label className="flex min-w-0 flex-1 items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(invite)}
+                          onChange={(event) => {
+                            setChannelAgentInvites((current) => {
+                              if (event.target.checked) return [...current, { agentId: agent.id, mode }];
+                              return current.filter((item) => item.agentId !== agent.id);
+                            });
+                          }}
+                        />
+                        <span className="text-base">{agent.emoji}</span>
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: agent.color }} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold text-[var(--text-primary)]">{agent.callsign}</span>
+                          <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{agent.title || agent.name || "Agent"}</span>
+                        </span>
+                      </label>
+                      <select
+                        value={mode}
+                        disabled={!invite}
+                        onChange={(event) => {
+                          const nextMode = event.target.value as PendingAgentInvite["mode"];
+                          setChannelAgentInvites((current) => current.map((item) => (
+                            item.agentId === agent.id ? { ...item, mode: nextMode } : item
+                          )));
+                        }}
+                        className="w-32 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1 text-[11px] text-[var(--text-secondary)] disabled:opacity-40"
+                      >
+                        <option value="watching">Watcher</option>
+                        <option value="mention_only">Tag only response</option>
+                        <option value="silent">Silent</option>
+                        <option value="proactive">Proactive</option>
+                        <option value="on_call">On call</option>
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {channelNotice && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300">{channelNotice}</div>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setChannelInviteOpen(false);
+                  setChannelInviteSearch("");
+                  setChannelUserInvites([]);
+                  setChannelAgentInvites([]);
+                }}
+                className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={channelUserInvites.length === 0 && channelAgentInvites.length === 0}
+                className="rounded-lg border border-[var(--accent)] bg-[var(--accent)]/12 px-3 py-2 text-[12px] font-semibold text-[var(--text-primary)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Invite
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {channelCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 backdrop-blur-sm">
           <form
@@ -4917,23 +5102,18 @@ export default function ChatPage() {
                         ))}
                       </div>
                       {activeChannel.canManage ? (
-                        <div className="flex gap-2">
-                          <input
-                            value={memberUserId}
-                            onChange={(event) => setMemberUserId(event.target.value)}
-                            onKeyDown={(event) => { if (event.key === "Enter") void addChannelMember(); }}
-                            placeholder="User ID to add"
-                            className="min-w-0 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void addChannelMember()}
-                            disabled={!memberUserId.trim()}
-                            className="rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[11px] text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Add
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChannelInviteSearch("");
+                            setChannelUserInvites([]);
+                            setChannelAgentInvites([]);
+                            setChannelInviteOpen(true);
+                          }}
+                          className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+                        >
+                          Invite members
+                        </button>
                       ) : (
                         <div className="text-[11px] text-[var(--text-tertiary)]">Only channel admins can manage membership.</div>
                       )}

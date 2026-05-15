@@ -4458,7 +4458,7 @@ export default function ChatPage() {
       : `Message ${agentCallsign}...`;
 
   return (
-    <div className="flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
+    <div className="relative flex h-[calc(100dvh_-_var(--mobile-app-bar-height))] overflow-hidden lg:h-dvh flex-col">
       {/* Hidden audio element for TTS */}
       <audio ref={audioRef} className="hidden" />
 
@@ -5461,7 +5461,7 @@ export default function ChatPage() {
           className={
             agentOverlayMode === "immersive"
               ? "fixed inset-0 z-[90] overflow-hidden"
-              : `shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80 px-3 pt-2 backdrop-blur-xl sm:px-4 ${mobileConversationOpen ? "block" : "hidden lg:block"}`
+              : `absolute inset-x-3 bottom-[5.75rem] z-20 max-h-[min(12rem,32dvh)] overflow-hidden rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-primary)]/88 px-2 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:shrink-0 lg:overflow-visible lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-3 lg:pb-0 lg:pt-2 lg:shadow-none sm:px-4 ${mobileConversationOpen ? "block" : "hidden lg:block"}`
           }
           style={{
             color: "var(--text-primary)",

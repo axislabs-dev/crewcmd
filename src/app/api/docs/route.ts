@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import type { DocCategory } from "@/lib/data";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import {
   getCompanyIdForWorkspace,
   isHeartbeatBearerRequest,
@@ -12,6 +13,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) return NextResponse.json([]);
 
   const { searchParams } = new URL(request.url);
@@ -106,6 +110,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json(
       { error: "Database not configured" },

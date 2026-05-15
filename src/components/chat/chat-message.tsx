@@ -296,6 +296,9 @@ interface ChatMessageProps {
   isSaved?: boolean;
   threadReplyCount?: number;
   threadReplies?: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
+  threadUserAvatarUrl?: string | null;
+  threadAssistantAvatarUrl?: string | null;
+  threadAssistantEmoji?: string | null;
   voiceSettings?: AgentVoiceSettings | null;
 }
 
@@ -580,19 +583,32 @@ export function ChatIdentityProfilePanel({
     </div>
   );
 }
-function ThreadAvatar({ role }: { role: "user" | "assistant" }) {
+function ThreadAvatar({
+  role,
+  avatarUrl,
+  emoji,
+}: {
+  role: "user" | "assistant";
+  avatarUrl?: string | null;
+  emoji?: string | null;
+}) {
   const isUser = role === "user";
 
   return (
     <span
-      className={`flex h-5 w-5 items-center justify-center rounded-md border text-[8px] font-bold shadow-sm ${
+      className={`flex h-5 w-5 overflow-hidden rounded-md border text-[8px] font-bold shadow-sm ${
         isUser
           ? "border-[var(--border-medium)] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]"
           : "border-[var(--border-medium)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
       }`}
       aria-hidden="true"
     >
-      {isUser ? "YOU" : "AI"}
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center">{isUser ? "YOU" : emoji || "AI"}</span>
+      )}
     </span>
   );
 }
@@ -601,11 +617,17 @@ function ThreadReplyIndicator({
   replies,
   fallbackCount,
   isUser,
+  userAvatarUrl,
+  assistantAvatarUrl,
+  assistantEmoji,
   onOpen,
 }: {
   replies: Array<{ id: string; role: "user" | "assistant"; createdAt?: string }>;
   fallbackCount: number;
   isUser: boolean;
+  userAvatarUrl?: string | null;
+  assistantAvatarUrl?: string | null;
+  assistantEmoji?: string | null;
   onOpen: () => void;
 }) {
   const replyCount = replies.length || fallbackCount;
@@ -630,7 +652,11 @@ function ThreadReplyIndicator({
               key={reply.id}
               className={index > 0 ? (isUser ? "-mr-1.5" : "-ml-1.5") : ""}
             >
-              <ThreadAvatar role={reply.role} />
+              <ThreadAvatar
+                role={reply.role}
+                avatarUrl={reply.role === "user" ? userAvatarUrl : assistantAvatarUrl}
+                emoji={reply.role === "assistant" ? assistantEmoji : null}
+              />
             </span>
           ))}
         </span>
@@ -663,6 +689,9 @@ export function ChatMessage({
   isSaved,
   threadReplyCount,
   threadReplies = [],
+  threadUserAvatarUrl,
+  threadAssistantAvatarUrl,
+  threadAssistantEmoji,
   voiceSettings,
 }: ChatMessageProps) {
   const isUser = role === "user";
@@ -813,6 +842,9 @@ export function ChatMessage({
             replies={threadReplies}
             fallbackCount={threadReplyCount ?? 0}
             isUser={false}
+            userAvatarUrl={threadUserAvatarUrl}
+            assistantAvatarUrl={threadAssistantAvatarUrl}
+            assistantEmoji={threadAssistantEmoji}
             onOpen={onReplyInThread}
           />
         )}

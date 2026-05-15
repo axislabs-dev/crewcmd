@@ -182,6 +182,27 @@ export function Sidebar() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!presenceMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-presence-menu-root]")) return;
+      setPresenceMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPresenceMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [presenceMenuOpen]);
+
   if (pathname === "/" || pathname === "/access-denied") return null;
   if (pathname.startsWith("/invite/")) return null;
 
@@ -257,7 +278,7 @@ export function Sidebar() {
     if (!session?.user) return null;
     const username = (session.user as Record<string, unknown>).username as string | undefined;
     return (
-      <div className="relative">
+      <div className="relative" data-presence-menu-root>
         <button
           type="button"
           onClick={() => setPresenceMenuOpen((open) => !open)}
@@ -275,7 +296,7 @@ export function Sidebar() {
             {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
           </div>
         </button>
-        <div className={`absolute bottom-full left-0 z-50 mb-2 ${presenceMenuOpen ? "block" : "hidden"}`}>
+        <div className={`fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[70] lg:absolute lg:inset-auto lg:bottom-full lg:left-0 lg:mb-2 ${presenceMenuOpen ? "block" : "hidden"}`}>
           <UserPresenceMenu onClose={() => setPresenceMenuOpen(false)} />
         </div>
       </div>
@@ -413,7 +434,7 @@ export function Sidebar() {
           <NavList compact />
         </nav>
         <div className="mx-2 border-t border-[var(--border-subtle)] px-2 py-3">
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-2" data-presence-menu-root>
             <button
               type="button"
               onClick={() => setPresenceMenuOpen((open) => !open)}

@@ -135,6 +135,14 @@ const companySettingsItem = {
   ),
 };
 
+interface CurrentUserProfile {
+  name: string | null;
+  email: string;
+  avatarUrl: string | null;
+}
+
+const USER_PROFILE_UPDATED_EVENT = "crewcmd:user-profile-updated";
+
 function BrandLogo({ size = "sm" }: { size?: "sm" | "md" }) {
   const { workspace, company } = useWorkspace();
   const logoSize = size === "sm" ? "h-6 w-6" : "h-8 w-8";
@@ -171,6 +179,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null);
   const { data: session } = useSession();
   const { workspace } = useWorkspace();
   const { theme, setTheme } = useTheme();
@@ -181,6 +190,39 @@ export function Sidebar() {
       delete document.documentElement.dataset.sidebarCollapsed;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentUserProfile() {
+      if (!session?.user) {
+        setCurrentUserProfile(null);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/user/profile", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          setCurrentUserProfile(data);
+        }
+      } catch {
+        if (!cancelled) setCurrentUserProfile(null);
+      }
+    }
+
+    function handleProfileUpdated(event: Event) {
+      const detail = (event as CustomEvent<CurrentUserProfile>).detail;
+      if (detail) setCurrentUserProfile(detail);
+    }
+
+    void loadCurrentUserProfile();
+    window.addEventListener(USER_PROFILE_UPDATED_EVENT, handleProfileUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(USER_PROFILE_UPDATED_EVENT, handleProfileUpdated);
+    };
+  }, [session?.user]);
 
   useEffect(() => {
     if (!presenceMenuOpen) return;
@@ -207,6 +249,9 @@ export function Sidebar() {
   if (pathname.startsWith("/invite/")) return null;
 
   const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
+  const userName = currentUserProfile?.name || session?.user?.name || "User";
+  const userEmail = currentUserProfile?.email || session?.user?.email || undefined;
+  const userAvatarUrl = currentUserProfile?.avatarUrl ?? session?.user?.image ?? null;
   const isSuperAdmin = role === "super_admin";
 
   const isActive = (href: string) => {
@@ -280,11 +325,11 @@ export function Sidebar() {
     const content = (
       <>
         <div className="relative shrink-0">
-          <Avatar src={session.user.image} alt={session.user.name || username || session.user.email || "User"} size="sm" />
+          <Avatar src={userAvatarUrl} alt={userName || username || userEmail || "User"} size="sm" />
           <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] text-[var(--text-secondary)]">{session.user.name || username || "User"}</p>
+          <p className="truncate text-[11px] text-[var(--text-secondary)]">{userName || username || "User"}</p>
           <UserPresenceLine />
           {role && <p className="text-[9px] text-[var(--text-tertiary)]">{role.toUpperCase().replace("_", " ")}</p>}
         </div>
@@ -410,7 +455,7 @@ export function Sidebar() {
           aria-expanded={presenceMenuOpen}
         >
           <span className="relative">
-            <Avatar src={session.user.image} alt={session.user.name || session.user.email || "User"} size="sm" />
+            <Avatar src={userAvatarUrl} alt={userName || userEmail || "User"} size="sm" />
             <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" />
           </span>
           <span>Me</span>
@@ -499,7 +544,7 @@ export function Sidebar() {
               className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--bg-surface-hover)]"
             >
               <div className="relative">
-                <Avatar src={session?.user?.image} alt={session?.user?.name || session?.user?.email || "User"} size="sm" />
+                <Avatar src={userAvatarUrl} alt={userName || userEmail || "User"} size="sm" />
                 {session?.user ? <UserPresenceDot className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border border-[var(--bg-elevated)] ring-2" /> : null}
               </div>
             </button>

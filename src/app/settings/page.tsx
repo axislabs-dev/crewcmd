@@ -36,6 +36,8 @@ interface RuntimeRecord {
   capabilitySnapshot?: RuntimeCapabilitySnapshot | null;
 }
 
+const USER_PROFILE_UPDATED_EVENT = "crewcmd:user-profile-updated";
+
 const inputClassName = "w-full rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)] focus:bg-[var(--accent-soft)]";
 const cardClassName = "glass-card border border-[var(--border-subtle)] p-5 sm:p-6";
 
@@ -201,7 +203,8 @@ export default function SettingsPage() {
       }
 
       setProfile(data);
-      setMessage({ type: "success", text: "Profile updated. Refresh the page to see header changes everywhere." });
+      notifyProfileUpdated(data);
+      setMessage({ type: "success", text: "Profile updated." });
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to save profile" });
     } finally {
@@ -255,6 +258,7 @@ export default function SettingsPage() {
       }
 
       setProfile(data);
+      notifyProfileUpdated(data);
       setMessage({ type: "success", text: "Avatar updated." });
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to upload avatar" });
@@ -281,12 +285,17 @@ export default function SettingsPage() {
       }
 
       setProfile(data);
+      notifyProfileUpdated(data);
       setMessage({ type: "success", text: "Avatar removed." });
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to remove avatar" });
     } finally {
       setUploadingAvatar(false);
     }
+  }
+
+  function notifyProfileUpdated(nextProfile: Profile) {
+    window.dispatchEvent(new CustomEvent<Profile>(USER_PROFILE_UPDATED_EVENT, { detail: nextProfile }));
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {

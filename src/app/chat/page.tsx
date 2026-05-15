@@ -78,6 +78,12 @@ interface Message {
   metadata?: { attachments?: Attachment[] } | null;
 }
 
+interface CurrentUserProfile {
+  name: string | null;
+  email: string;
+  avatarUrl: string | null;
+}
+
 type ThreadParentLink = {
   parentSessionKey: string;
   parentMessageId?: string | null;
@@ -312,6 +318,7 @@ type AgentOverlayMode = "transcript" | "immersive";
 const CHAT_AGENT_STORAGE_KEY = "crewcmd.chat.selected-agent";
 const CHAT_SESSION_STORAGE_KEY = "crewcmd.chat.selected-session";
 const CHAT_EXECUTION_STORAGE_PREFIX = "crewcmd.chat.execution.";
+const USER_PROFILE_UPDATED_EVENT = "crewcmd:user-profile-updated";
 const VOICE_ACK_DELAY_MS = 5000;
 const VOICE_CHECKIN_DELAY_MS = 30000;
 const VOICE_FAST_START_MIN_CHARS = 48;
@@ -1128,6 +1135,7 @@ export default function ChatPage() {
   const [threadEvents, setThreadEvents] = useState<ExecutionProgressEvent[]>([]);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("off");
   const [agentModeSessionKey, setAgentModeSessionKey] = useState<string | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null);
   const [agentOverlayMode, setAgentOverlayMode] = useState<AgentOverlayMode>("transcript");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -2232,21 +2240,54 @@ export default function ChatPage() {
     }
   }, [selectedAgent]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentUserProfile() {
+      if (!session?.user) {
+        setCurrentUserProfile(null);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/user/profile", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          setCurrentUserProfile(data);
+        }
+      } catch {
+        if (!cancelled) setCurrentUserProfile(null);
+      }
+    }
+
+    function handleProfileUpdated(event: Event) {
+      const detail = (event as CustomEvent<CurrentUserProfile>).detail;
+      if (detail) setCurrentUserProfile(detail);
+    }
+
+    void loadCurrentUserProfile();
+    window.addEventListener(USER_PROFILE_UPDATED_EVENT, handleProfileUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(USER_PROFILE_UPDATED_EVENT, handleProfileUpdated);
+    };
+  }, [session?.user]);
+
   const agentCallsign = selectedAgent?.callsign || "MAIN";
   const agentEmoji = selectedAgent?.emoji || "💬";
   const agentColor = "var(--accent)";
   const agentIdentityColor = selectedAgent?.color || "var(--accent)";
   const agentAbbrev = agentCallsign.slice(0, 3).toUpperCase();
-  const userDisplayName = session?.user?.name || session?.user?.email || "You";
-  const userAvatarUrl = session?.user?.image ?? null;
+  const userDisplayName = currentUserProfile?.name || currentUserProfile?.email || session?.user?.name || session?.user?.email || "You";
+  const userAvatarUrl = currentUserProfile?.avatarUrl ?? session?.user?.image ?? null;
   const assistantDisplayName = selectedAgent?.callsign || selectedAgent?.name || "Agent";
   const assistantAvatarUrl = selectedAgent?.avatarUrl ?? null;
   const userIdentityDetails = useMemo<ChatIdentityDetails>(() => ({
     type: "person",
-    title: session?.user?.email || "Workspace member",
+    title: currentUserProfile?.email || session?.user?.email || "Workspace member",
     status: "Active in this chat",
     profileHref: "/team",
-  }), [session?.user?.email]);
+  }), [currentUserProfile?.email, session?.user?.email]);
   const assistantIdentityDetails = useMemo<ChatIdentityDetails>(() => ({
     type: "agent",
     title: selectedAgent?.title || selectedAgent?.role || "AI agent",

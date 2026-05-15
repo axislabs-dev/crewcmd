@@ -24,7 +24,7 @@ export type ExecutionProgressEvent = {
   };
 };
 
-type ExecutionPhase = "run-started" | "thinking" | "tool" | "waiting" | "completed" | "error";
+type ExecutionPhase = "run-started" | "thinking" | "tool" | "compaction" | "waiting" | "completed" | "error";
 
 interface ExecutionProgressPanelProps {
   progress: ExecutionProgressEvent | null;
@@ -38,6 +38,7 @@ const PHASES: Array<{ phase: ExecutionPhase; label: string }> = [
   { phase: "run-started", label: "Run started" },
   { phase: "thinking", label: "Thinking" },
   { phase: "tool", label: "Tool" },
+  { phase: "compaction", label: "Compacting" },
   { phase: "waiting", label: "Waiting" },
   { phase: "completed", label: "Completed" },
   { phase: "error", label: "Error" },
@@ -57,7 +58,7 @@ function phaseFromProgress(
   if (event.includes("error") || event.includes("abort")) return "error";
   if (event.includes("tool")) return "tool";
   if (event.includes("completed") || event.includes("complete")) return "completed";
-  if (event.includes("compact") || event.includes("checkpoint")) return "waiting";
+  if (event.includes("compact") || event.includes("checkpoint")) return "compaction";
   if (event.includes("waiting") || event.includes("heartbeat") || event.includes("reconnect") || event.includes("interrupted")) return "waiting";
   if (event.includes("thinking") || event.includes("gateway_send")) return "thinking";
   if (event.includes("started") || event.includes("start")) return "run-started";
@@ -75,6 +76,10 @@ function formatElapsed(ms: number | undefined) {
 function labelFromProgress(progress: ExecutionProgressEvent | null, phase: ExecutionPhase) {
   const toolName = progress?.activeTool?.name;
   const toolStatus = progress?.activeTool?.status;
+
+  if (phase === "compaction") {
+    return progress?.checkpoint?.title || "Compacting context";
+  }
 
   if (phase === "tool" && toolName) {
     if (toolStatus === "result" || progress?.event === "tool_completed") return `Completed ${toolName}`;
@@ -278,6 +283,7 @@ function activityCountLabel(count: number) {
 function idleStatusText(phase: ExecutionPhase, hasStreamingContent: boolean) {
   if (phase === "completed") return "Response complete";
   if (phase === "error") return "Run stopped";
+  if (phase === "compaction") return "Compacting conversation history";
   if (phase === "waiting") return "Waiting for the next event";
   if (hasStreamingContent) return "Drafting response";
   return "Starting run";
@@ -424,6 +430,7 @@ export function ExecutionProgressPanel({
   const label = progress ? labelFromProgress(progress, phase) : "Tool activity";
   const statusDetail =
     phase === "tool" ? toolStatusDetail(progress) :
+    phase === "compaction" ? progress?.checkpoint?.summary ?? progress?.checkpoint?.detail ?? "Preserving context before continuing" :
     phase === "error" ? progress?.error :
     "";
   const hasStatusDetail = Boolean(statusDetail);

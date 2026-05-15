@@ -26,6 +26,7 @@ Everything you need to get started, self-host, and contribute.
 ## Launch & Positioning
 
 - [Soft Launch Plan](SOFT-LAUNCH-PLAN.md) — Early-access launch checklist, messaging, and rollout plan
+- [OSS-Style Launch Readiness Plan](OSS-STYLE-LAUNCH-READINESS.md) — Staged contributor-readiness and public launch plan
 
 ## Reference
 

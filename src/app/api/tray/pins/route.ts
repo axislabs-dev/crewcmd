@@ -81,6 +81,32 @@ async function resolveTarget(request: NextRequest, workspace: { id: string; comp
   }
 
   if (body.targetType === "chat_session") {
+    const channelId = typeof body.metadata?.channelId === "string" && body.metadata.channelId.trim()
+      ? body.metadata.channelId.trim()
+      : null;
+    if (channelId && rawTargetKey?.startsWith("channel:")) {
+      const channelName = typeof body.metadata?.channelName === "string" && body.metadata.channelName.trim()
+        ? body.metadata.channelName.trim()
+        : null;
+      if (!(await canAccessChatSession(request, {
+        workspaceId: workspace.id,
+        companyId: workspace.companyId ?? null,
+        channelId,
+      }))) return { error: forbiddenResponse() };
+      return {
+        targetType: body.targetType,
+        targetId: null,
+        targetKey: rawTargetKey,
+        title: body.title?.trim() || channelName || "Channel",
+        metadata: {
+          agentId: null,
+          gatewaySessionKey: null,
+          channelId,
+          ...(body.metadata ?? {}),
+        },
+      };
+    }
+
     const [session] = await withRetry(() =>
       db!.select().from(chatSessions)
         .where(rawTargetId ? eq(chatSessions.id, rawTargetId) : eq(chatSessions.gatewaySessionKey, rawTargetKey!))

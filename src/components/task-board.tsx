@@ -34,6 +34,7 @@ interface TaskBoardProps {
   projects?: Project[];
   agentsLoading?: boolean;
   agentsError?: string | null;
+  openTaskId?: string | null;
 }
 
 const columns: { key: TaskStatus; label: string }[] = [
@@ -69,9 +70,10 @@ function PinIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null, openTaskId = null }: TaskBoardProps) {
   const { pinTarget, pins, removePin } = useAgentVoiceSession();
   const [boardTasks, setBoardTasks] = useState<Task[]>(initialTasks);
+  const openedTaskIdRef = useRef<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -591,6 +593,14 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
     loadTaskDocs(task.id);
     loadTimeEntries(task.id);
   }
+
+  useEffect(() => {
+    if (!openTaskId || openedTaskIdRef.current === openTaskId) return;
+    const task = boardTasks.find((item) => item.id === openTaskId);
+    if (!task) return;
+    openedTaskIdRef.current = openTaskId;
+    openTaskDetail(task);
+  }, [boardTasks, openTaskId, openTaskDetail]);
 
   async function saveTask() {
     if (!selectedTask) return;

@@ -34,6 +34,7 @@ export default function TasksPage() {
   const [creating, setCreating] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [deepLinkedTaskId, setDeepLinkedTaskId] = useState<string | null>(null);
 
   // Load persisted view preference
   useEffect(() => {
@@ -96,8 +97,9 @@ export default function TasksPage() {
     if (!taskId) return;
     const task = tasks.find((item) => item.id === taskId);
     if (!task) return;
-    setSelectedTask(task);
-    setViewMode("table");
+    setProjectFilter("all");
+    setViewMode("board");
+    setDeepLinkedTaskId(taskId);
   }, [tasks]);
 
   const counts: Record<TaskStatus, number> = {
@@ -371,6 +373,7 @@ export default function TasksPage() {
               projects={projects}
               agentsLoading={agentsLoading}
               agentsError={agentsError}
+              openTaskId={deepLinkedTaskId}
             />
           ) : (
             <TaskTable

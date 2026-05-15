@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Task, Agent, TaskStatus, TimeEntry } from "@/lib/data";
@@ -60,6 +60,14 @@ const priorityStyles: Record<string, string> = {
   high: "text-[#c77445] bg-[color-mix(in_srgb,#c77445_12%,transparent)]",
   critical: "text-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]",
 };
+
+function PinIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 4.5 19.5 9.75m-10.5 0L4.5 14.25l5.25 5.25 4.5-4.5m-5.25-5.25 5.25 5.25m-5.25-5.25 3-3a2.121 2.121 0 0 1 3 0l2.25 2.25a2.121 2.121 0 0 1 0 3l-3 3" />
+    </svg>
+  );
+}
 
 export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null }: TaskBoardProps) {
   const { pinTarget } = useAgentVoiceSession();
@@ -341,7 +349,24 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
   } | null>(null);
 
   const agentMap = buildAgentLookup(agents);
-  const projectMap = new Map(projects.map((p) => [p.id, p]));
+  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+
+  const pinTaskToTray = useCallback((task: Task) => {
+    const project = task.projectId ? projectMap.get(task.projectId) : null;
+    void pinTarget({
+      targetType: "task",
+      targetId: task.id,
+      title: task.title,
+      metadata: {
+        shortId: task.shortId,
+        status: task.status,
+        priority: task.priority,
+        description: task.description,
+        projectId: task.projectId,
+        projectName: project?.name,
+      },
+    });
+  }, [pinTarget, projectMap]);
 
   const agentSelectStatus = agentsLoading
     ? "Loading agents..."
@@ -927,6 +952,14 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                     EDIT
                   </button>
                 )}
+                <button
+                  onClick={() => pinTaskToTray(selectedTask)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-medium)] text-[var(--text-tertiary)] transition-colors hover:text-neo"
+                  aria-label={`Pin ${selectedTask.title} to tray`}
+                  title="Pin task to tray"
+                >
+                  <PinIcon />
+                </button>
                 <button
                   onClick={deleteTask}
                   className="rounded-lg border border-red-500/20 px-3 py-1.5 text-[10px] tracking-wider text-[var(--danger)]/40 transition-colors hover:text-[var(--danger)]"
@@ -1761,22 +1794,13 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void pinTarget({
-                              targetType: "task",
-                              targetId: task.id,
-                              title: task.title,
-                              metadata: {
-                                shortId: task.shortId,
-                                status: task.status,
-                                priority: task.priority,
-                              },
-                            });
+                            pinTaskToTray(task);
                           }}
-                          className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[8px] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
+                          className="flex h-6 w-6 items-center justify-center rounded border border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-0 transition hover:text-[var(--text-primary)] group-hover:opacity-100"
                           aria-label={`Pin ${task.title} to tray`}
                           title="Pin task to tray"
                         >
-                          Pin
+                          <PinIcon className="h-3 w-3" />
                         </button>
                       </div>
 

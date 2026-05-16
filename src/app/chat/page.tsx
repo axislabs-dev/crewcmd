@@ -4509,11 +4509,17 @@ export default function ChatPage() {
       agentName: selectedAgent.name,
       agentColor: selectedAgent.color,
       sessionKey,
+      channelId: activeChannelId,
+      channelName: activeChannel?.name ?? null,
+      channelType: activeChannel?.type ?? null,
       threadSessionKey: activeThread?.sessionKey ?? null,
       title: activeThread ? `${selectedAgent.callsign.toUpperCase()} thread` : selectedAgent.name ?? selectedAgent.callsign,
       voiceSettings: resolvedVoiceSettings,
     });
   }, [
+    activeChannel?.name,
+    activeChannel?.type,
+    activeChannelId,
     activeSessionKey,
     activeThread,
     agentModeSessionKey,

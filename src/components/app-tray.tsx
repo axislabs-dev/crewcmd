@@ -39,6 +39,9 @@ export type ActiveAgentVoiceSession = {
   agentName?: string | null;
   agentColor?: string | null;
   sessionKey: string;
+  channelId?: string | null;
+  channelName?: string | null;
+  channelType?: string | null;
   title?: string | null;
   threadSessionKey?: string | null;
   voiceSettings?: AgentVoiceSettings | null;
@@ -886,12 +889,15 @@ function ManualPins() {
   const [miniSending, setMiniSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const activeSessionKey = activeSession?.threadSessionKey ?? activeSession?.sessionKey ?? null;
-  const activeAgentCallsign = activeSession?.agentCallsign.toLowerCase() ?? null;
+  const activeChannelId = activeSession?.channelId ?? null;
   const chatPins = pins.filter((pin) => {
     if (!isChatPin(pin)) return false;
     if (!activeSessionVisible || !activeSessionKey) return true;
-    const pinAgent = pinMetaString(pin, "agentId") ?? pinMetaString(pin, "storageAgentId");
-    if (pinAgent && activeAgentCallsign && pinAgent.toLowerCase() === activeAgentCallsign) return false;
+    const pinChannelId = pinMetaString(pin, "channelId");
+    if (activeChannelId) {
+      return pinChannelId !== activeChannelId && pin.targetKey !== `channel:${activeChannelId}`;
+    }
+    if (pinChannelId) return true;
     return pin.targetKey !== activeSessionKey && pinMetaString(pin, "threadSessionKey") !== activeSessionKey && pinMetaString(pin, "gatewaySessionKey") !== activeSessionKey;
   });
   const taskPins = pins.filter((pin) => pin.targetType === "task");

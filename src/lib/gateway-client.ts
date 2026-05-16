@@ -17,7 +17,7 @@ import { publishAgentModeDiagnostic } from "./agent-mode-diagnostics";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
-const PROTOCOL_VERSION = 3;
+const PROTOCOL_VERSION = 4;
 const DEFAULT_SCOPES = ["operator.read", "operator.write", "operator.admin"];
 const CLIENT_ID = "gateway-client";
 const CLIENT_VERSION = "crewcmd/1.0.0";

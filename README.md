@@ -8,7 +8,7 @@
   <img src="docs/images/crewcmd-intro.gif" alt="CrewCmd Introduction" width="800" />
 </p>
 
-CrewCmd is an open-source, self-hostable collaborative AI workspace built around channels and chats where humans and OpenClaw agents work together. Every person gets private AI leverage in their own runtime, while teams get shared channels with approved agents, tasks, inboxes, voice sessions, and governance.
+CrewCmd is an Apache-2.0 open-source, self-hostable collaborative AI workspace built around channels and chats where humans and OpenClaw agents work together. Every person gets private AI leverage in their own runtime, while teams get shared channels with approved agents, tasks, inboxes, voice sessions, and governance.
 
 **Built for small teams that want to punch way above their weight without giving up personal runtime privacy.**
 
@@ -50,7 +50,7 @@ No database setup required. CrewCmd runs with embedded Postgres locally.
 For normal local development on the machine running CrewCmd:
 
 ```bash
-git clone https://github.com/axislabs-dev/crewcmd.git
+git clone https://github.com/rogerchappel/crewcmd.git
 cd crewcmd
 pnpm install
 pnpm dev
@@ -147,10 +147,12 @@ pnpm dev
 
 ## Contributing
 
-CrewCmd is source-available under the [BSL 1.1](./LICENSE). Contributions welcome.
+CrewCmd core is open source under the [Apache License 2.0](./LICENSE). Contributions welcome.
+
+The project is designed to support both self-hosted deployments and a future managed CrewCmd service. The open-source core should remain useful on its own for teams that want to run agent operations on their own infrastructure.
 
 ```bash
-git clone https://github.com/axislabs-dev/crewcmd.git
+git clone https://github.com/rogerchappel/crewcmd.git
 cd crewcmd
 pnpm install
 pnpm dev
@@ -162,4 +164,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contributor workflow and [docs/
 
 ## License
 
-[BSL 1.1](./LICENSE) © 2026 RSCreative Technologies Pty Ltd. Converts to Apache 2.0 on 2030-03-31.
+[Apache License 2.0](./LICENSE) © 2026 RSCreative Technologies Pty Ltd.

@@ -8,7 +8,7 @@ Follow `AGENTS.md` first. It defines the branch-first workflow, atomic commit po
 
 AI-native workspace where humans and AI agents work side by side. Same task board, same org chart, same inbox. A team of 3 operates like a team of 30.
 
-**Repo:** `axislabs-dev/crewcmd` | **License:** BSL 1.1 (RSCreative Technologies)
+**Repo:** `rogerchappel/crewcmd` | **License:** Apache-2.0 (RSCreative Technologies)
 
 ## Stack
 

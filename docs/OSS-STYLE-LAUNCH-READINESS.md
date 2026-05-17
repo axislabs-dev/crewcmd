@@ -1,8 +1,8 @@
-# CrewCmd OSS-Style Launch Readiness Plan
+# CrewCmd Open-Source Launch Readiness Plan
 
 > Practical launch plan for making CrewCmd ready for outside contributors and early dogfooders.
 >
-> License note: CrewCmd is currently **source-available under BSL 1.1**, not OSI open source. This document uses “OSS-style” to mean open development habits: public repo, clear contributor path, transparent roadmap, issues/PRs, and a free early-access/self-hosted experience where appropriate.
+> License note: CrewCmd core is now **Apache-2.0 open source**. The project may also offer a managed CrewCmd service later, but the self-hosted core should remain useful on its own.
 
 ## Launch thesis
 
@@ -165,7 +165,7 @@ Ask for narrow, observable feedback:
 ```markdown
 I’m getting CrewCmd ready for outside contributors and I’m looking for a few sharp early testers.
 
-It’s a source-available, self-hostable control room for humans and AI agents: chat, channels, tasks, skills, org structure, and OpenClaw runtime integration.
+It’s an open-source, self-hostable control room for humans and AI agents: chat, channels, tasks, skills, org structure, and OpenClaw runtime integration.
 
 The thing I especially want tested is the product model:
 
@@ -176,7 +176,7 @@ The thing I especially want tested is the product model:
 
 Could you try the README setup and tell me where it breaks or feels confusing?
 
-Repo: https://github.com/axislabs-dev/crewcmd
+Repo: https://github.com/rogerchappel/crewcmd
 Site: https://crewcmd.dev
 Feedback thread: <link>
 ```
@@ -207,7 +207,7 @@ Find serious dogfooders and early contributors without overclaiming maturity.
 Recommended order:
 
 1. **GitHub repo** — README, topics, pinned feedback issue/discussion, screenshots.
-2. **crewcmd.dev** — concise landing page, install CTA, “source-available early access” wording.
+2. **crewcmd.dev** — concise landing page, install CTA, “open-source early access” wording.
 3. **OpenClaw community** — most relevant audience and context.
 4. **Roger’s LinkedIn/X** — candid builder note, not hype.
 5. **Dev.to / Hashnode / personal blog** — longer launch essay and architecture story.
@@ -220,7 +220,7 @@ Hold back on Product Hunt, Show HN, and broad Reddit until after this soft launc
 ```markdown
 I’m soft-launching CrewCmd for early dogfooding.
 
-CrewCmd is a source-available control room for humans and AI agents working together: shared channels, DMs, tasks, skills, org structure, and OpenClaw runtime integration.
+CrewCmd is an open-source control room for humans and AI agents working together: shared channels, DMs, tasks, skills, org structure, and OpenClaw runtime integration.
 
 The design goal is simple but important: personal runtimes stay private, while company/team work runs through explicit shared runtimes with governance and audit trails.
 
@@ -234,9 +234,9 @@ Useful if you care about:
 - tasking agents and inspecting progress;
 - governance around shared AI work.
 
-It’s early, not enterprise-polished, and currently source-available under BSL 1.1. Sharp feedback is more useful than praise.
+It’s early, not enterprise-polished, and Apache-2.0 open source. Sharp feedback is more useful than praise.
 
-Repo: https://github.com/axislabs-dev/crewcmd
+Repo: https://github.com/rogerchappel/crewcmd
 Site: https://crewcmd.dev
 Feedback: <link>
 ```
@@ -262,7 +262,7 @@ Please include:
 
 Known early limitations:
 
-- source-available BSL 1.1, not OSI open source;
+- Apache-2.0 open source, with a self-hosted core and possible managed service later;
 - early-access product, not enterprise-complete;
 - shared runtime governance and tests are actively being hardened;
 - some agent/voice/tasking flows may still need polish.
@@ -353,15 +353,15 @@ Do this only when:
 ### Show HN style copy
 
 ```markdown
-Show HN: CrewCmd — a source-available control room for human + AI agent teams
+Show HN: CrewCmd — an open-source control room for human + AI agent teams
 
 I built CrewCmd because once you have more than one agent, the hard part stops being “can an agent do a task?” and becomes “how do humans and agents coordinate safely?”
 
 CrewCmd gives you Slack-style channels/DMs, tasks, skills, org structure, and OpenClaw runtime integration. A big design constraint is runtime privacy: personal runtimes stay private, and shared/company work uses explicit shared runtimes with governance.
 
-It’s early and source-available under BSL 1.1. I’d especially value feedback from people running local/self-hosted agents or trying to coordinate agent work inside a small team.
+It’s early and Apache-2.0 open source. I’d especially value feedback from people running local/self-hosted agents or trying to coordinate agent work inside a small team.
 
-Repo: https://github.com/axislabs-dev/crewcmd
+Repo: https://github.com/rogerchappel/crewcmd
 Site: https://crewcmd.dev
 ```
 
@@ -369,7 +369,8 @@ Site: https://crewcmd.dev
 
 Say:
 
-- “source-available under BSL 1.1”
+- “Apache-2.0 open source”
+- “self-hosted core, with a possible managed service later”
 - “early access”
 - “self-hostable/local dev friendly”
 - “for technical dogfooders already experimenting with agents”
@@ -378,7 +379,6 @@ Say:
 
 Do not say yet:
 
-- “fully open source” unless the license changes;
 - “enterprise-ready”;
 - “secure by default for every org”;
 - “agents can join any channel automatically”;

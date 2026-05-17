@@ -5,7 +5,7 @@ Thanks for your interest in contributing to CrewCmd. This guide covers the proce
 ## Getting Started
 
 ```bash
-git clone https://github.com/axislabs-dev/crewcmd.git
+git clone https://github.com/rogerchappel/crewcmd.git
 cd crewcmd
 pnpm install
 pnpm dev
@@ -104,11 +104,11 @@ Not sure where to start? The [Roadmap](./docs/ROADMAP.md) has a full breakdown. 
 - **ADRs** — Documenting architecture decisions. Read the code, write the "why." See `docs/architecture/decisions/`.
 - **Schema split** — Breaking `src/db/schema.ts` into domain-specific files. Mechanical refactor with clear instructions in the roadmap.
 
-Check [GitHub Issues](https://github.com/axislabs-dev/crewcmd/issues) for items labeled `good first issue`.
+Check [GitHub Issues](https://github.com/rogerchappel/crewcmd/issues) for items labeled `good first issue`.
 
 ## Reporting Issues
 
-- Use [GitHub Issues](https://github.com/axislabs-dev/crewcmd/issues)
+- Use [GitHub Issues](https://github.com/rogerchappel/crewcmd/issues)
 - Include steps to reproduce, expected behavior, and actual behavior
 - For bugs, include your Node.js version, OS, and whether you're using PGlite or external Postgres
 
@@ -118,4 +118,4 @@ See [SECURITY.md](./SECURITY.md) for reporting security vulnerabilities.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the project's [BSL 1.1 license](./LICENSE).
+By contributing, you agree that your contributions will be licensed under the project's [Apache License 2.0](./LICENSE).

@@ -247,6 +247,10 @@ function chatPinInitials(pin: TrayPin) {
   return channel.replace(/^#/, "").slice(0, 2).toUpperCase();
 }
 
+function trayInitials(value: string) {
+  return value.replace(/^#/, "").slice(0, 2).toUpperCase();
+}
+
 export function AgentVoiceSessionProvider({ children }: { children: React.ReactNode }) {
   const { workspace } = useWorkspace();
   const [activeSession, setActiveSessionState] = useState<ActiveAgentVoiceSession | null>(null);
@@ -447,6 +451,16 @@ function ActiveAgentTrayItem() {
   const [miniSending, setMiniSending] = useState(false);
   const lastNativeStatusRef = useRef({ at: 0, key: "" });
   const active = tray.activeSession;
+  const activeChannelLabel = active?.channelName
+    ? `${active.channelType === "dm" ? "" : "#"}${active.channelName}`
+    : null;
+  const activeDisplayTitle = active ? activeChannelLabel ?? active.title ?? active.agentName ?? active.agentCallsign : "";
+  const activeBubbleInitials = active
+    ? activeChannelLabel
+      ? trayInitials(activeChannelLabel)
+      : active.agentCallsign.slice(0, 2).toUpperCase()
+    : "";
+  const activePlaceholder = active ? activeChannelLabel ?? active.agentCallsign.toUpperCase() : "";
 
   useEffect(() => {
     if (!active || pathname === "/chat" || !tray.systemPinned || tray.voiceState !== "ready") return;
@@ -467,7 +481,7 @@ function ActiveAgentTrayItem() {
       levelBucket,
       tray.systemPinned ? "active" : "recent",
       active.agentCallsign,
-      active.title ?? active.agentName ?? "",
+      activeDisplayTitle,
     ].join(":");
     const now = Date.now();
     if (lastNativeStatusRef.current.key === key && now - lastNativeStatusRef.current.at < 250) return;
@@ -478,10 +492,11 @@ function ActiveAgentTrayItem() {
       actor: nativeActor,
       level: tray.voiceLevel,
       agentCallsign: active.agentCallsign,
-      title: active.title ?? active.agentName ?? active.agentCallsign,
+      title: activeDisplayTitle,
     }).catch(() => {});
   }, [
     active,
+    activeDisplayTitle,
     nativeActor,
     tray.systemPinned,
     tray.visible,
@@ -495,6 +510,12 @@ function ActiveAgentTrayItem() {
   const voiceSettings = normalizeAgentVoiceSettings(active.voiceSettings ?? DEFAULT_AGENT_VOICE_SETTINGS);
 
   const openFullChat = () => {
+    if (active.channelId) {
+      const params = new URLSearchParams({ channelId: active.channelId, pane: "chat" });
+      router.push(`/chat?${params.toString()}`);
+      setExpanded(false);
+      return;
+    }
     const params = new URLSearchParams({ sessionKey: active.threadSessionKey ?? active.sessionKey });
     params.set("agent", active.agentCallsign);
     params.set("pane", "chat");
@@ -686,11 +707,11 @@ function ActiveAgentTrayItem() {
         onClick={() => setExpanded(true)}
         className="relative ml-auto flex h-14 w-14 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-white shadow-2xl transition hover:scale-[1.02]"
         aria-label="Open active agent bubble"
-        title={`${active.title || active.agentName || active.agentCallsign}: ${tray.voiceState}`}
+        title={`${activeDisplayTitle}: ${tray.voiceState}`}
       >
         <span className="absolute inset-0 rounded-full border-2 opacity-70" style={{ borderColor: stateTone }} />
         <span className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: active.agentColor ?? "var(--accent)" }}>
-            {active.agentCallsign.slice(0, 2).toUpperCase()}
+            {activeBubbleInitials}
         </span>
         {(tray.voiceState === "listening" || tray.voiceState === "hearing" || tray.voiceState === "thinking" || tray.voiceState === "processing" || tray.voiceState === "speaking") ? (
           <span className="absolute -bottom-0.5 flex h-4 items-end gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5" aria-hidden="true">
@@ -713,7 +734,7 @@ function ActiveAgentTrayItem() {
           <div className="w-full rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 shadow-2xl lg:mr-6 lg:max-w-sm lg:rounded-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{active.title || active.agentName || active.agentCallsign}</div>
+                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{activeDisplayTitle}</div>
                 <div className="text-xs text-[var(--text-tertiary)]">{tray.voiceState}{tray.systemPinned ? " / active" : " / recent"}</div>
               </div>
               <div className="flex items-center gap-1">
@@ -777,7 +798,7 @@ function ActiveAgentTrayItem() {
                 value={miniInput}
                 onChange={(event) => setMiniInput(event.target.value)}
                 rows={1}
-                placeholder={`Message ${active.agentCallsign.toUpperCase()}...`}
+                placeholder={`Message ${activePlaceholder}...`}
                 className="min-h-10 flex-1 resize-none rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)]"
               />
               <button type="submit" disabled={miniSending || !miniInput.trim()} className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white disabled:opacity-45" aria-label="Send tray message">

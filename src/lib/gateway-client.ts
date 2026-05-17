@@ -17,7 +17,8 @@ import { publishAgentModeDiagnostic } from "./agent-mode-diagnostics";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
-const PROTOCOL_VERSION = 3;
+const MIN_PROTOCOL_VERSION = 3;
+const MAX_PROTOCOL_VERSION = 4;
 const DEFAULT_SCOPES = ["operator.read", "operator.write", "operator.admin"];
 const CLIENT_ID = "gateway-client";
 const CLIENT_VERSION = "crewcmd/1.0.0";
@@ -460,8 +461,8 @@ export class GatewayClient {
               id: connectId,
               method: "connect",
               params: {
-                minProtocol: PROTOCOL_VERSION,
-                maxProtocol: PROTOCOL_VERSION,
+                minProtocol: MIN_PROTOCOL_VERSION,
+                maxProtocol: MAX_PROTOCOL_VERSION,
                 client: {
                   id: CLIENT_ID,
                   version: CLIENT_VERSION,

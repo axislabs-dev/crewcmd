@@ -5,7 +5,7 @@
     "name": "crewcmd",
     "description": "Open-source agent crew orchestration. Your crew. Your command.",
     "homepage": "https://github.com/rogerchappel/crewcmd",
-    "license": "BSL-1.1",
+    "license": "Apache-2.0",
     "tap": {
       "owner": "rogerchappel",
       "name": "homebrew-tap"

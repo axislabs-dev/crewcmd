@@ -1,6 +1,6 @@
 # CrewCmd Soft Launch Plan
 
-> Prepared launch notes for an early-access, source-available CrewCmd announcement.
+> Prepared launch notes for an early-access, Apache-2.0 open-source CrewCmd announcement.
 
 ## Positioning
 
@@ -9,7 +9,7 @@ CrewCmd is an AI-native workspace for managing human teams and AI agents side by
 For soft launch, position CrewCmd as:
 
 - **Early access** — useful today, still moving fast.
-- **Source-available** — BSL 1.1, contributions welcome; do not call it OSI open source unless the license changes.
+- **Open source** — Apache 2.0 core, contributions welcome, with room for a future managed CrewCmd service.
 - **Built for agent operators** — people already experimenting with OpenClaw, Claude Code, Cursor, custom agents, internal AI workflows, and small-team automation.
 - **Looking for dogfooders** — feedback from people running real agents matters more than broad attention.
 
@@ -58,13 +58,13 @@ We are looking for technical dogfooders who are already running agents and want 
 
 ### One-paragraph version
 
-I have been building CrewCmd, a source-available workspace for managing humans and AI agents side by side. It gives agent-heavy teams a shared task board, priority inbox, skills management, visual org chart, and OpenClaw runtime integration. It is early, but already useful if you are actively experimenting with agent crews and want a better way to deploy, route, inspect, and govern their work. I am looking for a small group of serious dogfooders before pushing it more broadly.
+I have been building CrewCmd, an open-source workspace for managing humans and AI agents side by side. It gives agent-heavy teams a shared task board, priority inbox, skills management, visual org chart, and OpenClaw runtime integration. It is early, but already useful if you are actively experimenting with agent crews and want a better way to deploy, route, inspect, and govern their work. I am looking for a small group of serious dogfooders before pushing it more broadly.
 
 ### Social post draft
 
 I’m soft-launching CrewCmd for early dogfooding.
 
-It is a source-available workspace for managing AI agents like a real team:
+It is an open-source workspace for managing AI agents like a real team:
 
 - deploy agent crews
 - route work through a shared inbox
@@ -75,7 +75,7 @@ It is a source-available workspace for managing AI agents like a real team:
 
 It is early, but real. I’m looking for technical users already running AI agents who want a better control room and are willing to give sharp feedback.
 
-Repo: https://github.com/axislabs-dev/crewcmd
+Repo: https://github.com/rogerchappel/crewcmd
 Site: https://crewcmd.dev
 
 ### More candid founder version
@@ -84,7 +84,7 @@ Most agent tools focus on creating individual agents. My problem has been differ
 
 CrewCmd is my attempt at that control layer: task board, inbox, skills, org chart, and OpenClaw integration for agent crews.
 
-It is source-available under BSL 1.1 and still early, so I’m not doing a huge launch yet. I’m looking for a small number of people who are already running agents and want to help shape the workflow before it gets polished.
+It is Apache-2.0 open source and still early, so I’m not doing a huge launch yet. I’m looking for a small number of people who are already running agents and want to help shape the workflow before it gets polished.
 
 If that’s you, I’d love feedback.
 
@@ -116,7 +116,7 @@ If that’s you, I’d love feedback.
 ### Repo readiness
 
 - [ ] README reflects what works today, not just the vision.
-- [ ] License wording consistently says **source-available / BSL 1.1**.
+- [ ] License wording consistently says **Apache-2.0 open source**.
 - [ ] CONTRIBUTING is accurate.
 - [ ] SECURITY has a working contact/process.
 - [ ] Issue templates exist for bug reports and feedback.
@@ -130,7 +130,7 @@ If that’s you, I’d love feedback.
 - [ ] crewcmd.dev homepage matches current positioning.
 - [ ] Install/getting-started CTA links to the correct repo/docs.
 - [ ] Early-access wording is visible.
-- [ ] License/source-available wording is accurate.
+- [ ] License/open-source wording is accurate.
 - [ ] Feedback CTA exists: GitHub issues, discussions, or direct contact.
 - [ ] Cloudflare deployment is live and verified.
 
@@ -178,7 +178,7 @@ Audience:
 
 Message:
 
-> I’m soft-launching CrewCmd quietly. It’s early, source-available, and aimed at people already running agents. Could you try the README quickstart and tell me where it breaks or feels confusing?
+> I’m soft-launching CrewCmd quietly. It’s early, open source, and aimed at people already running agents. Could you try the README quickstart and tell me where it breaks or feels confusing?
 
 Ask for:
 
@@ -204,7 +204,7 @@ Post style:
 
 - Candid founder note.
 - “Early dogfooders wanted.”
-- Clear that it is source-available BSL.
+- Clear that it is Apache-2.0 open source and early.
 - One concrete GIF/screenshot.
 - Link to repo and feedback thread.
 
@@ -277,7 +277,7 @@ Please include:
 
 Known early limitations:
 
-- Source-available BSL 1.1, not OSI open source.
+- Apache-2.0 open source, with a self-hosted core and possible managed service later.
 - ClawHub browsing/import is still preview-level.
 - Governance workflows are foundational, not complete enterprise guardrails.
 - Docker/self-hosting path may need more real-world testing.
@@ -285,15 +285,15 @@ Known early limitations:
 
 ## Known Risks and How to Say Them
 
-### License risk
+### License and positioning risk
 
-Do not say:
+Do not overstate:
 
-> CrewCmd is open source.
+> CrewCmd is a complete Slack, Trello, and ChatGPT replacement.
 
 Say:
 
-> CrewCmd is source-available under BSL 1.1, with contributions welcome.
+> CrewCmd core is Apache-2.0 open source, early, and self-hostable. The project may also offer a managed service later.
 
 ### Maturity risk
 
@@ -322,7 +322,7 @@ Say:
   - team org chart
   - inbox/chat
   - skills management
-- [ ] Short README badge/status line: `Early access` / `Source-available`.
+- [ ] Short README badge/status line: `Early access` / `Apache-2.0`.
 - [ ] Founder note/blog post.
 - [ ] GitHub feedback issue/discussion.
 - [ ] Short install troubleshooting section.
@@ -352,6 +352,6 @@ Target for first soft-launch window:
 1. Run `pnpm release:check`.
 2. Fix any quick README/setup blockers.
 3. Add the soft-launch feedback issue.
-4. Review crewcmd.dev for source-available/early-access wording.
+4. Review crewcmd.dev for open-source/early-access wording.
 5. Send private friendlies first.
 6. Post the public soft-launch note after private feedback catches obvious friction.

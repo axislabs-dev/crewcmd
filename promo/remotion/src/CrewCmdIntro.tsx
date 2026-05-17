@@ -512,7 +512,7 @@ const SelfHostedScene: React.FC = () => {
           color: ACCENT,
         }}
       >
-        git clone github.com/axislabs-dev/crewcmd
+        git clone github.com/rogerchappel/crewcmd
       </div>
     </AbsoluteFill>
   );

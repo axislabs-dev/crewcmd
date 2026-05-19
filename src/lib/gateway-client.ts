@@ -157,6 +157,51 @@ export interface GatewaySecretsReloadResult {
   degraded?: boolean;
 }
 
+export type GatewayRealtimeTalkTransport = "webrtc-sdp" | "json-pcm-websocket" | "gateway-relay";
+
+export interface GatewayRealtimeTalkSessionParams extends Record<string, unknown> {
+  sessionKey?: string;
+  provider?: string;
+  model?: string;
+  voice?: string;
+  agentId?: string;
+}
+
+export interface GatewayRealtimeTalkSessionResult {
+  sessionId?: string;
+  relaySessionId?: string;
+  transport?: GatewayRealtimeTalkTransport | string;
+  provider?: string;
+  model?: string;
+  voice?: string;
+  expiresAt?: string;
+  offerUrl?: string;
+  websocketUrl?: string;
+  clientSecret?: string;
+  headers?: Record<string, string>;
+  config?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface GatewayRealtimeRelayAudioParams extends Record<string, unknown> {
+  relaySessionId: string;
+  audioBase64: string;
+  timestamp?: number;
+  sampleRate?: number;
+  channels?: number;
+}
+
+export interface GatewayRealtimeRelayMarkParams extends Record<string, unknown> {
+  relaySessionId: string;
+  mark: string;
+}
+
+export interface GatewayRealtimeRelayToolResultParams extends Record<string, unknown> {
+  relaySessionId: string;
+  callId: string;
+  output: unknown;
+}
+
 export interface GatewayCronJob {
   id: string;
   agentId?: string;
@@ -666,6 +711,28 @@ export class GatewayClient {
 
   async secretsReload(): Promise<GatewaySecretsReloadResult> {
     return this.rpc<GatewaySecretsReloadResult>("secrets.reload", {});
+  }
+
+  async realtimeTalkSession(
+    params: GatewayRealtimeTalkSessionParams = {},
+  ): Promise<GatewayRealtimeTalkSessionResult> {
+    return this.rpc<GatewayRealtimeTalkSessionResult>("talk.realtime.session", params);
+  }
+
+  async realtimeRelayAudio(params: GatewayRealtimeRelayAudioParams): Promise<{ ok?: boolean }> {
+    return this.rpc<{ ok?: boolean }>("talk.realtime.relayAudio", params);
+  }
+
+  async realtimeRelayMark(params: GatewayRealtimeRelayMarkParams): Promise<{ ok?: boolean }> {
+    return this.rpc<{ ok?: boolean }>("talk.realtime.relayMark", params);
+  }
+
+  async realtimeRelayToolResult(params: GatewayRealtimeRelayToolResultParams): Promise<{ ok?: boolean }> {
+    return this.rpc<{ ok?: boolean }>("talk.realtime.relayToolResult", params);
+  }
+
+  async realtimeRelayStop(relaySessionId: string): Promise<{ ok?: boolean }> {
+    return this.rpc<{ ok?: boolean }>("talk.realtime.relayStop", { relaySessionId });
   }
 
   async cronList(): Promise<GatewayCronListResult> {

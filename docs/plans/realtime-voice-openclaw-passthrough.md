@@ -73,15 +73,23 @@ Gateway client methods:
 
 Runtime capability hints now include `realtimeVoice`, which is intentionally conservative. It identifies likely OpenAI/Google passthrough candidates from config, but the session route remains the source of truth.
 
+Voice UI:
+
+- `VoiceAgent` can now start an OpenClaw realtime session when `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE=1` and a CrewCMD runtime id is available.
+- The first implemented transport is `gateway-relay`.
+- Gateway-relay mode pumps browser microphone PCM16 chunks through CrewCMD to OpenClaw and plays streamed PCM16 audio back through the existing visual surface.
+- Realtime status, speaking state, mic level, mute state, and interruption clearing are fed into the existing CrewCMD voice visualization.
+- If realtime startup fails, or OpenClaw returns a direct browser transport that is not wired yet, CrewCMD falls back to the legacy recorded STT voice path.
+
 ## Suggested UI Wire-Up
 
 1. Add a feature flag such as `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE=1`.
 2. In chat, show a second voice option only when the selected runtime has `capabilities.realtimeVoice.passthroughCandidate`.
 3. On activation, call `startRealtimeVoiceSession`.
-4. If the transport is direct browser realtime, hand the payload to a copied/adapted OpenClaw browser transport.
-5. If the transport is `gateway-relay`, stream mic PCM to `sendRealtimeRelayAudio` and subscribe with `openRealtimeRelayEvents`.
-6. Drive the existing agent visualization process from realtime session events rather than introducing a separate realtime-only visual shell.
-7. Map transcript events into the visible conversation log before attempting durable persistence.
+4. If the transport is `gateway-relay`, stream mic PCM to `sendRealtimeRelayAudio` and subscribe with `openRealtimeRelayEvents`.
+5. Drive the existing agent visualization process from realtime session events rather than introducing a separate realtime-only visual shell.
+6. Map transcript events into the visible conversation log before attempting durable persistence.
+7. Add direct browser `webrtc-sdp` and `json-pcm-websocket` transports after the relay path is proven.
 8. Keep the current `VoiceAgent` path as fallback whenever session startup fails.
 
 ## Native Follow-Up

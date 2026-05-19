@@ -44,7 +44,6 @@ describe("realtime voice client helpers", () => {
     await sendRealtimeRelayAudio("rt_1", {
       relaySessionId: "relay_1",
       audioBase64: "AAAA",
-      sampleRate: 24000,
     });
 
     expect(fetchMock).toHaveBeenCalledWith("/api/runtimes/rt_1/talk/realtime/relay", {
@@ -54,7 +53,6 @@ describe("realtime voice client helpers", () => {
         action: "audio",
         relaySessionId: "relay_1",
         audioBase64: "AAAA",
-        sampleRate: 24000,
       }),
     });
   });

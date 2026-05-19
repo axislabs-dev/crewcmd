@@ -187,19 +187,17 @@ export interface GatewayRealtimeRelayAudioParams extends Record<string, unknown>
   relaySessionId: string;
   audioBase64: string;
   timestamp?: number;
-  sampleRate?: number;
-  channels?: number;
 }
 
 export interface GatewayRealtimeRelayMarkParams extends Record<string, unknown> {
   relaySessionId: string;
-  mark: string;
+  markName?: string;
 }
 
 export interface GatewayRealtimeRelayToolResultParams extends Record<string, unknown> {
   relaySessionId: string;
   callId: string;
-  output: unknown;
+  result: unknown;
 }
 
 export interface GatewayCronJob {

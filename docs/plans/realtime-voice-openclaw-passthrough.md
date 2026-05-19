@@ -25,6 +25,60 @@ This PoC keeps the reliable legacy path intact and adds a narrow passthrough pat
 - Add capability metadata so the UI can explain whether realtime voice is merely possible or actually configured.
 - Document the remaining native/mobile work separately from desktop web.
 
+## Implemented PoC Surface
+
+Server routes:
+
+- `POST /api/runtimes/:id/talk/realtime/session`
+  - Authenticates runtime access.
+  - Calls `talk.realtime.session`.
+  - Returns the OpenClaw session payload directly to the browser.
+- `POST /api/runtimes/:id/talk/realtime/relay`
+  - Authenticates runtime access.
+  - Proxies relay `audio`, `mark`, `toolResult`, and `stop` actions.
+- `GET /api/runtimes/:id/talk/realtime/events?relaySessionId=...`
+  - Authenticates runtime access.
+  - Streams matching `talk.realtime.relay` gateway events over SSE.
+
+Client helper:
+
+- `startRealtimeVoiceSession`
+- `sendRealtimeRelayAudio`
+- `sendRealtimeRelayMark`
+- `sendRealtimeRelayToolResult`
+- `stopRealtimeRelay`
+- `openRealtimeRelayEvents`
+
+Gateway client methods:
+
+- `realtimeTalkSession`
+- `realtimeRelayAudio`
+- `realtimeRelayMark`
+- `realtimeRelayToolResult`
+- `realtimeRelayStop`
+
+Runtime capability hints now include `realtimeVoice`, which is intentionally conservative. It identifies likely OpenAI/Google passthrough candidates from config, but the session route remains the source of truth.
+
+## Suggested UI Wire-Up
+
+1. Add a feature flag such as `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE=1`.
+2. In chat, show a second voice option only when the selected runtime has `capabilities.realtimeVoice.passthroughCandidate`.
+3. On activation, call `startRealtimeVoiceSession`.
+4. If the transport is direct browser realtime, hand the payload to a copied/adapted OpenClaw browser transport.
+5. If the transport is `gateway-relay`, stream mic PCM to `sendRealtimeRelayAudio` and subscribe with `openRealtimeRelayEvents`.
+6. Map transcript events into the visible conversation log before attempting durable persistence.
+7. Keep the current `VoiceAgent` path as fallback whenever session startup fails.
+
+## Native Follow-Up
+
+The native iOS plugin already owns `AVAudioEngine`, VAD, playback, and app lifecycle handling. To make it truly realtime, it needs:
+
+- continuous PCM16 uplink instead of finalized WAV upload;
+- streamed PCM/audio downlink playback;
+- interruption and barge-in event handling;
+- a persistent relay/session state machine;
+- fallback to the existing recorded STT upload when realtime is unavailable.
+
 ## Non-Goals
 
 - Reimplement OpenAI or Google realtime provider protocols inside CrewCMD.

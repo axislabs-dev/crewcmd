@@ -44,6 +44,7 @@ export type ActiveAgentVoiceSession = {
   channelType?: string | null;
   title?: string | null;
   threadSessionKey?: string | null;
+  runtimeId?: string | null;
   voiceSettings?: AgentVoiceSettings | null;
 };
 
@@ -829,6 +830,7 @@ function ActiveAgentTrayItem() {
             gatewayAgent={active.agentCallsign}
             companyId={workspace?.companyId ?? undefined}
             sessionKey={active.threadSessionKey ?? active.sessionKey}
+            realtimeRuntimeId={active.runtimeId ?? undefined}
           />
         </div>
       ) : null}

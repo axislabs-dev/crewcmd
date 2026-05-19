@@ -23,6 +23,8 @@ import {
   startNativeVoiceSession,
   stopNativeVoiceSession,
 } from "@/lib/native-voice-session";
+import { startRealtimeVoiceSession, type RealtimeVoiceSession } from "@/lib/realtime-voice-client";
+import { RealtimeGatewayRelaySession, type RealtimeVoiceStatus } from "@/lib/realtime-voice-gateway-relay";
 
 type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
@@ -44,6 +46,7 @@ interface VoiceAgentProps {
   gatewayAgent?: string;
   companyId?: string;
   sessionKey?: string;
+  realtimeRuntimeId?: string;
 }
 
 function hexToRgb(hex: string): string {
@@ -106,6 +109,7 @@ export function VoiceAgent({
   gatewayAgent,
   companyId,
   sessionKey,
+  realtimeRuntimeId,
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -113,6 +117,7 @@ export function VoiceAgent({
   const [error, setError] = useState<string | null>(null);
   const [nativeBackgroundCapable, setNativeBackgroundCapable] = useState(false);
   const [nativeSessionActive, setNativeSessionActive] = useState(false);
+  const [realtimeSession, setRealtimeSession] = useState<RealtimeVoiceSession | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -135,7 +140,9 @@ export function VoiceAgent({
   const discardRecordingRef = useRef(false);
   const nativeVoiceSessionIdRef = useRef<string | null>(null);
   const nativeSessionActiveRef = useRef(false);
+  const realtimeRelayRef = useRef<RealtimeGatewayRelaySession | null>(null);
   const deactivateRef = useRef<() => void>(() => {});
+  const realtimeEnabled = process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE === "1";
 
   useEffect(() => {
     onVoiceLevel?.(volumeLevel);
@@ -167,6 +174,7 @@ export function VoiceAgent({
         state,
         isActive,
         nativeSessionActive: nativeSessionActiveRef.current,
+        realtimeTransport: realtimeSession?.transport ?? null,
         agent: agent ?? null,
         gatewayAgent: gatewayAgent ?? null,
         sessionKey: sessionKey ?? null,
@@ -176,7 +184,7 @@ export function VoiceAgent({
         ...detail,
       },
     });
-  }, [agent, gatewayAgent, isActive, isAgentMuted, isMicMuted, isPlayingAudio, sessionKey, state]);
+  }, [agent, gatewayAgent, isActive, isAgentMuted, isMicMuted, isPlayingAudio, realtimeSession?.transport, sessionKey, state]);
 
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
@@ -446,6 +454,85 @@ export function VoiceAgent({
     wakeLockRef.current = null;
   }, []);
 
+  const startRealtimeRelay = useCallback(async (sessionId: string) => {
+    if (!realtimeEnabled || !realtimeRuntimeId) return false;
+
+    try {
+      const session = await startRealtimeVoiceSession({
+        runtimeId: realtimeRuntimeId,
+        sessionKey,
+        agentId: gatewayAgent ?? agent,
+      });
+      setRealtimeSession(session);
+      recordVoiceBreadcrumb("realtime.session.start", {
+        transport: session.transport,
+        provider: session.provider,
+        model: session.model,
+        hasRelaySessionId: Boolean(session.relaySessionId),
+      });
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "realtime.session.start",
+        sessionId,
+        detail: {
+          transport: session.transport,
+          provider: session.provider,
+          model: session.model,
+          hasRelaySessionId: Boolean(session.relaySessionId),
+        },
+      });
+
+      if (session.transport !== "gateway-relay") {
+        setError(`Realtime transport ${session.transport ?? "unknown"} is not wired into CrewCMD visuals yet. Falling back to recorded voice.`);
+        return false;
+      }
+
+      const relay = new RealtimeGatewayRelaySession(realtimeRuntimeId, session, {
+        onStatus: (status: RealtimeVoiceStatus, message?: string) => {
+          if (status === "error") {
+            setError(message ?? "Realtime voice failed.");
+            setState("idle");
+            return;
+          }
+          setError(null);
+          setState(status === "processing" ? "processing" : status === "speaking" ? "speaking" : status === "listening" ? "listening" : "idle");
+        },
+        onTranscript: (event) => {
+          recordVoiceBreadcrumb("realtime.transcript", {
+            role: event.role,
+            final: event.final,
+            characters: event.text.length,
+          });
+        },
+        onVoiceLevel: setVolumeLevel,
+        onSpeakingChange: (speaking) => {
+          if (speaking) setState("speaking");
+        },
+        onError: (message) => {
+          recordVoiceBreadcrumb("realtime.relay.error", { message });
+        },
+      });
+      realtimeRelayRef.current = relay;
+      await relay.start();
+      await requestWakeLock();
+      setIsActive(true);
+      setState("listening");
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRealtimeSession(null);
+      realtimeRelayRef.current = null;
+      recordVoiceBreadcrumb("realtime.session.error", { message });
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "realtime.session.error",
+        sessionId,
+        detail: { message },
+      });
+      return false;
+    }
+  }, [agent, gatewayAgent, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey]);
+
   const activate = useCallback(async () => {
     onMicMutedChange?.(false);
     onAgentMutedChange?.(false);
@@ -538,6 +625,16 @@ export function VoiceAgent({
           reason: "refuse-web-audio-fallback-in-native-shell",
           nativeAvailability,
         },
+      });
+      return;
+    }
+
+    if (await startRealtimeRelay(sessionId)) {
+      recordVoiceBreadcrumb("activate.realtime-relay");
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.realtime-relay",
+        sessionId,
       });
       return;
     }
@@ -647,7 +744,7 @@ export function VoiceAgent({
         setError("Microphone access denied. Please allow mic access and retry.");
       }
     }
-  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, recordVoiceBreadcrumb, requestWakeLock, sessionKey]);
+  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, recordVoiceBreadcrumb, requestWakeLock, sessionKey, startRealtimeRelay]);
 
   const deactivate = useCallback((options: { silence?: boolean } = {}) => {
     const sessionId = diagnosticSessionRef.current ?? undefined;
@@ -665,6 +762,7 @@ export function VoiceAgent({
       sessionId,
       detail: {
         hasStream: Boolean(streamRef.current),
+        hasRealtimeRelay: Boolean(realtimeRelayRef.current),
         audioContextState: audioContextRef.current?.state ?? null,
         mediaRecorderState: mediaRecorderRef.current?.state ?? null,
         nativeSessionActive: nativeSessionActiveRef.current,
@@ -682,6 +780,16 @@ export function VoiceAgent({
           sessionId,
           detail: { message: error instanceof Error ? error.message : String(error) },
         });
+      });
+    }
+    if (realtimeRelayRef.current) {
+      realtimeRelayRef.current.stop();
+      realtimeRelayRef.current = null;
+      setRealtimeSession(null);
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "realtime.relay.stop",
+        sessionId,
       });
     }
     nativeVoiceSessionIdRef.current = null;
@@ -764,6 +872,7 @@ export function VoiceAgent({
     streamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !isMicMuted;
     });
+    realtimeRelayRef.current?.setMicMuted(isMicMuted);
     if (nativeSessionActive) {
       void setNativeVoiceSessionMuted(isMicMuted).catch((error) => {
         recordVoiceBreadcrumb("native-voice.mute.error", { message: error instanceof Error ? error.message : String(error) });
@@ -785,6 +894,12 @@ export function VoiceAgent({
       setVolumeLevel(0);
     }
   }, [isActive, isMicMuted, nativeSessionActive, recordVoiceBreadcrumb, stopRecording]);
+
+  useEffect(() => {
+    if (isAgentMuted) {
+      realtimeRelayRef.current?.stopOutput();
+    }
+  }, [isAgentMuted]);
 
   useEffect(() => {
     let disposed = false;
@@ -1064,7 +1179,8 @@ export function VoiceAgent({
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
   const usesOrbitalVisual = immersive || compact;
   const particleCount = immersive ? 36 : compact ? 18 : 0;
-  const visualVolume = Math.min(1, volumeLevel * (nativeSessionActive ? 1.25 : 0.8));
+  const realtimeRelayActive = Boolean(realtimeRelayRef.current);
+  const visualVolume = Math.min(1, volumeLevel * (nativeSessionActive || realtimeRelayActive ? 1.25 : 0.8));
   const motionLevel =
     state === "speaking"
       ? Math.min(0.82, 0.24 + visualVolume * 0.78)
@@ -1355,6 +1471,8 @@ export function VoiceAgent({
                 : state === "listening"
                   ? nativeSessionActive && nativeBackgroundCapable
                     ? "NATIVE MIC SESSION ACTIVE"
+                    : realtimeRelayActive
+                      ? "REALTIME RELAY ACTIVE"
                     : "SPEAK NATURALLY"
                   : state === "processing"
                     ? "THINKING"
@@ -1389,6 +1507,11 @@ export function VoiceAgent({
           {nativeSessionActive && nativeBackgroundCapable ? (
             <span className="rounded-full bg-[var(--bg-surface-hover)] px-3 py-1.5 text-[9px] tracking-[0.18em] text-[var(--text-tertiary)]">
               Native iOS
+            </span>
+          ) : null}
+          {realtimeRelayActive ? (
+            <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[9px] tracking-[0.18em] text-[var(--accent)]">
+              Realtime
             </span>
           ) : null}
           <button

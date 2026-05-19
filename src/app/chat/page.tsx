@@ -4513,6 +4513,7 @@ export default function ChatPage() {
       channelName: activeChannel?.name ?? null,
       channelType: activeChannel?.type ?? null,
       threadSessionKey: activeThread?.sessionKey ?? null,
+      runtimeId: selectedAgent.runtimeId ?? null,
       title: activeThread ? `${selectedAgent.callsign.toUpperCase()} thread` : selectedAgent.name ?? selectedAgent.callsign,
       voiceSettings: resolvedVoiceSettings,
     });
@@ -4526,6 +4527,7 @@ export default function ChatPage() {
     selectedAgent?.callsign,
     selectedAgent?.color,
     selectedAgent?.name,
+    selectedAgent?.runtimeId,
     hasTrayActiveSession,
     resolvedVoiceSettings,
     setTrayActiveSession,
@@ -4867,6 +4869,7 @@ export default function ChatPage() {
                     gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
                     companyId={company?.id}
                     sessionKey={activeThread.sessionKey}
+                    realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
                   />
                 </div>
               ) : null}
@@ -5846,6 +5849,7 @@ export default function ChatPage() {
                     sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
                       ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                       : gatewaySessionKeyForAgent(selectedAgent)}
+                    realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
                   />
                 </div>
               </div>
@@ -5920,6 +5924,7 @@ export default function ChatPage() {
                   sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
                     ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                     : gatewaySessionKeyForAgent(selectedAgent)}
+                  realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
                 />
                 <div className="absolute right-2 top-2 flex items-center gap-1">
                   <button

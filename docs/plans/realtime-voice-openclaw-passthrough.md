@@ -17,6 +17,20 @@ This PoC keeps the reliable legacy path intact and adds a narrow passthrough pat
 4. CrewCMD maps transcript and lifecycle events back into the chat UI.
 5. Existing `/api/stt`, `/api/tts`, and native recorded speech remain the fallback.
 
+## Visualization Boundary
+
+Realtime voice is a transport upgrade, not a replacement for CrewCMD's agent visualization process.
+
+The existing `VoiceAgent`, `WaveformVisualizer`, agent mode overlay, tray visualization, fullscreen visual mode, mute controls, selected agent identity, and session-scoped visual state remain the owner of the user experience. The realtime layer should feed those visuals with lower-latency events:
+
+- microphone level and listening state from local capture;
+- assistant speaking state from realtime audio deltas;
+- interruption/barge-in state from provider or relay events;
+- transcript deltas for the transcript overlay;
+- tool/consult lifecycle events for the agent activity surface.
+
+This keeps CrewCMD's visual model consistent while replacing only the slow record/transcribe/respond transport underneath it.
+
 ## PoC Scope
 
 - Add typed gateway methods for `talk.realtime.*`.
@@ -66,8 +80,9 @@ Runtime capability hints now include `realtimeVoice`, which is intentionally con
 3. On activation, call `startRealtimeVoiceSession`.
 4. If the transport is direct browser realtime, hand the payload to a copied/adapted OpenClaw browser transport.
 5. If the transport is `gateway-relay`, stream mic PCM to `sendRealtimeRelayAudio` and subscribe with `openRealtimeRelayEvents`.
-6. Map transcript events into the visible conversation log before attempting durable persistence.
-7. Keep the current `VoiceAgent` path as fallback whenever session startup fails.
+6. Drive the existing agent visualization process from realtime session events rather than introducing a separate realtime-only visual shell.
+7. Map transcript events into the visible conversation log before attempting durable persistence.
+8. Keep the current `VoiceAgent` path as fallback whenever session startup fails.
 
 ## Native Follow-Up
 

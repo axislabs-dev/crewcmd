@@ -41,15 +41,15 @@ export async function POST(
         relaySessionId,
         audioBase64,
         timestamp: readOptionalNumber(body.timestamp),
-        sampleRate: readOptionalNumber(body.sampleRate),
-        channels: readOptionalNumber(body.channels),
       });
       return NextResponse.json({ result });
     }
 
     if (action === "mark") {
-      const mark = readRequiredString(body.mark, "mark");
-      const result = await client.realtimeRelayMark({ relaySessionId, mark });
+      const result = await client.realtimeRelayMark({
+        relaySessionId,
+        markName: readOptionalString(body.markName),
+      });
       return NextResponse.json({ result });
     }
 
@@ -58,7 +58,7 @@ export async function POST(
       const result = await client.realtimeRelayToolResult({
         relaySessionId,
         callId,
-        output: body.output ?? null,
+        result: body.result ?? null,
       });
       return NextResponse.json({ result });
     }
@@ -81,6 +81,10 @@ function readRequiredString(value: unknown, name: string) {
 
 function readOptionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function readRelayAction(value: unknown): RelayAction {

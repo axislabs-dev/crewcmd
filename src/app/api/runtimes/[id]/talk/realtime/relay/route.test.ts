@@ -69,8 +69,6 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
           relaySessionId: "relay_1",
           audioBase64: "AAAA",
           timestamp: 123,
-          sampleRate: 24000,
-          channels: 1,
         }),
       }),
       { params: Promise.resolve({ id: "rt_1" }) },
@@ -82,8 +80,6 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
       relaySessionId: "relay_1",
       audioBase64: "AAAA",
       timestamp: 123,
-      sampleRate: 24000,
-      channels: 1,
     });
   });
 

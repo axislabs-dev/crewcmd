@@ -22,6 +22,12 @@ export interface RealtimeVoiceSession {
   clientSecret?: string;
   headers?: Record<string, string>;
   config?: Record<string, unknown>;
+  audio?: {
+    inputEncoding?: string;
+    outputEncoding?: string;
+    inputSampleRateHz?: number;
+    outputSampleRateHz?: number;
+  };
   [key: string]: unknown;
 }
 
@@ -29,8 +35,6 @@ export interface RealtimeRelayAudioChunk {
   relaySessionId: string;
   audioBase64: string;
   timestamp?: number;
-  sampleRate?: number;
-  channels?: number;
 }
 
 export async function startRealtimeVoiceSession(
@@ -63,11 +67,11 @@ export async function sendRealtimeRelayAudio(runtimeId: string, chunk: RealtimeR
   });
 }
 
-export async function sendRealtimeRelayMark(runtimeId: string, relaySessionId: string, mark: string): Promise<void> {
+export async function sendRealtimeRelayMark(runtimeId: string, relaySessionId: string, markName?: string): Promise<void> {
   await postRealtimeRelay(runtimeId, {
     action: "mark",
     relaySessionId,
-    mark,
+    markName,
   });
 }
 
@@ -81,7 +85,7 @@ export async function sendRealtimeRelayToolResult(
     action: "toolResult",
     relaySessionId,
     callId,
-    output,
+    result: output,
   });
 }
 

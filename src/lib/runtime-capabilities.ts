@@ -31,6 +31,17 @@ export interface RuntimeCapabilitySnapshot {
     defaultAgent: string | null;
     allowedAgents: string[];
   };
+  realtimeVoice?: RuntimeRealtimeVoiceSummary;
+}
+
+export interface RuntimeRealtimeVoiceSummary {
+  passthroughCandidate: boolean;
+  likelyProviders: string[];
+  configured: boolean;
+  configuredProviders: string[];
+  transports: string[];
+  gatewayMethods: string[];
+  notes: string[];
 }
 
 export function deriveRuntimeCapabilitySnapshot(params: {
@@ -111,7 +122,56 @@ export function deriveRuntimeCapabilitySnapshot(params: {
         ? acp.allowedAgents.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
         : [],
     },
+    realtimeVoice: deriveRealtimeVoiceSummary({
+      config: params.config,
+      providerSummaries,
+    }),
   };
+}
+
+function deriveRealtimeVoiceSummary(params: {
+  config: Record<string, unknown>;
+  providerSummaries: RuntimeProviderSummary[];
+}): RuntimeRealtimeVoiceSummary {
+  const realtimeConfig = readRecord(readRecord(params.config.talk)?.realtime)
+    ?? readRecord(readRecord(params.config["voice-call"])?.realtime)
+    ?? readRecord(readRecord(params.config.voice)?.realtime);
+  const configuredProviders = readConfiguredRealtimeProviders(realtimeConfig);
+  const providerIds = params.providerSummaries.map((provider) => provider.id);
+  const likelyProviders = providerIds.filter((providerId) =>
+    ["openai", "google"].includes(providerId.toLowerCase())
+  );
+
+  return {
+    passthroughCandidate: likelyProviders.length > 0 || configuredProviders.length > 0,
+    likelyProviders,
+    configured: configuredProviders.length > 0 || realtimeConfig?.enabled === true,
+    configuredProviders,
+    transports: ["webrtc-sdp", "json-pcm-websocket", "gateway-relay"],
+    gatewayMethods: [
+      "talk.realtime.session",
+      "talk.realtime.relayAudio",
+      "talk.realtime.relayMark",
+      "talk.realtime.relayToolResult",
+      "talk.realtime.relayStop",
+    ],
+    notes: [
+      "Capability is config-derived only; route-level probing still determines whether the selected runtime accepts realtime talk sessions.",
+    ],
+  };
+}
+
+function readConfiguredRealtimeProviders(config: Record<string, unknown> | null): string[] {
+  if (!config) return [];
+
+  const providers = config.providers;
+  if (Array.isArray(providers)) {
+    return sortUnique(providers.filter((value): value is string => typeof value === "string" && value.trim().length > 0));
+  }
+  if (typeof config.provider === "string" && config.provider.trim()) {
+    return [config.provider.trim()];
+  }
+  return readStringKeys(readRecord(providers));
 }
 
 function readAuthProfiles(config: Record<string, unknown>): RuntimeAuthProfileSummary[] {

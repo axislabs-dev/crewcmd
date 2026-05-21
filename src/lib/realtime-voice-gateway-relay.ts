@@ -3,6 +3,7 @@ import {
   openRealtimeRelayEvents,
   sendRealtimeRelayAudio,
   sendRealtimeRelayMark,
+  sendRealtimeRelayToolCall,
   sendRealtimeRelayToolResult,
   stopRealtimeRelay,
   type RealtimeVoiceSession,
@@ -192,7 +193,7 @@ export class RealtimeGatewayRelaySession {
         }
         return;
       case "toolCall":
-        this.submitUnavailableToolResult(event);
+        this.handleToolCall(event);
         return;
       case "error":
         this.callbacks.onStatus?.("error", event.message ?? "Realtime relay failed");
@@ -240,12 +241,30 @@ export class RealtimeGatewayRelaySession {
     }, delayMs);
   }
 
-  private submitUnavailableToolResult(event: Extract<GatewayRelayEvent, { type?: "toolCall" }>): void {
-    if (!this.session.relaySessionId || !event.callId) return;
-    void sendRealtimeRelayToolResult(this.runtimeId, this.session.relaySessionId, event.callId, {
-      error: "Realtime browser tool calls are not wired into CrewCMD yet.",
-      name: event.name ?? null,
-    }).catch(() => {});
+  private handleToolCall(event: Extract<GatewayRelayEvent, { type?: "toolCall" }>): void {
+    const relaySessionId = this.session.relaySessionId;
+    const sessionKey = typeof this.session.sessionKey === "string" && this.session.sessionKey.trim()
+      ? this.session.sessionKey.trim()
+      : "main";
+    if (!relaySessionId || !event.callId || !event.name) return;
+    const callId = event.callId;
+    const name = event.name;
+
+    this.callbacks.onStatus?.("processing", "Consulting OpenClaw");
+    void sendRealtimeRelayToolCall(this.runtimeId, {
+      relaySessionId,
+      sessionKey,
+      callId,
+      name,
+      args: event.args ?? {},
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.callbacks.onError?.(message);
+      void sendRealtimeRelayToolResult(this.runtimeId, relaySessionId, callId, {
+        error: message,
+        name,
+      }).catch(() => {});
+    });
   }
 
   private cancelOutputForBargeIn(): void {

@@ -12,6 +12,7 @@ export interface RealtimeVoiceSessionRequest {
 export interface RealtimeVoiceSession {
   sessionId?: string;
   relaySessionId?: string;
+  sessionKey?: string;
   transport?: RealtimeVoiceTransport | string;
   provider?: string;
   model?: string;
@@ -37,6 +38,14 @@ export interface RealtimeRelayAudioChunk {
   timestamp?: number;
 }
 
+export interface RealtimeRelayToolCall {
+  relaySessionId: string;
+  sessionKey: string;
+  callId: string;
+  name: string;
+  args?: unknown;
+}
+
 export async function startRealtimeVoiceSession(
   request: RealtimeVoiceSessionRequest,
 ): Promise<RealtimeVoiceSession> {
@@ -57,7 +66,11 @@ export async function startRealtimeVoiceSession(
   }
 
   const data = await response.json();
-  return data.session as RealtimeVoiceSession;
+  const session = data.session as RealtimeVoiceSession;
+  return {
+    ...session,
+    sessionKey: session.sessionKey ?? request.sessionKey ?? "main",
+  };
 }
 
 export async function sendRealtimeRelayAudio(runtimeId: string, chunk: RealtimeRelayAudioChunk): Promise<void> {
@@ -98,6 +111,13 @@ export async function sendRealtimeRelayToolResult(
     relaySessionId,
     callId,
     result: output,
+  });
+}
+
+export async function sendRealtimeRelayToolCall(runtimeId: string, toolCall: RealtimeRelayToolCall): Promise<void> {
+  await postRealtimeRelay(runtimeId, {
+    action: "toolCall",
+    ...toolCall,
   });
 }
 

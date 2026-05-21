@@ -165,6 +165,9 @@ export interface GatewayRealtimeTalkSessionParams extends Record<string, unknown
   model?: string;
   voice?: string;
   agentId?: string;
+  mode?: string;
+  transport?: string;
+  brain?: string;
 }
 
 export interface GatewayRealtimeTalkSessionResult {
@@ -198,6 +201,10 @@ export interface GatewayRealtimeRelayToolResultParams extends Record<string, unk
   relaySessionId: string;
   callId: string;
   result: unknown;
+  options?: {
+    suppressResponse?: boolean;
+    willContinue?: boolean;
+  };
 }
 
 export interface GatewayCronJob {
@@ -290,6 +297,20 @@ function signPayload(privateKeyPem: string, payload: string): string {
   const key = crypto.createPrivateKey(privateKeyPem);
   const sig = crypto.sign(null, Buffer.from(payload, "utf8"), key);
   return base64UrlEncode(sig);
+}
+
+function withoutUndefined<T extends Record<string, unknown>>(record: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
+}
+
+function isLikelyMissingGatewayMethod(err: unknown): boolean {
+  const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  return (
+    message.includes("unknown method")
+    || message.includes("method not found")
+    || message.includes("unsupported method")
+    || message.includes("no handler")
+  );
 }
 
 /**
@@ -714,23 +735,60 @@ export class GatewayClient {
   async realtimeTalkSession(
     params: GatewayRealtimeTalkSessionParams = {},
   ): Promise<GatewayRealtimeTalkSessionResult> {
-    return this.rpc<GatewayRealtimeTalkSessionResult>("talk.realtime.session", params);
+    try {
+      const sessionParams = withoutUndefined(params);
+      delete sessionParams.agentId;
+      return await this.rpc<GatewayRealtimeTalkSessionResult>("talk.session.create", {
+        ...sessionParams,
+        mode: params.mode ?? "realtime",
+        transport: params.transport ?? "gateway-relay",
+        brain: params.brain ?? "agent-consult",
+      });
+    } catch (err) {
+      if (!isLikelyMissingGatewayMethod(err)) throw err;
+      return this.rpc<GatewayRealtimeTalkSessionResult>("talk.realtime.session", params);
+    }
   }
 
   async realtimeRelayAudio(params: GatewayRealtimeRelayAudioParams): Promise<{ ok?: boolean }> {
-    return this.rpc<{ ok?: boolean }>("talk.realtime.relayAudio", params);
+    try {
+      return await this.rpc<{ ok?: boolean }>("talk.session.appendAudio", withoutUndefined({
+        sessionId: params.relaySessionId,
+        audioBase64: params.audioBase64,
+        timestamp: params.timestamp,
+      }));
+    } catch (err) {
+      if (!isLikelyMissingGatewayMethod(err)) throw err;
+      return this.rpc<{ ok?: boolean }>("talk.realtime.relayAudio", params);
+    }
   }
 
   async realtimeRelayMark(params: GatewayRealtimeRelayMarkParams): Promise<{ ok?: boolean }> {
-    return this.rpc<{ ok?: boolean }>("talk.realtime.relayMark", params);
+    void params;
+    return { ok: true };
   }
 
   async realtimeRelayToolResult(params: GatewayRealtimeRelayToolResultParams): Promise<{ ok?: boolean }> {
-    return this.rpc<{ ok?: boolean }>("talk.realtime.relayToolResult", params);
+    try {
+      return await this.rpc<{ ok?: boolean }>("talk.session.submitToolResult", withoutUndefined({
+        sessionId: params.relaySessionId,
+        callId: params.callId,
+        result: params.result,
+        options: params.options,
+      }));
+    } catch (err) {
+      if (!isLikelyMissingGatewayMethod(err)) throw err;
+      return this.rpc<{ ok?: boolean }>("talk.realtime.relayToolResult", params);
+    }
   }
 
   async realtimeRelayStop(relaySessionId: string): Promise<{ ok?: boolean }> {
-    return this.rpc<{ ok?: boolean }>("talk.realtime.relayStop", { relaySessionId });
+    try {
+      return await this.rpc<{ ok?: boolean }>("talk.session.close", { sessionId: relaySessionId });
+    } catch (err) {
+      if (!isLikelyMissingGatewayMethod(err)) throw err;
+      return this.rpc<{ ok?: boolean }>("talk.realtime.relayStop", { relaySessionId });
+    }
   }
 
   async cronList(): Promise<GatewayCronListResult> {

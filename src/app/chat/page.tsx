@@ -3711,7 +3711,7 @@ export default function ChatPage() {
       });
       // User message persisted server-side in /api/chat route
       setInput("");
-      if (activeChannelId && !addressedAgent) {
+      if (activeChannelId && !addressedAgent && !options.forceVoiceResponse) {
         if (chatCompanyId || chatWorkspaceId) {
           try {
             const res = await fetch("/api/chat/messages", {

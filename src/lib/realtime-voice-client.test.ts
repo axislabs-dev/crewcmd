@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRealtimeRelayOutput,
   openRealtimeRelayEvents,
+  resolveRealtimeVoiceSessionSettings,
   sendRealtimeRelayAudio,
   sendRealtimeRelayToolCall,
   startRealtimeVoiceSession,
@@ -115,5 +116,36 @@ describe("realtime voice client helpers", () => {
     expect(eventSourceMock).toHaveBeenCalledWith(
       "/api/runtimes/rt_1/talk/realtime/events?relaySessionId=relay+1",
     );
+  });
+
+  it("maps OpenAI voice selections to realtime session settings", () => {
+    expect(resolveRealtimeVoiceSessionSettings({
+      enabled: true,
+      provider: "openai",
+      voiceId: "cedar",
+      model: "gpt-realtime-1.5",
+    })).toEqual({
+      provider: "openai",
+      voice: "cedar",
+      model: "gpt-realtime-1.5",
+    });
+  });
+
+  it("does not forward non-realtime TTS voice settings", () => {
+    expect(resolveRealtimeVoiceSessionSettings({
+      enabled: true,
+      provider: "elevenlabs",
+      voiceId: "eleven_voice",
+    })).toEqual({});
+    expect(resolveRealtimeVoiceSessionSettings({
+      enabled: true,
+      provider: "openai",
+      voiceId: "onyx",
+      model: "tts-1",
+    })).toEqual({
+      provider: "openai",
+      voice: undefined,
+      model: undefined,
+    });
   });
 });

@@ -1,4 +1,5 @@
 import {
+  GOOGLE_REALTIME_VOICE_IDS,
   OPENAI_REALTIME_VOICE_IDS,
   normalizeAgentVoiceSettings,
   type AgentVoiceSettings,
@@ -90,10 +91,20 @@ export function resolveRealtimeVoiceSessionSettings(
   voiceSettings?: AgentVoiceSettings | null,
 ): Pick<RealtimeVoiceSessionRequest, "provider" | "model" | "voice"> {
   const voice = normalizeAgentVoiceSettings(voiceSettings);
-  if (voice.enabled === false || voice.provider !== "openai") return {};
+  if (voice.enabled === false) return {};
 
-  const voiceId = voice.voiceId?.trim().toLowerCase();
+  const rawVoiceId = voice.voiceId?.trim();
+  const voiceId = rawVoiceId?.toLowerCase();
   const model = voice.model?.trim();
+  if (voice.provider === "google") {
+    return {
+      provider: "google",
+      voice: voiceId && GOOGLE_REALTIME_VOICE_IDS.has(voiceId) ? rawVoiceId : undefined,
+      model: model?.includes("native-audio") || model?.includes("live") ? model : undefined,
+    };
+  }
+  if (voice.provider !== "openai") return {};
+
   return {
     provider: "openai",
     voice: voiceId && OPENAI_REALTIME_VOICE_IDS.has(voiceId) ? voiceId : undefined,

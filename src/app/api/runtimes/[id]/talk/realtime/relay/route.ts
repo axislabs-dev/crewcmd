@@ -124,6 +124,13 @@ async function runRealtimeToolCall(
       const runId = firstString(toolCall.runId, toolCall.idempotencyKey);
       if (!runId) throw new Error("OpenClaw realtime tool call did not return a run id");
 
+      await client.realtimeRelayToolResult({
+        relaySessionId: params.relaySessionId,
+        callId: params.callId,
+        result: buildRealtimeToolWorkingResult(),
+        options: { willContinue: true },
+      });
+
       const text = await waitForChatFinal(client, runId);
       const result = await client.realtimeRelayToolResult({
         relaySessionId: params.relaySessionId,
@@ -143,6 +150,15 @@ async function runRealtimeToolCall(
   } finally {
     releaseClient(client);
   }
+}
+
+function buildRealtimeToolWorkingResult() {
+  return {
+    status: "working",
+    tool: "openclaw_agent_consult",
+    message:
+      "Tell the person briefly that you are checking, then wait for the final OpenClaw result before answering with the actual result.",
+  };
 }
 
 function waitForChatFinal(client: GatewayClient, runId: string, timeoutMs = 110_000) {

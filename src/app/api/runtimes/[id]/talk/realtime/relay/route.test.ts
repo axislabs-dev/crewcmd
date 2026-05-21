@@ -83,6 +83,28 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     });
   });
 
+  it("proxies realtime output cancellation through an accessible runtime", async () => {
+    const realtimeRelayCancelOutput = vi.fn().mockResolvedValue({ ok: true });
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ realtimeRelayCancelOutput });
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/relay", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "cancelOutput",
+          relaySessionId: "relay_1",
+          reason: "barge-in",
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ result: { ok: true } });
+    expect(realtimeRelayCancelOutput).toHaveBeenCalledWith("relay_1", "barge-in");
+  });
+
   it("rejects invalid relay actions before calling the gateway", async () => {
     mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
 

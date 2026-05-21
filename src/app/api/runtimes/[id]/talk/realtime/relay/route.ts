@@ -7,7 +7,7 @@ import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
 
 export const dynamic = "force-dynamic";
 
-type RelayAction = "audio" | "mark" | "toolResult" | "stop";
+type RelayAction = "audio" | "cancelOutput" | "mark" | "toolResult" | "stop";
 
 export async function POST(
   request: Request,
@@ -53,6 +53,14 @@ export async function POST(
       return NextResponse.json({ result });
     }
 
+    if (action === "cancelOutput") {
+      const result = await client.realtimeRelayCancelOutput(
+        relaySessionId,
+        readOptionalString(body.reason),
+      );
+      return NextResponse.json({ result });
+    }
+
     if (action === "toolResult") {
       const callId = readRequiredString(body.callId, "callId");
       const result = await client.realtimeRelayToolResult({
@@ -88,6 +96,6 @@ function readOptionalString(value: unknown) {
 }
 
 function readRelayAction(value: unknown): RelayAction {
-  if (value === "audio" || value === "mark" || value === "toolResult" || value === "stop") return value;
-  throw new ValidationError("action must be audio, mark, toolResult, or stop");
+  if (value === "audio" || value === "cancelOutput" || value === "mark" || value === "toolResult" || value === "stop") return value;
+  throw new ValidationError("action must be audio, cancelOutput, mark, toolResult, or stop");
 }

@@ -4954,6 +4954,7 @@ export default function ChatPage() {
                     companyId={company?.id}
                     sessionKey={activeThread.sessionKey}
                     realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
+                    voiceSettings={resolvedVoiceSettings}
                   />
                 </div>
               ) : null}
@@ -5962,6 +5963,7 @@ export default function ChatPage() {
                     ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                     : gatewaySessionKeyForAgent(selectedAgent)}
                   realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
+                  voiceSettings={resolvedVoiceSettings}
                 />
                 <div className={agentOverlayMode === "immersive"
                   ? "absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 flex gap-2 sm:right-6"

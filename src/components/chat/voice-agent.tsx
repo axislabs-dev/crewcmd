@@ -28,8 +28,15 @@ import { RealtimeGatewayRelaySession, type RealtimeVoiceStatus } from "@/lib/rea
 
 type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
+export interface VoiceAgentRealtimeTranscript {
+  role: "user" | "assistant";
+  text: string;
+  final: boolean;
+}
+
 interface VoiceAgentProps {
   onTranscript: (text: string) => void;
+  onRealtimeTranscript?: (event: VoiceAgentRealtimeTranscript) => void;
   isPlayingAudio: boolean;
   onInterrupt: () => void;
   isLoading: boolean;
@@ -93,6 +100,7 @@ async function isServerSttAvailable() {
 
 export function VoiceAgent({
   onTranscript,
+  onRealtimeTranscript,
   isPlayingAudio,
   onInterrupt,
   isLoading,
@@ -503,6 +511,7 @@ export function VoiceAgent({
             final: event.final,
             characters: event.text.length,
           });
+          onRealtimeTranscript?.(event);
         },
         onVoiceLevel: setVolumeLevel,
         onSpeakingChange: (speaking) => {
@@ -531,7 +540,7 @@ export function VoiceAgent({
       });
       return false;
     }
-  }, [agent, gatewayAgent, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey]);
+  }, [agent, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey]);
 
   const activate = useCallback(async () => {
     onMicMutedChange?.(false);

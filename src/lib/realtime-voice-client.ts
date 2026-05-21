@@ -46,6 +46,13 @@ export interface RealtimeRelayToolCall {
   args?: unknown;
 }
 
+export interface RealtimeRelayToolCallResult {
+  delegated?: boolean;
+  runId?: string;
+  finalText?: string;
+  result?: unknown;
+}
+
 export async function startRealtimeVoiceSession(
   request: RealtimeVoiceSessionRequest,
 ): Promise<RealtimeVoiceSession> {
@@ -114,11 +121,17 @@ export async function sendRealtimeRelayToolResult(
   });
 }
 
-export async function sendRealtimeRelayToolCall(runtimeId: string, toolCall: RealtimeRelayToolCall): Promise<void> {
-  await postRealtimeRelay(runtimeId, {
+export async function sendRealtimeRelayToolCall(
+  runtimeId: string,
+  toolCall: RealtimeRelayToolCall,
+): Promise<RealtimeRelayToolCallResult> {
+  const data = await postRealtimeRelay(runtimeId, {
     action: "toolCall",
     ...toolCall,
   });
+  return data.result && typeof data.result === "object"
+    ? data.result as RealtimeRelayToolCallResult
+    : {};
 }
 
 export async function stopRealtimeRelay(runtimeId: string, relaySessionId: string): Promise<void> {
@@ -145,6 +158,7 @@ async function postRealtimeRelay(runtimeId: string, body: Record<string, unknown
   if (!response.ok) {
     throw new Error(await readRealtimeVoiceError(response, "Realtime relay request failed"));
   }
+  return await response.json().catch(() => ({})) as { result?: unknown };
 }
 
 async function readRealtimeVoiceError(response: Response, fallback: string) {

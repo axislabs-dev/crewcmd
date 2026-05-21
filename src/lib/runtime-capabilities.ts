@@ -149,11 +149,11 @@ function deriveRealtimeVoiceSummary(params: {
     configuredProviders,
     transports: ["webrtc-sdp", "json-pcm-websocket", "gateway-relay"],
     gatewayMethods: [
-      "talk.realtime.session",
-      "talk.realtime.relayAudio",
-      "talk.realtime.relayMark",
-      "talk.realtime.relayToolResult",
-      "talk.realtime.relayStop",
+      "talk.session.create",
+      "talk.session.appendAudio",
+      "talk.session.submitToolResult",
+      "talk.session.close",
+      "talk.event",
     ],
     notes: [
       "Capability is config-derived only; route-level probing still determines whether the selected runtime accepts realtime talk sessions.",

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { companyRuntimes } from "@/db/schema";
+import { chatSessions, companyRuntimes } from "@/db/schema";
 import { buildRuntimeReadWhere, getAgentAccessContext } from "@/lib/agent-access";
+import { canAccessChatSession } from "@/lib/chat-session-access";
+import { publishChatProgressEvent } from "@/lib/chat-pubsub";
+import { persistChatProgressEvent } from "@/lib/chat-session-events";
 import { getGatewayClientForRuntime, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import type { GatewayClient } from "@/lib/gateway-client";
 
@@ -10,6 +13,34 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 type RelayAction = "audio" | "cancelOutput" | "mark" | "toolCall" | "toolResult" | "stop";
+
+type ChatProgressEventName =
+  | "run_started"
+  | "tool_started"
+  | "tool_updated"
+  | "tool_completed"
+  | "run_completed"
+  | "run_error";
+
+type ChatProgressEvent = {
+  type: "chat_progress";
+  event: ChatProgressEventName;
+  at: string;
+  elapsedMs: number;
+  agentId: string;
+  gatewayAgentId: string;
+  sessionKey: string;
+  runId?: string;
+  error?: string;
+  activeTool?: {
+    id?: string;
+    name: string;
+    status?: string;
+    detail?: string;
+    detailKind?: "input" | "output" | "status";
+    detailTruncated?: boolean;
+  };
+};
 
 export async function POST(
   request: Request,
@@ -75,6 +106,7 @@ export async function POST(
 
     if (action === "toolCall") {
       const result = await runRealtimeToolCall(client, {
+        request,
         relaySessionId,
         sessionKey: readRequiredString(body.sessionKey, "sessionKey"),
         callId: readRequiredString(body.callId, "callId"),
@@ -98,6 +130,7 @@ class ValidationError extends Error {}
 async function runRealtimeToolCall(
   client: GatewayClient,
   params: {
+    request: Request;
     relaySessionId: string;
     sessionKey: string;
     callId: string;
@@ -120,9 +153,17 @@ async function runRealtimeToolCall(
   holdClient(client);
   try {
     try {
-      const toolCall = await client.realtimeClientToolCall(params);
+      const toolCall = await client.realtimeClientToolCall({
+        relaySessionId: params.relaySessionId,
+        sessionKey: params.sessionKey,
+        callId: params.callId,
+        name: params.name,
+        args: params.args,
+      });
       const runId = firstString(toolCall.runId, toolCall.idempotencyKey);
       if (!runId) throw new Error("OpenClaw realtime tool call did not return a run id");
+      const audit = await createRealtimeAuditPublisher(params.request, params.sessionKey, runId);
+      void audit.publish("run_started");
 
       await client.realtimeRelayToolResult({
         relaySessionId: params.relaySessionId,
@@ -131,12 +172,13 @@ async function runRealtimeToolCall(
         options: { willContinue: true },
       });
 
-      const text = await waitForChatFinal(client, runId);
+      const text = await waitForChatFinal(client, runId, audit);
       const result = await client.realtimeRelayToolResult({
         relaySessionId: params.relaySessionId,
         callId: params.callId,
         result: { text },
       });
+      void audit.publish("run_completed");
       return { delegated: true, runId, result, finalText: text };
     } catch (error) {
       const message = error instanceof Error ? error.message : "OpenClaw realtime tool call failed";
@@ -161,10 +203,16 @@ function buildRealtimeToolWorkingResult() {
   };
 }
 
-function waitForChatFinal(client: GatewayClient, runId: string, timeoutMs = 110_000) {
+function waitForChatFinal(
+  client: GatewayClient,
+  runId: string,
+  audit: RealtimeAuditPublisher,
+  timeoutMs = 110_000,
+) {
   return new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup();
+      void audit.publish("run_error", { error: "Timed out waiting for OpenClaw realtime tool result" });
       reject(new Error("Timed out waiting for OpenClaw realtime tool result"));
     }, timeoutMs);
 
@@ -179,6 +227,9 @@ function waitForChatFinal(client: GatewayClient, runId: string, timeoutMs = 110_
       const runIds = extractEventRunIds(event);
       if (!runIds.includes(runId)) return;
 
+      const toolProgress = extractToolProgress(event);
+      if (toolProgress) void audit.publish(toolProgress.event, { activeTool: toolProgress.activeTool });
+
       const state = firstString(event.state, event.status)?.toLowerCase();
       if (state === "final" || state === "complete" || state === "completed") {
         const text = extractText(event.message) || extractText(event);
@@ -190,6 +241,7 @@ function waitForChatFinal(client: GatewayClient, runId: string, timeoutMs = 110_
       if (state === "aborted" || state === "error" || state === "failed") {
         const message = firstString(event.errorMessage, event.error, event.message) ??
           "OpenClaw realtime tool call failed";
+        void audit.publish("run_error", { error: message });
         cleanup();
         reject(new Error(message));
       }
@@ -197,6 +249,73 @@ function waitForChatFinal(client: GatewayClient, runId: string, timeoutMs = 110_
 
     client.on("*", onEvent);
   });
+}
+
+type RealtimeAuditPublisher = Awaited<ReturnType<typeof createRealtimeAuditPublisher>>;
+
+async function createRealtimeAuditPublisher(request: Request, sessionKey: string, runId: string) {
+  const startedAt = Date.now();
+  const session = await resolveAuditSession(request, sessionKey);
+
+  const publish = async (
+    event: ChatProgressEventName,
+    details: Partial<Pick<ChatProgressEvent, "error" | "activeTool">> = {},
+  ) => {
+    if (!session?.companyId) return;
+    const payload: ChatProgressEvent = {
+      type: "chat_progress",
+      event,
+      at: new Date().toISOString(),
+      elapsedMs: Date.now() - startedAt,
+      agentId: session.agentId,
+      gatewayAgentId: session.agentId,
+      sessionKey,
+      runId,
+      ...(details.error ? { error: details.error } : {}),
+      ...(details.activeTool ? { activeTool: details.activeTool } : {}),
+    };
+
+    await persistChatProgressEvent({
+      sessionId: session.id,
+      companyId: session.companyId,
+      agentId: session.agentId,
+      gatewaySessionKey: sessionKey,
+      payload,
+    }).catch((error) => {
+      console.error("[api/realtime/relay] Failed to persist realtime tool progress:", error);
+    });
+
+    publishChatProgressEvent({
+      type: "chat_progress",
+      sessionId: session.id,
+      agentId: session.agentId,
+      companyId: session.companyId,
+      sessionKey,
+      channelId: session.channelId,
+      event,
+      at: payload.at,
+      payload: payload as unknown as Record<string, unknown>,
+    });
+  };
+
+  return { publish };
+}
+
+async function resolveAuditSession(request: Request, sessionKey: string) {
+  if (!db) return null;
+  const sessions = await withRetry(() =>
+    db!
+      .select()
+      .from(chatSessions)
+      .where(eq(chatSessions.gatewaySessionKey, sessionKey))
+      .orderBy(desc(chatSessions.updatedAt))
+      .limit(10)
+  );
+
+  for (const session of sessions) {
+    if (await canAccessChatSession(request as Parameters<typeof canAccessChatSession>[0], session)) return session;
+  }
+  return null;
 }
 
 function readRequiredString(value: unknown, name: string) {
@@ -249,6 +368,71 @@ function extractEventRunIds(payload: Record<string, unknown>) {
   ]
     .map((value) => typeof value === "string" ? value : null)
     .filter((value): value is string => Boolean(value));
+}
+
+function stringifyToolDetail(value: unknown, maxLength = 8_000) {
+  if (value === undefined || value === null) return null;
+
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else if (typeof value === "number" || typeof value === "boolean") {
+    text = String(value);
+  } else {
+    try {
+      text = JSON.stringify(value, null, 2);
+    } catch {
+      text = String(value);
+    }
+  }
+
+  text = text.trim();
+  if (!text) return null;
+
+  return {
+    detail: text.length > maxLength ? text.slice(0, maxLength) : text,
+    detailTruncated: text.length > maxLength,
+  };
+}
+
+function extractToolProgress(payload: Record<string, unknown>) {
+  const stream = firstString(payload.stream, payload.event);
+  const streamKey = stream?.toLowerCase() ?? "";
+  const data = asRecord(payload.data) ?? asRecord(payload.payload) ?? payload;
+  const kind = firstString(data.kind, data.type, payload.kind, payload.type)?.toLowerCase() ?? "";
+  const isToolEvent = streamKey === "tool" ||
+    streamKey === "tool_call" ||
+    streamKey === "agent.tool" ||
+    streamKey.includes("tool") ||
+    kind.includes("tool") ||
+    Boolean(firstString(data.toolCallId, data.tool_call_id, data.toolName, data.tool_name));
+  if (!isToolEvent) return null;
+
+  const toolCallId = firstString(data.toolCallId, data.tool_call_id, payload.toolCallId, payload.tool_call_id);
+  const name = firstString(data.name, data.toolName, data.tool_name, payload.toolName, payload.tool_name) ?? "tool";
+  const phase = firstString(data.phase, data.status, data.state, payload.phase, payload.status, payload.state) ?? "update";
+  const normalizedPhase = phase.toLowerCase();
+  const event: ChatProgressEventName = ["start", "started", "call", "calling", "running"].includes(normalizedPhase)
+    ? "tool_started"
+    : ["result", "end", "ended", "complete", "completed", "success", "succeeded"].includes(normalizedPhase)
+      ? "tool_completed"
+      : "tool_updated";
+  const detailKind: "input" | "output" = event === "tool_started" ? "input" : "output";
+  const detailValue = event === "tool_started"
+    ? data.args ?? data.arguments ?? data.input
+    : data.partialResult ?? data.partial_result ?? data.result ?? data.output;
+  const detail = stringifyToolDetail(detailValue);
+
+  return {
+    event,
+    activeTool: {
+      ...(toolCallId ? { id: toolCallId } : {}),
+      name,
+      status: phase,
+      detailKind,
+      ...(detail ? detail : {}),
+    },
+  };
 }
 
 function extractText(value: unknown, seen = new WeakSet<object>()): string {

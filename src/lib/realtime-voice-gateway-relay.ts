@@ -8,6 +8,7 @@ import {
   stopRealtimeRelay,
   type RealtimeVoiceSession,
 } from "./realtime-voice-client";
+import { buildCurrentPageContextForRealtime, formatPageContextForPrompt } from "./page-context-store";
 import { base64ToBytes, bytesToBase64, floatToPcm16, pcm16ToFloat, rmsLevel } from "./realtime-voice-audio";
 
 export type RealtimeVoiceStatus = "idle" | "listening" | "processing" | "speaking" | "error";
@@ -309,7 +310,7 @@ export class RealtimeGatewayRelaySession {
           sessionKey,
           callId,
           name,
-          args: event.args ?? {},
+          args: withRealtimeScreenContext(event.args ?? {}),
         });
         if (result.finalText?.trim()) {
           this.callbacks.onTranscript?.({
@@ -355,6 +356,36 @@ export class RealtimeGatewayRelaySession {
     this.speechFramesDuringPlayback = result.speechFrames;
     return result;
   }
+}
+
+export function withRealtimeScreenContext(args: unknown) {
+  const screenContext = formatPageContextForPrompt(buildCurrentPageContextForRealtime());
+  if (!screenContext) return args;
+
+  const normalized = normalizeRealtimeToolArgs(args);
+  const existingContext = typeof normalized.context === "string" && normalized.context.trim()
+    ? normalized.context.trim()
+    : null;
+  return {
+    ...normalized,
+    context: [existingContext, screenContext].filter(Boolean).join("\n\n"),
+  };
+}
+
+function normalizeRealtimeToolArgs(args: unknown): Record<string, unknown> {
+  if (args && typeof args === "object" && !Array.isArray(args)) return { ...args as Record<string, unknown> };
+  if (typeof args === "string") {
+    try {
+      const parsed = JSON.parse(args);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ...parsed as Record<string, unknown> };
+      }
+    } catch {
+      return { question: args };
+    }
+    return { question: args };
+  }
+  return {};
 }
 
 export function resolveRealtimeBargeInProfile(userAgent = readUserAgent(), hasCapacitor = readHasCapacitor()) {

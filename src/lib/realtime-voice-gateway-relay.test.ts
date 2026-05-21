@@ -4,7 +4,9 @@ import {
   MOBILE_REALTIME_BARGE_IN_PROFILE,
   detectRealtimeBargeIn,
   resolveRealtimeBargeInProfile,
+  withRealtimeScreenContext,
 } from "./realtime-voice-gateway-relay";
+import { usePageContextStore } from "./page-context-store";
 
 function inputWithLevel(level: number) {
   return new Float32Array([level, -level, level, -level]);
@@ -102,5 +104,37 @@ describe("realtime gateway relay barge-in detection", () => {
     expect(resolveRealtimeBargeInProfile("Mozilla/5.0 (iPhone)", false)).toBe(MOBILE_REALTIME_BARGE_IN_PROFILE);
     expect(resolveRealtimeBargeInProfile("Mozilla/5.0 (Macintosh)", true)).toBe(MOBILE_REALTIME_BARGE_IN_PROFILE);
     expect(resolveRealtimeBargeInProfile("Mozilla/5.0 (Macintosh)", false)).toBe(DESKTOP_REALTIME_BARGE_IN_PROFILE);
+  });
+});
+
+describe("realtime gateway relay screen context", () => {
+  it("adds current CrewCMD page context to consult args", () => {
+    usePageContextStore.getState().setContext({
+      route: "/tasks",
+      surface: "tasks",
+      entityIds: { taskId: "task_1" },
+      visibleIds: ["task_1", "task_2"],
+      screenText: "Task detail Fix realtime voice Status review",
+    });
+
+    expect(withRealtimeScreenContext({
+      question: "What is this?",
+      context: "Existing context",
+    })).toEqual({
+      question: "What is this?",
+      context: [
+        "Existing context",
+        "",
+        "CrewCMD page context for this turn:",
+        "Current CrewCMD surface: tasks",
+        "Current route: /tasks",
+        "Selected task ID: task_1",
+        "Visible IDs: task_1, task_2",
+        "Visible screen text:",
+        "Task detail Fix realtime voice Status review",
+      ].join("\n"),
+    });
+
+    usePageContextStore.getState().clearContext();
   });
 });

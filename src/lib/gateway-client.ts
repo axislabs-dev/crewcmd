@@ -220,6 +220,32 @@ export interface GatewayRealtimeClientToolCallResult {
   idempotencyKey?: string;
 }
 
+export interface GatewayTalkCatalogProvider {
+  id: string;
+  label?: string;
+  configured?: boolean;
+  modes?: string[];
+  transports?: string[];
+  brains?: string[];
+  models?: string[];
+  voices?: string[];
+  defaultModel?: string;
+  supportsBrowserSession?: boolean;
+  supportsBargeIn?: boolean;
+  supportsToolCalls?: boolean;
+  [key: string]: unknown;
+}
+
+export interface GatewayTalkCatalog {
+  modes?: string[];
+  transports?: string[];
+  brains?: string[];
+  speech?: { providers?: GatewayTalkCatalogProvider[] };
+  transcription?: { providers?: GatewayTalkCatalogProvider[] };
+  realtime?: { providers?: GatewayTalkCatalogProvider[] };
+  [key: string]: unknown;
+}
+
 export interface GatewayCronJob {
   id: string;
   agentId?: string;
@@ -743,6 +769,10 @@ export class GatewayClient {
 
   async secretsReload(): Promise<GatewaySecretsReloadResult> {
     return this.rpc<GatewaySecretsReloadResult>("secrets.reload", {});
+  }
+
+  async talkCatalog(): Promise<GatewayTalkCatalog> {
+    return this.rpc<GatewayTalkCatalog>("talk.catalog", {});
   }
 
   async realtimeTalkSession(

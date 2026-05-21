@@ -84,6 +84,7 @@ export function VoiceSelectModal({
   const [provider, setProvider] = useState<ProviderFilter>("all");
   const [query, setQuery] = useState("");
   const [voices, setVoices] = useState<TtsVoiceOption[]>([]);
+  const [providerCounts, setProviderCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -108,16 +109,21 @@ export function VoiceSelectModal({
     setError(null);
     fetch(`/api/tts/voices?${params.toString()}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Voice list failed: ${response.status}`)))
-      .then((data: { voices?: TtsVoiceOption[] }) => {
+      .then((data: { voices?: TtsVoiceOption[]; providers?: Record<string, number> }) => {
         const serverVoices = Array.isArray(data.voices) ? data.voices : [];
         const browserVoices = (provider === "all" || provider === "browser" || provider === "favorites")
           ? listBrowserVoices().filter((voice) => matchesQuery(voice, query))
           : [];
-        setVoices(uniqueVoices([...serverVoices, ...browserVoices]));
+        const nextVoices = uniqueVoices([...serverVoices, ...browserVoices]);
+        setVoices(nextVoices);
+        if (provider === "all" || provider === "realtime" || provider === "favorites") {
+          setProviderCounts(mergeProviderCounts(readProviderCounts(data.providers), summarizeProviders(browserVoices)));
+        }
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Unable to load voices");
         setVoices([]);
+        setProviderCounts({});
       })
       .finally(() => setLoading(false));
   }, [open, provider, query]);
@@ -233,18 +239,20 @@ export function VoiceSelectModal({
             />
             <div className="flex flex-wrap gap-2">
               {[{ value: "all", label: "All" }, { value: "realtime", label: "Realtime" }, { value: "favorites", label: "Favorites" }, ...TTS_PROVIDER_OPTIONS.filter((item) => item.value !== "auto")].map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setProvider(item.value as ProviderFilter)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                    provider === item.value
-                      ? "border-[#00f0ff]/60 bg-[#00f0ff]/15 text-[#00f0ff]"
-                      : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  {item.label}
-                </button>
+                shouldShowProviderFilter(item.value, providerCounts) ? (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setProvider(item.value as ProviderFilter)}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      provider === item.value
+                        ? "border-[#00f0ff]/60 bg-[#00f0ff]/15 text-[#00f0ff]"
+                        : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ) : null
               ))}
             </div>
           </div>
@@ -339,6 +347,34 @@ export function VoiceSelectModal({
       </div>
     </div>
   );
+}
+
+function summarizeProviders(voices: TtsVoiceOption[]) {
+  return voices.reduce<Record<string, number>>((acc, voice) => {
+    acc[voice.provider] = (acc[voice.provider] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function readProviderCounts(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const counts: Record<string, number> = {};
+  for (const [key, count] of Object.entries(value)) {
+    if (typeof count === "number" && Number.isFinite(count) && count > 0) counts[key] = count;
+  }
+  return counts;
+}
+
+function mergeProviderCounts(...items: Array<Record<string, number>>) {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    for (const [key, count] of Object.entries(item)) acc[key] = (acc[key] || 0) + count;
+    return acc;
+  }, {});
+}
+
+function shouldShowProviderFilter(value: string, counts: Record<string, number>) {
+  if (value === "all" || value === "realtime" || value === "favorites") return true;
+  return (counts[value] || 0) > 0;
 }
 
 export function VoiceSummary({ value }: { value?: AgentVoiceSettings | null }) {

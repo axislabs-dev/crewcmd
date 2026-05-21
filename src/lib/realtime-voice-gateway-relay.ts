@@ -20,6 +20,7 @@ const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.055;
 const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.16;
 const MOBILE_BARGE_IN_FRAMES = 4;
 const MOBILE_BARGE_IN_GRACE_MS = 750;
+const REALTIME_VOICE_CONTEXT_LIMIT = 8;
 
 export interface RealtimeBargeInProfile {
   rmsThreshold: number;
@@ -62,6 +63,13 @@ export interface RealtimeGatewayRelayCallbacks {
   onSpeakingChange?: (speaking: boolean) => void;
   onError?: (message: string) => void;
 }
+
+interface RealtimeVoiceContextEntry {
+  role: "user" | "assistant";
+  text: string;
+}
+
+const realtimeVoiceContextBySession = new Map<string, RealtimeVoiceContextEntry[]>();
 
 type GatewayRelayEvent =
   | { relaySessionId?: string; type?: "ready" }
@@ -232,11 +240,13 @@ export class RealtimeGatewayRelaySession {
       case "transcript":
         if (event.role && event.text) {
           if (event.role === "assistant" && this.pendingToolCalls > 0) return;
-          this.callbacks.onTranscript?.({
+          const transcript = {
             role: event.role,
             text: event.text,
             final: event.final ?? false,
-          });
+          };
+          recordRealtimeVoiceContext(this.session.sessionKey, transcript);
+          this.callbacks.onTranscript?.(transcript);
         }
         return;
       case "toolCall":
@@ -310,9 +320,17 @@ export class RealtimeGatewayRelaySession {
           sessionKey,
           callId,
           name,
-          args: withRealtimeScreenContext(event.args ?? {}),
+          args: withRealtimeScreenContext(
+            event.args ?? {},
+            buildRealtimeVoiceContext(this.session.sessionKey),
+          ),
         });
         if (result.finalText?.trim()) {
+          recordRealtimeVoiceContext(this.session.sessionKey, {
+            role: "assistant",
+            text: result.finalText,
+            final: true,
+          });
           this.callbacks.onTranscript?.({
             role: "assistant",
             text: result.finalText.trim(),
@@ -358,9 +376,12 @@ export class RealtimeGatewayRelaySession {
   }
 }
 
-export function withRealtimeScreenContext(args: unknown) {
+export function withRealtimeScreenContext(args: unknown, voiceContext?: string | null) {
   const screenContext = formatPageContextForPrompt(buildCurrentPageContextForRealtime());
-  if (!screenContext) return args;
+  const realtimeVoiceContext = typeof voiceContext === "string" && voiceContext.trim()
+    ? voiceContext.trim()
+    : null;
+  if (!screenContext && !realtimeVoiceContext) return args;
 
   const normalized = normalizeRealtimeToolArgs(args);
   const existingContext = typeof normalized.context === "string" && normalized.context.trim()
@@ -368,8 +389,40 @@ export function withRealtimeScreenContext(args: unknown) {
     : null;
   return {
     ...normalized,
-    context: [existingContext, screenContext].filter(Boolean).join("\n\n"),
+    context: [existingContext, screenContext, realtimeVoiceContext].filter(Boolean).join("\n\n"),
   };
+}
+
+export function recordRealtimeVoiceContext(
+  sessionKey: string | undefined,
+  event: { role: "user" | "assistant"; text: string; final: boolean },
+) {
+  if (!event.final) return;
+  const key = normalizeRealtimeSessionKey(sessionKey);
+  const text = event.text.trim();
+  if (!text) return;
+
+  const entries = realtimeVoiceContextBySession.get(key) ?? [];
+  entries.push({ role: event.role, text });
+  realtimeVoiceContextBySession.set(key, entries.slice(-REALTIME_VOICE_CONTEXT_LIMIT));
+}
+
+export function buildRealtimeVoiceContext(sessionKey: string | undefined) {
+  const entries = realtimeVoiceContextBySession.get(normalizeRealtimeSessionKey(sessionKey));
+  if (!entries?.length) return null;
+
+  return [
+    "Recent realtime voice context for this CrewCMD session:",
+    ...entries.map((entry) => `${entry.role}: ${entry.text}`),
+  ].join("\n");
+}
+
+export function clearRealtimeVoiceContextForTest() {
+  realtimeVoiceContextBySession.clear();
+}
+
+function normalizeRealtimeSessionKey(sessionKey: string | undefined) {
+  return typeof sessionKey === "string" && sessionKey.trim() ? sessionKey.trim() : "main";
 }
 
 function normalizeRealtimeToolArgs(args: unknown): Record<string, unknown> {

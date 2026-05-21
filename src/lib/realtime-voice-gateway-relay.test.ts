@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRealtimeVoiceContext,
+  clearRealtimeVoiceContextForTest,
   DESKTOP_REALTIME_BARGE_IN_PROFILE,
   MOBILE_REALTIME_BARGE_IN_PROFILE,
   detectRealtimeBargeIn,
+  recordRealtimeVoiceContext,
   resolveRealtimeBargeInProfile,
   withRealtimeScreenContext,
 } from "./realtime-voice-gateway-relay";
@@ -136,5 +139,34 @@ describe("realtime gateway relay screen context", () => {
     });
 
     usePageContextStore.getState().clearContext();
+  });
+
+  it("adds recent realtime voice context to consult args", () => {
+    expect(withRealtimeScreenContext(
+      { question: "What was I asking about?" },
+      "Recent realtime voice context for this CrewCMD session:\nuser: Read the README",
+    )).toEqual({
+      question: "What was I asking about?",
+      context: "Recent realtime voice context for this CrewCMD session:\nuser: Read the README",
+    });
+  });
+});
+
+describe("realtime gateway relay voice context", () => {
+  it("keeps recent final voice turns by session", () => {
+    clearRealtimeVoiceContextForTest();
+
+    recordRealtimeVoiceContext("main", { role: "user", text: "Read the README", final: true });
+    recordRealtimeVoiceContext("main", { role: "assistant", text: "I am checking it now.", final: false });
+    recordRealtimeVoiceContext("main", { role: "assistant", text: "product-videogen is a video engine.", final: true });
+
+    expect(buildRealtimeVoiceContext("main")).toBe([
+      "Recent realtime voice context for this CrewCMD session:",
+      "user: Read the README",
+      "assistant: product-videogen is a video engine.",
+    ].join("\n"));
+    expect(buildRealtimeVoiceContext("other")).toBeNull();
+
+    clearRealtimeVoiceContextForTest();
   });
 });

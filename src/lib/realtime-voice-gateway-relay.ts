@@ -15,6 +15,44 @@ export type RealtimeVoiceStatus = "idle" | "listening" | "processing" | "speakin
 const BARGE_IN_RMS_THRESHOLD = 0.02;
 const BARGE_IN_PEAK_THRESHOLD = 0.08;
 const BARGE_IN_FRAMES = 2;
+const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.055;
+const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.16;
+const MOBILE_BARGE_IN_FRAMES = 4;
+const MOBILE_BARGE_IN_GRACE_MS = 750;
+
+export interface RealtimeBargeInProfile {
+  rmsThreshold: number;
+  peakThreshold: number;
+  frames: number;
+  graceMs: number;
+  suppressEchoInput: boolean;
+}
+
+export interface RealtimeBargeInDetectionInput {
+  input: Float32Array;
+  activeOutput: boolean;
+  cancelRequested: boolean;
+  speechFrames: number;
+  outputStartedAtMs: number | null;
+  nowMs: number;
+  profile: RealtimeBargeInProfile;
+}
+
+export const DESKTOP_REALTIME_BARGE_IN_PROFILE: RealtimeBargeInProfile = {
+  rmsThreshold: BARGE_IN_RMS_THRESHOLD,
+  peakThreshold: BARGE_IN_PEAK_THRESHOLD,
+  frames: BARGE_IN_FRAMES,
+  graceMs: 0,
+  suppressEchoInput: false,
+};
+
+export const MOBILE_REALTIME_BARGE_IN_PROFILE: RealtimeBargeInProfile = {
+  rmsThreshold: MOBILE_BARGE_IN_RMS_THRESHOLD,
+  peakThreshold: MOBILE_BARGE_IN_PEAK_THRESHOLD,
+  frames: MOBILE_BARGE_IN_FRAMES,
+  graceMs: MOBILE_BARGE_IN_GRACE_MS,
+  suppressEchoInput: true,
+};
 
 export interface RealtimeGatewayRelayCallbacks {
   onStatus?: (status: RealtimeVoiceStatus, message?: string) => void;
@@ -58,6 +96,8 @@ export class RealtimeGatewayRelaySession {
   private closed = false;
   private cancelRequestedForPlayback = false;
   private speechFramesDuringPlayback = 0;
+  private outputStartedAtMs: number | null = null;
+  private readonly bargeInProfile = resolveRealtimeBargeInProfile();
 
   constructor(
     private readonly runtimeId: string,
@@ -137,6 +177,7 @@ export class RealtimeGatewayRelaySession {
     this.sources.clear();
     this.playhead = this.outputContext?.currentTime ?? 0;
     this.speechFramesDuringPlayback = 0;
+    this.outputStartedAtMs = null;
     this.callbacks.onSpeakingChange?.(false);
   }
 
@@ -149,8 +190,11 @@ export class RealtimeGatewayRelaySession {
       if (this.closed || !this.session.relaySessionId) return;
       const input = event.inputBuffer.getChannelData(0);
       this.callbacks.onVoiceLevel?.(rmsLevel(input));
-      const pcm = floatToPcm16(input);
-      if (this.detectBargeInSpeech(input)) this.cancelOutputForBargeIn();
+      const bargeIn = this.detectBargeInSpeech(input);
+      const pcm = bargeIn.suppressInput
+        ? new Uint8Array(input.length * 2)
+        : floatToPcm16(input);
+      if (bargeIn.triggered) this.cancelOutputForBargeIn();
       void sendRealtimeRelayAudio(this.runtimeId, {
         relaySessionId: this.session.relaySessionId,
         audioBase64: bytesToBase64(pcm),
@@ -218,12 +262,16 @@ export class RealtimeGatewayRelaySession {
     this.sources.add(source);
     source.addEventListener("ended", () => {
       this.sources.delete(source);
-      if (this.sources.size === 0) this.callbacks.onSpeakingChange?.(false);
+      if (this.sources.size === 0) {
+        this.outputStartedAtMs = null;
+        this.callbacks.onSpeakingChange?.(false);
+      }
     });
     source.buffer = buffer;
     source.connect(this.outputContext.destination);
     const startAt = Math.max(this.outputContext.currentTime, this.playhead);
     source.start(startAt);
+    this.outputStartedAtMs ??= performanceNow();
     this.playhead = startAt + buffer.duration;
     this.callbacks.onSpeakingChange?.(true);
     this.callbacks.onStatus?.("speaking");
@@ -278,27 +326,77 @@ export class RealtimeGatewayRelaySession {
     });
   }
 
-  private detectBargeInSpeech(input: Float32Array): boolean {
-    if (this.sources.size === 0 || this.cancelRequestedForPlayback || input.length === 0) {
-      this.speechFramesDuringPlayback = 0;
-      return false;
-    }
-
-    let peak = 0;
-    let sum = 0;
-    for (const sample of input) {
-      const abs = Math.abs(sample);
-      peak = Math.max(peak, abs);
-      sum += sample * sample;
-    }
-
-    const rms = Math.sqrt(sum / input.length);
-    if (rms >= BARGE_IN_RMS_THRESHOLD && peak >= BARGE_IN_PEAK_THRESHOLD) {
-      this.speechFramesDuringPlayback += 1;
-    } else {
-      this.speechFramesDuringPlayback = 0;
-    }
-
-    return this.speechFramesDuringPlayback >= BARGE_IN_FRAMES;
+  private detectBargeInSpeech(input: Float32Array) {
+    const result = detectRealtimeBargeIn({
+      input,
+      activeOutput: this.sources.size > 0,
+      cancelRequested: this.cancelRequestedForPlayback,
+      speechFrames: this.speechFramesDuringPlayback,
+      outputStartedAtMs: this.outputStartedAtMs,
+      nowMs: performanceNow(),
+      profile: this.bargeInProfile,
+    });
+    this.speechFramesDuringPlayback = result.speechFrames;
+    return result;
   }
+}
+
+export function resolveRealtimeBargeInProfile(userAgent = readUserAgent(), hasCapacitor = readHasCapacitor()) {
+  return hasCapacitor || /android|iphone|ipad|ipod|mobile/i.test(userAgent)
+    ? MOBILE_REALTIME_BARGE_IN_PROFILE
+    : DESKTOP_REALTIME_BARGE_IN_PROFILE;
+}
+
+export function detectRealtimeBargeIn(input: RealtimeBargeInDetectionInput) {
+  if (
+    !input.activeOutput ||
+    input.cancelRequested ||
+    input.input.length === 0 ||
+    isWithinGraceWindow(input)
+  ) {
+    return {
+      triggered: false,
+      speechFrames: 0,
+      suppressInput: input.profile.suppressEchoInput && input.activeOutput && !input.cancelRequested,
+    };
+  }
+
+  let peak = 0;
+  let sum = 0;
+  for (const sample of input.input) {
+    const abs = Math.abs(sample);
+    peak = Math.max(peak, abs);
+    sum += sample * sample;
+  }
+
+  const rms = Math.sqrt(sum / input.input.length);
+  const speechFrames = rms >= input.profile.rmsThreshold && peak >= input.profile.peakThreshold
+    ? input.speechFrames + 1
+    : 0;
+
+  return {
+    triggered: speechFrames >= input.profile.frames,
+    speechFrames,
+    suppressInput: input.profile.suppressEchoInput && input.activeOutput && speechFrames < input.profile.frames,
+  };
+}
+
+function isWithinGraceWindow(input: RealtimeBargeInDetectionInput) {
+  return Boolean(
+    input.outputStartedAtMs !== null &&
+    input.profile.graceMs > 0 &&
+    input.nowMs - input.outputStartedAtMs < input.profile.graceMs,
+  );
+}
+
+function readUserAgent() {
+  return typeof navigator === "undefined" ? "" : navigator.userAgent;
+}
+
+function readHasCapacitor() {
+  return typeof window !== "undefined" && Boolean((window as { Capacitor?: unknown }).Capacitor);
+}
+
+function performanceNow() {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
 }

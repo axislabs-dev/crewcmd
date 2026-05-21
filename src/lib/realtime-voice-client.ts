@@ -1,4 +1,19 @@
+import { normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
+
 export type RealtimeVoiceTransport = "webrtc-sdp" | "json-pcm-websocket" | "gateway-relay";
+
+const OPENAI_REALTIME_VOICE_IDS = new Set([
+  "alloy",
+  "ash",
+  "ballad",
+  "cedar",
+  "coral",
+  "echo",
+  "marin",
+  "sage",
+  "shimmer",
+  "verse",
+]);
 
 export interface RealtimeVoiceSessionRequest {
   runtimeId: string;
@@ -77,6 +92,21 @@ export async function startRealtimeVoiceSession(
   return {
     ...session,
     sessionKey: session.sessionKey ?? request.sessionKey ?? "main",
+  };
+}
+
+export function resolveRealtimeVoiceSessionSettings(
+  voiceSettings?: AgentVoiceSettings | null,
+): Pick<RealtimeVoiceSessionRequest, "provider" | "model" | "voice"> {
+  const voice = normalizeAgentVoiceSettings(voiceSettings);
+  if (voice.enabled === false || voice.provider !== "openai") return {};
+
+  const voiceId = voice.voiceId?.trim().toLowerCase();
+  const model = voice.model?.trim();
+  return {
+    provider: "openai",
+    voice: voiceId && OPENAI_REALTIME_VOICE_IDS.has(voiceId) ? voiceId : undefined,
+    model: model?.includes("realtime") ? model : undefined,
   };
 }
 

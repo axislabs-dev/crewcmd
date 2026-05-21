@@ -23,8 +23,13 @@ import {
   startNativeVoiceSession,
   stopNativeVoiceSession,
 } from "@/lib/native-voice-session";
-import { startRealtimeVoiceSession, type RealtimeVoiceSession } from "@/lib/realtime-voice-client";
+import {
+  resolveRealtimeVoiceSessionSettings,
+  startRealtimeVoiceSession,
+  type RealtimeVoiceSession,
+} from "@/lib/realtime-voice-client";
 import { RealtimeGatewayRelaySession, type RealtimeVoiceStatus } from "@/lib/realtime-voice-gateway-relay";
+import type { AgentVoiceSettings } from "@/lib/tts-voices";
 
 type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
@@ -54,6 +59,7 @@ interface VoiceAgentProps {
   companyId?: string;
   sessionKey?: string;
   realtimeRuntimeId?: string;
+  voiceSettings?: AgentVoiceSettings | null;
 }
 
 function hexToRgb(hex: string): string {
@@ -118,6 +124,7 @@ export function VoiceAgent({
   companyId,
   sessionKey,
   realtimeRuntimeId,
+  voiceSettings,
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -466,16 +473,21 @@ export function VoiceAgent({
     if (!realtimeEnabled || !realtimeRuntimeId) return false;
 
     try {
+      const realtimeVoiceSettings = resolveRealtimeVoiceSessionSettings(voiceSettings);
       const session = await startRealtimeVoiceSession({
         runtimeId: realtimeRuntimeId,
         sessionKey,
         agentId: gatewayAgent ?? agent,
+        ...realtimeVoiceSettings,
       });
       setRealtimeSession(session);
       recordVoiceBreadcrumb("realtime.session.start", {
         transport: session.transport,
         provider: session.provider,
         model: session.model,
+        requestedProvider: realtimeVoiceSettings.provider,
+        requestedVoice: realtimeVoiceSettings.voice,
+        requestedModel: realtimeVoiceSettings.model,
         hasRelaySessionId: Boolean(session.relaySessionId),
       });
       publishAgentModeDiagnostic({
@@ -486,6 +498,9 @@ export function VoiceAgent({
           transport: session.transport,
           provider: session.provider,
           model: session.model,
+          requestedProvider: realtimeVoiceSettings.provider,
+          requestedVoice: realtimeVoiceSettings.voice,
+          requestedModel: realtimeVoiceSettings.model,
           hasRelaySessionId: Boolean(session.relaySessionId),
         },
       });
@@ -540,7 +555,7 @@ export function VoiceAgent({
       });
       return false;
     }
-  }, [agent, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey]);
+  }, [agent, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey, voiceSettings]);
 
   const activate = useCallback(async () => {
     onMicMutedChange?.(false);

@@ -239,7 +239,7 @@ function getActiveServerUrl() {
     return state.bootstrap.serverUrl;
   }
 
-  return state.brand?.bootstrapMode === "qr-or-url" ? "" : state.brand?.defaultBaseUrl || "";
+  return state.brand?.defaultBaseUrl || "";
 }
 
 function shouldAutoOpenCrewCmd() {

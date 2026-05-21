@@ -47,12 +47,14 @@ export async function GET(
         };
         cleanup = () => {
           if (!cleanup) return;
+          client.off("talk.event", onRelay);
           client.off("talk.realtime.relay", onRelay);
           request.signal.removeEventListener("abort", cleanup);
           releaseClient(client);
           cleanup = null;
         };
 
+        client.on("talk.event", onRelay);
         client.on("talk.realtime.relay", onRelay);
         request.signal.addEventListener("abort", cleanup, { once: true });
         send("realtime_ready", { relaySessionId });

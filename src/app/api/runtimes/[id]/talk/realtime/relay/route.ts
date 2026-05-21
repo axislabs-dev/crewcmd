@@ -135,7 +135,7 @@ async function runRealtimeToolCall(
       const result = await client.realtimeRelayToolResult({
         relaySessionId: params.relaySessionId,
         callId: params.callId,
-        result: { result: text },
+        result: { text },
       });
       return { delegated: true, runId, result, finalText: text };
     } catch (error) {

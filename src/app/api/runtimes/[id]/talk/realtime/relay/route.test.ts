@@ -179,7 +179,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
       relaySessionId: "relay_1",
       callId: "call_1",
-      result: { result: "The repo is a CrewCMD app." },
+      result: { text: "The repo is a CrewCMD app." },
     });
     expect(mockHoldClient).toHaveBeenCalledWith(client);
     expect(mockReleaseClient).toHaveBeenCalledWith(client);

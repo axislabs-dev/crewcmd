@@ -21,7 +21,8 @@ describe("deriveRuntimeCapabilitySnapshot realtime voice", () => {
       configuredProviders: [],
       transports: ["webrtc-sdp", "json-pcm-websocket", "gateway-relay"],
     });
-    expect(snapshot.realtimeVoice?.gatewayMethods).toContain("talk.realtime.session");
+    expect(snapshot.realtimeVoice?.gatewayMethods).toContain("talk.session.create");
+    expect(snapshot.realtimeVoice?.gatewayMethods).toContain("talk.event");
   });
 
   it("reads explicit realtime talk provider config when present", () => {

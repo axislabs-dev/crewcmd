@@ -1,12 +1,13 @@
 "use client";
 
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ChatIdentityProfilePanel, ChatMessage, DateSeparator, getDateKey } from "@/components/chat/chat-message";
 import type { Attachment, ChatIdentityDetails, ChatIdentityProfile } from "@/components/chat/chat-message";
 import { VoiceRecorder } from "@/components/chat/voice-recorder";
-import { VoiceAgent } from "@/components/chat/voice-agent";
+import { VoiceAgent, type VoiceAgentRealtimeTranscript } from "@/components/chat/voice-agent";
 import { ChatThreadDrawer } from "@/components/chat/thread-drawer";
 import { VoiceSelectModal } from "@/components/voice-select-modal";
 import { WaveformVisualizer } from "@/components/chat/waveform-visualizer";
@@ -77,7 +78,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
-  metadata?: { attachments?: Attachment[] } | null;
+  metadata?: { attachments?: Attachment[]; source?: string } | null;
 }
 
 interface CurrentUserProfile {
@@ -1304,12 +1305,90 @@ export default function ChatPage() {
     () => selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent),
     [selectedSessionKey, selectedAgent]
   );
+  const activeVoiceSessionKey = useMemo(
+    () => selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
+      ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
+      : gatewaySessionKeyForAgent(selectedAgent),
+    [selectedAgent, selectedSessionKey]
+  );
+  const activeVoiceStoreKey = useMemo(
+    () => chatConversationStoreKey(activeVoiceSessionKey, activeChannelId),
+    [activeChannelId, activeVoiceSessionKey]
+  );
   const activeStoreKey = useMemo(
     () => chatConversationStoreKey(activeSessionKey, activeChannelId),
     [activeChannelId, activeSessionKey]
   );
   const activeStoreKeyRef = useRef(activeStoreKey);
   const activeMainRequestStoreKeyRef = useRef<string | null>(null);
+
+  const persistRealtimeTranscript = useCallback((
+    event: VoiceAgentRealtimeTranscript,
+    params: {
+      sessionKey: string;
+      storeKey: string;
+      setVisibleMessages: Dispatch<SetStateAction<Message[]>>;
+    },
+  ) => {
+    const content = event.text.trim();
+    if (!event.final || !content) return;
+
+    const createdAt = new Date().toISOString();
+    const metadata = { source: "realtime_voice" };
+    const localId = `realtime-${event.role}-${createClientId()}`;
+    const localMessage: Message = {
+      id: localId,
+      role: event.role,
+      content,
+      createdAt,
+      metadata,
+    };
+
+    useChatStore.getState().addMessage({
+      id: localId,
+      agentId: params.storeKey,
+      role: event.role,
+      content,
+      metadata,
+      createdAt,
+    });
+    params.setVisibleMessages((prev) => uniqueMessagesById([...prev, localMessage]));
+
+    if (chatCompanyId || chatWorkspaceId) {
+      void fetch("/api/chat/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: agentDisplayCallsign(selectedAgent),
+          companyId: chatCompanyId,
+          workspaceId: chatWorkspaceId,
+          channelId: activeChannelId,
+          gatewaySessionKey: params.sessionKey,
+          role: event.role,
+          content,
+          metadata,
+        }),
+      })
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({})) as { message?: { id?: string; createdAt?: string } };
+          const persistedId = data.message?.id;
+          if (!res.ok || !persistedId) return;
+          const persistedCreatedAt = data.message?.createdAt ?? createdAt;
+          useChatStore.getState().replaceMessageId(params.storeKey, localId, persistedId);
+          params.setVisibleMessages((prev) =>
+            prev.map((message) =>
+              message.id === localId
+                ? { ...message, id: persistedId, createdAt: persistedCreatedAt }
+                : message
+            )
+          );
+        })
+        .catch((error) => {
+          console.error("[chat] Failed to persist realtime transcript:", error);
+        });
+    }
+  }, [activeChannelId, chatCompanyId, chatWorkspaceId, selectedAgent]);
+
   useEffect(() => {
     activeStoreKeyRef.current = activeStoreKey;
     if (activeMainRequestStoreKeyRef.current && activeMainRequestStoreKeyRef.current !== activeStoreKey) {
@@ -4855,6 +4934,11 @@ export default function ChatPage() {
                 <div className="mb-2 rounded-[22px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl">
                   <VoiceAgent
                     onTranscript={(text) => void sendThreadMessage(text)}
+                    onRealtimeTranscript={(event) => persistRealtimeTranscript(event, {
+                      sessionKey: activeThread.sessionKey,
+                      storeKey: activeThread.sessionKey.toLowerCase(),
+                      setVisibleMessages: setThreadMessages,
+                    })}
                     isPlayingAudio={isPlayingAudio}
                     onInterrupt={interruptAudio}
                     isLoading={isThreadLoading}
@@ -5833,6 +5917,11 @@ export default function ChatPage() {
                 >
                   <VoiceAgent
                     onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
+                    onRealtimeTranscript={(event) => persistRealtimeTranscript(event, {
+                      sessionKey: activeVoiceSessionKey,
+                      storeKey: activeVoiceStoreKey,
+                      setVisibleMessages: setMessages,
+                    })}
                     isPlayingAudio={isPlayingAudio}
                     onInterrupt={interruptAudio}
                     isLoading={isLoading}
@@ -5908,6 +5997,11 @@ export default function ChatPage() {
               <div className="relative max-h-[min(10.75rem,28dvh)] overflow-hidden rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl sm:max-h-none">
                 <VoiceAgent
                   onTranscript={(text) => sendMessage(text, { forceVoiceResponse: true })}
+                  onRealtimeTranscript={(event) => persistRealtimeTranscript(event, {
+                    sessionKey: activeVoiceSessionKey,
+                    storeKey: activeVoiceStoreKey,
+                    setVisibleMessages: setMessages,
+                  })}
                   isPlayingAudio={isPlayingAudio}
                   onInterrupt={interruptAudio}
                   isLoading={isLoading}

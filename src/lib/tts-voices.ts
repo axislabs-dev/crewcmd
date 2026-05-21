@@ -1,4 +1,4 @@
-export type TtsProviderId = "openai" | "elevenlabs" | "say" | "browser";
+export type TtsProviderId = "openai" | "google" | "elevenlabs" | "say" | "browser";
 
 export interface TtsVoiceOption {
   id: string;
@@ -22,6 +22,7 @@ export interface AgentVoiceSettings {
 export const TTS_PROVIDER_OPTIONS: Array<{ value: TtsProviderId | "auto"; label: string; description: string }> = [
   { value: "auto", label: "Auto", description: "Use the best available device or configured backend voice" },
   { value: "openai", label: "OpenAI", description: "Cloud neural voices" },
+  { value: "google", label: "Google", description: "Gemini realtime voices" },
   { value: "elevenlabs", label: "ElevenLabs", description: "Large voice library when configured" },
   { value: "say", label: "macOS say", description: "Local system voices" },
   { value: "browser", label: "Browser", description: "Web Speech voices on this device" },
@@ -54,6 +55,15 @@ export const OPENAI_REALTIME_VOICE_IDS = new Set([
   "shimmer",
   "verse",
 ]);
+
+export const GOOGLE_REALTIME_VOICES: TtsVoiceOption[] = [
+  { id: "Kore", name: "Kore", provider: "google", description: "Gemini realtime default" },
+  { id: "Puck", name: "Puck", provider: "google", description: "Gemini realtime voice" },
+];
+
+export const GOOGLE_REALTIME_VOICE_IDS = new Set(
+  GOOGLE_REALTIME_VOICES.map((voice) => voice.id.toLowerCase()),
+);
 
 export const DEFAULT_AGENT_VOICE_SETTINGS: AgentVoiceSettings = {
   enabled: true,
@@ -104,5 +114,9 @@ export function shouldUseDeviceTts(voice: AgentVoiceSettings) {
 }
 
 export function isRealtimeVoiceOption(voice: Pick<TtsVoiceOption, "provider" | "id">) {
-  return voice.provider === "openai" && OPENAI_REALTIME_VOICE_IDS.has(voice.id.trim().toLowerCase());
+  const voiceId = voice.id.trim().toLowerCase();
+  return (
+    (voice.provider === "openai" && OPENAI_REALTIME_VOICE_IDS.has(voiceId)) ||
+    (voice.provider === "google" && GOOGLE_REALTIME_VOICE_IDS.has(voiceId))
+  );
 }

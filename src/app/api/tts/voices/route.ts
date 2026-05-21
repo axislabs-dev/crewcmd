@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { requireAuth } from "@/lib/require-auth";
-import { OPENAI_TTS_VOICES, type TtsVoiceOption, type TtsProviderId } from "@/lib/tts-voices";
+import { GOOGLE_REALTIME_VOICES, OPENAI_TTS_VOICES, type TtsVoiceOption, type TtsProviderId } from "@/lib/tts-voices";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const provider = normalizeProvider(request.nextUrl.searchParams.get("provider"));
   const query = (request.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
 
-  const providers: TtsProviderId[] = provider === "all" ? ["openai", "elevenlabs", "say", "browser"] : [provider];
+  const providers: TtsProviderId[] = provider === "all" ? ["openai", "google", "elevenlabs", "say", "browser"] : [provider];
   const settled = await Promise.allSettled(providers.map((p) => listProviderVoices(p)));
   const voices = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   const filtered = query
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 }
 
 function normalizeProvider(value: string | null): ProviderFilter {
-  if (value === "openai" || value === "elevenlabs" || value === "say" || value === "browser") return value;
+  if (value === "openai" || value === "google" || value === "elevenlabs" || value === "say" || value === "browser") return value;
   return "all";
 }
 
@@ -42,6 +42,8 @@ async function listProviderVoices(provider: TtsProviderId): Promise<TtsVoiceOpti
   switch (provider) {
     case "openai":
       return OPENAI_TTS_VOICES;
+    case "google":
+      return GOOGLE_REALTIME_VOICES;
     case "elevenlabs":
       return listElevenLabsVoices();
     case "say":

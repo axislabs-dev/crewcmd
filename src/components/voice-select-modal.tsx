@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_AGENT_VOICE_SETTINGS,
   TTS_PROVIDER_OPTIONS,
+  isRealtimeVoiceOption,
   normalizeAgentVoiceSettings,
   type AgentVoiceSettings,
   type TtsProviderId,
@@ -12,7 +13,7 @@ import {
 
 const FAVORITES_KEY = "crewcmd.tts.favorite-voices";
 
-type ProviderFilter = TtsProviderId | "all" | "favorites";
+type ProviderFilter = TtsProviderId | "all" | "favorites" | "realtime";
 
 type VoiceSelectModalProps = {
   open: boolean;
@@ -101,7 +102,7 @@ export function VoiceSelectModal({
   useEffect(() => {
     if (!open) return;
     const params = new URLSearchParams();
-    if (provider !== "favorites") params.set("provider", provider === "all" ? "all" : provider);
+    if (provider !== "favorites") params.set("provider", provider === "all" || provider === "realtime" ? "all" : provider);
     if (query.trim()) params.set("q", query.trim());
     setLoading(true);
     setError(null);
@@ -122,6 +123,7 @@ export function VoiceSelectModal({
   }, [open, provider, query]);
 
   const filteredVoices = useMemo(() => {
+    if (provider === "realtime") return voices.filter(isRealtimeVoiceOption);
     if (provider !== "favorites") return voices;
     const favoriteSet = new Set(favorites);
     return voices.filter((voice) => favoriteSet.has(voiceKey(voice)));
@@ -230,7 +232,7 @@ export function VoiceSelectModal({
               autoFocus
             />
             <div className="flex flex-wrap gap-2">
-              {[{ value: "all", label: "All" }, { value: "favorites", label: "Favorites" }, ...TTS_PROVIDER_OPTIONS.filter((item) => item.value !== "auto")].map((item) => (
+              {[{ value: "all", label: "All" }, { value: "realtime", label: "Realtime" }, { value: "favorites", label: "Favorites" }, ...TTS_PROVIDER_OPTIONS.filter((item) => item.value !== "auto")].map((item) => (
                 <button
                   key={item.value}
                   type="button"
@@ -270,6 +272,7 @@ export function VoiceSelectModal({
               const selected = key === selectedKey;
               const favorite = favorites.includes(key);
               const sampleState = previewState?.key === key ? previewState.status : null;
+              const realtimeCapable = isRealtimeVoiceOption(voice);
               return (
                 <div
                   key={key}
@@ -295,14 +298,23 @@ export function VoiceSelectModal({
                         {voice.provider}{voice.language ? ` · ${voice.language}` : ""}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(event) => { event.stopPropagation(); toggleFavorite(voice); }}
-                      className={`rounded-full px-2 py-0.5 text-xl leading-none ${favorite ? "text-amber-300" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}
-                      aria-label={favorite ? "Remove favorite" : "Add favorite"}
-                    >
-                      ★
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                        realtimeCapable
+                          ? "border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff]"
+                          : "border-[var(--border-subtle)] text-[var(--text-tertiary)]"
+                      }`}>
+                        {realtimeCapable ? "Realtime" : "TTS"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); toggleFavorite(voice); }}
+                        className={`rounded-full px-2 py-0.5 text-xl leading-none ${favorite ? "text-amber-300" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"}`}
+                        aria-label={favorite ? "Remove favorite" : "Add favorite"}
+                      >
+                        ★
+                      </button>
+                    </div>
                   </div>
                   {voice.description && <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">{voice.description}</p>}
                   <button
@@ -334,5 +346,8 @@ export function VoiceSummary({ value }: { value?: AgentVoiceSettings | null }) {
   if (settings.enabled === false) return <span>Voice disabled</span>;
   const provider = TTS_PROVIDER_OPTIONS.find((item) => item.value === settings.provider)?.label ?? settings.provider ?? "Auto";
   const name = settings.voiceName || settings.voiceId || (settings.preferNative ? "Device default" : "Auto voice");
-  return <span>{name} · {provider}{settings.preferNative ? " · native preferred" : ""}</span>;
+  const realtime = settings.provider && settings.voiceId
+    ? isRealtimeVoiceOption({ provider: settings.provider as TtsProviderId, id: settings.voiceId })
+    : false;
+  return <span>{name} · {provider}{realtime ? " · realtime" : ""}{settings.preferNative ? " · native preferred" : ""}</span>;
 }

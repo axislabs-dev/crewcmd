@@ -131,6 +131,19 @@ describe("realtime voice client helpers", () => {
     });
   });
 
+  it("maps Google voice selections to realtime session settings", () => {
+    expect(resolveRealtimeVoiceSessionSettings({
+      enabled: true,
+      provider: "google",
+      voiceId: "Kore",
+      model: "gemini-2.5-flash-native-audio-preview-12-2025",
+    })).toEqual({
+      provider: "google",
+      voice: "Kore",
+      model: "gemini-2.5-flash-native-audio-preview-12-2025",
+    });
+  });
+
   it("does not forward non-realtime TTS voice settings", () => {
     expect(resolveRealtimeVoiceSessionSettings({
       enabled: true,

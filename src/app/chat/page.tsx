@@ -148,6 +148,17 @@ type ChatExecutionSnapshot = {
   events?: ExecutionProgressEvent[];
 } | null;
 
+type ExecutionAuditGroup = {
+  id: string;
+  createdAt: string;
+  progress: ExecutionProgressEvent | null;
+  events: ExecutionProgressEvent[];
+};
+
+type TranscriptTimelineItem =
+  | { type: "message"; message: Message; index: number }
+  | { type: "audit"; audit: ExecutionAuditGroup };
+
 type ChatHistoryLoadResult = {
   sessionId: string | null;
   execution: ChatExecutionSnapshot;
@@ -908,6 +919,55 @@ function uniqueMessagesById(messages: Message[]) {
     if (seen.has(message.id)) return false;
     seen.add(message.id);
     return true;
+  });
+}
+
+function eventTimeMs(event: ExecutionProgressEvent) {
+  const parsed = event.at ? Date.parse(event.at) : NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function groupKeyForExecutionEvent(event: ExecutionProgressEvent, index: number) {
+  return event.runId || event.activeTool?.id || event.checkpoint?.id || `audit-${index}`;
+}
+
+function buildExecutionAuditGroups(events: ExecutionProgressEvent[]): ExecutionAuditGroup[] {
+  const groups = new Map<string, ExecutionProgressEvent[]>();
+  events.forEach((event, index) => {
+    if (!event.activeTool && !event.checkpoint) return;
+    const key = groupKeyForExecutionEvent(event, index);
+    groups.set(key, [...(groups.get(key) ?? []), event]);
+  });
+
+  return Array.from(groups.entries())
+    .map(([id, groupEvents]) => {
+      const sortedEvents = [...groupEvents].sort((a, b) => eventTimeMs(a) - eventTimeMs(b));
+      const firstEvent = sortedEvents[0];
+      const lastEvent = sortedEvents[sortedEvents.length - 1];
+      return {
+        id,
+        createdAt: firstEvent?.at ?? lastEvent?.at ?? new Date().toISOString(),
+        progress: lastEvent ?? null,
+        events: sortedEvents,
+      };
+    })
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
+
+function buildTranscriptTimeline(messages: Message[], audits: ExecutionAuditGroup[]): TranscriptTimelineItem[] {
+  const items: TranscriptTimelineItem[] = [
+    ...messages.map((message, index) => ({ type: "message" as const, message, index })),
+    ...audits.map((audit) => ({ type: "audit" as const, audit })),
+  ];
+
+  return items.sort((a, b) => {
+    const aTime = Date.parse(a.type === "message" ? a.message.createdAt ?? "" : a.audit.createdAt);
+    const bTime = Date.parse(b.type === "message" ? b.message.createdAt ?? "" : b.audit.createdAt);
+    const safeATime = Number.isFinite(aTime) ? aTime : 0;
+    const safeBTime = Number.isFinite(bTime) ? bTime : 0;
+    if (safeATime !== safeBTime) return safeATime - safeBTime;
+    if (a.type === b.type) return 0;
+    return a.type === "message" ? -1 : 1;
   });
 }
 
@@ -2506,6 +2566,14 @@ export default function ChatPage() {
   const hasPersistedExecutionActivity = useMemo(
     () => executionEvents.some((event) => event.activeTool || event.checkpoint),
     [executionEvents]
+  );
+  const executionAuditGroups = useMemo(
+    () => buildExecutionAuditGroups(executionEvents),
+    [executionEvents]
+  );
+  const transcriptTimelineItems = useMemo(
+    () => buildTranscriptTimeline(transcriptItems, executionAuditGroups),
+    [executionAuditGroups, transcriptItems]
   );
 
   const scrollToMessage = useCallback((messageId: string) => {
@@ -5737,10 +5805,31 @@ export default function ChatPage() {
             </div>
           )}
 
-          {transcriptItems.map((msg, i) => {
-            const prevDate = i > 0 ? getDateKey(transcriptItems[i - 1].createdAt) : null;
-            const currDate = getDateKey(msg.createdAt);
+          {transcriptTimelineItems.map((item, i) => {
+            const itemDate = item.type === "message" ? item.message.createdAt : item.audit.createdAt;
+            const prevItem = i > 0 ? transcriptTimelineItems[i - 1] : null;
+            const prevDate = prevItem
+              ? getDateKey(prevItem.type === "message" ? prevItem.message.createdAt : prevItem.audit.createdAt)
+              : null;
+            const currDate = getDateKey(itemDate);
             const showSeparator = currDate && currDate !== prevDate;
+            if (item.type === "audit") {
+              return (
+                <div key={`audit-${item.audit.id}`} className="scroll-mt-24">
+                  {showSeparator && <DateSeparator date={item.audit.createdAt} />}
+                  <ExecutionProgressPanel
+                    progress={item.audit.progress}
+                    events={item.audit.events}
+                    isLoading={false}
+                    hasStreamingContent={false}
+                    agentColor={agentColor}
+                  />
+                </div>
+              );
+            }
+
+            const msg = item.message;
+            const messageIndex = item.index;
             const threadSummary = threadReplySummaries[`id:${threadParentIdForMessage(msg)}`];
             const threadReplies = threadSummary?.replies ?? [];
             const canPersistMessageAction = isUuid(msg.id);
@@ -5767,7 +5856,7 @@ export default function ChatPage() {
                     authorEmoji={msg.role === "assistant" ? agentEmoji : null}
                     identityDetails={msg.role === "user" ? userIdentityDetails : assistantIdentityDetails}
                     onOpenIdentity={setActiveIdentityProfile}
-                    onReplyInThread={() => openThreadForMessage(msg, i, threadSummary?.sessionKey)}
+                    onReplyInThread={() => openThreadForMessage(msg, messageIndex, threadSummary?.sessionKey)}
                     onTogglePin={canPersistMessageAction ? () => void togglePin(msg) : undefined}
                     onToggleSaved={canPersistMessageAction ? () => void toggleSaved(msg) : undefined}
                     isPinned={pinnedMessageIds.has(msg.id)}
@@ -5785,7 +5874,7 @@ export default function ChatPage() {
           })}
 
           {/* Execution progress */}
-          {(isLoading || executionProgress || hasPersistedExecutionActivity) && (
+          {(isLoading || executionProgress || (hasPersistedExecutionActivity && executionAuditGroups.length === 0)) && (
             <ExecutionProgressPanel
               progress={executionProgress}
               events={executionEvents}

@@ -748,6 +748,17 @@ export class GatewayClient {
   async realtimeTalkSession(
     params: GatewayRealtimeTalkSessionParams = {},
   ): Promise<GatewayRealtimeTalkSessionResult> {
+    const clientParams = withoutUndefined(params);
+    try {
+      return await this.rpc<GatewayRealtimeTalkSessionResult>("talk.client.create", clientParams);
+    } catch (err) {
+      if (
+        !isLikelyMissingGatewayMethod(err) &&
+        params.transport &&
+        params.transport !== "gateway-relay"
+      ) throw err;
+    }
+
     try {
       const sessionParams = withoutUndefined(params);
       delete sessionParams.agentId;

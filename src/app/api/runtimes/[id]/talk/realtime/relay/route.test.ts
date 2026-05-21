@@ -152,7 +152,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
       event: "chat",
       runId: "run_1",
       state: "final",
-      message: { content: "The repo is a CrewCMD app." },
+      message: { content: [{ type: "text", text: "The repo is a CrewCMD app." }] },
     });
 
     const response = await responsePromise;
@@ -182,6 +182,72 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
       result: { text: "The repo is a CrewCMD app." },
     });
     expect(mockHoldClient).toHaveBeenCalledWith(client);
+    expect(mockReleaseClient).toHaveBeenCalledWith(client);
+  });
+
+  it("extracts final realtime consult text from OpenClaw trace artifacts", async () => {
+    let gatewayHandler: ((payload: unknown) => void) | null = null;
+    const client = {
+      realtimeClientToolCall: vi.fn().mockResolvedValue({ ok: true, runId: "run_1" }),
+      realtimeRelayToolResult: vi.fn().mockResolvedValue({ ok: true }),
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") gatewayHandler = handler;
+      }),
+      off: vi.fn(),
+    };
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue(client);
+
+    const responsePromise = POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/relay", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "toolCall",
+          relaySessionId: "relay_1",
+          sessionKey: "main",
+          callId: "call_1",
+          name: "openclaw_agent_consult",
+          args: { prompt: "Inspect this repo" },
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    await vi.waitFor(() => {
+      expect(client.realtimeClientToolCall).toHaveBeenCalledWith({
+        relaySessionId: "relay_1",
+        sessionKey: "main",
+        callId: "call_1",
+        name: "openclaw_agent_consult",
+        args: { prompt: "Inspect this repo" },
+      });
+      expect(gatewayHandler).toBeTypeOf("function");
+    });
+
+    (gatewayHandler as ((payload: unknown) => void) | null)?.({
+      event: "trace.artifacts",
+      runId: "run_1",
+      state: "completed",
+      data: {
+        assistantTexts: ["The README describes the ClutchCut content engine."],
+      },
+    });
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      result: {
+        delegated: true,
+        runId: "run_1",
+        finalText: "The README describes the ClutchCut content engine.",
+        result: { ok: true },
+      },
+    });
+    expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { text: "The README describes the ClutchCut content engine." },
+    });
     expect(mockReleaseClient).toHaveBeenCalledWith(client);
   });
 

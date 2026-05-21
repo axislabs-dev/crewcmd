@@ -88,4 +88,25 @@ describe("GatewayClient realtime Talk compatibility", () => {
       reason: "barge-in",
     });
   });
+
+  it("forwards realtime provider tool calls through OpenClaw client tool calls", async () => {
+    const client = new GatewayClient("ws://localhost:18789", null, device);
+    const rpc = vi.spyOn(client, "rpc").mockResolvedValue({ runId: "run_1" });
+
+    await expect(client.realtimeClientToolCall({
+      sessionKey: "main",
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      name: "openclaw_agent_consult",
+      args: { prompt: "Inspect this repo" },
+    })).resolves.toEqual({ runId: "run_1" });
+
+    expect(rpc).toHaveBeenCalledWith("talk.client.toolCall", {
+      sessionKey: "main",
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      name: "openclaw_agent_consult",
+      args: { prompt: "Inspect this repo" },
+    });
+  });
 });

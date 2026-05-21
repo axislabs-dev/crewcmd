@@ -8,9 +8,11 @@ type RuntimeRow = {
 type Field = { key: keyof RuntimeRow };
 type Predicate = (row: RuntimeRow) => boolean;
 
-const { mockRuntimeRows, mockGetGatewayClientForRuntime } = vi.hoisted(() => ({
+const { mockRuntimeRows, mockGetGatewayClientForRuntime, mockHoldClient, mockReleaseClient } = vi.hoisted(() => ({
   mockRuntimeRows: [] as RuntimeRow[],
   mockGetGatewayClientForRuntime: vi.fn(),
+  mockHoldClient: vi.fn(),
+  mockReleaseClient: vi.fn(),
 }));
 
 vi.mock("@/db/schema", () => ({
@@ -46,6 +48,8 @@ vi.mock("@/lib/agent-access", () => ({
 
 vi.mock("@/lib/gateway-chat-pool", () => ({
   getGatewayClientForRuntime: (...args: unknown[]) => mockGetGatewayClientForRuntime(...args),
+  holdClient: (...args: unknown[]) => mockHoldClient(...args),
+  releaseClient: (...args: unknown[]) => mockReleaseClient(...args),
 }));
 
 import { POST } from "./route";
@@ -103,6 +107,70 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ result: { ok: true } });
     expect(realtimeRelayCancelOutput).toHaveBeenCalledWith("relay_1", "barge-in");
+  });
+
+  it("delegates realtime tool calls to OpenClaw and submits the final result", async () => {
+    let gatewayHandler: ((payload: unknown) => void) | null = null;
+    const client = {
+      realtimeClientToolCall: vi.fn().mockResolvedValue({ runId: "run_1" }),
+      realtimeRelayToolResult: vi.fn().mockResolvedValue({ ok: true }),
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") gatewayHandler = handler;
+      }),
+      off: vi.fn(),
+    };
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue(client);
+
+    const responsePromise = POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/relay", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "toolCall",
+          relaySessionId: "relay_1",
+          sessionKey: "main",
+          callId: "call_1",
+          name: "openclaw_agent_consult",
+          args: { prompt: "Inspect this repo" },
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    await vi.waitFor(() => {
+      expect(client.realtimeClientToolCall).toHaveBeenCalledWith({
+        relaySessionId: "relay_1",
+        sessionKey: "main",
+        callId: "call_1",
+        name: "openclaw_agent_consult",
+        args: { prompt: "Inspect this repo" },
+      });
+      expect(gatewayHandler).toBeTypeOf("function");
+    });
+
+    (gatewayHandler as ((payload: unknown) => void) | null)?.({
+      event: "chat",
+      runId: "run_1",
+      state: "final",
+      message: { content: "The repo is a CrewCMD app." },
+    });
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      result: {
+        delegated: true,
+        runId: "run_1",
+        result: { ok: true },
+      },
+    });
+    expect(client.realtimeRelayToolResult).toHaveBeenCalledWith({
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { result: "The repo is a CrewCMD app." },
+    });
+    expect(mockHoldClient).toHaveBeenCalledWith(client);
+    expect(mockReleaseClient).toHaveBeenCalledWith(client);
   });
 
   it("rejects invalid relay actions before calling the gateway", async () => {

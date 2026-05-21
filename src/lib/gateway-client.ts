@@ -207,6 +207,19 @@ export interface GatewayRealtimeRelayToolResultParams extends Record<string, unk
   };
 }
 
+export interface GatewayRealtimeClientToolCallParams extends Record<string, unknown> {
+  sessionKey: string;
+  callId: string;
+  name: string;
+  args?: unknown;
+  relaySessionId?: string;
+}
+
+export interface GatewayRealtimeClientToolCallResult {
+  runId?: string;
+  idempotencyKey?: string;
+}
+
 export interface GatewayCronJob {
   id: string;
   agentId?: string;
@@ -792,6 +805,12 @@ export class GatewayClient {
       if (!isLikelyMissingGatewayMethod(err)) throw err;
       return this.rpc<{ ok?: boolean }>("talk.realtime.relayToolResult", params);
     }
+  }
+
+  async realtimeClientToolCall(
+    params: GatewayRealtimeClientToolCallParams,
+  ): Promise<GatewayRealtimeClientToolCallResult> {
+    return this.rpc<GatewayRealtimeClientToolCallResult>("talk.client.toolCall", withoutUndefined(params));
   }
 
   async realtimeRelayStop(relaySessionId: string): Promise<{ ok?: boolean }> {

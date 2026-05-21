@@ -3,6 +3,7 @@ import {
   cancelRealtimeRelayOutput,
   openRealtimeRelayEvents,
   sendRealtimeRelayAudio,
+  sendRealtimeRelayToolCall,
   startRealtimeVoiceSession,
 } from "./realtime-voice-client";
 
@@ -21,7 +22,7 @@ describe("realtime voice client helpers", () => {
       runtimeId: "rt 1",
       sessionKey: "main",
       provider: "openai",
-    })).resolves.toEqual({ transport: "gateway-relay", relaySessionId: "relay_1" });
+    })).resolves.toEqual({ transport: "gateway-relay", relaySessionId: "relay_1", sessionKey: "main" });
 
     expect(fetchMock).toHaveBeenCalledWith("/api/runtimes/rt%201/talk/realtime/session", {
       method: "POST",
@@ -73,6 +74,34 @@ describe("realtime voice client helpers", () => {
         action: "cancelOutput",
         relaySessionId: "relay_1",
         reason: "barge-in",
+      }),
+    });
+  });
+
+  it("sends provider tool calls through the runtime relay route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ result: { delegated: true } }),
+    } as Response);
+
+    await sendRealtimeRelayToolCall("rt_1", {
+      relaySessionId: "relay_1",
+      sessionKey: "main",
+      callId: "call_1",
+      name: "openclaw_agent_consult",
+      args: { prompt: "Inspect this repo" },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtimes/rt_1/talk/realtime/relay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "toolCall",
+        relaySessionId: "relay_1",
+        sessionKey: "main",
+        callId: "call_1",
+        name: "openclaw_agent_consult",
+        args: { prompt: "Inspect this repo" },
       }),
     });
   });

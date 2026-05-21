@@ -97,6 +97,7 @@ export class RealtimeGatewayRelaySession {
   private cancelRequestedForPlayback = false;
   private speechFramesDuringPlayback = 0;
   private outputStartedAtMs: number | null = null;
+  private pendingToolCalls = 0;
   private readonly bargeInProfile = resolveRealtimeBargeInProfile();
 
   constructor(
@@ -229,6 +230,7 @@ export class RealtimeGatewayRelaySession {
         return;
       case "transcript":
         if (event.role && event.text) {
+          if (event.role === "assistant" && this.pendingToolCalls > 0) return;
           this.callbacks.onTranscript?.({
             role: event.role,
             text: event.text,
@@ -299,20 +301,34 @@ export class RealtimeGatewayRelaySession {
     const name = event.name;
 
     this.callbacks.onStatus?.("processing", "Consulting OpenClaw");
-    void sendRealtimeRelayToolCall(this.runtimeId, {
-      relaySessionId,
-      sessionKey,
-      callId,
-      name,
-      args: event.args ?? {},
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      this.callbacks.onError?.(message);
-      void sendRealtimeRelayToolResult(this.runtimeId, relaySessionId, callId, {
-        error: message,
-        name,
-      }).catch(() => {});
-    });
+    this.pendingToolCalls += 1;
+    void (async () => {
+      try {
+        const result = await sendRealtimeRelayToolCall(this.runtimeId, {
+          relaySessionId,
+          sessionKey,
+          callId,
+          name,
+          args: event.args ?? {},
+        });
+        if (result.finalText?.trim()) {
+          this.callbacks.onTranscript?.({
+            role: "assistant",
+            text: result.finalText.trim(),
+            final: true,
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.callbacks.onError?.(message);
+        void sendRealtimeRelayToolResult(this.runtimeId, relaySessionId, callId, {
+          error: message,
+          name,
+        }).catch(() => {});
+      } finally {
+        this.pendingToolCalls = Math.max(0, this.pendingToolCalls - 1);
+      }
+    })();
   }
 
   private cancelOutputForBargeIn(): void {

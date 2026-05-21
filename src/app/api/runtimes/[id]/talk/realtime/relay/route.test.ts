@@ -161,6 +161,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
       result: {
         delegated: true,
         runId: "run_1",
+        finalText: "The repo is a CrewCMD app.",
         result: { ok: true },
       },
     });

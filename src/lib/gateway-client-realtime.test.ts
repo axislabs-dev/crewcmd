@@ -9,7 +9,7 @@ const device: DeviceIdentity = {
 };
 
 describe("GatewayClient realtime Talk compatibility", () => {
-  it("creates gateway relay sessions through the unified Talk session API", async () => {
+  it("creates realtime talk sessions through the OpenClaw client Talk API", async () => {
     const client = new GatewayClient("ws://localhost:18789", null, device);
     const rpc = vi.spyOn(client, "rpc").mockResolvedValueOnce({
       transport: "gateway-relay",
@@ -25,7 +25,37 @@ describe("GatewayClient realtime Talk compatibility", () => {
       relaySessionId: "relay_1",
     });
 
-    expect(rpc).toHaveBeenCalledWith("talk.session.create", {
+    expect(rpc).toHaveBeenCalledWith("talk.client.create", {
+      sessionKey: "main",
+      provider: "openai",
+      agentId: "NEO",
+    });
+  });
+
+  it("falls back to the unified Talk session API when client Talk create is unavailable", async () => {
+    const client = new GatewayClient("ws://localhost:18789", null, device);
+    const rpc = vi.spyOn(client, "rpc")
+      .mockRejectedValueOnce(new Error("method not found"))
+      .mockResolvedValueOnce({
+        transport: "gateway-relay",
+        relaySessionId: "relay_1",
+      });
+
+    await expect(client.realtimeTalkSession({
+      sessionKey: "main",
+      provider: "openai",
+      agentId: "NEO",
+    })).resolves.toMatchObject({
+      transport: "gateway-relay",
+      relaySessionId: "relay_1",
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, "talk.client.create", {
+      sessionKey: "main",
+      provider: "openai",
+      agentId: "NEO",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "talk.session.create", {
       sessionKey: "main",
       provider: "openai",
       mode: "realtime",

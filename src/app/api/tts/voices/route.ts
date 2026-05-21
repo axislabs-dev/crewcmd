@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { and, eq } from "drizzle-orm";
+import { db, withRetry } from "@/db";
+import { companyRuntimes } from "@/db/schema";
+import { buildRuntimeReadWhere, getAgentAccessContext } from "@/lib/agent-access";
+import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
 import { requireAuth } from "@/lib/require-auth";
 import { GOOGLE_REALTIME_VOICES, OPENAI_TTS_VOICES, type TtsVoiceOption, type TtsProviderId } from "@/lib/tts-voices";
 
@@ -18,9 +23,10 @@ export async function GET(request: NextRequest) {
 
   const provider = normalizeProvider(request.nextUrl.searchParams.get("provider"));
   const query = (request.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
+  const configuredRealtimeProviders = await listConfiguredRealtimeProviders();
 
   const providers: TtsProviderId[] = provider === "all" ? ["openai", "google", "elevenlabs", "say", "browser"] : [provider];
-  const settled = await Promise.allSettled(providers.map((p) => listProviderVoices(p)));
+  const settled = await Promise.allSettled(providers.map((p) => listProviderVoices(p, configuredRealtimeProviders)));
   const voices = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   const filtered = query
     ? voices.filter((voice) =>
@@ -38,7 +44,18 @@ function normalizeProvider(value: string | null): ProviderFilter {
   return "all";
 }
 
-async function listProviderVoices(provider: TtsProviderId): Promise<TtsVoiceOption[]> {
+async function listProviderVoices(
+  provider: TtsProviderId,
+  configuredRealtimeProviders: Set<string> | null,
+): Promise<TtsVoiceOption[]> {
+  if (
+    (provider === "openai" || provider === "google") &&
+    configuredRealtimeProviders &&
+    !configuredRealtimeProviders.has(provider)
+  ) {
+    return [];
+  }
+
   switch (provider) {
     case "openai":
       return OPENAI_TTS_VOICES;
@@ -50,6 +67,37 @@ async function listProviderVoices(provider: TtsProviderId): Promise<TtsVoiceOpti
       return listSayVoices();
     case "browser":
       return [];
+  }
+}
+
+async function listConfiguredRealtimeProviders(): Promise<Set<string> | null> {
+  try {
+    if (!db) return null;
+    const access = await getAgentAccessContext();
+    const readable = buildRuntimeReadWhere(access);
+    if (!readable) return null;
+
+    const [runtime] = await withRetry(() =>
+      db!
+        .select({ id: companyRuntimes.id })
+        .from(companyRuntimes)
+        .where(and(readable, eq(companyRuntimes.isPrimary, true)))
+        .limit(1)
+    );
+    if (!runtime) return null;
+
+    const catalog = await (await getGatewayClientForRuntime(runtime.id)).talkCatalog();
+    const providers = catalog.realtime?.providers;
+    if (!Array.isArray(providers)) return null;
+
+    return new Set(
+      providers
+        .filter((provider) => provider.configured === true)
+        .map((provider) => provider.id.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  } catch {
+    return null;
   }
 }
 

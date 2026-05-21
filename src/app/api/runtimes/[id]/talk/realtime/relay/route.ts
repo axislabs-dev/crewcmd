@@ -137,7 +137,7 @@ async function runRealtimeToolCall(
         callId: params.callId,
         result: { result: text },
       });
-      return { delegated: true, runId, result };
+      return { delegated: true, runId, result, finalText: text };
     } catch (error) {
       const message = error instanceof Error ? error.message : "OpenClaw realtime tool call failed";
       await client.realtimeRelayToolResult({

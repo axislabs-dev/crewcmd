@@ -1,19 +1,10 @@
-import { normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/tts-voices";
+import {
+  OPENAI_REALTIME_VOICE_IDS,
+  normalizeAgentVoiceSettings,
+  type AgentVoiceSettings,
+} from "@/lib/tts-voices";
 
 export type RealtimeVoiceTransport = "webrtc-sdp" | "json-pcm-websocket" | "gateway-relay";
-
-const OPENAI_REALTIME_VOICE_IDS = new Set([
-  "alloy",
-  "ash",
-  "ballad",
-  "cedar",
-  "coral",
-  "echo",
-  "marin",
-  "sage",
-  "shimmer",
-  "verse",
-]);
 
 export interface RealtimeVoiceSessionRequest {
   runtimeId: string;

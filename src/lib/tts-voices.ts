@@ -42,6 +42,19 @@ export const OPENAI_TTS_VOICES: TtsVoiceOption[] = [
   { id: "shimmer", name: "Shimmer", provider: "openai", description: "Light, clear" },
 ];
 
+export const OPENAI_REALTIME_VOICE_IDS = new Set([
+  "alloy",
+  "ash",
+  "ballad",
+  "cedar",
+  "coral",
+  "echo",
+  "marin",
+  "sage",
+  "shimmer",
+  "verse",
+]);
+
 export const DEFAULT_AGENT_VOICE_SETTINGS: AgentVoiceSettings = {
   enabled: true,
   provider: "auto",
@@ -88,4 +101,8 @@ export function shouldUseDeviceTts(voice: AgentVoiceSettings) {
     voice.provider === "say" ||
     (voice.preferNative === true && !isExplicitServerVoice(voice))
   );
+}
+
+export function isRealtimeVoiceOption(voice: Pick<TtsVoiceOption, "provider" | "id">) {
+  return voice.provider === "openai" && OPENAI_REALTIME_VOICE_IDS.has(voice.id.trim().toLowerCase());
 }

@@ -181,7 +181,7 @@ function waitForChatFinal(client: GatewayClient, runId: string, timeoutMs = 110_
 
       const state = firstString(event.state, event.status)?.toLowerCase();
       if (state === "final" || state === "complete" || state === "completed") {
-        const text = extractText(event.message ?? event);
+        const text = extractText(event.message) || extractText(event);
         cleanup();
         resolve(text || "OpenClaw completed without returning text.");
         return;
@@ -263,15 +263,17 @@ function extractText(value: unknown, seen = new WeakSet<object>()): string {
   }
 
   const record = value as Record<string, unknown>;
-  const direct = firstString(record.text, record.content, record.output, record.result);
+  const direct = firstString(record.text, record.output, record.result, record.finalText);
   if (direct) return direct;
 
   return [
+    record.content,
     record.message,
     record.delta,
     record.data,
     record.payload,
     record.parts,
     record.items,
+    record.assistantTexts,
   ].map((item) => extractText(item, seen)).filter(Boolean).join("");
 }

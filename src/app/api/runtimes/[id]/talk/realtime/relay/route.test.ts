@@ -109,7 +109,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(realtimeRelayCancelOutput).toHaveBeenCalledWith("relay_1", "barge-in");
   });
 
-  it("delegates realtime tool calls to OpenClaw and submits the final result", async () => {
+  it("delegates realtime tool calls to OpenClaw and keeps the relay waiting for the final result", async () => {
     let gatewayHandler: ((payload: unknown) => void) | null = null;
     const client = {
       realtimeClientToolCall: vi.fn().mockResolvedValue({ runId: "run_1" }),
@@ -164,7 +164,18 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
         result: { ok: true },
       },
     });
-    expect(client.realtimeRelayToolResult).toHaveBeenCalledWith({
+    expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(1, {
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: {
+        status: "working",
+        tool: "openclaw_agent_consult",
+        message:
+          "Tell the person briefly that you are checking, then wait for the final OpenClaw result before answering with the actual result.",
+      },
+      options: { willContinue: true },
+    });
+    expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
       relaySessionId: "relay_1",
       callId: "call_1",
       result: { result: "The repo is a CrewCMD app." },

@@ -1,4 +1,5 @@
 import {
+  cancelRealtimeRelayOutput,
   openRealtimeRelayEvents,
   sendRealtimeRelayAudio,
   sendRealtimeRelayMark,
@@ -9,6 +10,10 @@ import {
 import { base64ToBytes, bytesToBase64, floatToPcm16, pcm16ToFloat, rmsLevel } from "./realtime-voice-audio";
 
 export type RealtimeVoiceStatus = "idle" | "listening" | "processing" | "speaking" | "error";
+
+const BARGE_IN_RMS_THRESHOLD = 0.02;
+const BARGE_IN_PEAK_THRESHOLD = 0.08;
+const BARGE_IN_FRAMES = 2;
 
 export interface RealtimeGatewayRelayCallbacks {
   onStatus?: (status: RealtimeVoiceStatus, message?: string) => void;
@@ -50,6 +55,8 @@ export class RealtimeGatewayRelaySession {
   private readonly sources = new Set<AudioBufferSourceNode>();
   private playhead = 0;
   private closed = false;
+  private cancelRequestedForPlayback = false;
+  private speechFramesDuringPlayback = 0;
 
   constructor(
     private readonly runtimeId: string,
@@ -128,6 +135,7 @@ export class RealtimeGatewayRelaySession {
     }
     this.sources.clear();
     this.playhead = this.outputContext?.currentTime ?? 0;
+    this.speechFramesDuringPlayback = 0;
     this.callbacks.onSpeakingChange?.(false);
   }
 
@@ -141,6 +149,7 @@ export class RealtimeGatewayRelaySession {
       const input = event.inputBuffer.getChannelData(0);
       this.callbacks.onVoiceLevel?.(rmsLevel(input));
       const pcm = floatToPcm16(input);
+      if (this.detectBargeInSpeech(input)) this.cancelOutputForBargeIn();
       void sendRealtimeRelayAudio(this.runtimeId, {
         relaySessionId: this.session.relaySessionId,
         audioBase64: bytesToBase64(pcm),
@@ -162,7 +171,10 @@ export class RealtimeGatewayRelaySession {
         this.callbacks.onStatus?.("listening");
         return;
       case "audio":
-        if (event.audioBase64) this.playPcm16(event.audioBase64);
+        if (event.audioBase64) {
+          this.cancelRequestedForPlayback = false;
+          this.playPcm16(event.audioBase64);
+        }
         return;
       case "clear":
         this.stopOutput();
@@ -234,5 +246,40 @@ export class RealtimeGatewayRelaySession {
       error: "Realtime browser tool calls are not wired into CrewCMD yet.",
       name: event.name ?? null,
     }).catch(() => {});
+  }
+
+  private cancelOutputForBargeIn(): void {
+    if (!this.session.relaySessionId || this.cancelRequestedForPlayback) return;
+    this.cancelRequestedForPlayback = true;
+    this.stopOutput();
+    this.callbacks.onStatus?.("listening", "Interrupted");
+    void cancelRealtimeRelayOutput(this.runtimeId, this.session.relaySessionId, "barge-in").catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.callbacks.onError?.(message);
+    });
+  }
+
+  private detectBargeInSpeech(input: Float32Array): boolean {
+    if (this.sources.size === 0 || this.cancelRequestedForPlayback || input.length === 0) {
+      this.speechFramesDuringPlayback = 0;
+      return false;
+    }
+
+    let peak = 0;
+    let sum = 0;
+    for (const sample of input) {
+      const abs = Math.abs(sample);
+      peak = Math.max(peak, abs);
+      sum += sample * sample;
+    }
+
+    const rms = Math.sqrt(sum / input.length);
+    if (rms >= BARGE_IN_RMS_THRESHOLD && peak >= BARGE_IN_PEAK_THRESHOLD) {
+      this.speechFramesDuringPlayback += 1;
+    } else {
+      this.speechFramesDuringPlayback = 0;
+    }
+
+    return this.speechFramesDuringPlayback >= BARGE_IN_FRAMES;
   }
 }

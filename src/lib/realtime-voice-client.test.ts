@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cancelRealtimeRelayOutput,
   openRealtimeRelayEvents,
   sendRealtimeRelayAudio,
   startRealtimeVoiceSession,
@@ -53,6 +54,25 @@ describe("realtime voice client helpers", () => {
         action: "audio",
         relaySessionId: "relay_1",
         audioBase64: "AAAA",
+      }),
+    });
+  });
+
+  it("sends output cancellation through the runtime relay route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ result: { ok: true } }),
+    } as Response);
+
+    await cancelRealtimeRelayOutput("rt_1", "relay_1", "barge-in");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtimes/rt_1/talk/realtime/relay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "cancelOutput",
+        relaySessionId: "relay_1",
+        reason: "barge-in",
       }),
     });
   });

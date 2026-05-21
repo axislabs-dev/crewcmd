@@ -75,6 +75,18 @@ export async function sendRealtimeRelayMark(runtimeId: string, relaySessionId: s
   });
 }
 
+export async function cancelRealtimeRelayOutput(
+  runtimeId: string,
+  relaySessionId: string,
+  reason = "barge-in",
+): Promise<void> {
+  await postRealtimeRelay(runtimeId, {
+    action: "cancelOutput",
+    relaySessionId,
+    reason,
+  });
+}
+
 export async function sendRealtimeRelayToolResult(
   runtimeId: string,
   relaySessionId: string,

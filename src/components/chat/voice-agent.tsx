@@ -570,6 +570,23 @@ export function VoiceAgent({
       detail: nativeAvailability,
     });
 
+    if (await startRealtimeRelay(sessionId)) {
+      recordVoiceBreadcrumb("activate.realtime-relay", {
+        nativeAvailable: nativeAvailability.available,
+        nativeBackgroundCapable: nativeAvailability.backgroundCapable,
+      });
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "activate.realtime-relay",
+        sessionId,
+        detail: {
+          nativeAvailable: nativeAvailability.available,
+          nativeBackgroundCapable: nativeAvailability.backgroundCapable,
+        },
+      });
+      return;
+    }
+
     if (nativeAvailability.available) {
       try {
         const nativeSession = await startNativeVoiceSession({
@@ -634,16 +651,6 @@ export function VoiceAgent({
           reason: "refuse-web-audio-fallback-in-native-shell",
           nativeAvailability,
         },
-      });
-      return;
-    }
-
-    if (await startRealtimeRelay(sessionId)) {
-      recordVoiceBreadcrumb("activate.realtime-relay");
-      publishAgentModeDiagnostic({
-        scope: "voice-agent",
-        event: "activate.realtime-relay",
-        sessionId,
       });
       return;
     }

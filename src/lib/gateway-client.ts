@@ -768,6 +768,18 @@ export class GatewayClient {
     return { ok: true };
   }
 
+  async realtimeRelayCancelOutput(relaySessionId: string, reason?: string): Promise<{ ok?: boolean }> {
+    try {
+      return await this.rpc<{ ok?: boolean }>("talk.session.cancelOutput", withoutUndefined({
+        sessionId: relaySessionId,
+        reason,
+      }));
+    } catch (err) {
+      if (!isLikelyMissingGatewayMethod(err)) throw err;
+      return { ok: true };
+    }
+  }
+
   async realtimeRelayToolResult(params: GatewayRealtimeRelayToolResultParams): Promise<{ ok?: boolean }> {
     try {
       return await this.rpc<{ ok?: boolean }>("talk.session.submitToolResult", withoutUndefined({

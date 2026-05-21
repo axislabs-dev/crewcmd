@@ -76,4 +76,16 @@ describe("GatewayClient realtime Talk compatibility", () => {
 
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it("maps output cancellation onto the unified session API", async () => {
+    const client = new GatewayClient("ws://localhost:18789", null, device);
+    const rpc = vi.spyOn(client, "rpc").mockResolvedValue({ ok: true });
+
+    await expect(client.realtimeRelayCancelOutput("relay_1", "barge-in")).resolves.toEqual({ ok: true });
+
+    expect(rpc).toHaveBeenCalledWith("talk.session.cancelOutput", {
+      sessionId: "relay_1",
+      reason: "barge-in",
+    });
+  });
 });

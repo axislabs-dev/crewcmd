@@ -13,13 +13,13 @@ import { base64ToBytes, bytesToBase64, floatToPcm16, pcm16ToFloat, rmsLevel } fr
 
 export type RealtimeVoiceStatus = "idle" | "listening" | "processing" | "speaking" | "error";
 
-const BARGE_IN_RMS_THRESHOLD = 0.02;
-const BARGE_IN_PEAK_THRESHOLD = 0.08;
-const BARGE_IN_FRAMES = 2;
-const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.055;
-const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.16;
-const MOBILE_BARGE_IN_FRAMES = 4;
-const MOBILE_BARGE_IN_GRACE_MS = 750;
+const BARGE_IN_RMS_THRESHOLD = 0.03;
+const BARGE_IN_PEAK_THRESHOLD = 0.1;
+const BARGE_IN_FRAMES = 3;
+const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.075;
+const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.22;
+const MOBILE_BARGE_IN_FRAMES = 7;
+const MOBILE_BARGE_IN_GRACE_MS = 1200;
 const REALTIME_VOICE_CONTEXT_LIMIT = 8;
 
 export interface RealtimeBargeInProfile {

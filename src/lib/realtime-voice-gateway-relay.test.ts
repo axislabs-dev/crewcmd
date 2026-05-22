@@ -16,11 +16,11 @@ function inputWithLevel(level: number) {
 }
 
 describe("realtime gateway relay barge-in detection", () => {
-  it("keeps the existing desktop sensitivity", () => {
+  it("requires sustained desktop speech before barge-in", () => {
     let speechFrames = 0;
     for (let i = 0; i < DESKTOP_REALTIME_BARGE_IN_PROFILE.frames; i += 1) {
       const result = detectRealtimeBargeIn({
-        input: inputWithLevel(0.09),
+        input: inputWithLevel(0.11),
         activeOutput: true,
         cancelRequested: false,
         speechFrames,
@@ -53,12 +53,12 @@ describe("realtime gateway relay barge-in detection", () => {
     let speechFrames = 0;
     for (let i = 0; i < MOBILE_REALTIME_BARGE_IN_PROFILE.frames - 1; i += 1) {
       const result = detectRealtimeBargeIn({
-        input: inputWithLevel(0.17),
+        input: inputWithLevel(0.23),
         activeOutput: true,
         cancelRequested: false,
         speechFrames,
         outputStartedAtMs: 1_000,
-        nowMs: 2_000,
+        nowMs: 2_500,
         profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
       });
       speechFrames = result.speechFrames;
@@ -66,17 +66,35 @@ describe("realtime gateway relay barge-in detection", () => {
     }
 
     const result = detectRealtimeBargeIn({
-      input: inputWithLevel(0.17),
+      input: inputWithLevel(0.23),
       activeOutput: true,
       cancelRequested: false,
       speechFrames,
       outputStartedAtMs: 1_000,
-      nowMs: 2_000,
+      nowMs: 2_500,
       profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
     });
 
     expect(result.triggered).toBe(true);
     expect(result.suppressInput).toBe(false);
+  });
+
+  it("does not interrupt mobile output for short speech bursts", () => {
+    let speechFrames = 0;
+    for (let i = 0; i < MOBILE_REALTIME_BARGE_IN_PROFILE.frames - 2; i += 1) {
+      const result = detectRealtimeBargeIn({
+        input: inputWithLevel(0.3),
+        activeOutput: true,
+        cancelRequested: false,
+        speechFrames,
+        outputStartedAtMs: 1_000,
+        nowMs: 2_500,
+        profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
+      });
+      speechFrames = result.speechFrames;
+      expect(result.triggered).toBe(false);
+      expect(result.suppressInput).toBe(true);
+    }
   });
 
   it("suppresses mobile playback echo until barge-in is confirmed", () => {

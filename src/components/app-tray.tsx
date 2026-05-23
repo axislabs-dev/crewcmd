@@ -13,6 +13,7 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AgentVisualizer, type AgentVisualState } from "@/components/chat/agent-visualizer";
 import { VoiceAgent } from "@/components/chat/voice-agent";
 import { useWorkspace } from "@/components/company-context";
 import {
@@ -29,6 +30,12 @@ import {
   shouldUseDeviceTts,
   type AgentVoiceSettings,
 } from "@/lib/tts-voices";
+import {
+  DEFAULT_AGENT_VISUAL_SETTINGS,
+  normalizeAgentVisualSettings,
+  resolveAgentVisualAccentColor,
+  type AgentVisualSettings,
+} from "@/lib/agent-visual-settings";
 
 type AgentVoiceState = "idle" | "ready" | "listening" | "hearing" | "processing" | "thinking" | "speaking" | "muted" | "paused" | "error";
 type TrayPinTargetType = "task" | "chat_session" | "chat_thread";
@@ -46,6 +53,7 @@ export type ActiveAgentVoiceSession = {
   threadSessionKey?: string | null;
   runtimeId?: string | null;
   voiceSettings?: AgentVoiceSettings | null;
+  visualSettings?: AgentVisualSettings | null;
 };
 
 export type TrayPin = {
@@ -105,6 +113,21 @@ function isActiveState(state: AgentVoiceState) {
 
 function clampVoiceLevel(level: number) {
   return Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
+}
+
+function trayStateToVisualState(state: AgentVoiceState): AgentVisualState {
+  if (state === "speaking") return "speaking";
+  if (state === "processing" || state === "thinking") return "processing";
+  if (state === "listening" || state === "hearing" || state === "ready") return "listening";
+  if (state === "muted" || state === "paused" || state === "error") return "muted";
+  return "idle";
+}
+
+function hexToRgbString(hex: string) {
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return "99, 183, 170";
+  const value = parseInt(normalized, 16);
+  return `${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}`;
 }
 
 function createMiniChatId() {
@@ -509,6 +532,7 @@ function ActiveAgentTrayItem() {
   if (pathname === "/chat" && !expanded) return null;
 
   const voiceSettings = normalizeAgentVoiceSettings(active.voiceSettings ?? DEFAULT_AGENT_VOICE_SETTINGS);
+  const visualSettings = normalizeAgentVisualSettings(active.visualSettings ?? DEFAULT_AGENT_VISUAL_SETTINGS);
 
   const openFullChat = () => {
     if (active.channelId) {
@@ -678,17 +702,13 @@ function ActiveAgentTrayItem() {
   };
 
   const pinnedLabel = tray.userPinned ? "Unpin active agent" : "Pin active agent";
-  const stateTone = tray.voiceState === "speaking"
-    ? "var(--accent)"
-    : tray.voiceState === "thinking" || tray.voiceState === "processing"
-      ? active.agentColor ?? "var(--accent)"
-    : tray.voiceState === "error" || tray.voiceState === "paused"
-      ? "var(--danger)"
-      : tray.voiceState === "ready"
-        ? "var(--text-tertiary)"
-        : active.agentColor ?? "var(--accent)";
-  const visualActor = nativeActor === "agent" ? "agent" : "user";
-  const visualTone = visualActor === "agent" ? (active.agentColor ?? "var(--accent)") : "var(--voice-listening, #d9b96e)";
+  const visualAccentColor = resolveAgentVisualAccentColor({
+    settings: visualSettings,
+    agentColor: active.agentColor ?? null,
+    teamColor: null,
+  });
+  const visualAccentRgb = hexToRgbString(visualAccentColor);
+  const trayVisualState = trayStateToVisualState(tray.voiceState);
   const visualLevel = tray.isPlayingAudio
     ? Math.max(tray.voiceLevel, 0.24)
     : tray.voiceState === "thinking" || tray.voiceState === "processing"
@@ -696,38 +716,47 @@ function ActiveAgentTrayItem() {
     : tray.voiceState === "listening" || tray.voiceState === "hearing"
       ? Math.max(tray.voiceLevel, 0.08)
       : 0;
-  const visualBars = [0.45, 0.78, 0.58, 0.92].map((weight, index) => {
-    const lift = tray.isPlayingAudio ? 0.28 : 0.16;
-    return Math.max(0.18, Math.min(1, visualLevel * weight + lift + index * 0.035));
-  });
+  const visualMotion = trayVisualState === "speaking"
+    ? Math.min(0.84, 0.25 + visualLevel * 0.76)
+    : trayVisualState === "listening"
+      ? Math.min(0.58, 0.1 + visualLevel * 0.8)
+      : trayVisualState === "processing"
+        ? Math.min(0.42, 0.24 + visualLevel * 0.4)
+        : 0;
 
   return (
     <>
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="relative ml-auto flex h-14 w-14 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-white shadow-2xl transition hover:scale-[1.02]"
+        className="relative ml-auto flex h-16 w-16 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-white shadow-2xl transition hover:scale-[1.02]"
         aria-label="Open active agent bubble"
         title={`${activeDisplayTitle}: ${tray.voiceState}`}
       >
-        <span className="absolute inset-0 rounded-full border-2 opacity-70" style={{ borderColor: stateTone }} />
-        <span className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: active.agentColor ?? "var(--accent)" }}>
-            {activeBubbleInitials}
+        <div className="pointer-events-none scale-[0.46]">
+          <AgentVisualizer
+            state={trayVisualState}
+            isActive={tray.systemPinned}
+            isRecording={tray.voiceState === "hearing"}
+            compact
+            visualVolume={visualLevel}
+            motionLevel={visualMotion}
+            haloSize={104 + visualMotion * 26}
+            orbScale={1 + visualMotion * 0.06}
+            glowStrength={0.18 + visualLevel * 0.28}
+            activeRgb={visualAccentRgb}
+            listeningRgb="var(--voice-listening-rgb)"
+            speakingRgb={visualAccentRgb}
+            processingRgb="var(--voice-processing-rgb)"
+            listeningColor="rgb(var(--voice-listening-rgb))"
+            speakingColor={visualAccentColor}
+            onToggle={() => {}}
+            settings={visualSettings}
+          />
+        </div>
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[var(--text-primary)] drop-shadow">
+          {activeBubbleInitials}
         </span>
-        {(tray.voiceState === "listening" || tray.voiceState === "hearing" || tray.voiceState === "thinking" || tray.voiceState === "processing" || tray.voiceState === "speaking") ? (
-          <span className="absolute -bottom-0.5 flex h-4 items-end gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-1.5 py-0.5" aria-hidden="true">
-            {visualBars.map((bar, index) => (
-              <span
-                key={index}
-                className={`w-0.5 rounded-full transition-[height,background-color] duration-100 ${nativeActor === "agent" ? "animate-pulse" : ""}`}
-                style={{
-                  height: `${5 + bar * 9}px`,
-                  backgroundColor: visualTone,
-                }}
-              />
-            ))}
-          </span>
-        ) : null}
       </button>
 
       {expanded && (
@@ -749,6 +778,29 @@ function ActiveAgentTrayItem() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                   </svg>
                 </button>
+              </div>
+            </div>
+            <div className="mb-4 flex justify-center">
+              <div className="pointer-events-none scale-[0.92]">
+                <AgentVisualizer
+                  state={trayVisualState}
+                  isActive={tray.systemPinned}
+                  isRecording={tray.voiceState === "hearing"}
+                  compact
+                  visualVolume={visualLevel}
+                  motionLevel={visualMotion}
+                  haloSize={104 + visualMotion * 28}
+                  orbScale={1 + visualMotion * 0.06}
+                  glowStrength={0.18 + visualLevel * 0.28}
+                  activeRgb={visualAccentRgb}
+                  listeningRgb="var(--voice-listening-rgb)"
+                  speakingRgb={visualAccentRgb}
+                  processingRgb="var(--voice-processing-rgb)"
+                  listeningColor="rgb(var(--voice-listening-rgb))"
+                  speakingColor={visualAccentColor}
+                  onToggle={() => {}}
+                  settings={visualSettings}
+                />
               </div>
             </div>
             <div className="flex items-center justify-center gap-2">
@@ -831,6 +883,8 @@ function ActiveAgentTrayItem() {
             companyId={workspace?.companyId ?? undefined}
             sessionKey={active.threadSessionKey ?? active.sessionKey}
             realtimeRuntimeId={active.runtimeId ?? undefined}
+            voiceSettings={voiceSettings}
+            visualSettings={visualSettings}
           />
         </div>
       ) : null}

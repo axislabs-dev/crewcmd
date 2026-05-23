@@ -168,6 +168,9 @@ export interface GatewayRealtimeTalkSessionParams extends Record<string, unknown
   mode?: string;
   transport?: string;
   brain?: string;
+  vadThreshold?: number;
+  silenceDurationMs?: number;
+  prefixPaddingMs?: number;
 }
 
 export interface GatewayRealtimeTalkSessionResult {

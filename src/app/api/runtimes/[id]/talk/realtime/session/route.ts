@@ -7,6 +7,9 @@ import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
 
 export const dynamic = "force-dynamic";
 
+const REALTIME_SLOW_SPEECH_SILENCE_MS = 2000;
+const REALTIME_SLOW_SPEECH_PREFIX_PADDING_MS = 500;
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -36,6 +39,9 @@ export async function POST(
       model: readOptionalString(body.model),
       voice: readOptionalString(body.voice),
       agentId: readOptionalString(body.agentId),
+      vadThreshold: readOptionalNumber(body.vadThreshold),
+      silenceDurationMs: readOptionalNumber(body.silenceDurationMs) ?? REALTIME_SLOW_SPEECH_SILENCE_MS,
+      prefixPaddingMs: readOptionalNumber(body.prefixPaddingMs) ?? REALTIME_SLOW_SPEECH_PREFIX_PADDING_MS,
     });
 
     return NextResponse.json({ session });
@@ -47,4 +53,8 @@ export async function POST(
 
 function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readOptionalNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }

@@ -342,6 +342,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 .voice-agent-visual-layer {
   position: absolute;
   inset: 0;
+  z-index: 1;
   border-radius: 999px;
   overflow: hidden;
 }
@@ -354,7 +355,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 .voice-visual-hologram,
 .voice-visual-command {
   position: absolute;
-  inset: 4%;
+  inset: 2%;
   border-radius: 999px;
   pointer-events: none;
 }
@@ -364,9 +365,9 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   inset: 8%;
   border-radius: 999px;
   background:
-    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-volume, 0) * 0.12)) 0%, transparent 58%),
+    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.14 + var(--voice-volume, 0) * 0.18)) 0%, transparent 58%),
     repeating-radial-gradient(circle, var(--voice-shell-grid-soft) 0 1px, transparent 1px 28px);
-  opacity: calc(0.28 + var(--voice-motion, 0) * 0.3);
+  opacity: calc(0.48 + var(--voice-motion, 0) * 0.34);
   filter: blur(0.2px);
   animation: voice-agent-breathe calc(5.8s / var(--voice-intensity, 1)) ease-in-out infinite;
 }
@@ -380,7 +381,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
     linear-gradient(24deg, transparent 18%, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-motion, 0) * 0.18)) 18.5%, transparent 20% 46%, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.1 + var(--voice-volume, 0) * 0.16)) 47%, transparent 48.5%),
     linear-gradient(144deg, transparent 24%, var(--voice-shell-grid) 25%, transparent 26% 62%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.18) 63%, transparent 64%),
     linear-gradient(82deg, transparent 32%, var(--voice-shell-grid-soft) 33%, transparent 34% 72%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.12) 73%, transparent 74%);
-  opacity: calc(0.38 + var(--voice-motion, 0) * 0.34);
+  opacity: calc(0.58 + var(--voice-motion, 0) * 0.36);
   animation: voice-agent-drift calc(13s / var(--voice-intensity, 1)) ease-in-out infinite;
 }
 
@@ -400,7 +401,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   margin-left: calc(var(--node-size) / -2);
   margin-top: calc(var(--node-size) / -2);
   border-radius: 999px;
-  background: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.62 + var(--voice-motion, 0) * 0.32));
+  background: rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.78 + var(--voice-motion, 0) * 0.2));
   box-shadow:
     0 0 calc(8px + var(--voice-volume, 0) * 18px * var(--voice-intensity, 1)) rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.34 + var(--voice-motion, 0) * 0.34)),
     0 0 1px var(--voice-shell-highlight);
@@ -408,7 +409,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
     rotate(var(--node-angle))
     translateY(calc(-1 * var(--node-radius)))
     scale(calc(0.84 + var(--voice-volume, 0) * 0.32 + var(--voice-motion, 0) * 0.38));
-  opacity: calc(0.38 + var(--voice-volume, 0) * 0.22 + var(--voice-motion, 0) * 0.28);
+  opacity: calc(0.68 + var(--voice-volume, 0) * 0.16 + var(--voice-motion, 0) * 0.16);
   animation: voice-neural-node calc(7s / var(--voice-intensity, 1)) ease-in-out infinite;
   animation-delay: var(--node-delay);
 }
@@ -416,7 +417,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
 .voice-visual-hologram {
   inset: 14%;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.24) 80%, transparent);
+  border: 1px solid rgba(var(--voice-accent-rgb, 99, 183, 170), 0.42);
   background:
     radial-gradient(ellipse at center, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-volume, 0) * 0.1)), transparent 68%),
     linear-gradient(180deg, transparent, color-mix(in srgb, var(--voice-shell-highlight) 16%, transparent), transparent);
@@ -435,7 +436,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
     radial-gradient(ellipse at 25% 50%, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.18 + var(--voice-volume, 0) * 0.22)), transparent 44%),
     linear-gradient(90deg, transparent, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.12 + var(--voice-volume, 0) * 0.2)), transparent);
   filter: blur(calc(var(--ribbon-index) * 0.35px));
-  opacity: calc(0.24 + var(--voice-motion, 0) * 0.38);
+  opacity: calc(0.54 + var(--voice-motion, 0) * 0.38);
   transform: translateY(-50%) skewX(-8deg) scaleX(calc(0.78 + var(--voice-motion, 0) * 0.18 + var(--ribbon-index) * 0.035));
   animation: voice-hologram-ribbon calc(2.8s / var(--voice-intensity, 1)) ease-in-out infinite;
   animation-delay: var(--ribbon-delay);
@@ -464,8 +465,8 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
   inset: 6%;
   overflow: hidden;
   background:
-    radial-gradient(circle, transparent 0 41%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.08) 42% 43%, transparent 44%),
-    conic-gradient(from 0deg, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.08 + var(--voice-motion, 0) * 0.16)), transparent 18%, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.1 + var(--voice-volume, 0) * 0.16)), transparent 52%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.08));
+    radial-gradient(circle, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.06 + var(--voice-volume, 0) * 0.1)) 0 40%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.18) 42% 43%, transparent 44%),
+    conic-gradient(from 0deg, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.18 + var(--voice-motion, 0) * 0.22)), transparent 18%, rgba(var(--voice-accent-rgb, 99, 183, 170), calc(0.2 + var(--voice-volume, 0) * 0.22)), transparent 52%, rgba(var(--voice-accent-rgb, 99, 183, 170), 0.18));
 }
 
 .voice-visual-command-grid {
@@ -477,7 +478,7 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top l
     linear-gradient(90deg, var(--voice-shell-grid-soft) 1px, transparent 1px);
   background-size: 18px 18px;
   mask-image: radial-gradient(circle, black 50%, transparent 74%);
-  opacity: calc(0.18 + var(--voice-motion, 0) * 0.24);
+  opacity: calc(0.3 + var(--voice-motion, 0) * 0.34);
 }
 
 .voice-visual-command-ring {

@@ -1190,16 +1190,6 @@ export function VoiceAgent({
   const listeningRgb = "var(--voice-listening-rgb)";
   const speakingRgb = "var(--voice-speaking-rgb)";
   const processingRgb = "var(--voice-processing-rgb)";
-  const activeRgb =
-    isMicMuted && !isPlayingAudio && !isLoading
-      ? "var(--text-muted-rgb, 128, 128, 128)"
-      : state === "listening"
-      ? listeningRgb
-      : state === "speaking"
-        ? speakingRgb
-        : state === "processing"
-          ? processingRgb
-          : accentRgb;
   const stateColor =
     isMicMuted && !isPlayingAudio && !isLoading
       ? "var(--text-tertiary)"
@@ -1212,7 +1202,14 @@ export function VoiceAgent({
           : "var(--text-tertiary)";
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
   const realtimeRelayActive = Boolean(realtimeRelayRef.current);
-  const visualVolume = Math.min(1, volumeLevel * (nativeSessionActive || realtimeRelayActive ? 1.25 : 0.8));
+  const baseReactiveLevel = state === "speaking"
+    ? 0.36
+    : state === "listening"
+      ? 0.22
+      : state === "processing"
+        ? 0.28
+        : 0;
+  const visualVolume = Math.min(1, Math.max(baseReactiveLevel, volumeLevel * (nativeSessionActive || realtimeRelayActive ? 1.25 : 0.8)));
   const motionLevel =
     state === "speaking"
       ? Math.min(0.82, 0.24 + visualVolume * 0.78)
@@ -1257,7 +1254,7 @@ export function VoiceAgent({
         haloSize={haloSize}
         orbScale={orbScale}
         glowStrength={glowStrength}
-        activeRgb={activeRgb}
+        activeRgb={accentRgb}
         listeningRgb={listeningRgb}
         speakingRgb={speakingRgb}
         processingRgb={processingRgb}

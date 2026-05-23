@@ -6102,6 +6102,7 @@ export default function ChatPage() {
                   : "absolute right-2 top-2 flex items-center gap-1"}
                 >
                   <button
+                    type="button"
                     onClick={() => setVoicePickerOpen(true)}
                     title="Choose style"
                     aria-label="Choose style"
@@ -6112,6 +6113,7 @@ export default function ChatPage() {
                     <VoicePersonIcon className={agentOverlayMode === "immersive" ? undefined : "h-3.5 w-3.5"} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setAgentOverlayMode(agentOverlayMode === "immersive" ? "transcript" : "immersive")}
                     title={agentOverlayMode === "immersive" ? "Return to chat" : "Enter fullscreen visual mode"}
                     aria-label={agentOverlayMode === "immersive" ? "Return to chat" : "Enter fullscreen visual mode"}

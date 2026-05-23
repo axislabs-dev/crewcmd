@@ -59,6 +59,7 @@ export function AgentVisualizer({
 }: AgentVisualizerProps) {
   const visualSettings = normalizeAgentVisualSettings(settings);
   const styleId = visualSettings.styleId;
+  const isOrbitalStyle = styleId === "builtin:orbital-reactor";
   const intensityScale = INTENSITY_SCALE[visualSettings.intensity ?? "balanced"];
   const visualVars = {
     "--voice-accent-rgb": activeRgb,
@@ -109,7 +110,7 @@ export function AgentVisualizer({
         }}
       />
 
-      {styleId === "builtin:orbital-reactor" ? (
+      {isOrbitalStyle ? (
         <OrbitalSharedRings compact={compact} immersive={immersive} />
       ) : null}
 
@@ -129,54 +130,56 @@ export function AgentVisualizer({
         }}
       />
 
-      <div
-        className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${coreClass} cursor-pointer`}
-        style={
-          state === "listening"
-            ? {
-                borderColor: `rgba(${listeningRgb}, ${0.46 + visualVolume * 0.12})`,
-                background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), var(--voice-shell-bg-strong) 72%)`,
-                boxShadow: `0 0 ${22 + visualVolume * 18}px rgba(${listeningRgb}, ${0.18 + visualVolume * 0.16})`,
-                transform: `scale(${orbScale})`,
-              }
-            : state === "speaking"
+      {isOrbitalStyle ? (
+        <div
+          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${coreClass} cursor-pointer`}
+          style={
+            state === "listening"
               ? {
-                  borderColor: `rgba(${speakingRgb}, 0.55)`,
-                  background: `radial-gradient(circle, rgba(${speakingRgb},0.24), var(--voice-shell-bg-strong) 72%)`,
-                  boxShadow:
-                    `0 0 ${34 + motionLevel * 24}px rgba(${speakingRgb}, ${0.25 + motionLevel * 0.1}), 0 0 ${64 + motionLevel * 42}px rgba(${speakingRgb}, ${0.1 + motionLevel * 0.08})`,
+                  borderColor: `rgba(${listeningRgb}, ${0.46 + visualVolume * 0.12})`,
+                  background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), var(--voice-shell-bg-strong) 72%)`,
+                  boxShadow: `0 0 ${22 + visualVolume * 18}px rgba(${listeningRgb}, ${0.18 + visualVolume * 0.16})`,
                   transform: `scale(${orbScale})`,
                 }
-              : state === "processing"
+              : state === "speaking"
                 ? {
-                    borderColor: `rgba(${processingRgb}, 0.45)`,
-                    background: `radial-gradient(circle, rgba(${processingRgb},0.2), var(--voice-shell-bg-strong) 72%)`,
-                    boxShadow: `0 0 20px rgba(${processingRgb}, 0.15)`,
+                    borderColor: `rgba(${speakingRgb}, 0.55)`,
+                    background: `radial-gradient(circle, rgba(${speakingRgb},0.24), var(--voice-shell-bg-strong) 72%)`,
+                    boxShadow:
+                      `0 0 ${34 + motionLevel * 24}px rgba(${speakingRgb}, ${0.25 + motionLevel * 0.1}), 0 0 ${64 + motionLevel * 42}px rgba(${speakingRgb}, ${0.1 + motionLevel * 0.08})`,
+                    transform: `scale(${orbScale})`,
                   }
-                : {
-                    background: "radial-gradient(circle, color-mix(in srgb, var(--voice-shell-highlight) 90%, transparent), var(--voice-shell-bg-strong) 72%)",
-                  }
-        }
-      >
-        {styleId === "builtin:orbital-reactor" && (immersive || compact) ? (
-          <div className="voice-agent-orbital-core">
-            <div className="voice-agent-core-grid" />
-            <div className="voice-agent-core-lattice" />
-            <div className="voice-agent-core-pulse" />
-            <div className="voice-agent-core-highlight" />
-          </div>
-        ) : (
-          <StateIcon
-            state={state}
-            compact={compact}
-            isRecording={isRecording}
-            listeningColor={listeningColor}
-            speakingColor={speakingColor}
-            listeningRgb={listeningRgb}
-            processingRgb={processingRgb}
-          />
-        )}
-      </div>
+                : state === "processing"
+                  ? {
+                      borderColor: `rgba(${processingRgb}, 0.45)`,
+                      background: `radial-gradient(circle, rgba(${processingRgb},0.2), var(--voice-shell-bg-strong) 72%)`,
+                      boxShadow: `0 0 20px rgba(${processingRgb}, 0.15)`,
+                    }
+                  : {
+                      background: "radial-gradient(circle, color-mix(in srgb, var(--voice-shell-highlight) 90%, transparent), var(--voice-shell-bg-strong) 72%)",
+                    }
+          }
+        >
+          {immersive || compact ? (
+            <div className="voice-agent-orbital-core">
+              <div className="voice-agent-core-grid" />
+              <div className="voice-agent-core-lattice" />
+              <div className="voice-agent-core-pulse" />
+              <div className="voice-agent-core-highlight" />
+            </div>
+          ) : (
+            <StateIcon
+              state={state}
+              compact={compact}
+              isRecording={isRecording}
+              listeningColor={listeningColor}
+              speakingColor={speakingColor}
+              listeningRgb={listeningRgb}
+              processingRgb={processingRgb}
+            />
+          )}
+        </div>
+      ) : null}
     </Wrapper>
   );
 }

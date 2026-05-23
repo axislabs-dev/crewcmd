@@ -90,7 +90,38 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
       model: "gpt-realtime-1.5",
       voice: "marin",
       agentId: undefined,
+      vadThreshold: undefined,
+      silenceDurationMs: 2000,
+      prefixPaddingMs: 500,
     });
+  });
+
+  it("allows realtime VAD tuning overrides", async () => {
+    const realtimeTalkSession = vi.fn().mockResolvedValue({
+      transport: "gateway-relay",
+      relaySessionId: "relay_1",
+    });
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ realtimeTalkSession });
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session", {
+        method: "POST",
+        body: JSON.stringify({
+          silenceDurationMs: 2400,
+          prefixPaddingMs: 650,
+          vadThreshold: 0.45,
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(realtimeTalkSession).toHaveBeenCalledWith(expect.objectContaining({
+      silenceDurationMs: 2400,
+      prefixPaddingMs: 650,
+      vadThreshold: 0.45,
+    }));
   });
 
   it("does not call the gateway for unreadable runtimes", async () => {

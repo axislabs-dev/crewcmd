@@ -750,7 +750,7 @@ function ActiveAgentTrayItem() {
             processingRgb="var(--voice-processing-rgb)"
             listeningColor="rgb(var(--voice-listening-rgb))"
             speakingColor={visualAccentColor}
-            onToggle={() => {}}
+            interactive={false}
             settings={visualSettings}
           />
         </div>
@@ -798,7 +798,7 @@ function ActiveAgentTrayItem() {
                   processingRgb="var(--voice-processing-rgb)"
                   listeningColor="rgb(var(--voice-listening-rgb))"
                   speakingColor={visualAccentColor}
-                  onToggle={() => {}}
+                  interactive={false}
                   settings={visualSettings}
                 />
               </div>

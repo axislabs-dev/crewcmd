@@ -25,8 +25,9 @@ interface AgentVisualizerProps {
   processingRgb: string;
   listeningColor: string;
   speakingColor: string;
-  onToggle: () => void;
+  onToggle?: () => void;
   settings?: AgentVisualSettings | null;
+  interactive?: boolean;
 }
 
 const INTENSITY_SCALE = {
@@ -54,6 +55,7 @@ export function AgentVisualizer({
   speakingColor,
   onToggle,
   settings,
+  interactive = true,
 }: AgentVisualizerProps) {
   const visualSettings = normalizeAgentVisualSettings(settings);
   const styleId = visualSettings.styleId;
@@ -75,9 +77,11 @@ export function AgentVisualizer({
       ? "h-16 w-16 sm:h-20 sm:w-20"
       : "h-20 w-20 sm:h-24 sm:w-24";
 
+  const Wrapper = interactive ? "button" : "div";
+
   return (
-    <button
-      onClick={onToggle}
+    <Wrapper
+      {...(interactive ? { onClick: onToggle, type: "button" as const } : { role: "presentation" })}
       className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${sizeClass}`}
       style={visualVars}
     >
@@ -173,7 +177,7 @@ export function AgentVisualizer({
           />
         )}
       </div>
-    </button>
+    </Wrapper>
   );
 }
 

@@ -38,6 +38,7 @@ export interface WorkspaceRecord {
 export interface WorkspaceSummary extends WorkspaceRecord {
   companyName: string | null;
   companyLogoUrl: string | null;
+  companySettings: Record<string, unknown> | null;
   memberRole: CompanyRole | null;
 }
 
@@ -192,6 +193,7 @@ export async function listAccessibleWorkspaces(userId: string): Promise<Workspac
           role: companyMembers.role,
           companyName: companies.name,
           companyLogoUrl: companies.logoUrl,
+          companySettings: companies.settings,
         })
         .from(companyMembers)
         .innerJoin(companies, eq(companyMembers.companyId, companies.id))
@@ -207,6 +209,7 @@ export async function listAccessibleWorkspaces(userId: string): Promise<Workspac
         ...workspace,
         companyName: membership.companyName,
         companyLogoUrl: membership.companyLogoUrl,
+        companySettings: membership.companySettings ?? null,
         memberRole: membership.role,
       };
     })
@@ -218,6 +221,7 @@ export async function listAccessibleWorkspaces(userId: string): Promise<Workspac
       ...personal,
       companyName: null,
       companyLogoUrl: null,
+      companySettings: null,
       memberRole: null,
     });
   }

@@ -6,6 +6,7 @@ interface CompanyData {
   id: string;
   name: string;
   logoUrl: string | null;
+  settings: Record<string, unknown> | null;
 }
 
 export interface WorkspaceData {
@@ -16,6 +17,7 @@ export interface WorkspaceData {
   companyId: string | null;
   companyName: string | null;
   companyLogoUrl: string | null;
+  companySettings: Record<string, unknown> | null;
   memberRole: string | null;
 }
 
@@ -100,6 +102,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         id: workspace.companyId,
         name: workspace.companyName || workspace.name,
         logoUrl: workspace.companyLogoUrl || null,
+        settings: workspace.companySettings || null,
       }
     : null;
 

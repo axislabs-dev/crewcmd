@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { VoiceSelectModal, VoiceSummary } from "@/components/voice-select-modal";
+import { VoiceSelectModal, VisualSummary, VoiceSummary } from "@/components/voice-select-modal";
 import { DEFAULT_AGENT_VOICE_SETTINGS, type AgentVoiceSettings } from "@/lib/tts-voices";
+import { DEFAULT_AGENT_VISUAL_SETTINGS, type AgentVisualSettings } from "@/lib/agent-visual-settings";
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export interface AgentConfigValues {
   openrouterBaseUrl: string;
   skillIds: string[];
   voiceSettings: AgentVoiceSettings;
+  visualSettings: AgentVisualSettings;
 }
 
 export interface CompanySkill {
@@ -188,6 +190,7 @@ export function defaultAgentConfigValues(): AgentConfigValues {
     openrouterBaseUrl: "",
     skillIds: [],
     voiceSettings: { ...DEFAULT_AGENT_VOICE_SETTINGS },
+    visualSettings: { ...DEFAULT_AGENT_VISUAL_SETTINGS },
   };
 }
 
@@ -920,33 +923,34 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
         </div>
       </Section>
 
-      {/* ── VOICE IDENTITY ── */}
-      <Section title="Voice" defaultOpen>
+      {/* ── AGENT STYLE ── */}
+      <Section title="Style" defaultOpen>
         <div className="space-y-3">
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-[var(--text-primary)]"><VoiceSummary value={values.voiceSettings} /></div>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">Default for this agent.</p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]"><VisualSummary value={values.visualSettings} /></p>
               </div>
               <button
                 type="button"
                 onClick={() => setVoiceModalOpen(true)}
                 className="rounded-lg border border-[#00f0ff]/35 px-3 py-1.5 text-xs font-medium text-[#00f0ff] transition-colors hover:bg-[#00f0ff]/10"
               >
-                Choose voice
+                Choose style
               </button>
             </div>
           </div>
           <VoiceSelectModal
             open={voiceModalOpen}
-            title="Agent default voice"
+            title="Agent default style"
             value={values.voiceSettings}
+            visualValue={values.visualSettings}
             onClose={() => setVoiceModalOpen(false)}
             onSelect={(voiceSettings) => {
               onChange({ voiceSettings });
-              setVoiceModalOpen(false);
             }}
+            onVisualSelect={(visualSettings) => onChange({ visualSettings })}
           />
         </div>
       </Section>

@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCompany } from "@/components/company-context";
+import { VoiceSelectModal, VisualSummary } from "@/components/voice-select-modal";
+import {
+  DEFAULT_AGENT_VISUAL_SETTINGS,
+  normalizeAgentVisualSettings,
+  readTeamVisualSettings,
+  type AgentVisualSettings,
+} from "@/lib/agent-visual-settings";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 import { labelModelProfile, listSupportedModelProfiles } from "@/lib/model-profiles";
 
@@ -10,6 +17,7 @@ interface Company {
   name: string;
   mission: string | null;
   logoUrl: string | null;
+  settings: Record<string, unknown> | null;
 }
 
 interface Member {
@@ -122,6 +130,9 @@ export default function CompanySettingsPage() {
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isOwnerOrAdmin, setIsOwnerOrAdmin] = useState(false);
+  const [teamVisualSettings, setTeamVisualSettings] = useState<AgentVisualSettings>({ ...DEFAULT_AGENT_VISUAL_SETTINGS });
+  const [teamStyleModalOpen, setTeamStyleModalOpen] = useState(false);
+  const [savingTeamStyle, setSavingTeamStyle] = useState(false);
 
   // Heartbeat secret state (separate from API token)
   const [heartbeatSecret, setHeartbeatSecret] = useState<string | null>(null);
@@ -159,6 +170,7 @@ export default function CompanySettingsPage() {
         setName(data.name);
         setMission(data.mission || "");
         setLogoUrl(data.logoUrl || "");
+        setTeamVisualSettings(readTeamVisualSettings(data.settings) ?? DEFAULT_AGENT_VISUAL_SETTINGS);
       }
 
       if (membersRes.ok) {
@@ -244,6 +256,41 @@ export default function CompanySettingsPage() {
       setMessage({ type: "error", text: "Network error" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveTeamVisual(nextSettings: AgentVisualSettings) {
+    if (!company) return;
+    const visual = normalizeAgentVisualSettings(nextSettings);
+    setTeamVisualSettings(visual);
+    setSavingTeamStyle(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch(`/api/companies/${company.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            agentStyle: {
+              visual,
+            },
+          },
+        }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setCompany(updated);
+        refreshCompany();
+        setMessage({ type: "success", text: "Team visual style updated" });
+      } else {
+        setMessage({ type: "error", text: "Failed to update team visual style" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setSavingTeamStyle(false);
     }
   }
 
@@ -667,6 +714,40 @@ export default function CompanySettingsPage() {
           {saving ? "SAVING..." : "SAVE CHANGES"}
         </button>
       </div>
+
+      <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">TEAM AGENT VISUAL STYLE</h2>
+            <p className="mt-2 text-sm text-[var(--text-primary)]"><VisualSummary value={teamVisualSettings} /></p>
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+              Default visual style for agents that do not define their own style.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTeamStyleModalOpen(true)}
+            disabled={!isOwnerOrAdmin || savingTeamStyle}
+            className="rounded-lg border border-[var(--accent-medium)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {savingTeamStyle ? "Saving..." : "Choose style"}
+          </button>
+        </div>
+      </div>
+
+      <VoiceSelectModal
+        open={teamStyleModalOpen}
+        title="Team agent visual style"
+        visualValue={teamVisualSettings}
+        initialTab="visual"
+        visualOnly
+        helperText="Sets the default visual style for this company workspace."
+        onClose={() => setTeamStyleModalOpen(false)}
+        onSelect={() => {}}
+        onVisualSelect={(visualSettings) => {
+          void handleSaveTeamVisual(visualSettings);
+        }}
+      />
 
       {/* Members */}
       <div className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">

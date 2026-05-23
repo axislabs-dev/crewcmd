@@ -10,6 +10,14 @@ import {
   type TtsProviderId,
   type TtsVoiceOption,
 } from "@/lib/tts-voices";
+import {
+  AGENT_VISUAL_STYLE_OPTIONS,
+  DEFAULT_AGENT_VISUAL_SETTINGS,
+  normalizeAgentVisualSettings,
+  type AgentVisualAccent,
+  type AgentVisualIntensity,
+  type AgentVisualSettings,
+} from "@/lib/agent-visual-settings";
 
 const FAVORITES_KEY = "crewcmd.tts.favorite-voices";
 
@@ -19,8 +27,12 @@ type VoiceSelectModalProps = {
   open: boolean;
   title?: string;
   value?: AgentVoiceSettings | null;
+  visualValue?: AgentVisualSettings | null;
   onClose: () => void;
   onSelect: (settings: AgentVoiceSettings) => void;
+  onVisualSelect?: (settings: AgentVisualSettings) => void;
+  initialTab?: "voice" | "visual";
+  visualOnly?: boolean;
   helperText?: string;
 };
 
@@ -76,11 +88,17 @@ export function VoiceSelectModal({
   open,
   title = "Choose voice",
   value,
+  visualValue,
   onClose,
   onSelect,
+  onVisualSelect,
+  initialTab = "voice",
+  visualOnly = false,
   helperText,
 }: VoiceSelectModalProps) {
   const current = normalizeAgentVoiceSettings(value ?? DEFAULT_AGENT_VOICE_SETTINGS);
+  const currentVisual = normalizeAgentVisualSettings(visualValue ?? DEFAULT_AGENT_VISUAL_SETTINGS);
+  const [tab, setTab] = useState<"voice" | "visual">(visualOnly ? "visual" : initialTab);
   const [provider, setProvider] = useState<ProviderFilter>("all");
   const [query, setQuery] = useState("");
   const [voices, setVoices] = useState<TtsVoiceOption[]>([]);
@@ -95,10 +113,11 @@ export function VoiceSelectModal({
 
   useEffect(() => {
     if (!open) return;
+    setTab(visualOnly ? "visual" : initialTab);
     setFavorites(readFavorites());
     setSpeed(current.speed ?? 1);
     setPreferNative(current.preferNative ?? false);
-  }, [open, current.speed, current.preferNative]);
+  }, [open, current.speed, current.preferNative, initialTab, visualOnly]);
 
   useEffect(() => {
     if (!open) return;
@@ -224,11 +243,31 @@ export function VoiceSelectModal({
             <div>
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {helperText ?? "Pick how this agent sounds."}
+                {helperText ?? (onVisualSelect ? "Pick how this agent sounds and appears." : "Pick how this agent sounds.")}
               </p>
             </div>
             <button type="button" onClick={onClose} className="text-xl text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
           </div>
+          {onVisualSelect && !visualOnly ? (
+            <div className="mt-4 flex gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-1">
+              {(["voice", "visual"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setTab(item)}
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium capitalize transition ${
+                    tab === item
+                      ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {tab === "voice" && !visualOnly ? (
+          <>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <input
               value={query}
@@ -266,9 +305,18 @@ export function VoiceSelectModal({
               <input className="w-full" type="range" min="0.7" max="1.3" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
             </label>
           </div>
+          </>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {tab === "visual" && onVisualSelect ? (
+            <VisualStylePane
+              value={currentVisual}
+              onChange={onVisualSelect}
+            />
+          ) : (
+          <>
           {loading && <p className="p-4 text-sm text-[var(--text-secondary)]">Loading voices…</p>}
           {error && <p className="p-4 text-sm text-amber-400">{error}</p>}
           {!loading && !error && filteredVoices.length === 0 && (
@@ -337,6 +385,8 @@ export function VoiceSelectModal({
               );
             })}
           </div>
+          </>
+          )}
         </div>
 
         <div className="flex justify-end border-t border-[var(--border-subtle)] p-4">
@@ -344,6 +394,77 @@ export function VoiceSelectModal({
             Done
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function VisualStylePane({
+  value,
+  onChange,
+}: {
+  value: AgentVisualSettings;
+  onChange: (settings: AgentVisualSettings) => void;
+}) {
+  const settings = normalizeAgentVisualSettings(value);
+  const patch = (next: Partial<AgentVisualSettings>) => onChange(normalizeAgentVisualSettings({ ...settings, ...next }));
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {AGENT_VISUAL_STYLE_OPTIONS.map((style) => {
+          const selected = settings.styleId === style.id;
+          return (
+            <button
+              key={style.id}
+              type="button"
+              onClick={() => patch({ styleId: style.id })}
+              className={`rounded-xl border p-3 text-left transition ${
+                selected
+                  ? "border-[var(--accent)]/60 bg-[var(--accent-soft)]"
+                  : "border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 hover:border-[var(--border-medium)] hover:bg-[var(--bg-surface-hover)]"
+              }`}
+            >
+              <span className="block text-sm font-semibold text-[var(--text-primary)]">{style.name}</span>
+              <span className="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]">{style.description}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3 sm:grid-cols-3">
+        <label className="space-y-1 text-xs text-[var(--text-secondary)]">
+          <span className="block font-medium text-[var(--text-primary)]">Accent</span>
+          <select
+            value={settings.accent}
+            onChange={(event) => patch({ accent: event.target.value as AgentVisualAccent })}
+            className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-2 text-sm text-[var(--text-primary)] outline-none"
+          >
+            <option value="agent">Agent color</option>
+            <option value="team">Team color</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs text-[var(--text-secondary)]">
+          <span className="block font-medium text-[var(--text-primary)]">Color</span>
+          <input
+            type="color"
+            value={settings.accentColor ?? "#63b7aa"}
+            onChange={(event) => patch({ accent: "custom", accentColor: event.target.value })}
+            className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1 outline-none"
+          />
+        </label>
+        <label className="space-y-1 text-xs text-[var(--text-secondary)]">
+          <span className="block font-medium text-[var(--text-primary)]">Intensity</span>
+          <select
+            value={settings.intensity}
+            onChange={(event) => patch({ intensity: event.target.value as AgentVisualIntensity })}
+            className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-2 text-sm text-[var(--text-primary)] outline-none"
+          >
+            <option value="calm">Calm</option>
+            <option value="balanced">Balanced</option>
+            <option value="vivid">Vivid</option>
+          </select>
+        </label>
       </div>
     </div>
   );
@@ -386,4 +507,15 @@ export function VoiceSummary({ value }: { value?: AgentVoiceSettings | null }) {
     ? isRealtimeVoiceOption({ provider: settings.provider as TtsProviderId, id: settings.voiceId })
     : false;
   return <span>{name} · {provider}{realtime ? " · realtime" : ""}{settings.preferNative ? " · native preferred" : ""}</span>;
+}
+
+export function VisualSummary({ value }: { value?: AgentVisualSettings | null }) {
+  const settings = normalizeAgentVisualSettings(value ?? DEFAULT_AGENT_VISUAL_SETTINGS);
+  const style = AGENT_VISUAL_STYLE_OPTIONS.find((item) => item.id === settings.styleId);
+  const accent = settings.accent === "custom" && settings.accentColor
+    ? settings.accentColor
+    : settings.accent === "team"
+      ? "Team color"
+      : "Agent color";
+  return <span>{style?.name ?? "Orbital Reactor"} · {accent} · {settings.intensity}</span>;
 }

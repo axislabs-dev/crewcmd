@@ -128,7 +128,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
           wakeOnDemand: values.wakeOnDemand,
           cooldownSec: values.cooldownSec,
           maxConcurrentRuns: values.maxConcurrentRuns,
-          runtimeConfig: { voice: values.voiceSettings },
+          runtimeConfig: { voice: values.voiceSettings, visual: values.visualSettings },
         }),
       });
 

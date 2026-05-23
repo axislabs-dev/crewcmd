@@ -29,6 +29,7 @@ import { AgentOutputViewer } from "@/components/agent-output-viewer";
 import { AgentAvatar } from "@/components/avatar";
 import { labelModelProfile } from "@/lib/model-profiles";
 import { DEFAULT_AGENT_VOICE_SETTINGS, normalizeAgentVoiceSettings } from "@/lib/tts-voices";
+import { readAgentVisualSettings, DEFAULT_AGENT_VISUAL_SETTINGS } from "@/lib/agent-visual-settings";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -293,6 +294,7 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
       openrouterBaseUrl: OPENROUTER_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.baseUrl as string) ?? "" : "",
       skillIds: nextSkills.map((row) => row.skillId).filter(Boolean),
       voiceSettings: normalizeAgentVoiceSettings(nextRuntimeConfig.voice ?? DEFAULT_AGENT_VOICE_SETTINGS),
+      visualSettings: readAgentVisualSettings(nextRuntimeConfig) ?? DEFAULT_AGENT_VISUAL_SETTINGS,
     });
   }, []);
 
@@ -580,6 +582,7 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
           runtimeConfig: {
             ...runtimeConfig,
             voice: configValues.voiceSettings,
+            visual: configValues.visualSettings,
           },
           provider: configValues.provider || null,
           role: configValues.role,

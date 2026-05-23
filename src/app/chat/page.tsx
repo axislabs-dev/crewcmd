@@ -45,6 +45,15 @@ import {
   shouldUseDeviceTts,
   type AgentVoiceSettings,
 } from "@/lib/tts-voices";
+import {
+  DEFAULT_AGENT_VISUAL_SETTINGS,
+  normalizeAgentVisualSettings,
+  readAgentVisualSettings,
+  readTeamVisualSettings,
+  resolveAgentVisualAccentColor,
+  resolveAgentVisualSettings,
+  type AgentVisualSettings,
+} from "@/lib/agent-visual-settings";
 import { isOpenClawHeartbeatAck, isOpenClawHeartbeatArtifact } from "@/lib/openclaw-heartbeat-artifacts";
 import { formatPageContextForPrompt, usePageContextStore } from "@/lib/page-context-store";
 
@@ -1222,6 +1231,7 @@ export default function ChatPage() {
   const [agentAudioMuted, setAgentAudioMuted] = useState(false);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [sessionVoiceOverride, setSessionVoiceOverride] = useState<AgentVoiceSettings | null>(null);
+  const [sessionVisualOverride, setSessionVisualOverride] = useState<AgentVisualSettings | null>(null);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -1467,9 +1477,34 @@ export default function ChatPage() {
     () => normalizeAgentVoiceSettings(sessionVoiceOverride ?? agentDefaultVoice),
     [agentDefaultVoice, sessionVoiceOverride]
   );
+  const teamDefaultVisual = useMemo(
+    () => readTeamVisualSettings(company?.settings) ?? DEFAULT_AGENT_VISUAL_SETTINGS,
+    [company?.settings]
+  );
+  const agentDefaultVisual = useMemo(
+    () => readAgentVisualSettings(selectedAgent?.runtimeConfig) ?? null,
+    [selectedAgent?.runtimeConfig]
+  );
+  const resolvedVisualSettings = useMemo(
+    () => resolveAgentVisualSettings({
+      session: sessionVisualOverride,
+      agent: agentDefaultVisual,
+      team: teamDefaultVisual,
+    }),
+    [agentDefaultVisual, sessionVisualOverride, teamDefaultVisual]
+  );
+  const resolvedVisualAccentColor = useMemo(
+    () => resolveAgentVisualAccentColor({
+      settings: resolvedVisualSettings,
+      agentColor: selectedAgent?.color ?? "#63b7aa",
+      teamColor: null,
+    }),
+    [resolvedVisualSettings, selectedAgent?.color]
+  );
 
   useEffect(() => {
     setSessionVoiceOverride(null);
+    setSessionVisualOverride(null);
   }, [activeSessionKey]);
 
   const scopedSearchParams = useCallback(() => {
@@ -5010,7 +5045,7 @@ export default function ChatPage() {
                     isPlayingAudio={isPlayingAudio}
                     onInterrupt={interruptAudio}
                     isLoading={isThreadLoading}
-                    accentColor={agentColor}
+                    accentColor={resolvedVisualAccentColor}
                     autoActivate
                     compact
                     isMicMuted={agentMicMuted}
@@ -5023,6 +5058,7 @@ export default function ChatPage() {
                     sessionKey={activeThread.sessionKey}
                     realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
                     voiceSettings={resolvedVoiceSettings}
+                    visualSettings={resolvedVisualSettings}
                   />
                 </div>
               ) : null}
@@ -5959,13 +5995,17 @@ export default function ChatPage() {
 
       <VoiceSelectModal
         open={voicePickerOpen}
-        title="Voice"
+        title="Style"
         value={resolvedVoiceSettings}
+        visualValue={resolvedVisualSettings}
         helperText="Applies to this chat only. Go to Team > Agent to change the agent default."
         onClose={() => setVoicePickerOpen(false)}
         onSelect={(voiceSettings) => {
           setSessionVoiceOverride(voiceSettings);
           setVoicePickerOpen(false);
+        }}
+        onVisualSelect={(visualSettings) => {
+          setSessionVisualOverride(normalizeAgentVisualSettings(visualSettings));
         }}
       />
 
@@ -6037,7 +6077,7 @@ export default function ChatPage() {
                   isPlayingAudio={isPlayingAudio}
                   onInterrupt={interruptAudio}
                   isLoading={isLoading}
-                  accentColor={agentColor}
+                  accentColor={resolvedVisualAccentColor}
                   autoActivate
                   compact={agentOverlayMode !== "immersive"}
                   immersive={agentOverlayMode === "immersive"}
@@ -6053,6 +6093,7 @@ export default function ChatPage() {
                     : gatewaySessionKeyForAgent(selectedAgent)}
                   realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
                   voiceSettings={resolvedVoiceSettings}
+                  visualSettings={resolvedVisualSettings}
                 />
                 <div className={agentOverlayMode === "immersive"
                   ? "absolute right-4 top-[max(var(--mobile-safe-top),1rem)] z-10 flex gap-2 sm:right-6"
@@ -6060,11 +6101,11 @@ export default function ChatPage() {
                 >
                   <button
                     onClick={() => setVoicePickerOpen(true)}
-                    title="Choose voice"
-                    aria-label="Choose voice"
+                    title="Choose style"
+                    aria-label="Choose style"
                     className={agentOverlayMode === "immersive"
-                      ? `flex h-10 w-10 items-center justify-center rounded-full border shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`
-                      : `flex h-8 w-8 items-center justify-center rounded-full border transition ${sessionVoiceOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
+                      ? `flex h-10 w-10 items-center justify-center rounded-full border shadow-[var(--theme-shadow)] transition ${sessionVoiceOverride || sessionVisualOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-surface)]/85 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`
+                      : `flex h-8 w-8 items-center justify-center rounded-full border transition ${sessionVoiceOverride || sessionVisualOverride ? "border-[#00f0ff]/45 bg-[#00f0ff]/15 text-[#00f0ff]" : "border-[var(--border-medium)] bg-[var(--bg-primary)]/70 text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"}`}
                   >
                     <VoicePersonIcon className={agentOverlayMode === "immersive" ? undefined : "h-3.5 w-3.5"} />
                   </button>

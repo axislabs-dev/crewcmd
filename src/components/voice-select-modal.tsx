@@ -233,7 +233,7 @@ export function VoiceSelectModal({
   const selectedKey = current.provider && current.voiceId ? `${current.provider}:${current.voiceId}` : "";
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div
         className="flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-2xl sm:max-h-[86vh]"
         onClick={(event) => event.stopPropagation()}
@@ -407,6 +407,10 @@ function VisualStylePane({
   onChange: (settings: AgentVisualSettings) => void;
 }) {
   const settings = normalizeAgentVisualSettings(value);
+  const [draftAccentColor, setDraftAccentColor] = useState(settings.accentColor ?? "#63b7aa");
+  useEffect(() => {
+    setDraftAccentColor(settings.accentColor ?? "#63b7aa");
+  }, [settings.accentColor]);
   const patch = (next: Partial<AgentVisualSettings>) => onChange(normalizeAgentVisualSettings({ ...settings, ...next }));
   return (
     <div className="space-y-4">
@@ -448,10 +452,18 @@ function VisualStylePane({
           <span className="block font-medium text-[var(--text-primary)]">Color</span>
           <input
             type="color"
-            value={settings.accentColor ?? "#63b7aa"}
-            onChange={(event) => patch({ accent: "custom", accentColor: event.target.value })}
+            value={draftAccentColor}
+            onChange={(event) => setDraftAccentColor(event.target.value)}
+            onBlur={() => patch({ accent: "custom", accentColor: draftAccentColor })}
             className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1 outline-none"
           />
+          <button
+            type="button"
+            onClick={() => patch({ accent: "custom", accentColor: draftAccentColor })}
+            className="mt-1 w-full rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+          >
+            Apply color
+          </button>
         </label>
         <label className="space-y-1 text-xs text-[var(--text-secondary)]">
           <span className="block font-medium text-[var(--text-primary)]">Intensity</span>

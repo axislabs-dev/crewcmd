@@ -60,9 +60,19 @@ export function AgentVisualizer({
   const visualSettings = normalizeAgentVisualSettings(settings);
   const styleId = visualSettings.styleId;
   const isOrbitalStyle = styleId === "builtin:orbital-reactor";
+  const styleClass =
+    styleId === "builtin:neural-constellation"
+      ? "voice-agent-style-neural"
+      : styleId === "builtin:hologram-waveform"
+        ? "voice-agent-style-hologram"
+        : styleId === "builtin:command-core"
+          ? "voice-agent-style-command"
+          : "voice-agent-style-orbital";
   const intensityScale = INTENSITY_SCALE[visualSettings.intensity ?? "balanced"];
   const visualVars = {
     "--voice-accent-rgb": activeRgb,
+    "--voice-style-secondary-rgb": styleId === "builtin:hologram-waveform" ? "35, 160, 225" : styleId === "builtin:command-core" ? "214, 169, 74" : "76, 184, 168",
+    "--voice-style-shadow-rgb": styleId === "builtin:hologram-waveform" ? "70, 92, 178" : styleId === "builtin:command-core" ? "32, 42, 55" : "50, 88, 140",
     "--voice-volume": `${visualVolume}`,
     "--voice-motion": `${motionLevel}`,
     "--voice-intensity": `${intensityScale}`,
@@ -83,7 +93,7 @@ export function AgentVisualizer({
   return (
     <Wrapper
       {...(interactive ? { onClick: onToggle, type: "button" as const } : { role: "presentation" })}
-      className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${sizeClass}`}
+      className={`voice-agent-reactor ${styleClass} relative flex max-w-full items-center justify-center select-none transition-transform duration-300 hover:scale-[1.01] ${sizeClass}`}
       style={visualVars}
     >
       <div className={`voice-agent-visual-layer ${compact ? "voice-agent-visual-layer-compact" : ""}`}>

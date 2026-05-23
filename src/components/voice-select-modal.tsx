@@ -31,6 +31,8 @@ type VoiceSelectModalProps = {
   onClose: () => void;
   onSelect: (settings: AgentVoiceSettings) => void;
   onVisualSelect?: (settings: AgentVisualSettings) => void;
+  initialTab?: "voice" | "visual";
+  visualOnly?: boolean;
   helperText?: string;
 };
 
@@ -90,11 +92,13 @@ export function VoiceSelectModal({
   onClose,
   onSelect,
   onVisualSelect,
+  initialTab = "voice",
+  visualOnly = false,
   helperText,
 }: VoiceSelectModalProps) {
   const current = normalizeAgentVoiceSettings(value ?? DEFAULT_AGENT_VOICE_SETTINGS);
   const currentVisual = normalizeAgentVisualSettings(visualValue ?? DEFAULT_AGENT_VISUAL_SETTINGS);
-  const [tab, setTab] = useState<"voice" | "visual">("voice");
+  const [tab, setTab] = useState<"voice" | "visual">(visualOnly ? "visual" : initialTab);
   const [provider, setProvider] = useState<ProviderFilter>("all");
   const [query, setQuery] = useState("");
   const [voices, setVoices] = useState<TtsVoiceOption[]>([]);
@@ -109,11 +113,11 @@ export function VoiceSelectModal({
 
   useEffect(() => {
     if (!open) return;
-    setTab("voice");
+    setTab(visualOnly ? "visual" : initialTab);
     setFavorites(readFavorites());
     setSpeed(current.speed ?? 1);
     setPreferNative(current.preferNative ?? false);
-  }, [open, current.speed, current.preferNative]);
+  }, [open, current.speed, current.preferNative, initialTab, visualOnly]);
 
   useEffect(() => {
     if (!open) return;
@@ -244,7 +248,7 @@ export function VoiceSelectModal({
             </div>
             <button type="button" onClick={onClose} className="text-xl text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
           </div>
-          {onVisualSelect ? (
+          {onVisualSelect && !visualOnly ? (
             <div className="mt-4 flex gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-1">
               {(["voice", "visual"] as const).map((item) => (
                 <button
@@ -262,7 +266,7 @@ export function VoiceSelectModal({
               ))}
             </div>
           ) : null}
-          {tab === "voice" ? (
+          {tab === "voice" && !visualOnly ? (
           <>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <input

@@ -25,8 +25,9 @@ interface AgentVisualizerProps {
   processingRgb: string;
   listeningColor: string;
   speakingColor: string;
-  onToggle: () => void;
+  onToggle?: () => void;
   settings?: AgentVisualSettings | null;
+  interactive?: boolean;
 }
 
 const INTENSITY_SCALE = {
@@ -54,6 +55,7 @@ export function AgentVisualizer({
   speakingColor,
   onToggle,
   settings,
+  interactive = true,
 }: AgentVisualizerProps) {
   const visualSettings = normalizeAgentVisualSettings(settings);
   const styleId = visualSettings.styleId;
@@ -75,21 +77,25 @@ export function AgentVisualizer({
       ? "h-16 w-16 sm:h-20 sm:w-20"
       : "h-20 w-20 sm:h-24 sm:w-24";
 
+  const Wrapper = interactive ? "button" : "div";
+
   return (
-    <button
-      onClick={onToggle}
+    <Wrapper
+      {...(interactive ? { onClick: onToggle, type: "button" as const } : { role: "presentation" })}
       className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${sizeClass}`}
       style={visualVars}
     >
-      {styleId === "builtin:neural-constellation" ? (
-        <NeuralConstellation compact={compact} immersive={immersive} />
-      ) : styleId === "builtin:hologram-waveform" ? (
-        <HologramWaveform compact={compact} immersive={immersive} />
-      ) : styleId === "builtin:command-core" ? (
-        <CommandCore compact={compact} immersive={immersive} />
-      ) : (
-        <OrbitalReactor compact={compact} immersive={immersive} particleCount={immersive ? 36 : compact ? 18 : 0} />
-      )}
+      <div className={`voice-agent-visual-layer ${compact ? "voice-agent-visual-layer-compact" : ""}`}>
+        {styleId === "builtin:neural-constellation" ? (
+          <NeuralConstellation compact={compact} immersive={immersive} />
+        ) : styleId === "builtin:hologram-waveform" ? (
+          <HologramWaveform compact={compact} immersive={immersive} />
+        ) : styleId === "builtin:command-core" ? (
+          <CommandCore compact={compact} immersive={immersive} />
+        ) : (
+          <OrbitalReactor compact={compact} immersive={immersive} particleCount={immersive ? 36 : compact ? 18 : 0} />
+        )}
+      </div>
 
       <div
         className={`absolute rounded-full blur-3xl transition-all duration-500 ${immersive ? "inset-[2%]" : "inset-[8%]"}`}
@@ -171,7 +177,7 @@ export function AgentVisualizer({
           />
         )}
       </div>
-    </button>
+    </Wrapper>
   );
 }
 
@@ -219,7 +225,7 @@ function OrbitalSharedRings({ compact, immersive }: { compact: boolean; immersiv
 }
 
 function NeuralConstellation({ compact, immersive }: { compact: boolean; immersive: boolean }) {
-  const nodeCount = immersive ? 28 : compact ? 16 : 20;
+  const nodeCount = immersive ? 28 : compact ? 14 : 20;
   return (
     <div className="voice-visual-neural" aria-hidden="true">
       <div className="voice-visual-neural-field" />
@@ -232,7 +238,7 @@ function NeuralConstellation({ compact, immersive }: { compact: boolean; immersi
           style={
             {
               "--node-angle": `${(360 / nodeCount) * i + (i % 3) * 11}deg`,
-              "--node-radius": `${compact ? 34 + (i % 5) * 5 : 31 + (i % 8) * 5}%`,
+              "--node-radius": `${compact ? 32 + (i % 5) * 4.5 : 31 + (i % 8) * 5}%`,
               "--node-size": `${compact ? 4 + (i % 3) : 5 + (i % 4)}px`,
               "--node-delay": `${(i % 9) * 0.16}s`,
             } as CSSProperties
@@ -255,7 +261,7 @@ function HologramWaveform({ compact, immersive }: { compact: boolean; immersive:
           style={
             {
               "--ribbon-index": `${i}`,
-              "--ribbon-offset": `${(i - (ribbons - 1) / 2) * (compact ? 9 : 13)}px`,
+              "--ribbon-offset": `${(i - (ribbons - 1) / 2) * (compact ? 8 : 13)}px`,
               "--ribbon-delay": `${i * 0.11}s`,
             } as CSSProperties
           }

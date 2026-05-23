@@ -4698,6 +4698,7 @@ export default function ChatPage() {
       runtimeId: selectedAgent.runtimeId ?? null,
       title: activeThread ? `${selectedAgent.callsign.toUpperCase()} thread` : selectedAgent.name ?? selectedAgent.callsign,
       voiceSettings: resolvedVoiceSettings,
+      visualSettings: resolvedVisualSettings,
     });
   }, [
     activeChannel?.name,
@@ -4711,6 +4712,7 @@ export default function ChatPage() {
     selectedAgent?.name,
     selectedAgent?.runtimeId,
     hasTrayActiveSession,
+    resolvedVisualSettings,
     resolvedVoiceSettings,
     setTrayActiveSession,
     setTrayVoiceState,

@@ -1,8 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useOrientationLock } from "@/hooks/use-orientation-lock";
+import { AgentVisualizer } from "@/components/chat/agent-visualizer";
 import {
   buildMediaRecorderOptions,
   createBrowserAudioContext,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/realtime-voice-client";
 import { RealtimeGatewayRelaySession, type RealtimeVoiceStatus } from "@/lib/realtime-voice-gateway-relay";
 import type { AgentVoiceSettings } from "@/lib/tts-voices";
+import type { AgentVisualSettings } from "@/lib/agent-visual-settings";
 
 type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
 
@@ -60,6 +61,7 @@ interface VoiceAgentProps {
   sessionKey?: string;
   realtimeRuntimeId?: string;
   voiceSettings?: AgentVoiceSettings | null;
+  visualSettings?: AgentVisualSettings | null;
 }
 
 function hexToRgb(hex: string): string {
@@ -125,6 +127,7 @@ export function VoiceAgent({
   sessionKey,
   realtimeRuntimeId,
   voiceSettings,
+  visualSettings,
 }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
@@ -1208,8 +1211,6 @@ export function VoiceAgent({
           ? speakingColor
           : "var(--text-tertiary)";
   const glowStrength = state === "idle" ? 0.16 : 0.28 + volumeLevel * 0.32;
-  const usesOrbitalVisual = immersive || compact;
-  const particleCount = immersive ? 36 : compact ? 18 : 0;
   const realtimeRelayActive = Boolean(realtimeRelayRef.current);
   const visualVolume = Math.min(1, volumeLevel * (nativeSessionActive || realtimeRelayActive ? 1.25 : 0.8));
   const motionLevel =
@@ -1245,211 +1246,26 @@ export function VoiceAgent({
         </div>
       )}
 
-      <button
-        onClick={isActive ? () => deactivate({ silence: true }) : activate}
-        className={`voice-agent-reactor relative flex max-w-full items-center justify-center rounded-full select-none transition-transform duration-300 hover:scale-[1.01] ${
-          immersive
-            ? "voice-agent-reactor-immersive h-[23rem] w-[23rem] sm:h-[28rem] sm:w-[28rem] lg:h-[36rem] lg:w-[36rem]"
-            : compact
-              ? "h-[7.5rem] w-[7.5rem] sm:h-[8.5rem] sm:w-[8.5rem]"
-              : "h-[10rem] w-[10rem] sm:h-[12rem] sm:w-[12rem]"
-        }`}
-        style={
-          {
-            "--voice-accent-rgb": activeRgb,
-            "--voice-volume": `${visualVolume}`,
-            "--voice-motion": `${motionLevel}`,
-          } as CSSProperties
-        }
-      >
-        {usesOrbitalVisual ? (
-          <>
-            <div className="voice-agent-aura voice-agent-aura-outer" />
-            <div className="voice-agent-aura voice-agent-aura-inner" />
-            <div className="voice-agent-orbit-shell" />
-            <div className="voice-agent-orbit-shell voice-agent-orbit-shell-reverse" />
-            <div className="voice-agent-spectrum" />
-            <div className="voice-agent-spectrum voice-agent-spectrum-inner" />
-            <div className="voice-agent-particle-cloud">
-              {Array.from({ length: particleCount }).map((_, i) => (
-                <span
-                  key={i}
-                  className="voice-agent-particle"
-                  style={
-                    {
-                      "--particle-angle": `${(360 / particleCount) * i}deg`,
-                      "--particle-delay": `${(i % 12) * 0.18}s`,
-                      "--particle-duration": `${6 + (i % 5) * 0.7}s`,
-                      "--particle-radius": `${47 + (i % 7) * 1.5}%`,
-                    } as CSSProperties
-                  }
-                />
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        <div
-          className={`absolute rounded-full blur-3xl transition-all duration-500 ${immersive ? "inset-[2%]" : "inset-[8%]"}`}
-          style={{
-            background:
-              state === "speaking"
-                ? `radial-gradient(circle, rgba(${speakingRgb},${0.24 + motionLevel * 0.24}) 0%, transparent 68%)`
-                : state === "processing"
-                  ? `radial-gradient(circle, rgba(${processingRgb},0.18) 0%, transparent 68%)`
-                  : `radial-gradient(circle, rgba(${activeRgb}, ${glowStrength}) 0%, transparent 68%)`,
-          }}
-        />
-
-        <div className={`voice-agent-ring voice-agent-ring-outer ${usesOrbitalVisual ? "voice-agent-ring-immersive" : ""}`} />
-        <div className={`voice-agent-ring voice-agent-ring-middle ${usesOrbitalVisual ? "voice-agent-ring-immersive" : ""}`} />
-        <div className={`voice-agent-ring voice-agent-ring-inner ${usesOrbitalVisual ? "voice-agent-ring-immersive" : ""}`} />
-        <div className={`voice-agent-grid ${usesOrbitalVisual ? "voice-agent-grid-immersive" : ""}`} />
-
-        <div
-          className={`absolute rounded-full transition-all duration-500 ${isActive ? "opacity-100" : "opacity-0"}`}
-          style={{
-            width: `${haloSize}px`,
-            height: `${haloSize}px`,
-            background:
-              state === "listening"
-                ? `radial-gradient(circle, rgba(${listeningRgb}, ${0.1 + visualVolume * 0.1}) 0%, transparent 70%)`
-                : state === "speaking"
-                  ? `radial-gradient(circle, rgba(${speakingRgb}, ${0.14 + motionLevel * 0.22}) 0%, transparent 70%)`
-                : state === "processing"
-                  ? `radial-gradient(circle, rgba(${processingRgb}, 0.08) 0%, transparent 70%)`
-                    : "none",
-          }}
-        />
-
-        <div
-          className={`voice-agent-core relative flex items-center justify-center rounded-full border transition-all duration-300 ${
-            immersive ? "h-56 w-56 sm:h-72 sm:w-72" : compact ? "h-16 w-16 sm:h-20 sm:w-20" : "h-20 w-20 sm:h-24 sm:w-24"
-          } ${
-            state === "idle"
-              ? "cursor-pointer border-[var(--border-medium)]"
-              : state === "listening"
-                ? "cursor-pointer"
-                : state === "processing"
-                  ? "cursor-pointer"
-                  : "cursor-pointer"
-          }`}
-          style={
-            state === "listening"
-              ? {
-                  borderColor: `rgba(${listeningRgb}, ${0.46 + visualVolume * 0.12})`,
-                  background: `radial-gradient(circle, rgba(${listeningRgb}, 0.24), var(--voice-shell-bg-strong) 72%)`,
-                  boxShadow: `0 0 ${22 + visualVolume * 18}px rgba(${listeningRgb}, ${0.18 + visualVolume * 0.16})`,
-                  transform: `scale(${orbScale})`,
-                }
-              : state === "speaking"
-                ? {
-                    borderColor: `rgba(${speakingRgb}, 0.55)`,
-                    background: `radial-gradient(circle, rgba(${speakingRgb},0.24), var(--voice-shell-bg-strong) 72%)`,
-                    boxShadow:
-                      `0 0 ${34 + motionLevel * 24}px rgba(${speakingRgb}, ${0.25 + motionLevel * 0.1}), 0 0 ${64 + motionLevel * 42}px rgba(${speakingRgb}, ${0.1 + motionLevel * 0.08})`,
-                    transform: `scale(${orbScale})`,
-                  }
-                : state === "processing"
-                  ? {
-                      borderColor: `rgba(${processingRgb}, 0.45)`,
-                      background: `radial-gradient(circle, rgba(${processingRgb},0.2), var(--voice-shell-bg-strong) 72%)`,
-                      boxShadow: `0 0 20px rgba(${processingRgb}, 0.15)`,
-                    }
-                  : {
-                      background: "radial-gradient(circle, color-mix(in srgb, var(--voice-shell-highlight) 90%, transparent), var(--voice-shell-bg-strong) 72%)",
-                    }
-          }
-        >
-          {usesOrbitalVisual ? (
-            <div className="voice-agent-orbital-core">
-              <div className="voice-agent-core-grid" />
-              <div className="voice-agent-core-lattice" />
-              <div className="voice-agent-core-pulse" />
-              <div className="voice-agent-core-highlight" />
-            </div>
-          ) : state === "idle" ? (
-            <svg
-              className={`${compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"} text-[var(--text-tertiary)]`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"
-              />
-            </svg>
-          ) : state === "muted" ? (
-            <svg
-              className={`${compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"} text-[var(--text-tertiary)]`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 9.75V4.5a3 3 0 0 0-5.68-1.35M9 9.75v3a3 3 0 0 0 5.12 2.12M18 10.5v2.25a6 6 0 0 1-9.65 4.76M6 10.5v2.25c0 .9.2 1.75.56 2.51M12 18.75v3.75m-3.75 0h7.5M3 3l18 18"
-              />
-            </svg>
-          ) : state === "listening" ? (
-            <>
-              <svg
-                className={compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke={listeningColor}
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
-                />
-              </svg>
-              {isRecordingRef.current && (
-                <span
-                  className="absolute inset-0 rounded-full border animate-ping"
-                  style={{ borderColor: `rgba(${listeningRgb}, 0.45)` }}
-                />
-              )}
-            </>
-          ) : state === "processing" ? (
-            <div className="flex items-center gap-1.5">
-              <span
-                className="h-2 w-2 rounded-full animate-pulse"
-                style={{ backgroundColor: `rgba(${processingRgb}, 0.68)` }}
-              />
-              <span
-                className="h-2 w-2 rounded-full animate-pulse"
-                style={{ backgroundColor: `rgba(${processingRgb}, 0.68)`, animationDelay: "0.15s" }}
-              />
-              <span
-                className="h-2 w-2 rounded-full animate-pulse"
-                style={{ backgroundColor: `rgba(${processingRgb}, 0.68)`, animationDelay: "0.3s" }}
-              />
-            </div>
-          ) : (
-            <svg
-              className={compact ? "h-7 w-7" : "h-10 w-10 sm:h-12 sm:w-12"}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke={speakingColor}
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
-              />
-            </svg>
-          )}
-        </div>
-      </button>
+      <AgentVisualizer
+        state={state}
+        isActive={isActive}
+        isRecording={isRecordingRef.current}
+        compact={compact}
+        immersive={immersive}
+        visualVolume={visualVolume}
+        motionLevel={motionLevel}
+        haloSize={haloSize}
+        orbScale={orbScale}
+        glowStrength={glowStrength}
+        activeRgb={activeRgb}
+        listeningRgb={listeningRgb}
+        speakingRgb={speakingRgb}
+        processingRgb={processingRgb}
+        listeningColor={listeningColor}
+        speakingColor={speakingColor}
+        onToggle={isActive ? () => deactivate({ silence: true }) : activate}
+        settings={visualSettings}
+      />
 
       {showCompactStatus ? (
         <div className="flex flex-col items-center gap-1.5">

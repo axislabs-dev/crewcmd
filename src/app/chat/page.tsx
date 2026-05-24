@@ -6012,7 +6012,10 @@ export default function ChatPage() {
       />
 
       {/* Input area — Claude-style layout */}
-      <div ref={composerDockRef} className={`z-20 shrink-0 bg-[var(--bg-primary)]/50 backdrop-blur-xl px-3 pb-1.5 pt-1.5 sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2 transition-opacity ${conversationTab === "messages" ? mobileConversationOpen ? "block" : "hidden lg:block" : "hidden"} ${isPaused ? "opacity-60" : ""}`}>
+      <div
+        ref={composerDockRef}
+        className={`${agentOverlayMode === "immersive" && voiceMode === "agent" && !activeThread ? "relative z-[130] shrink-0 bg-transparent px-0 py-0" : "z-20 shrink-0 bg-[var(--bg-primary)]/50 px-3 pb-1.5 pt-1.5 backdrop-blur-xl sm:px-4 lg:px-6 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:pt-2"} transition-opacity ${conversationTab === "messages" ? mobileConversationOpen ? "block" : "hidden lg:block" : "hidden"} ${isPaused ? "opacity-60" : ""}`}
+      >
         <div className="mx-auto max-w-3xl">
           <ChatComposer
             value={input}
@@ -6048,11 +6051,11 @@ export default function ChatPage() {
             agentPanel={voiceMode === "agent" && !activeThread ? (
               <div
                 className={agentOverlayMode === "immersive"
-                  ? "fixed inset-0 z-[90] flex items-center justify-center overflow-hidden border-0 px-4 pb-3 sm:px-6"
+                  ? "fixed inset-0 z-[130] flex items-center justify-center overflow-hidden border-0 px-4 pb-3 sm:px-6"
                   : "relative max-h-[min(10.75rem,28dvh)] overflow-hidden rounded-[24px] border border-[var(--voice-shell-border)] bg-[var(--bg-surface)]/88 px-3 py-2 shadow-[var(--theme-shadow)] backdrop-blur-xl sm:max-h-none"}
                 style={agentOverlayMode === "immersive" ? {
                   color: "var(--text-primary)",
-                  background: "linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 97%, transparent), color-mix(in srgb, var(--bg-primary) 93%, var(--bg-secondary) 7%))",
+                  background: "linear-gradient(180deg, var(--bg-primary), color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary) 6%))",
                 } : undefined}
               >
                 {agentOverlayMode === "immersive" ? (

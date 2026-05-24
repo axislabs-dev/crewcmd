@@ -321,13 +321,17 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
   const points = Array.from({ length: nodes }, (_, i) => {
     const seed = i * 12.9898;
     const lane = i / nodes;
-    const angle = lane * Math.PI * 2 + Math.sin(seed) * 0.52;
-    const radius = 0.2 + ((i * 37) % 100) / 140;
+    const angle = lane * Math.PI * 2 + Math.sin(seed) * 0.82;
+    const crossAngle = ((i * 19) % nodes) / nodes * Math.PI * 2 + Math.cos(seed) * 0.64;
+    const radius = 0.18 + ((i * 37) % 100) / 132;
     const drift = frame.state === "processing" ? -0.045 : frame.state === "speaking" ? 0.024 : 0.035;
     const pulse = Math.sin(frame.primaryPhase * 0.58 + i * 0.9) * drift;
+    const plane = frame.primaryPhase * 0.12;
+    const rawX = Math.cos(angle) * spreadX * (radius + pulse) + Math.cos(crossAngle + frame.secondaryPhase * 0.18) * spreadX * 0.12;
+    const rawY = Math.sin(crossAngle) * spreadY * (radius * 0.82 + pulse * 0.7) + Math.sin(angle - frame.tertiaryPhase * 0.1) * spreadY * 0.13;
     return {
-      x: cx + Math.cos(angle) * spreadX * (radius + pulse),
-      y: cy + Math.sin(angle * 1.17) * spreadY * (radius + pulse * 0.7),
+      x: cx + rawX * Math.cos(plane) - rawY * Math.sin(plane),
+      y: cy + rawX * Math.sin(plane) + rawY * Math.cos(plane),
       rank: (i * 7) % 11,
     };
   });

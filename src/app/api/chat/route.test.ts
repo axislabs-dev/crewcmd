@@ -48,6 +48,8 @@ vi.mock("@/lib/chat-pubsub", () => ({
 
 const mockSelectRecoveredAssistantText = vi.fn<(params: unknown) => string>(() => "");
 vi.mock("@/lib/chat-recovery", () => ({
+  isAssistantDeliveryPlaceholder: (content: string) =>
+    content.trim().replace(/\s+/g, " ").toLowerCase() === "answered in chat.",
   selectRecoveredAssistantText: (params: unknown) => mockSelectRecoveredAssistantText(params),
 }));
 
@@ -776,6 +778,60 @@ describe("POST /api/chat", () => {
     const streamed = await readUntilDone(reader);
     expect(streamed).not.toContain("raw tool output");
     expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"human-facing answer\"}}]");
+    expect(streamed).toContain("data: [DONE]");
+  });
+
+  it("streams message-tool source replies instead of the delivery placeholder", async () => {
+    const chatHandlers: Array<(payload: unknown) => void> = [];
+    mockGetGatewayClient.mockResolvedValueOnce({
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") chatHandlers.push(handler);
+      }),
+      off: vi.fn(),
+      chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "did it publish?" }],
+      agent: "main",
+    }));
+    const reader = response.body!.getReader();
+    await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+    await vi.waitFor(() => {
+      expect(chatHandlers).toHaveLength(1);
+    });
+
+    chatHandlers[0]({
+      event: "agent",
+      stream: "tool",
+      sessionKey: "main",
+      runId: "run-1",
+      data: {
+        name: "message",
+        phase: "completed",
+        result: {
+          status: "ok",
+          sourceReply: {
+            text: "Detailed answer from the message tool.",
+          },
+        },
+      },
+    });
+    chatHandlers[0]({
+      event: "chat",
+      state: "final",
+      sessionKey: "main",
+      runId: "run-1",
+      message: { role: "assistant", content: "Answered in chat." },
+    });
+
+    const streamed = await readUntilDone(reader);
+    expect(streamed).toContain("\"choices\":[{\"delta\":{\"content\":\"Detailed answer from the message tool.\"}}]");
+    expect(streamed).not.toContain("\"choices\":[{\"delta\":{\"content\":\"Answered in chat.\"}}]");
     expect(streamed).toContain("data: [DONE]");
   });
 

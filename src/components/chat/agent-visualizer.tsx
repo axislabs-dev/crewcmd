@@ -310,6 +310,11 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
   const nodes = frame.compact ? 16 : frame.immersive ? 34 : 24;
   const spreadX = size * (frame.immersive ? 0.36 : 0.34);
   const spreadY = size * (frame.immersive ? 0.3 : 0.28);
+  const voiceEnergy = frame.state === "listening" || frame.state === "speaking"
+    ? clamp(frame.visualVolume * 1.6 + frame.motionLevel * 0.7)
+    : frame.state === "processing"
+      ? 0.58
+      : 0.16;
 
   drawBackground(ctx, frame, ink, false);
 
@@ -329,6 +334,7 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
+  const links: Array<{ a: typeof points[number]; b: typeof points[number]; i: number; j: number; distance: number; threshold: number }> = [];
   for (let i = 0; i < points.length; i += 1) {
     for (let j = i + 1; j < points.length; j += 1) {
       const a = points[i];
@@ -338,9 +344,39 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
       const distance = Math.hypot(dx, dy);
       const threshold = size * (frame.compact ? 0.19 : 0.16);
       if (distance > threshold) continue;
-      const route = frame.state === "processing" ? Math.sin(frame.primaryPhase * 2.6 + i * 0.8 + j) * 0.5 + 0.5 : 0.25;
-      const alpha = (1 - distance / threshold) * (0.15 + energy * 0.24 + route * 0.18);
-      line(ctx, a.x, a.y, b.x, b.y, rgba(route > 0.7 ? accent : cool, alpha), 1 + route * 1.4);
+      links.push({ a, b, i, j, distance, threshold });
+      const routeWave = Math.sin(frame.primaryPhase * 2.4 + i * 0.8 + j * 0.47) * 0.5 + 0.5;
+      const voiceWave = Math.sin(frame.tertiaryPhase * 3.6 - Math.min(a.rank, b.rank) * 0.7) * 0.5 + 0.5;
+      const route = frame.state === "processing" ? routeWave : frame.state === "speaking" ? voiceWave : frame.state === "listening" ? 1 - voiceWave : 0.22;
+      const alpha = (1 - distance / threshold) * (0.1 + energy * 0.16 + route * voiceEnergy * 0.44);
+      const width = 0.7 + route * voiceEnergy * 2.4;
+      line(ctx, a.x, a.y, b.x, b.y, rgba(route > 0.54 ? accent : cool, alpha), width);
+    }
+  }
+
+  if (voiceEnergy > 0.18) {
+    const packetCount = frame.compact ? 10 : frame.immersive ? 26 : 18;
+    for (let n = 0; n < Math.min(packetCount, links.length); n += 1) {
+      const link = links[(n * 7 + Math.floor(frame.secondaryPhase * 2)) % links.length];
+      if (!link) continue;
+      const progress = (frame.tertiaryPhase * (frame.state === "speaking" ? 0.46 : -0.38) + n * 0.131) % 1;
+      const t = progress < 0 ? progress + 1 : progress;
+      const x = link.a.x + (link.b.x - link.a.x) * t;
+      const y = link.a.y + (link.b.y - link.a.y) * t;
+      const packetAlpha = (1 - link.distance / link.threshold) * voiceEnergy * (frame.state === "idle" ? 0.18 : 0.58);
+      glow(ctx, x, y, size * 0.035, accent, packetAlpha * 0.12);
+      circle(ctx, x, y, 1.4 + voiceEnergy * 2.8, rgba(accent, packetAlpha), 1, rgba(mix(accent, [255, 255, 255], 0.28), packetAlpha * 0.45));
+    }
+  }
+
+  if (voiceEnergy > 0.22) {
+    const rings = frame.state === "speaking" ? 3 : 2;
+    for (let i = 0; i < rings; i += 1) {
+      const pulse = (frame.secondaryPhase * (frame.state === "speaking" ? 0.38 : -0.3) + i / rings) % 1;
+      const t = pulse < 0 ? pulse + 1 : pulse;
+      const radius = size * (0.08 + t * 0.34);
+      const alpha = (1 - t) * voiceEnergy * 0.24;
+      circle(ctx, cx, cy, radius, rgba(frame.state === "speaking" ? frame.speaking : frame.listening, alpha), 1.2 + voiceEnergy * 1.5);
     }
   }
 
@@ -355,8 +391,8 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
         : frame.state === "processing"
           ? wave * 0.82
           : 0.24;
-    const radius = (frame.compact ? 2.1 : 3.1) + active * energy * (frame.immersive ? 5.8 : 3.8);
-    glow(ctx, point.x, point.y, radius * 4.2, accent, active * 0.08);
+    const radius = (frame.compact ? 2.1 : 3.1) + active * energy * (frame.immersive ? 5.8 : 3.8) + voiceEnergy * active * 1.8;
+    glow(ctx, point.x, point.y, radius * (4.2 + voiceEnergy * 2.8), accent, active * (0.08 + voiceEnergy * 0.08));
     circle(ctx, point.x, point.y, radius, rgba(mix(accent, [232, 249, 246], 0.35), 0.42 + active * 0.36), 1, rgba(accent, 0.12 + active * 0.18));
   }
   ctx.restore();

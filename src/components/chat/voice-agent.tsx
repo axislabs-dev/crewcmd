@@ -1244,7 +1244,7 @@ export function VoiceAgent({
       )}
 
       <AgentVisualizer
-        state={state}
+        state={displayState}
         isActive={isActive}
         isRecording={isRecordingRef.current}
         compact={compact}

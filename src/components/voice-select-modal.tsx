@@ -233,7 +233,7 @@ export function VoiceSelectModal({
   const selectedKey = current.provider && current.voiceId ? `${current.provider}:${current.voiceId}` : "";
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div
         className="flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-primary)] shadow-2xl sm:max-h-[86vh]"
         onClick={(event) => event.stopPropagation()}

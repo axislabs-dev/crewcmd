@@ -6,7 +6,7 @@ import { db, withRetry } from "@/db";
 import { agents, channelMembers, chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
 import { eq, desc, and, isNull, sql } from "drizzle-orm";
 import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
-import { selectRecoveredAssistantText } from "@/lib/chat-recovery";
+import { isAssistantDeliveryPlaceholder, selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
 import { sendAgentReplyNotification } from "@/lib/mobile-push";
 import { registerChatRunAbort } from "@/lib/chat-run-abort-registry";
@@ -269,6 +269,51 @@ function extractText(value: unknown, seen = new WeakSet<object>()): string {
   for (const key of nestedKeys) {
     const nested = extractText(record[key], seen);
     if (nested) return nested;
+  }
+
+  return "";
+}
+
+function parseJsonRecord(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return null;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function extractSourceReplyText(value: unknown, seen = new WeakSet<object>()): string {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const parsed = parseJsonRecord(value);
+    return parsed ? extractSourceReplyText(parsed, seen) : "";
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = extractSourceReplyText(item, seen);
+      if (text) return text;
+    }
+    return "";
+  }
+
+  const record = asRecord(value);
+  if (!record) return "";
+  if (seen.has(record)) return "";
+  seen.add(record);
+
+  const sourceReply = asRecord(record.sourceReply) ?? asRecord(record.source_reply);
+  const direct = sourceReply
+    ? firstString(sourceReply.text, sourceReply.message, sourceReply.content)
+    : firstString(record.sourceReplyText, record.source_reply_text);
+  if (direct && !isAssistantDeliveryPlaceholder(direct)) return direct;
+
+  for (const key of ["content", "text", "output", "result", "data", "payload", "message"]) {
+    const text = extractSourceReplyText(record[key], seen);
+    if (text) return text;
   }
 
   return "";
@@ -1012,6 +1057,7 @@ export async function POST(request: NextRequest) {
     let historySnapshotStreamed = false;
     let hasToolActivity = false;
     let deferredToolCompletion = false;
+    let deliveredSourceReplyText = "";
 
     const enqueueData = (payload: unknown) => {
       if (!streamController || done) return;
@@ -1440,6 +1486,13 @@ export async function POST(request: NextRequest) {
       if (!matchesSession) return;
 
       const state = p.state as string;
+      const sourceReplyText = extractSourceReplyText(p);
+      if (sourceReplyText) {
+        deliveredSourceReplyText = sourceReplyText;
+        if (streamAssistantSnapshot(sourceReplyText)) {
+          historySnapshotStreamed = true;
+        }
+      }
       const isChatLifecycle = isChatLifecycleEvent(p);
       const compactionProgress = extractCompactionProgress(p);
       const toolProgress = compactionProgress ? null : extractToolProgress(p);
@@ -1500,7 +1553,10 @@ export async function POST(request: NextRequest) {
       } else if (state === "final") {
         const finalMessage = p.message || p;
         const toolOnlyFinal = isToolOnlyMessage(finalMessage);
-        const finalText = toolOnlyFinal ? "" : extractText(finalMessage);
+        const extractedFinalText = toolOnlyFinal ? "" : extractText(finalMessage);
+        const finalText = extractedFinalText && isAssistantDeliveryPlaceholder(extractedFinalText)
+          ? deliveredSourceReplyText
+          : extractedFinalText;
         if (finalText && !streamAssistantSnapshot(finalText)) {
           fullAssistantText = finalText;
         }

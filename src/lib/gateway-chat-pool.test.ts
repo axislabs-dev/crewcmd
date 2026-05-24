@@ -187,4 +187,23 @@ describe("getGatewayClientForRuntime", () => {
     expect(mockState.clients[0].close).toHaveBeenCalledTimes(1);
     expect(getGatewayPoolDiagnostics()).toMatchObject({ poolSize: 1 });
   });
+
+  it("replaces disconnected held clients instead of returning them", async () => {
+    addRuntime("runtime-a");
+
+    const disconnectedClient = await getGatewayClientForRuntime("runtime-a");
+    holdClient(disconnectedClient);
+    mockState.clients[0].isConnected = false;
+
+    const freshClient = await getGatewayClientForRuntime("runtime-a");
+
+    expect(freshClient).not.toBe(disconnectedClient);
+    expect(mockState.clients).toHaveLength(2);
+    expect(mockState.clients[0].close).toHaveBeenCalledTimes(1);
+    expect(getGatewayPoolDiagnostics()).toMatchObject({
+      activeClients: 0,
+      activeHolds: 0,
+      poolSize: 1,
+    });
+  });
 });

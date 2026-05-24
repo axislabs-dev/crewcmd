@@ -505,7 +505,7 @@ async function getClientForRuntime(runtime: GatewayRuntimeConnection | null | un
 
   // Close stale connection — but only if no active request is using it
   if (existing) {
-    if (activeClientHolds.has(existing.client)) {
+    if (activeClientHolds.has(existing.client) && existing.client.isConnected) {
       // Client is mid-request, return it anyway (don't recycle under its feet)
       publishAgentModeDiagnostic({
         scope: "gateway-pool",
@@ -519,6 +519,7 @@ async function getClientForRuntime(runtime: GatewayRuntimeConnection | null | un
       });
       return existing.client;
     }
+    activeClientHolds.delete(existing.client);
     publishAgentModeDiagnostic({
       scope: "gateway-pool",
       event: "client.recycle.close-stale",

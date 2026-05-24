@@ -299,12 +299,11 @@ function drawOrbitalReactor(ctx: CanvasRenderingContext2D, frame: DrawFrame) {
 }
 
 function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame) {
-  const { width, height, time } = frame;
+  const { width, height } = frame;
   const cx = width / 2;
   const cy = height / 2;
   const size = Math.min(width, height);
   const energy = stateEnergy(frame);
-  const motion = frame.reducedMotion ? 0 : frame.motionLevel * frame.intensity;
   const accent = activeColor(frame);
   const ink: Rgb = [20, 28, 38];
   const cool: Rgb = [84, 180, 194];
@@ -319,8 +318,8 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
     const lane = i / nodes;
     const angle = lane * Math.PI * 2 + Math.sin(seed) * 0.52;
     const radius = 0.2 + ((i * 37) % 100) / 140;
-    const drift = frame.state === "processing" ? -0.08 : 0.045;
-    const pulse = Math.sin(time * (0.7 + motion) + i * 0.9) * drift;
+    const drift = frame.state === "processing" ? -0.045 : frame.state === "speaking" ? 0.024 : 0.035;
+    const pulse = Math.sin(frame.primaryPhase * 0.58 + i * 0.9) * drift;
     return {
       x: cx + Math.cos(angle) * spreadX * (radius + pulse),
       y: cy + Math.sin(angle * 1.17) * spreadY * (radius + pulse * 0.7),
@@ -347,8 +346,15 @@ function drawNeuralConstellation(ctx: CanvasRenderingContext2D, frame: DrawFrame
 
   for (let i = 0; i < points.length; i += 1) {
     const point = points[i];
-    const wave = Math.max(0, Math.sin(frame.secondaryPhase * (1.4 + motion) - point.rank * 0.75));
-    const active = frame.state === "listening" ? wave : frame.state === "speaking" ? 1 - wave * 0.45 : frame.state === "processing" ? wave * 0.9 : 0.28;
+    const wave = Math.max(0, Math.sin(frame.secondaryPhase * 1.25 - point.rank * 0.75));
+    const outbound = Math.max(0, Math.sin(frame.tertiaryPhase * 0.9 - point.rank * 0.42));
+    const active = frame.state === "listening"
+      ? wave
+      : frame.state === "speaking"
+        ? 0.34 + outbound * 0.48
+        : frame.state === "processing"
+          ? wave * 0.82
+          : 0.24;
     const radius = (frame.compact ? 2.1 : 3.1) + active * energy * (frame.immersive ? 5.8 : 3.8);
     glow(ctx, point.x, point.y, radius * 4.2, accent, active * 0.08);
     circle(ctx, point.x, point.y, radius, rgba(mix(accent, [232, 249, 246], 0.35), 0.42 + active * 0.36), 1, rgba(accent, 0.12 + active * 0.18));

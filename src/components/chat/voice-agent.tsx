@@ -533,7 +533,10 @@ export function VoiceAgent({
         },
         onVoiceLevel: setVolumeLevel,
         onSpeakingChange: (speaking) => {
-          if (speaking) setState("speaking");
+          setState((current) => {
+            if (speaking) return "speaking";
+            return current === "speaking" ? "listening" : current;
+          });
         },
         onError: (message) => {
           recordVoiceBreadcrumb("realtime.relay.error", { message });

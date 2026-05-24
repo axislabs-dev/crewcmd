@@ -63,4 +63,17 @@ describe("selectRecoveredAssistantText", () => {
 
     expect(recovered).toBe("");
   });
+
+  it("skips webchat delivery placeholders and recovers the mirrored source reply", () => {
+    const recovered = selectRecoveredAssistantText({
+      messages: [
+        { role: "user", content: "did the cron publish?" },
+        { role: "assistant", content: "Answered in chat." },
+        { role: "assistant", content: "Yes, it published updates, not five brand-new repos." },
+      ],
+      currentUserContents: ["did the cron publish?"],
+    });
+
+    expect(recovered).toBe("Yes, it published updates, not five brand-new repos.");
+  });
 });

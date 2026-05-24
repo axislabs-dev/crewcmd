@@ -13,6 +13,10 @@ function contentSet(contents: string[]) {
   );
 }
 
+export function isAssistantDeliveryPlaceholder(content: string) {
+  return normalizeContent(content).toLowerCase() === "answered in chat.";
+}
+
 export function selectRecoveredAssistantText(params: {
   messages: ChatRecoveryMessage[];
   currentUserContents: string[];
@@ -31,7 +35,11 @@ export function selectRecoveredAssistantText(params: {
 
   const recovered = params.messages
     .slice(lastMatchingUserIndex + 1)
-    .find((message) => message.role === "assistant" && message.content.trim());
+    .find((message) =>
+      message.role === "assistant" &&
+      message.content.trim() &&
+      !isAssistantDeliveryPlaceholder(message.content)
+    );
 
   if (!recovered) return "";
 

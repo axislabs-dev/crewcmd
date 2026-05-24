@@ -170,8 +170,8 @@ export function VoiceAgent({
     const normalized = Math.max(0, Math.min(1, Number.isFinite(nextLevel) ? nextLevel : 0));
     const now = Date.now();
     if (
-      now - lastVolumeLevelAtRef.current < 50 &&
-      Math.abs(normalized - lastVolumeLevelRef.current) < 0.035
+      now - lastVolumeLevelAtRef.current < 24 &&
+      Math.abs(normalized - lastVolumeLevelRef.current) < 0.012
     ) {
       return;
     }

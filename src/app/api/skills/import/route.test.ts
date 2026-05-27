@@ -141,6 +141,7 @@ describe("POST /api/skills/import native ClawHub", () => {
     createdRows.length = 0;
     updatedRows.length = 0;
     existingSkill = null;
+    vi.unstubAllGlobals();
     nativeMocks.detailCalls.length = 0;
     nativeMocks.installCalls.length = 0;
     nativeMocks.setRejectVersionOnce(false);
@@ -244,5 +245,111 @@ describe("POST /api/skills/import native ClawHub", () => {
       installPath: "/Users/roger/.openclaw/workspace/skills/calendar",
       installStatus: "installed",
     });
+  });
+
+  it("imports a GitHub skill folder with SKILL.md and skill.json metadata", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/SKILL.md")) {
+          return new Response(`---
+name: paperhug-card
+description: Create printable greeting cards.
+---
+
+# Paperhug Card
+
+Use the Paperhug CLI to create, refine, preview, and print cards.
+`);
+        }
+        if (url.endsWith("/skill.json")) {
+          return new Response(
+            JSON.stringify({
+              name: "Paperhug Card Maker",
+              slug: "paperhug-card",
+              description: "Create and print greeting cards.",
+              version: "0.1.0",
+              metadata: {
+                kind: "cli-skill",
+                openclaw: {
+                  requires: { env: ["OPENAI_API_KEY"] },
+                  primaryEnv: "OPENAI_API_KEY",
+                },
+                configSchema: {
+                  type: "object",
+                  properties: {
+                    openaiApiKey: {
+                      type: "object",
+                      properties: { name: { type: "string" } },
+                      required: ["name"],
+                    },
+                  },
+                  required: ["openaiApiKey"],
+                },
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      }),
+    );
+
+    const request = new NextRequest("http://localhost/api/skills/import", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: "github",
+        sourceUrl:
+          "https://github.com/rogerchappel/paperhug/tree/main/skills/paperhug-card",
+        workspaceId: "workspace-1",
+      }),
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(createdRows).toHaveLength(1);
+    expect(json).toMatchObject({
+      id: "skill-1",
+      workspaceId: "workspace-1",
+      name: "Paperhug Card Maker",
+      slug: "paperhug-card",
+      source: "github",
+      sourceUrl:
+        "https://github.com/rogerchappel/paperhug/tree/main/skills/paperhug-card",
+      sourceRef: "main/skills/paperhug-card",
+      version: "0.1.0",
+      installed: true,
+    });
+    expect(json.content).toMatch(/^# Paperhug Card/);
+    expect(json.metadata).toMatchObject({
+      kind: "cli-skill",
+      openclaw: {
+        primaryEnv: "OPENAI_API_KEY",
+      },
+      configSchema: {
+        required: ["openaiApiKey"],
+      },
+    });
+  });
+
+  it("rejects non-GitHub URL imports", async () => {
+    const request = new NextRequest("http://localhost/api/skills/import", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: "github",
+        sourceUrl: "https://example.com/skills/paperhug-card",
+        workspaceId: "workspace-1",
+      }),
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toMatch(/github.com/);
+    expect(createdRows).toHaveLength(0);
   });
 });

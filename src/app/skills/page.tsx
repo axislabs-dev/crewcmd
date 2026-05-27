@@ -65,6 +65,13 @@ const SOURCE_STYLES: Record<
     border: "border-[#00f0ff]/30",
     bg: "bg-[#00f0ff]/10",
   },
+  github: {
+    label: "GitHub",
+    icon: "GH",
+    color: "text-slate-300",
+    border: "border-slate-400/30",
+    bg: "bg-slate-400/10",
+  },
   system: {
     label: "System",
     icon: "\u{1F512}",
@@ -319,6 +326,7 @@ export default function SkillsPage() {
 
   // Custom skill form
   const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customSourceUrl, setCustomSourceUrl] = useState("");
   const [customName, setCustomName] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [customContent, setCustomContent] = useState("");
@@ -649,9 +657,41 @@ export default function SkillsPage() {
   }
 
   async function handleCreateCustom() {
-    if (!companyId || !workspaceId || !customName.trim()) return;
+    if (!workspaceId) return;
+    const trimmedSourceUrl = customSourceUrl.trim();
+    if (!trimmedSourceUrl && !customName.trim()) return;
     setSavingCustom(true);
     try {
+      if (trimmedSourceUrl) {
+        const res = await fetch("/api/skills/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "github",
+            source: "github",
+            sourceUrl: trimmedSourceUrl,
+            workspaceId,
+            companyId,
+            ...(customName.trim() ? { name: customName.trim() } : {}),
+            ...(customDescription.trim()
+              ? { description: customDescription.trim() }
+              : {}),
+          }),
+        });
+        if (!res.ok) {
+          addToast("Failed to import GitHub skill");
+          return;
+        }
+        setShowCustomForm(false);
+        setCustomSourceUrl("");
+        setCustomName("");
+        setCustomDescription("");
+        setCustomContent("");
+        await fetchSkills(workspaceId, companyId);
+        addToast("GitHub skill imported", "success");
+        return;
+      }
+
       const slug = customName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -671,6 +711,7 @@ export default function SkillsPage() {
       });
       if (res.ok) {
         setShowCustomForm(false);
+        setCustomSourceUrl("");
         setCustomName("");
         setCustomDescription("");
         setCustomContent("");
@@ -1030,7 +1071,7 @@ export default function SkillsPage() {
           )}
 
           {/* CUSTOM TAB */}
-          {tab === "custom" && companyId && (
+          {tab === "custom" && workspaceId && (
             <>
               <button
                 onClick={() => setShowCustomForm(true)}
@@ -1073,13 +1114,13 @@ export default function SkillsPage() {
             </>
           )}
 
-          {tab === "custom" && !companyId && (
+          {tab === "custom" && !workspaceId && (
             <div className="py-8 text-center">
               <p className="font-mono text-[10px] text-[var(--text-tertiary)]">
-                Custom skills are company-scoped.
+                Custom skills require a workspace.
               </p>
               <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">
-                Switch to a company workspace to create them.
+                Select a workspace from the sidebar to create them.
               </p>
             </div>
           )}
@@ -1115,15 +1156,35 @@ export default function SkillsPage() {
             <div className="mt-4 space-y-3">
               <div>
                 <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
+                  GITHUB SKILL URL
+                </label>
+                <input
+                  type="text"
+                  value={customSourceUrl}
+                  onChange={(e) => setCustomSourceUrl(e.target.value)}
+                  placeholder="https://github.com/org/repo/tree/main/skills/my-skill"
+                  className={`mt-1 ${inputClass}`}
+                  autoFocus
+                />
+                <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  Import a folder containing SKILL.md and optional skill.json.
+                  Leave blank to paste skill content manually.
+                </p>
+              </div>
+              <div>
+                <label className="text-[11px] tracking-wider text-[var(--text-secondary)] uppercase">
                   NAME
                 </label>
                 <input
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="e.g., My Custom Skill"
+                  placeholder={
+                    customSourceUrl.trim()
+                      ? "Optional display name override"
+                      : "e.g., My Custom Skill"
+                  }
                   className={`mt-1 ${inputClass}`}
-                  autoFocus
                 />
               </div>
               <div>
@@ -1161,10 +1222,17 @@ export default function SkillsPage() {
                 </button>
                 <button
                   onClick={handleCreateCustom}
-                  disabled={savingCustom || !customName.trim()}
+                  disabled={
+                    savingCustom ||
+                    (!customName.trim() && !customSourceUrl.trim())
+                  }
                   className="rounded-lg bg-[var(--accent-soft)] px-4 py-2 font-mono text-xs tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent-medium)] disabled:opacity-50"
                 >
-                  {savingCustom ? "SAVING..." : "CREATE SKILL"}
+                  {savingCustom
+                    ? "SAVING..."
+                    : customSourceUrl.trim()
+                      ? "IMPORT SKILL"
+                      : "CREATE SKILL"}
                 </button>
               </div>
             </div>

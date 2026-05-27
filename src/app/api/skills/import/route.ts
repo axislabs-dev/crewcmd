@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
       description,
       version,
       sourceUrl,
+      sourceRef,
+      url,
       content,
       metadata,
       force,
@@ -88,9 +90,26 @@ export async function POST(request: NextRequest) {
       if (native) return native;
     }
 
-    const skillName = name || query || "Imported Skill";
+    let githubSkill: GithubSkillPayload | null = null;
+    if (
+      effectiveProvider === "github" &&
+      typeof (sourceUrl || url) === "string" &&
+      String(sourceUrl || url).trim()
+    ) {
+      try {
+        githubSkill = await loadGithubSkill(String(sourceUrl || url).trim());
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+    }
+
+    const mergedMetadata = mergeObjects(githubSkill?.metadata, metadata);
+    const skillName =
+      name || githubSkill?.name || query || "Imported Skill";
     const skillSlug =
       slug ||
+      githubSkill?.slug ||
       skillName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -103,13 +122,14 @@ export async function POST(request: NextRequest) {
           workspaceId: workspace.id,
           name: skillName,
           slug: skillSlug,
-          description: description || null,
+          description: description || githubSkill?.description || null,
           source: effectiveProvider,
-          sourceUrl: sourceUrl || null,
-          version: version || null,
-          content: content || null,
+          sourceUrl: githubSkill?.sourceUrl || sourceUrl || null,
+          sourceRef: sourceRef || githubSkill?.sourceRef || null,
+          version: version || githubSkill?.version || null,
+          content: content || githubSkill?.content || null,
           companyId: resolvedCompanyId,
-          metadata: metadata || {},
+          metadata: mergedMetadata,
           installed: true,
         })
         .returning(),
@@ -123,6 +143,164 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+interface GithubSkillPayload {
+  name?: string;
+  slug?: string;
+  description?: string;
+  version?: string;
+  sourceUrl: string;
+  sourceRef: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}
+
+interface GithubSkillTarget {
+  skillMdUrl: string;
+  manifestUrl: string;
+  metadataUrl: string;
+  sourceUrl: string;
+  sourceRef: string;
+  fallbackSlug: string;
+}
+
+async function loadGithubSkill(inputUrl: string): Promise<GithubSkillPayload> {
+  const target = resolveGithubSkillTarget(inputUrl);
+  const skillMd = await fetchRequiredText(target.skillMdUrl);
+  const manifest = await fetchOptionalJson(target.manifestUrl);
+  const fallbackMetadata = await fetchOptionalJson(target.metadataUrl);
+  const parsed = parseSkillMarkdown(skillMd);
+  const metadata = mergeObjects(
+    isRecord(fallbackMetadata) ? fallbackMetadata : undefined,
+    isRecord(manifest?.metadata) ? manifest.metadata : undefined,
+  );
+
+  return {
+    name: readString(manifest?.name) || readString(parsed.frontmatter.name),
+    slug:
+      readString(manifest?.slug) ||
+      readString(parsed.frontmatter.name)?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") ||
+      target.fallbackSlug,
+    description:
+      readString(manifest?.description) ||
+      readString(parsed.frontmatter.description),
+    version: readString(manifest?.version),
+    sourceUrl: readString(manifest?.sourceUrl) || target.sourceUrl,
+    sourceRef: target.sourceRef,
+    content: parsed.content,
+    metadata,
+  };
+}
+
+function resolveGithubSkillTarget(input: string): GithubSkillTarget {
+  const url = new URL(input);
+  if (url.hostname === "github.com") {
+    const parts = url.pathname.split("/").filter(Boolean);
+    const [owner, repo, marker, ref, ...rest] = parts;
+    if (!owner || !repo || !marker || !ref || !["tree", "blob"].includes(marker)) {
+      throw new Error("GitHub skill imports require a repository tree or blob URL");
+    }
+
+    const folderParts =
+      marker === "blob" && rest.at(-1)?.toLowerCase() === "skill.md"
+        ? rest.slice(0, -1)
+        : rest;
+    const rawBase = `https://raw.githubusercontent.com/${encodePath([owner, repo, ref, ...folderParts])}`;
+    const githubBase = `https://github.com/${encodePath([owner, repo])}/tree/${encodePath([ref, ...folderParts])}`;
+    return {
+      skillMdUrl: `${rawBase}/SKILL.md`,
+      manifestUrl: `${rawBase}/skill.json`,
+      metadataUrl: `${rawBase}/metadata.json`,
+      sourceUrl: githubBase,
+      sourceRef: [ref, ...folderParts].join("/"),
+      fallbackSlug: folderParts.at(-1) || repo,
+    };
+  }
+
+  if (url.hostname === "raw.githubusercontent.com") {
+    const parts = url.pathname.split("/").filter(Boolean);
+    const [owner, repo, ref, ...rest] = parts;
+    if (!owner || !repo || !ref || rest.length === 0) {
+      throw new Error("Raw GitHub skill imports require a SKILL.md URL");
+    }
+    const folderParts =
+      rest.at(-1)?.toLowerCase() === "skill.md" ? rest.slice(0, -1) : rest;
+    const rawBase = `https://raw.githubusercontent.com/${encodePath([owner, repo, ref, ...folderParts])}`;
+    return {
+      skillMdUrl: `${rawBase}/SKILL.md`,
+      manifestUrl: `${rawBase}/skill.json`,
+      metadataUrl: `${rawBase}/metadata.json`,
+      sourceUrl: `https://github.com/${encodePath([owner, repo])}/tree/${encodePath([ref, ...folderParts])}`,
+      sourceRef: [ref, ...folderParts].join("/"),
+      fallbackSlug: folderParts.at(-1) || repo,
+    };
+  }
+
+  throw new Error("Only github.com and raw.githubusercontent.com skill URLs are supported");
+}
+
+async function fetchRequiredText(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Could not fetch SKILL.md from ${url}: ${response.status}`);
+  }
+  return response.text();
+}
+
+async function fetchOptionalJson(url: string): Promise<Record<string, unknown> | null> {
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Could not fetch skill metadata from ${url}: ${response.status}`);
+  }
+  const value = await response.json();
+  return isRecord(value) ? value : null;
+}
+
+function parseSkillMarkdown(markdown: string): {
+  frontmatter: Record<string, string>;
+  content: string;
+} {
+  if (!markdown.startsWith("---\n")) {
+    return { frontmatter: {}, content: markdown };
+  }
+
+  const end = markdown.indexOf("\n---", 4);
+  if (end === -1) return { frontmatter: {}, content: markdown };
+
+  const raw = markdown.slice(4, end);
+  const frontmatter: Record<string, string> = {};
+  for (const line of raw.split("\n")) {
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.+)$/);
+    if (!match) continue;
+    frontmatter[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
+  }
+
+  const content = markdown.slice(end + "\n---".length).replace(/^\s+/, "");
+  return { frontmatter, content };
+}
+
+function encodePath(parts: string[]): string {
+  return parts.map((part) => encodeURIComponent(part)).join("/");
+}
+
+function mergeObjects(
+  base: Record<string, unknown> | undefined,
+  overlay: unknown,
+): Record<string, unknown> {
+  return {
+    ...(base || {}),
+    ...(isRecord(overlay) ? overlay : {}),
+  };
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeInstallVersion(version: unknown): string | undefined {

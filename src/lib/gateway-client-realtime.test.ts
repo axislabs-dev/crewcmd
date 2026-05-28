@@ -95,6 +95,51 @@ describe("GatewayClient realtime Talk compatibility", () => {
     });
   });
 
+  it("skips interim continuing tool results when only the legacy relay API is available", async () => {
+    const client = new GatewayClient("ws://localhost:18789", null, device);
+    const rpc = vi.spyOn(client, "rpc")
+      .mockRejectedValueOnce(new Error("method not found"));
+
+    await expect(client.realtimeRelayToolResult({
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { status: "working" },
+      options: { willContinue: true },
+    })).resolves.toEqual({ ok: true });
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("talk.session.submitToolResult", {
+      sessionId: "relay_1",
+      callId: "call_1",
+      result: { status: "working" },
+      options: { willContinue: true },
+    });
+  });
+
+  it("strips unsupported tool-result options when falling back to the legacy relay API", async () => {
+    const client = new GatewayClient("ws://localhost:18789", null, device);
+    const rpc = vi.spyOn(client, "rpc")
+      .mockRejectedValueOnce(new Error("method not found"))
+      .mockResolvedValueOnce({ ok: true });
+
+    await expect(client.realtimeRelayToolResult({
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { text: "Done" },
+    })).resolves.toEqual({ ok: true });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, "talk.session.submitToolResult", {
+      sessionId: "relay_1",
+      callId: "call_1",
+      result: { text: "Done" },
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "talk.realtime.relayToolResult", {
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { text: "Done" },
+    });
+  });
+
   it("keeps relay mark acknowledgements local for the current OpenClaw API", async () => {
     const client = new GatewayClient("ws://localhost:18789", null, device);
     const rpc = vi.spyOn(client, "rpc");
@@ -138,5 +183,43 @@ describe("GatewayClient realtime Talk compatibility", () => {
       name: "openclaw_agent_consult",
       args: { prompt: "Inspect this repo" },
     });
+  });
+
+  it("falls back to chat.send when OpenClaw client tool calls are unavailable", async () => {
+    const client = new GatewayClient("ws://localhost:18789", null, device);
+    const rpc = vi.spyOn(client, "rpc")
+      .mockRejectedValueOnce(new Error("unknown method"))
+      .mockResolvedValueOnce({ runId: "call_1", status: "started" });
+
+    await expect(client.realtimeClientToolCall({
+      sessionKey: "main",
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      name: "openclaw_agent_consult",
+      args: {
+        prompt: "Inspect this repo",
+        context: "Current screen is CrewCMD chat.",
+      },
+    })).resolves.toEqual({ runId: "call_1", status: "started" });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, "talk.client.toolCall", {
+      sessionKey: "main",
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      name: "openclaw_agent_consult",
+      args: {
+        prompt: "Inspect this repo",
+        context: "Current screen is CrewCMD chat.",
+      },
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "chat.send", expect.objectContaining({
+      sessionKey: "main",
+      idempotencyKey: "call_1",
+      thinking: "low",
+      message: expect.stringContaining("Question:\nInspect this repo"),
+    }));
+    expect(rpc).toHaveBeenNthCalledWith(2, "chat.send", expect.objectContaining({
+      message: expect.stringContaining("Context:\nCurrent screen is CrewCMD chat."),
+    }));
   });
 });

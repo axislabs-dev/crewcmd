@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAgent } from "@/lib/resolve-agent";
 import { runtime } from "@/lib/agent-runtime";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,10 @@ interface RouteParams {
 }
 
 /** GET /api/agents/[callsign]/status — Get runtime status of an agent process */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   const { callsign } = await params;
   const agent = await resolveAgent(callsign);
 

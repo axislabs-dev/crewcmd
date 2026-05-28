@@ -80,8 +80,8 @@ chore: update dependencies
 
 ## API Changes
 
-- All GET endpoints are public (no auth required)
-- Mutations (POST/PATCH/DELETE) require `Authorization: Bearer <HEARTBEAT_SECRET>` or a valid NextAuth session
+- Most endpoints require a valid NextAuth session; runtime-scoped routes may also accept `Authorization: Bearer <HEARTBEAT_SECRET>` when explicitly documented
+- Public endpoints must be explicitly documented as public
 - Don't break existing API contracts. Existing consumers (crons, agent integrations) depend on them.
 
 ## Testing

@@ -26,6 +26,24 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function isUniqueViolation(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error ? error.cause : null;
+  const causeRecord = cause && typeof cause === "object"
+    ? cause as Record<string, unknown>
+    : {};
+  const causeMessage = cause instanceof Error ? cause.message : String(cause ?? "");
+
+  return (
+    message.includes("unique") ||
+    message.includes("duplicate") ||
+    causeMessage.includes("unique") ||
+    causeMessage.includes("duplicate") ||
+    causeRecord.code === "23505" ||
+    causeRecord.constraint === "agents_callsign_unique"
+  );
+}
+
 export async function GET(request: NextRequest) {
   if (!db) {
     return NextResponse.json({ agents: [], source: "none" });
@@ -268,11 +286,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
-    console.error("[api/agents] POST Error:", err);
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("unique") || msg.includes("duplicate")) {
+    if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "An agent with that callsign already exists" }, { status: 409 });
     }
+    console.error("[api/agents] POST Error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
     if (err instanceof Error && err.name === "PolicyViolation") {
       return NextResponse.json({ error: msg }, { status: 403 });
     }

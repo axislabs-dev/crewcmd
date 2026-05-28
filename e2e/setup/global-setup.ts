@@ -1,13 +1,12 @@
 import { request } from "@playwright/test";
 
 /**
- * Playwright global setup: ensures a test user exists and the app is seeded.
- *
- * The dev server (PGlite) auto-seeds via `pnpm dev`, so we just need to
- * create a test user account for authenticated tests.
+ * Playwright global setup: creates the first-user account. Individual tests
+ * opt into authentication with the login helpers so unauthenticated API
+ * coverage stays meaningful.
  */
 async function globalSetup() {
-  const baseURL = process.env.BASE_URL ?? "http://localhost:3000";
+  const baseURL = process.env.BASE_URL ?? "http://127.0.0.1:3100";
   const api = await request.newContext({ baseURL });
 
   // Wait for the app to be ready (healthcheck via auth status)
@@ -26,7 +25,8 @@ async function globalSetup() {
   }
   if (!ready) throw new Error("App not ready after 20s");
 
-  // Create a test user (first user gets super_admin role)
+  // Create a test user. The e2e web server starts with a freshly seeded DB, so
+  // this is the first user and receives the super_admin role.
   const signupRes = await api.post("/api/auth/signup", {
     data: {
       name: "E2E Test User",
@@ -38,7 +38,7 @@ async function globalSetup() {
   // 200 = created, 409 = already exists — both fine
   if (!signupRes.ok() && signupRes.status() !== 409) {
     const body = await signupRes.text();
-    console.warn(`[global-setup] Signup response ${signupRes.status()}: ${body}`);
+    throw new Error(`[global-setup] Signup response ${signupRes.status()}: ${body}`);
   }
 
   await api.dispose();

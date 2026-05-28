@@ -4,7 +4,10 @@ import { mkdirSync, readFileSync, readdirSync, existsSync } from "fs";
 import path from "path";
 import * as schema from "./schema";
 
-const dataDir = path.join(process.cwd(), ".data", "pglite");
+const configuredDataDir = process.env.CREWCMD_PGLITE_DATA_DIR;
+const dataDir = configuredDataDir
+  ? path.resolve(process.cwd(), configuredDataDir)
+  : path.join(process.cwd(), ".data", "pglite");
 const markerFile = path.join(dataDir, ".schema-applied");
 
 // Ensure the data directory exists
@@ -63,6 +66,161 @@ const queuedClient = new Proxy(client, {
 
 const pgliteDb = drizzle(queuedClient as PGlite, { schema });
 
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let start = 0;
+  let dollarQuote: string | null = null;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      if (char === "\n") inLineComment = false;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (dollarQuote) {
+      if (sql.startsWith(dollarQuote, i)) {
+        i += dollarQuote.length - 1;
+        dollarQuote = null;
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (char === "'" && next === "'") {
+        i++;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"') inDoubleQuote = false;
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      continue;
+    }
+
+    if (char === "$") {
+      const match = sql.slice(i).match(/^\$[A-Za-z0-9_]*\$/);
+      if (match) {
+        dollarQuote = match[0];
+        i += dollarQuote.length - 1;
+        continue;
+      }
+    }
+
+    if (char === ";") {
+      const statement = sql.slice(start, i + 1).trim();
+      if (statement) statements.push(statement);
+      start = i + 1;
+    }
+  }
+
+  const tail = sql.slice(start).trim();
+  if (tail) statements.push(tail);
+
+  return statements;
+}
+
+const incrementalAlters = [
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS name text`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS company_id uuid`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS adapter_type text NOT NULL DEFAULT 'openclaw_gateway'`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS adapter_config jsonb DEFAULT '{}'`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS role text DEFAULT 'engineer'`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS model text`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS workspace_path text`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_config JSONB DEFAULT '{}'`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS canvas_position JSONB`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_id UUID`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_ref TEXT`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_type ownership_type NOT NULL DEFAULT 'user'`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility agent_visibility NOT NULL DEFAULT 'private'`,
+  `ALTER TABLE agents ADD COLUMN IF NOT EXISTS avatar_url text`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS url text`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS folder text`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS company_id uuid`,
+  `ALTER TABLE projects ADD COLUMN IF NOT EXISTS goal_id uuid`,
+  `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS company_id uuid`,
+  `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS goal_id uuid`,
+  `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS images jsonb DEFAULT '[]'::jsonb NOT NULL`,
+  `ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS company_id uuid`,
+  `ALTER TABLE docs ADD COLUMN IF NOT EXISTS doc_type doc_type DEFAULT 'general' NOT NULL`,
+  `ALTER TABLE docs ADD COLUMN IF NOT EXISTS visibility doc_visibility DEFAULT 'company' NOT NULL`,
+  `ALTER TABLE docs ADD COLUMN IF NOT EXISTS author_user_id uuid`,
+  `ALTER TABLE docs ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE docs ADD COLUMN IF NOT EXISTS company_id uuid`,
+  `ALTER TABLE docs ADD COLUMN IF NOT EXISTS pinned boolean DEFAULT false NOT NULL`,
+  `ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS gateway_session_key TEXT`,
+  `ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS channel_id uuid`,
+  `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_type ownership_type NOT NULL DEFAULT 'company'`,
+  `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
+  `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
+  `UPDATE company_runtimes SET owner_company_id = company_id WHERE owner_company_id IS NULL`,
+  `ALTER TABLE org_chart_nodes ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE skills ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS workspace_id uuid`,
+  `ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS parent_session_id uuid`,
+  `ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS parent_thread_id uuid`,
+  `ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS parent_fingerprint text`,
+  `ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS channel_id uuid`,
+];
+
+async function runIncrementalAlters() {
+  for (const stmt of incrementalAlters) {
+    try {
+      await queuedClient.exec(stmt);
+    } catch {
+      // Safe to ignore: the target table/type may not exist yet on fresh setup.
+    }
+  }
+}
+
 /**
  * Apply full schema from schema.ts via raw SQL generated from all migration files.
  * Since migration 0000 is a no-op baseline, we use drizzle-kit push equivalent:
@@ -70,33 +228,7 @@ const pgliteDb = drizzle(queuedClient as PGlite, { schema });
  */
 async function applySchema() {
   // Always run incremental migrations for new columns
-  const incrementalAlters = [
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS adapter_type text NOT NULL DEFAULT 'openclaw_gateway'`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS adapter_config jsonb DEFAULT '{}'`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS role text DEFAULT 'engineer'`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS model text`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS workspace_path text`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_config JSONB DEFAULT '{}'`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS canvas_position JSONB`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_id UUID`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_ref TEXT`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'user'`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
-    `ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS gateway_session_key TEXT`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
-    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private'`,
-    `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'company'`,
-    `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_user_id UUID`,
-    `ALTER TABLE company_runtimes ADD COLUMN IF NOT EXISTS owner_company_id UUID`,
-    `UPDATE company_runtimes SET owner_company_id = company_id WHERE owner_company_id IS NULL`,
-  ];
-  for (const stmt of incrementalAlters) {
-    try {
-      await queuedClient.exec(stmt);
-    } catch {
-      // Safe to ignore — column may already exist
-    }
-  }
+  await runIncrementalAlters();
 
   // System settings table (zero-config startup)
   try {
@@ -434,35 +566,52 @@ async function applySchema() {
 
   console.log("[CrewCmd] PGlite: applying schema from scratch...");
 
-  // Read all migration SQL files in order and extract CREATE statements
+  // Read all migration SQL files in order and extract schema statements.
   const migrationsDir = path.join(process.cwd(), "drizzle");
   const sqlFiles = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
-  // Collect all CREATE TYPE and CREATE TABLE statements across all migrations
+  // Collect statements by phase. Some migrations are multi-statement files
+  // without Drizzle breakpoints, so split on SQL semicolons while respecting
+  // dollar-quoted DO blocks.
+  const typeStatements: string[] = [];
   const createStatements: string[] = [];
   const alterStatements: string[] = [];
+  const indexStatements: string[] = [];
 
   for (const file of sqlFiles) {
     const sql = readFileSync(path.join(migrationsDir, file), "utf-8");
-    const statements = sql
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const statements = splitSqlStatements(sql);
 
     for (const stmt of statements) {
       // Strip leading SQL comments to detect statement type
       const stripped = stmt.replace(/^--.*\n?/gm, "").trim();
-      if (stripped.startsWith("CREATE")) {
+      if (stripped.startsWith("CREATE TYPE") || (stripped.startsWith("DO $$") && stripped.includes("CREATE TYPE"))) {
+        typeStatements.push(stmt);
+      } else if (stripped.startsWith("CREATE TABLE")) {
         createStatements.push(stmt);
+      } else if (stripped.startsWith("CREATE INDEX") || stripped.startsWith("CREATE UNIQUE INDEX")) {
+        indexStatements.push(stmt);
       } else if (stripped.startsWith("ALTER") || stripped.startsWith("DO $$")) {
         alterStatements.push(stmt);
       }
     }
   }
 
-  // Execute CREATEs first (types, then tables), then ALTERs
+  // Execute types first, then tables, then ALTERs, then indexes that may rely
+  // on columns introduced by ALTER statements.
+  for (const stmt of typeStatements) {
+    try {
+      await queuedClient.exec(stmt);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("already exists")) {
+        console.warn("[CrewCmd] PGlite schema warning:", msg.slice(0, 120));
+      }
+    }
+  }
+
   for (const stmt of createStatements) {
     try {
       await queuedClient.exec(stmt);
@@ -481,6 +630,19 @@ async function applySchema() {
     } catch {
       // Silently ignore ALTER failures — expected on fresh installs
       // when referenced tables/columns don't yet exist
+    }
+  }
+
+  await runIncrementalAlters();
+
+  for (const stmt of indexStatements) {
+    try {
+      await queuedClient.exec(stmt);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("already exists")) {
+        console.warn("[CrewCmd] PGlite schema warning:", msg.slice(0, 120));
+      }
     }
   }
 

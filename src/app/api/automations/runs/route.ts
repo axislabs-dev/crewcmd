@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
 import { GatewayClient, resolveDeviceIdentity } from "@/lib/gateway-client";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
   const jobId = req.nextUrl.searchParams.get("job_id");
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "20", 10) || 20, 100);
 

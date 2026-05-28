@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { probeGateway } from "@/lib/gateway-client";
 import { parseOpenClawConfig } from "@/lib/openclaw-config-parser";
+import { requireAuth } from "@/lib/require-auth";
 
 /**
  * POST /api/runtimes/probe
@@ -24,7 +25,10 @@ import { parseOpenClawConfig } from "@/lib/openclaw-config-parser";
  *   { mode: "local" }
  *   { mode: "paste", config: string }
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const mode = body.mode || "gateway";

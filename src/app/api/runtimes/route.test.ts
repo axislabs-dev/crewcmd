@@ -119,6 +119,10 @@ vi.mock("@/lib/workspace", () => ({
   resolveAccessibleWorkspace: (...args: unknown[]) => mockResolveAccessibleWorkspace(...args),
 }));
 
+vi.mock("@/lib/require-auth", () => ({
+  requireAuth: vi.fn(async () => null),
+}));
+
 import { POST } from "./route";
 
 function makeRequest(body: Record<string, unknown>) {

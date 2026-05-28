@@ -167,6 +167,8 @@ test.describe("Inbox", () => {
 
 test.describe("Chat sessions", () => {
   let companyId: string;
+  let sessionAgentCallsign: string;
+  let listAgentCallsign: string;
 
   test.beforeAll(async ({ request }) => {
     await loginViaApi(request);
@@ -180,6 +182,20 @@ test.describe("Chat sessions", () => {
       });
       companyId = company.id;
     }
+
+    sessionAgentCallsign = uniqueName("CHATAG").toUpperCase().replace(/-/g, "");
+    listAgentCallsign = uniqueName("CHATLIST").toUpperCase().replace(/-/g, "");
+
+    await apiPost(request, "/api/agents", {
+      name: "Chat Agent",
+      callsign: sessionAgentCallsign,
+      title: "Chat Tester",
+    });
+    await apiPost(request, "/api/agents", {
+      name: "Chat List Agent",
+      callsign: listAgentCallsign,
+      title: "Chat List Tester",
+    });
   });
 
   test.beforeEach(async ({ request }) => {
@@ -188,20 +204,20 @@ test.describe("Chat sessions", () => {
 
   test("POST /api/chat/sessions creates a session", async ({ request }) => {
     const res = await apiPost(request, "/api/chat/sessions", {
-      agentId: "neo",
+      agentId: sessionAgentCallsign,
       companyId,
       title: uniqueName("E2E-Chat"),
     });
 
     expect(res.session).toBeDefined();
-    expect(res.session.agentId).toBe("neo");
+    expect(res.session.agentId).toBe(sessionAgentCallsign.toLowerCase());
     expect(res.session.companyId).toBe(companyId);
   });
 
   test("GET /api/chat/sessions lists sessions for company", async ({ request }) => {
     // Create a session first
     await apiPost(request, "/api/chat/sessions", {
-      agentId: "cipher",
+      agentId: listAgentCallsign,
       companyId,
     });
 
@@ -215,7 +231,13 @@ test.describe("Chat sessions", () => {
   });
 
   test("GET /api/chat/sessions filters by agentId", async ({ request }) => {
-    const agentId = `e2echat${Date.now()}`;
+    const agentId = uniqueName("FILTERCHAT").toUpperCase().replace(/-/g, "");
+    await apiPost(request, "/api/agents", {
+      name: "Filter Chat Agent",
+      callsign: agentId,
+      title: "Filter Chat Tester",
+    });
+
     await apiPost(request, "/api/chat/sessions", {
       agentId,
       companyId,
@@ -227,7 +249,7 @@ test.describe("Chat sessions", () => {
     );
     expect(res.sessions).toBeDefined();
     for (const s of res.sessions) {
-      expect(s.agentId).toBe(agentId);
+      expect(s.agentId).toBe(agentId.toLowerCase());
     }
   });
 });

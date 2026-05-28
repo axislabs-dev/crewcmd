@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { requireAuth } from "@/lib/require-auth";
@@ -29,6 +29,23 @@ function getOperatingRolePack(agent: typeof schema.agents.$inferSelect | undefin
   if (!operatingLayer || typeof operatingLayer !== "object") return null;
   const rolePack = (operatingLayer as Record<string, unknown>).rolePack;
   return typeof rolePack === "string" ? (rolePack as CrewCmdRolePack) : null;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function resolveAssignedAgent(agentRef: string) {
+  const whereClause = isUuid(agentRef)
+    ? eq(schema.agents.id, agentRef)
+    : sql`lower(${schema.agents.callsign}) = ${agentRef.toLowerCase()}`;
+
+  const [agent] = await db!
+    .select()
+    .from(schema.agents)
+    .where(whereClause)
+    .limit(1);
+  return agent ?? null;
 }
 
 export async function GET(
@@ -119,9 +136,9 @@ export async function PATCH(
     }
 
     const nextAssignedAgentId = body.assignedAgentId ?? oldTask.assignedAgentId ?? null;
-    const [assignedAgent] = nextAssignedAgentId
-      ? await db.select().from(schema.agents).where(eq(schema.agents.id, nextAssignedAgentId)).limit(1)
-      : [null];
+    const assignedAgent = nextAssignedAgentId
+      ? await resolveAssignedAgent(nextAssignedAgentId)
+      : null;
     const rolePack = getOperatingRolePack(assignedAgent ?? undefined);
     const nextPrUrl = body.prUrl ?? oldTask.prUrl ?? null;
 
@@ -131,7 +148,7 @@ export async function PATCH(
       (targetStatus === "review" || targetStatus === "done") &&
       nextAssignedAgentId
     ) {
-      const validationResult = await verifyTaskCompletion(id, nextAssignedAgentId);
+      const validationResult = await verifyTaskCompletion(id, assignedAgent?.id ?? null);
       if (!validationResult.valid) {
         const rejection = evaluateSupervisorRejection(validationResult, targetStatus);
         if (rejection.rejected) {

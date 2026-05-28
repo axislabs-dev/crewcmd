@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { and, eq, lt, isNull, inArray } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
+import { requireRuntimeBearerAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,10 @@ async function getProjectName(projectId: string | null): Promise<string | null> 
  *   (agent/gateway crash left them orphaned) and resets to queued
  *   so dispatch can pick them up again.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireRuntimeBearerAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }

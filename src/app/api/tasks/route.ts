@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
           )
         );
       if (existing) {
-        return NextResponse.json({ existing }, { status: 409 });
+        return NextResponse.json({ existing, existingTask: existing }, { status: 409 });
       }
     }
 

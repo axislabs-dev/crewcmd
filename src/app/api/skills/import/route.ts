@@ -8,11 +8,15 @@ import {
   withGateway,
 } from "@/lib/native-clawhub";
 import { normalizeClawhubEntry } from "@/lib/skill-providers/clawhub";
+import { requireAuth } from "@/lib/require-auth";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json(
       { error: "Database not available" },

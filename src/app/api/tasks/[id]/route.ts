@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import { createHumanAttentionInbox, type HumanAttentionType } from "@/lib/human-attention";
 import { isDeveloperWorkflowRole, type CrewCmdRolePack } from "@/lib/operating-layer";
 import {
@@ -49,9 +49,12 @@ async function resolveAssignedAgent(agentRef: string) {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }

@@ -7,6 +7,7 @@ import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 import { getAgentWorkspaceIds, resolveRuntimeWorkspace } from "@/lib/workspace";
 import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,10 @@ interface RouteParams {
 }
 
 // GET /api/skills/[id]/agents — returns all agents with assignment status for this skill
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json([]);
   }
@@ -47,6 +51,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 // Body: { agentId: string, enabled?: boolean, config?: Record<string, unknown> }
 // If agent is already assigned, removes the assignment. Otherwise, creates it.
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }

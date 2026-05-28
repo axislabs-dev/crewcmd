@@ -3,11 +3,15 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { BUILT_IN_SKILLS } from "@/lib/skills/built-in";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   const requestedCompanyId =
     request.nextUrl.searchParams.get("companyId") ??
     request.nextUrl.searchParams.get("company_id");
@@ -65,6 +69,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }

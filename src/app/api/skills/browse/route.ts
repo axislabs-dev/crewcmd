@@ -12,6 +12,7 @@ import {
   listNativeClawhubSkills,
   resolveWorkspaceRuntime,
 } from "@/lib/native-clawhub";
+import { requireAuth } from "@/lib/require-auth";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // ─── Route handler ───────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   const params = request.nextUrl.searchParams;
   const provider = params.get("provider") || "all";
   const query = params.get("query") || undefined;

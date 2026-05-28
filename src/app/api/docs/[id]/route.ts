@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,10 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json(
       { error: "Database not configured" },
@@ -31,6 +35,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json(
       { error: "Database not configured" },
@@ -77,7 +84,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json(
       { error: "Database not configured" },

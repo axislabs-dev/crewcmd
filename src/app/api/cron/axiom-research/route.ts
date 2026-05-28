@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { eq, and, isNull, or } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
+import { requireRuntimeBearerAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,10 @@ const MAVERICK_AGENT_ID = "agent-maverick";
  * Always sets assignedAgentId so dispatch routes correctly.
  * Deduplicates: skips if an active Quant R&D task already exists (inbox or queued).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireRuntimeBearerAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }

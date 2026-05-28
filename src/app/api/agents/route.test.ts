@@ -81,6 +81,7 @@ vi.mock("@/lib/workspace", () => ({
 
 vi.mock("@/lib/require-auth", () => ({
   requireAuth: vi.fn(async () => null),
+  requireUserOrRuntimeAuth: vi.fn(async () => null),
 }));
 
 import { resolveRuntimeOwnership } from "@/lib/agent-access";

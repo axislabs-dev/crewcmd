@@ -61,6 +61,10 @@ vi.mock("@/lib/workspace", () => ({
   })),
 }));
 
+vi.mock("@/lib/require-auth", () => ({
+  requireAuth: vi.fn(async () => null),
+}));
+
 const nativeMocks = vi.hoisted(() => {
   const detailCalls: unknown[] = [];
   const installCalls: unknown[] = [];

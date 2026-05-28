@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { runtime } from "@/lib/agent-runtime";
 import { resolveReadableAgentByCallsign } from "@/lib/agent-route-auth";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,9 +10,12 @@ interface RouteParams {
 }
 
 /** GET /api/agents/[callsign]/output/stream — SSE endpoint for live agent output */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   const { callsign } = await params;
-  const agent = await resolveReadableAgentByCallsign(callsign, _request);
+  const agent = await resolveReadableAgentByCallsign(callsign, request);
 
   if (!agent) {
     return new Response(JSON.stringify({ error: "Agent not found" }), {
@@ -51,7 +55,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }, 30_000);
 
       // Clean up when the client disconnects
-      _request.signal.addEventListener("abort", () => {
+      request.signal.addEventListener("abort", () => {
         unsubscribe();
         clearInterval(keepalive);
         try {

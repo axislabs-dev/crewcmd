@@ -10,7 +10,7 @@ CrewCmd is the task board, inbox, and agent management backend. All task operati
 ## Connection
 
 - **Base URL:** Provided via `CREWCMD_URL` env var, or defaults to `https://localhost:3000`
-- **Auth:** `Authorization: Bearer <HEARTBEAT_SECRET>` for mutations. GETs are public.
+- **Auth:** Send `Authorization: Bearer <HEARTBEAT_SECRET>` for runtime-enabled API calls. Include `X-CrewCMD-Runtime-Id` and `workspaceId` or `companyId` when listing workspace data.
 - Use `-k` flag with curl (self-signed TLS in local dev).
 
 ## Task Lifecycle

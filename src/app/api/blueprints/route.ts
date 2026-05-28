@@ -3,6 +3,7 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq, and, or, isNull } from "drizzle-orm";
 import { BUILT_IN_BLUEPRINTS } from "@/lib/blueprints-data";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,9 @@ export const dynamic = "force-dynamic";
  * Query params: ?category=development&company_id=xxx
  */
 export async function GET(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category");
   const companyId = searchParams.get("company_id");
@@ -103,6 +107,9 @@ export async function GET(request: NextRequest) {
  * POST /api/blueprints — Create a custom blueprint (save a company's current team as a blueprint).
  */
 export async function POST(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }

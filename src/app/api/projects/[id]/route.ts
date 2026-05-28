@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireUserOrRuntimeAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +11,12 @@ interface RouteParams {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }

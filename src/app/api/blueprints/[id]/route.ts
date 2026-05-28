@@ -3,6 +3,7 @@ import { db, withRetry } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { BUILT_IN_BLUEPRINTS } from "@/lib/blueprints-data";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,12 @@ export const dynamic = "force-dynamic";
  * GET /api/blueprints/[id] — Get a single blueprint by ID or built-in slug.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   const { id } = await params;
 
   // Check if it's a built-in reference (builtin-slug format)

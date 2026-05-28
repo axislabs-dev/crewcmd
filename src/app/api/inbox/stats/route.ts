@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withRetry } from "@/db";
 import type { InboxStats, InboxPriority, InboxMessageType } from "@/db/schema-inbox";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import { extractSqlRows } from "@/lib/sql-result";
 import {
   isHeartbeatBearerRequest,
@@ -24,6 +25,9 @@ function emptyStats(): InboxStats {
  * Query params: workspaceId/company_id
  */
 export async function GET(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) return NextResponse.json(emptyStats());
 
   const { searchParams } = new URL(request.url);

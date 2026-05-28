@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { cronJobs } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "@/lib/require-auth";
 import { listCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   const { id } = await params;
 
   try {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireUserOrRuntimeAuth } from "@/lib/require-auth";
 import { createHumanAttentionInbox, type HumanAttentionType } from "@/lib/human-attention";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,10 @@ async function resolveTaskId(rawId: string): Promise<string | null> {
   return task?.id ?? null;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }

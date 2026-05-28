@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runtime } from "@/lib/agent-runtime";
 import { resolveReadableAgentByCallsign } from "@/lib/agent-route-auth";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ interface RouteParams {
 
 /** GET /api/agents/[callsign]/output — Get the output buffer for an agent */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   const { callsign } = await params;
   const agent = await resolveReadableAgentByCallsign(callsign, request);
 

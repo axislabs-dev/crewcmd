@@ -13,10 +13,8 @@ export const TEST_USER = {
 };
 
 /**
- * Bearer token for agent/system auth. Falls back to a test-only value when
- * HEARTBEAT_SECRET is not set (PGlite dev mode still accepts it if the env
- * var is unset, because `requireAuth` skips the bearer check when
- * `expectedToken` is falsy — so session auth is the fallback).
+ * Bearer token for agent/system auth. Tests that exercise valid bearer auth
+ * should skip when HEARTBEAT_SECRET is not configured.
  */
 export const BEARER_TOKEN = process.env.HEARTBEAT_SECRET ?? "e2e-test-secret";
 

@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db, withRetry } from "@/db";
 import { agentSkills, agents, skills } from "@/db/schema";
 import { legacyOpenClawWorkspacePath, resolveOpenClawWorkspacePath } from "@/lib/openclaw-workspace-resolver";
+import { requireAuth } from "@/lib/require-auth";
 import { deriveSkillSyncDrift } from "@/lib/skill-sync-drift";
 
 interface SyncMeta {
@@ -22,7 +23,10 @@ function metaPathFor(workspacePath: string, slug: string) {
   return join(workspacePath, "skills", slug, ".crewcmd-meta.json");
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 500 });
   }

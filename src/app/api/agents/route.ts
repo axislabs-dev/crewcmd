@@ -23,6 +23,7 @@ import {
   resolveAccessibleWorkspace,
   type WorkspaceRecord,
 } from "@/lib/workspace";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,9 @@ function isUniqueViolation(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ agents: [], source: "none" });
   }

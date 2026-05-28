@@ -28,6 +28,9 @@ const PRIORITY_ORDER: Record<string, number> = {
  * Returns real data only.
  */
 export async function GET(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) return NextResponse.json([]);
 
   const { searchParams } = new URL(request.url);

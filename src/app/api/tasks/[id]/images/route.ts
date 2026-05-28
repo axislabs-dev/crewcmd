@@ -102,9 +102,12 @@ export async function POST(
  * Get all images for a task
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }

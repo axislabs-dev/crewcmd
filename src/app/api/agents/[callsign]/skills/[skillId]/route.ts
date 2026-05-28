@@ -7,6 +7,7 @@ import { pushSecretsToGateway } from "@/lib/push-secrets-to-gateway";
 import { syncSkillToOpenClaw } from "@/lib/sync-skill-to-openclaw";
 import { resolveRuntimeWorkspace } from "@/lib/workspace";
 import { uninstallSkillFromOpenClaw } from "@/lib/uninstall-skill-from-openclaw";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,9 @@ async function findSkill(skillId: string) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }
@@ -159,7 +163,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   if (!db) {
     return NextResponse.json({ error: "Database not available" }, { status: 503 });
   }

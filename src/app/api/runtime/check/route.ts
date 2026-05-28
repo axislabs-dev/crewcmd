@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { checkAllAdapters } from "@/lib/adapters";
+import { requireAuth } from "@/lib/require-auth";
 
 const execFileAsync = promisify(execFile);
 
@@ -58,11 +59,17 @@ async function handleCheck() {
 }
 
 /** GET /api/runtime/check — Check adapter availability */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   return handleCheck();
 }
 
 /** POST /api/runtime/check — Check adapter availability (legacy) */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   return handleCheck();
 }

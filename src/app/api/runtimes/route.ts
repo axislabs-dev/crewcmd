@@ -1,15 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/db";
 import { companyRuntimes } from "@/db/schema";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getAgentAccessContext, runtimeOwnershipValues, buildRuntimeReadWhere, canManageCompanyOwnedAgent } from "@/lib/agent-access";
+import { requireAuth } from "@/lib/require-auth";
 import { getRequestOrigin } from "@/lib/runtime-callback-url";
 import { deriveRuntimeTrustSummary } from "@/lib/runtime-trust";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   try {
     const access = await getAgentAccessContext();
     if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
@@ -49,7 +53,10 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   try {
     const access = await getAgentAccessContext();
     if (!access.userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });

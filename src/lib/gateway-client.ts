@@ -223,6 +223,8 @@ export interface GatewayRealtimeClientToolCallResult {
   idempotencyKey?: string;
 }
 
+const REALTIME_AGENT_CONSULT_TOOL = "openclaw_agent_consult";
+
 export interface GatewayTalkCatalogProvider {
   id: string;
   label?: string;
@@ -353,6 +355,57 @@ function isLikelyMissingGatewayMethod(err: unknown): boolean {
     || message.includes("unsupported method")
     || message.includes("no handler")
   );
+}
+
+function isRpcTimeoutFor(err: unknown, method: string): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message === `RPC timeout: ${method}`;
+}
+
+function buildRealtimeAgentConsultFallbackMessage(args: unknown): string {
+  const parsed = normalizeRealtimeAgentConsultArgs(args);
+  const question = firstTrimmedString(parsed.question, parsed.prompt, parsed.message, parsed.input);
+  const context = firstTrimmedString(parsed.context);
+  const responseStyle = firstTrimmedString(parsed.responseStyle, parsed.response_style);
+  const rawArgs = question ? null : stringifyCompact(args);
+
+  return [
+    "Realtime voice requested an OpenClaw agent consult.",
+    question ? `Question:\n${question}` : rawArgs ? `Tool arguments:\n${rawArgs}` : null,
+    context ? `Context:\n${context}` : null,
+    responseStyle ? `Spoken style:\n${responseStyle}` : null,
+    "Return only the concise answer the realtime voice agent should speak next.",
+  ].filter(Boolean).join("\n\n");
+}
+
+function normalizeRealtimeAgentConsultArgs(args: unknown): Record<string, unknown> {
+  if (args && typeof args === "object" && !Array.isArray(args)) return args as Record<string, unknown>;
+  if (typeof args !== "string") return {};
+  try {
+    const parsed = JSON.parse(args);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : { question: args };
+  } catch {
+    return { question: args };
+  }
+}
+
+function firstTrimmedString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function stringifyCompact(value: unknown) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return value.trim() || null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 /**
@@ -846,15 +899,41 @@ export class GatewayClient {
         options: params.options,
       }));
     } catch (err) {
-      if (!isLikelyMissingGatewayMethod(err)) throw err;
-      return this.rpc<{ ok?: boolean }>("talk.realtime.relayToolResult", params);
+      if (
+        !isLikelyMissingGatewayMethod(err) &&
+        !(params.options?.willContinue && isRpcTimeoutFor(err, "talk.session.submitToolResult"))
+      ) throw err;
+      if (params.options?.willContinue) {
+        return { ok: true };
+      }
+      return this.rpc<{ ok?: boolean }>("talk.realtime.relayToolResult", withoutUndefined({
+        relaySessionId: params.relaySessionId,
+        callId: params.callId,
+        result: params.result,
+      }));
     }
   }
 
   async realtimeClientToolCall(
     params: GatewayRealtimeClientToolCallParams,
   ): Promise<GatewayRealtimeClientToolCallResult> {
-    return this.rpc<GatewayRealtimeClientToolCallResult>("talk.client.toolCall", withoutUndefined(params));
+    try {
+      return await this.rpc<GatewayRealtimeClientToolCallResult>("talk.client.toolCall", withoutUndefined(params));
+    } catch (err) {
+      if (
+        (
+          !isLikelyMissingGatewayMethod(err) &&
+          !isRpcTimeoutFor(err, "talk.client.toolCall")
+        ) ||
+        params.name !== REALTIME_AGENT_CONSULT_TOOL
+      ) throw err;
+      return this.chatSend({
+        sessionKey: params.sessionKey,
+        idempotencyKey: params.callId,
+        message: buildRealtimeAgentConsultFallbackMessage(params.args),
+        thinking: "low",
+      });
+    }
   }
 
   async realtimeRelayStop(relaySessionId: string): Promise<{ ok?: boolean }> {

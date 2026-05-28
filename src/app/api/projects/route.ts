@@ -13,6 +13,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const authError = await requireUserOrRuntimeAuth(request);
+  if (authError) return authError;
+
   if (!db) return NextResponse.json([]);
 
   const { searchParams } = new URL(request.url);

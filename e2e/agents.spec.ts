@@ -6,17 +6,25 @@ test.describe("Agent management", () => {
     await loginViaApi(request);
   });
 
-  test("GET /api/agents returns seeded agents", async ({ request }) => {
+  test("GET /api/agents returns created agents", async ({ request }) => {
+    const callsign = uniqueName("LISTAG").toUpperCase().replace(/-/g, "");
+    await apiPost(
+      request,
+      "/api/agents",
+      {
+        name: "Listed Agent",
+        callsign,
+        title: "E2E Listed Agent",
+      },
+      { expectStatus: 201 },
+    );
+
     const data = await apiGet(request, "/api/agents");
     expect(data.agents).toBeDefined();
     expect(Array.isArray(data.agents)).toBe(true);
-    // Seed creates 7 agents
-    expect(data.agents.length).toBeGreaterThanOrEqual(7);
 
     const callsigns = data.agents.map((a: { callsign: string }) => a.callsign);
-    expect(callsigns).toContain("Neo");
-    expect(callsigns).toContain("Cipher");
-    expect(callsigns).toContain("Havoc");
+    expect(callsigns).toContain(callsign);
   });
 
   test("POST /api/agents creates a new agent", async ({ request }) => {
@@ -59,10 +67,18 @@ test.describe("Agent management", () => {
   });
 
   test("GET /api/agents/:callsign returns a single agent", async ({ request }) => {
-    const data = await apiGet(request, "/api/agents/Neo");
-    expect(data.callsign).toBe("Neo");
-    expect(data.name).toBe("Neo");
-    expect(data.title).toBe("Chief Revenue Officer");
+    const callsign = uniqueName("GETAG").toUpperCase().replace(/-/g, "");
+    await apiPost(
+      request,
+      "/api/agents",
+      { name: "Get Agent", callsign, title: "Lookup Engineer" },
+      { expectStatus: 201 },
+    );
+
+    const data = await apiGet(request, `/api/agents/${callsign}`);
+    expect(data.callsign).toBe(callsign);
+    expect(data.name).toBe("Get Agent");
+    expect(data.title).toBe("Lookup Engineer");
   });
 
   test("PATCH /api/agents/:callsign updates an agent", async ({ request }) => {
@@ -103,7 +119,15 @@ test.describe("Agent management", () => {
   });
 
   test("GET /api/agents/:callsign/status returns status info", async ({ request }) => {
-    const data = await apiGet(request, "/api/agents/Neo/status");
+    const callsign = uniqueName("STATAG").toUpperCase().replace(/-/g, "");
+    await apiPost(
+      request,
+      "/api/agents",
+      { name: "Status Agent", callsign, title: "Status Engineer" },
+      { expectStatus: 201 },
+    );
+
+    const data = await apiGet(request, `/api/agents/${callsign}/status`);
     // Status endpoint returns running state info
     expect(data).toHaveProperty("status");
   });

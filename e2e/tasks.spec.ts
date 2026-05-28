@@ -6,10 +6,17 @@ test.describe("Tasks lifecycle", () => {
     await loginViaApi(request);
   });
 
-  test("GET /api/tasks returns seeded tasks", async ({ request }) => {
+  test("GET /api/tasks returns created tasks", async ({ request }) => {
+    const firstTitle = uniqueName("E2E-ListTask-A");
+    const secondTitle = uniqueName("E2E-ListTask-B");
+    await apiPost(request, "/api/tasks", { title: firstTitle, status: "inbox" });
+    await apiPost(request, "/api/tasks", { title: secondTitle, status: "queued" });
+
     const tasks = await apiGet(request, "/api/tasks");
     expect(Array.isArray(tasks)).toBe(true);
-    expect(tasks.length).toBeGreaterThanOrEqual(8);
+    const titles = tasks.map((task: { title: string }) => task.title);
+    expect(titles).toContain(firstTitle);
+    expect(titles).toContain(secondTitle);
   });
 
   test("POST /api/tasks creates a task in inbox", async ({ request }) => {

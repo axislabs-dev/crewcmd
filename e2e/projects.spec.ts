@@ -6,15 +6,17 @@ test.describe("Projects CRUD", () => {
     await loginViaApi(request);
   });
 
-  test("GET /api/projects returns seeded projects", async ({ request }) => {
+  test("GET /api/projects returns created projects", async ({ request }) => {
+    const firstName = uniqueName("E2E-ListProject-A");
+    const secondName = uniqueName("E2E-ListProject-B");
+    await apiPost(request, "/api/projects", { name: firstName });
+    await apiPost(request, "/api/projects", { name: secondName });
+
     const projects = await apiGet(request, "/api/projects");
     expect(Array.isArray(projects)).toBe(true);
-    // Seed creates 3 projects: CrewCmd, Product Launch, Content Pipeline
-    expect(projects.length).toBeGreaterThanOrEqual(3);
     const names = projects.map((p: { name: string }) => p.name);
-    expect(names).toContain("CrewCmd");
-    expect(names).toContain("Product Launch");
-    expect(names).toContain("Content Pipeline");
+    expect(names).toContain(firstName);
+    expect(names).toContain(secondName);
   });
 
   test("POST /api/projects creates a new project", async ({ request }) => {

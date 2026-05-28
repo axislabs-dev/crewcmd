@@ -2,24 +2,52 @@ import { test, expect } from "@playwright/test";
 import { uniqueName, loginViaApi } from "./helpers";
 
 test.describe("API authentication", () => {
-  test.describe("GETs are publicly accessible", () => {
-    test("GET /api/agents is public", async ({ request }) => {
-      const res = await request.get("/api/agents");
-      expect(res.status()).toBe(200);
-    });
+  test.describe("business data requires authentication", () => {
+    const protectedGets = [
+      "/api/agents",
+      "/api/agents/NOPE/status",
+      "/api/agents/NOPE/output",
+      "/api/agents/NOPE/output/stream",
+      "/api/tasks",
+      "/api/tasks/00000000-0000-4000-8000-000000000000",
+      "/api/tasks/00000000-0000-4000-8000-000000000000/comments",
+      "/api/tasks/00000000-0000-4000-8000-000000000000/images",
+      "/api/tasks/00000000-0000-4000-8000-000000000000/time-entries",
+      "/api/projects",
+      "/api/projects/00000000-0000-4000-8000-000000000000",
+      "/api/inbox",
+      "/api/inbox/stats",
+      "/api/docs/00000000-0000-4000-8000-000000000000",
+      "/api/time-entries",
+      "/api/blueprints",
+      "/api/blueprints/builtin-startup-founding-team",
+      "/api/skills",
+      "/api/skills/browse",
+      "/api/skills/sync-status",
+      "/api/runtimes",
+      "/api/schedules",
+      "/api/automations/runs?job_id=e2e",
+      "/api/openclaw/agents",
+      "/api/openclaw/bridge/status",
+      "/api/openclaw/health",
+      "/api/openclaw/nodes",
+      "/api/runtime/check",
+      "/api/runtime/status",
+      "/api/cron/triage",
+      "/api/cron/axiom-research",
+    ];
 
-    test("GET /api/tasks is public", async ({ request }) => {
-      const res = await request.get("/api/tasks");
-      expect(res.status()).toBe(200);
-    });
+    for (const path of protectedGets) {
+      test(`GET ${path} without auth returns 401`, async ({ request }) => {
+        const res = await request.get(path);
+        expect(res.status()).toBe(401);
+      });
+    }
+  });
 
-    test("GET /api/projects is public", async ({ request }) => {
-      const res = await request.get("/api/projects");
-      expect(res.status()).toBe(200);
-    });
-
-    test("GET /api/inbox is public", async ({ request }) => {
-      const res = await request.get("/api/inbox");
+  test.describe("public auth bootstrap endpoints", () => {
+    test("GET /api/health is public", async ({ request }) => {
+      const res = await request.get("/api/health");
       expect(res.status()).toBe(200);
     });
 
@@ -50,22 +78,58 @@ test.describe("API authentication", () => {
     });
 
     test("PATCH /api/tasks/:id without auth returns 401", async ({ request }) => {
-      // First get a real task ID
-      const tasks = await (await request.get("/api/tasks")).json();
-      if (tasks.length > 0) {
-        const res = await request.patch(`/api/tasks/${tasks[0].id}`, {
-          data: { status: "done" },
-        });
-        expect(res.status()).toBe(401);
-      }
+      const res = await request.patch("/api/tasks/00000000-0000-4000-8000-000000000000", {
+        data: { status: "done" },
+      });
+      expect(res.status()).toBe(401);
     });
 
     test("DELETE /api/projects/:id without auth returns 401", async ({ request }) => {
-      const projects = await (await request.get("/api/projects")).json();
-      if (projects.length > 0) {
-        const res = await request.delete(`/api/projects/${projects[0].id}`);
-        expect(res.status()).toBe(401);
-      }
+      const res = await request.delete("/api/projects/00000000-0000-4000-8000-000000000000");
+      expect(res.status()).toBe(401);
+    });
+
+    test("POST /api/runtimes/probe without auth returns 401", async ({ request }) => {
+      const res = await request.post("/api/runtimes/probe", {
+        data: { mode: "paste", config: "{}" },
+      });
+      expect(res.status()).toBe(401);
+    });
+
+    test("PATCH /api/schedules/:id without auth returns 401", async ({ request }) => {
+      const res = await request.patch("/api/schedules/e2e-schedule", {
+        data: { enabled: false },
+      });
+      expect(res.status()).toBe(401);
+    });
+
+    test("PATCH /api/agents/:callsign/skills/:id without auth returns 401", async ({ request }) => {
+      const res = await request.patch("/api/agents/NOPE/skills/00000000-0000-4000-8000-000000000000", {
+        data: { enabled: false },
+      });
+      expect(res.status()).toBe(401);
+    });
+
+    test("DELETE /api/agents/:callsign/skills/:id without auth returns 401", async ({ request }) => {
+      const res = await request.delete("/api/agents/NOPE/skills/00000000-0000-4000-8000-000000000000");
+      expect(res.status()).toBe(401);
+    });
+
+    test("POST /api/agents/access without auth returns 401", async ({ request }) => {
+      const res = await request.post("/api/agents/access", {
+        data: { agentId: "agent", userId: "user" },
+      });
+      expect(res.status()).toBe(401);
+    });
+
+    test("DELETE /api/agents/access/:id without auth returns 401", async ({ request }) => {
+      const res = await request.delete("/api/agents/access/00000000-0000-4000-8000-000000000000");
+      expect(res.status()).toBe(401);
+    });
+
+    test("POST /api/runtime/check without auth returns 401", async ({ request }) => {
+      const res = await request.post("/api/runtime/check");
+      expect(res.status()).toBe(401);
     });
   });
 

@@ -835,6 +835,89 @@ describe("POST /api/chat", () => {
     expect(streamed).toContain("data: [DONE]");
   });
 
+  it("recovers Dashboard-mirrored message tool replies when chat final is only Done", async () => {
+    vi.useFakeTimers();
+    try {
+      const chatHandlers: Array<(payload: unknown) => void> = [];
+      let historyMessages: unknown[] = [];
+      const chatHistory = vi.fn().mockImplementation(() => Promise.resolve({ messages: historyMessages }));
+      mockSelectRecoveredAssistantText.mockImplementation((params: unknown) => {
+        const messages = (params as { messages?: Array<{ role: string | null; content: string }> }).messages ?? [];
+        expect(messages.some((message) => message.role === "assistant" && message.content === "Done.")).toBe(false);
+        return messages.find((message) =>
+          message.role === "assistant" &&
+          message.content.includes("product-videogen")
+        )?.content ?? "";
+      });
+      mockGetGatewayClient.mockResolvedValueOnce({
+        on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+          if (event === "*") chatHandlers.push(handler);
+        }),
+        off: vi.fn(),
+        chatSend: vi.fn().mockResolvedValue({ runId: "run-1" }),
+        chatAbort: vi.fn(() => Promise.resolve()),
+        chatHistory,
+        rpc: vi.fn().mockResolvedValue({ sessions: [] }),
+      });
+
+      const response = await POST(makeRequest({
+        messages: [{ role: "user", content: "Can you summarize the product-videogen README?" }],
+        agent: "main",
+      }));
+      const reader = response.body!.getReader();
+      await readUntilContains(reader, "\"event\":\"gateway_send_started\"");
+
+      await vi.waitFor(() => {
+        expect(chatHandlers).toHaveLength(1);
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      chatHandlers[0]({
+        event: "agent",
+        stream: "tool",
+        sessionKey: "main",
+        runId: "run-1",
+        data: {
+          name: "message",
+          phase: "completed",
+          result: { status: "ok" },
+        },
+      });
+      await readUntilContains(reader, "\"event\":\"tool_completed\"");
+
+      historyMessages = [
+        { role: "user", content: "Can you summarize the product-videogen README?" },
+        {
+          role: "assistant",
+          content: [{
+            type: "text",
+            text:
+              "The README describes product-videogen as a workflow for creating product videos from prompts and assets.",
+          }],
+          openclawMessageToolMirror: { toolName: "message" },
+        },
+        { role: "assistant", content: "Done." },
+      ];
+      chatHandlers[0]({
+        event: "chat",
+        state: "final",
+        sessionKey: "main",
+        runId: "run-1",
+        message: { role: "assistant", content: "Done." },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      const streamed = await readUntilDone(reader);
+      expect(streamed).toContain(
+        "\"choices\":[{\"delta\":{\"content\":\"The README describes product-videogen as a workflow for creating product videos from prompts and assets.\"}}]",
+      );
+      expect(streamed).not.toContain("\"choices\":[{\"delta\":{\"content\":\"Done.\"}}]");
+      expect(streamed).toContain("data: [DONE]");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps long-running chat streams alive with heartbeat progress", async () => {
     vi.useFakeTimers();
     const response = await POST(makeRequest({

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { agents, channelMembers, companyRuntimes } from "@/db/schema";
+import { agents, channelMembers, channels, companyRuntimes } from "@/db/schema";
 import { buildRuntimeReadWhere, getAgentAccessContext } from "@/lib/agent-access";
 import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const REALTIME_SLOW_SPEECH_SILENCE_MS = 2000;
 const REALTIME_SLOW_SPEECH_PREFIX_PADDING_MS = 500;
 const CHANNEL_AGENT_SPEAKING_ROLES = new Set(["owner", "admin", "member", "contributor"]);
-const CHANNEL_AGENT_SPEAKING_MODES = new Set(["mention_only", "proactive", "on_call"]);
+const CHANNEL_AGENT_ACTIVE_MODES = new Set(["proactive", "on_call"]);
 
 export async function POST(
   request: Request,
@@ -70,6 +70,15 @@ async function resolveRealtimeChannelAgentViolation(params: {
   const callsign = params.agentCallsign?.trim();
   if (!callsign) return "Channel agent mention is required.";
 
+  const [channel] = await withRetry(() =>
+    db!
+      .select({ type: channels.type })
+      .from(channels)
+      .where(eq(channels.id, params.channelId))
+      .limit(1)
+  );
+  if (!channel) return "Agent is not a member of this channel.";
+
   const [agent] = await withRetry(() =>
     db!
       .select({ id: agents.id })
@@ -98,8 +107,8 @@ async function resolveRealtimeChannelAgentViolation(params: {
   if (!CHANNEL_AGENT_SPEAKING_ROLES.has(member.role)) {
     return "Agent cannot post in this channel.";
   }
-  if (!CHANNEL_AGENT_SPEAKING_MODES.has(member.agentParticipationMode ?? "mention_only")) {
-    return "Agent is not configured to respond in this channel.";
+  if (channel.type !== "dm" && !CHANNEL_AGENT_ACTIVE_MODES.has(member.agentParticipationMode ?? "mention_only")) {
+    return "Agent is not an active participant in this channel.";
   }
   return null;
 }

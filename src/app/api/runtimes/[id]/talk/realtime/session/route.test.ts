@@ -19,13 +19,19 @@ type ChannelMemberRow = {
   agentParticipationMode: string | null;
 };
 
-type DbRow = RuntimeRow | AgentRow | ChannelMemberRow;
+type ChannelRow = {
+  id: string;
+  type: "channel" | "dm";
+};
+
+type DbRow = RuntimeRow | AgentRow | ChannelMemberRow | ChannelRow;
 type Field = { table: string; key: string };
 type Predicate = (row: DbRow) => boolean;
 
-const { mockRuntimeRows, mockAgentRows, mockChannelMemberRows, mockGetGatewayClientForRuntime } = vi.hoisted(() => ({
+const { mockRuntimeRows, mockAgentRows, mockChannelRows, mockChannelMemberRows, mockGetGatewayClientForRuntime } = vi.hoisted(() => ({
   mockRuntimeRows: [] as RuntimeRow[],
   mockAgentRows: [] as AgentRow[],
+  mockChannelRows: [] as ChannelRow[],
   mockChannelMemberRows: [] as ChannelMemberRow[],
   mockGetGatewayClientForRuntime: vi.fn(),
 }));
@@ -40,6 +46,11 @@ vi.mock("@/db/schema", () => ({
     __table: "agents",
     id: { table: "agents", key: "id" },
     callsign: { table: "agents", key: "callsign" },
+  },
+  channels: {
+    __table: "channels",
+    id: { table: "channels", key: "id" },
+    type: { table: "channels", key: "type" },
   },
   channelMembers: {
     __table: "channelMembers",
@@ -61,6 +72,7 @@ vi.mock("drizzle-orm", () => ({
 function rowsForTable(table: { __table: string }) {
   if (table.__table === "companyRuntimes") return mockRuntimeRows;
   if (table.__table === "agents") return mockAgentRows;
+  if (table.__table === "channels") return mockChannelRows;
   if (table.__table === "channelMembers") return mockChannelMemberRows;
   return [];
 }
@@ -106,6 +118,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
     vi.clearAllMocks();
     mockRuntimeRows.length = 0;
     mockAgentRows.length = 0;
+    mockChannelRows.length = 0;
     mockChannelMemberRows.length = 0;
   });
 
@@ -210,6 +223,42 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
     });
     mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
     mockAgentRows.push({ id: "agent_1", callsign: "neo" });
+    mockChannelRows.push({ id: "channel_crew", type: "channel" });
+    mockChannelMemberRows.push({
+      id: "member_1",
+      channelId: "channel_crew",
+      memberType: "agent",
+      agentId: "agent_1",
+      role: "member",
+      agentParticipationMode: "on_call",
+    });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ realtimeTalkSession });
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionKey: "main",
+          agentId: "main",
+          channelAgentId: "neo",
+          channelId: "channel_crew",
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(realtimeTalkSession).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "main",
+      sessionKey: "main",
+    }));
+  });
+
+  it("rejects mention-only agents for shared-channel realtime sessions", async () => {
+    const realtimeTalkSession = vi.fn();
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockAgentRows.push({ id: "agent_1", callsign: "neo" });
+    mockChannelRows.push({ id: "channel_crew", type: "channel" });
     mockChannelMemberRows.push({
       id: "member_1",
       channelId: "channel_crew",
@@ -228,6 +277,45 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
           agentId: "main",
           channelAgentId: "neo",
           channelId: "channel_crew",
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Agent is not an active participant in this channel.",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+    expect(realtimeTalkSession).not.toHaveBeenCalled();
+  });
+
+  it("allows direct agent DM realtime sessions even when the stored mode is mention-only", async () => {
+    const realtimeTalkSession = vi.fn().mockResolvedValue({
+      transport: "gateway-relay",
+      relaySessionId: "relay_1",
+    });
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockAgentRows.push({ id: "agent_1", callsign: "neo" });
+    mockChannelRows.push({ id: "dm_neo", type: "dm" });
+    mockChannelMemberRows.push({
+      id: "member_1",
+      channelId: "dm_neo",
+      memberType: "agent",
+      agentId: "agent_1",
+      role: "member",
+      agentParticipationMode: "mention_only",
+    });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ realtimeTalkSession });
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionKey: "main",
+          agentId: "main",
+          channelAgentId: "neo",
+          channelId: "dm_neo",
         }),
       }),
       { params: Promise.resolve({ id: "rt_1" }) },

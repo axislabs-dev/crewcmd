@@ -2577,30 +2577,55 @@ export default function ChatPage() {
     () => new Map(agents.map((agent) => [agent.id, agent])),
     [agents]
   );
-  const eligibleChannelAgents = useMemo(() => {
+  const mentionableChannelAgents = useMemo(() => {
     if (!activeChannel) return [];
     const speakingRoles = new Set(["owner", "admin", "member", "contributor"]);
-    const speakingModes = new Set(["mention_only", "proactive", "on_call"]);
+    const mentionModes = new Set(["mention_only", "proactive", "on_call"]);
     return agents.filter((agent) => {
       const membership = channelAgentMemberById.get(agent.id);
       if (!membership) return false;
       if (!speakingRoles.has(membership.role)) return false;
-      if (!speakingModes.has(membership.agentParticipationMode ?? "mention_only")) return false;
+      if (!mentionModes.has(membership.agentParticipationMode ?? "mention_only")) return false;
       return true;
     });
   }, [activeChannel, agents, channelAgentMemberById]);
-  const selectedAgentCanSpeakInActiveChannel = useMemo(() => {
+  const activeChannelAgents = useMemo(() => {
+    if (!activeChannel) return [];
+    const speakingRoles = new Set(["owner", "admin", "member", "contributor"]);
+    const activeModes = new Set(["proactive", "on_call"]);
+    return agents.filter((agent) => {
+      const membership = channelAgentMemberById.get(agent.id);
+      if (!membership) return false;
+      if (!speakingRoles.has(membership.role)) return false;
+      if (activeChannel.type === "dm") return true;
+      if (!activeModes.has(membership.agentParticipationMode ?? "mention_only")) return false;
+      return true;
+    });
+  }, [activeChannel, agents, channelAgentMemberById]);
+  const selectedAgentIsActiveInChannel = useMemo(() => {
     if (!activeChannelId) return true;
     if (!selectedAgent) return false;
-    return eligibleChannelAgents.some((agent) => sameAgent(agent, selectedAgent));
-  }, [activeChannelId, eligibleChannelAgents, selectedAgent]);
+    return activeChannelAgents.some((agent) => sameAgent(agent, selectedAgent));
+  }, [activeChannelAgents, activeChannelId, selectedAgent]);
   const channelAgentModeBlockReason = useMemo(() => {
-    if (!activeChannelId || selectedAgentCanSpeakInActiveChannel) return null;
+    if (!activeChannelId || selectedAgentIsActiveInChannel) return null;
     const channelName = activeChannel?.name ? `#${activeChannel.name}` : "this channel";
+    if (activeChannelAgents.length === 0) {
+      return activeChannel?.type === "dm"
+        ? `Start a direct agent DM before using agent mode.`
+        : `Invite an agent as On call or Proactive before using agent mode in ${channelName}.`;
+    }
     return selectedAgent
-      ? `Invite @${selectedAgent.callsign} to ${channelName} before using agent mode.`
-      : `Select an agent member of ${channelName} before using agent mode.`;
-  }, [activeChannel?.name, activeChannelId, selectedAgent, selectedAgentCanSpeakInActiveChannel]);
+      ? `Set @${selectedAgent.callsign} to On call or Proactive before using agent mode in ${channelName}.`
+      : `Select an active agent participant in ${channelName} before using agent mode.`;
+  }, [activeChannel?.name, activeChannel?.type, activeChannelAgents.length, activeChannelId, selectedAgent, selectedAgentIsActiveInChannel]);
+
+  useEffect(() => {
+    if (!activeChannelId || activeChannel?.type === "dm") return;
+    if (activeChannelAgents.length !== 1) return;
+    if (selectedAgent && sameAgent(selectedAgent, activeChannelAgents[0])) return;
+    setSelectedAgent(activeChannelAgents[0]);
+  }, [activeChannel?.type, activeChannelAgents, activeChannelId, selectedAgent]);
   const visibleMessages = useMemo(
     () => uniqueMessagesById(
       messages.filter(isVisibleChatMessage)
@@ -3650,7 +3675,7 @@ export default function ChatPage() {
       // --- Wake word detection: check if user is addressing a specific agent ---
       const lowerTrimmed = trimmed.toLowerCase();
       let wakeAgent: Agent | null = null;
-      const mentionableAgents = activeChannelId ? eligibleChannelAgents : agents;
+      const mentionableAgents = activeChannelId ? mentionableChannelAgents : agents;
       for (const agent of mentionableAgents) {
         const callsign = agent.callsign.toLowerCase();
         const name = agent.name.toLowerCase();
@@ -3671,8 +3696,8 @@ export default function ChatPage() {
         }
       }
       const addressedAgent = wakeAgent ?? (
-        activeChannel?.type === "dm" && eligibleChannelAgents.length === 1
-          ? eligibleChannelAgents[0]
+        activeChannel?.type === "dm" && activeChannelAgents.length === 1
+          ? activeChannelAgents[0]
           : null
       );
 
@@ -3866,6 +3891,9 @@ export default function ChatPage() {
         setChannelNotice(channelAgentModeBlockReason);
         return;
       }
+      const shouldSendToActiveChannelAgent = activeChannelId
+        ? Boolean(addressedAgent || options.forceVoiceResponse || selectedAgentIsActiveInChannel)
+        : true;
       const respondingDelegatedViaAgent = addressedAgent && defaultAgent && !sameAgent(addressedAgent, defaultAgent)
         ? defaultAgent
         : delegatedViaAgent;
@@ -3912,7 +3940,7 @@ export default function ChatPage() {
       });
       // User message persisted server-side in /api/chat route
       setInput("");
-      if (activeChannelId && !addressedAgent && !options.forceVoiceResponse) {
+      if (activeChannelId && !shouldSendToActiveChannelAgent) {
         if (chatCompanyId || chatWorkspaceId) {
           try {
             const res = await fetch("/api/chat/messages", {
@@ -4018,9 +4046,12 @@ export default function ChatPage() {
             companyId: chatCompanyId,
             workspaceId: chatWorkspaceId,
             channelId: activeChannelId,
-          metadata,
-          pageContext,
-          sessionKey: requestSessionKey,
+            channelInvocationMode: activeChannelId
+              ? addressedAgent ? "mention" : "active"
+              : undefined,
+            metadata,
+            pageContext,
+            sessionKey: requestSessionKey,
             agentMode: voiceMode === "agent",
             clientVisibility: typeof document !== "undefined" && document.hidden ? "hidden" : "visible",
             notifyOnCompletion: true,
@@ -4328,7 +4359,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode, pageContext, channelAgentModeBlockReason]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, activeChannelAgents, mentionableChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode, pageContext, channelAgentModeBlockReason, selectedAgentIsActiveInChannel]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -4448,6 +4479,7 @@ export default function ChatPage() {
           companyId: chatCompanyId,
           workspaceId: chatWorkspaceId,
           channelId: activeChannelId,
+          channelInvocationMode: activeChannelId ? "active" : undefined,
           metadata,
           pageContext,
           sessionKey: thread.sessionKey,
@@ -4925,9 +4957,9 @@ export default function ChatPage() {
   const activeConversationLabel = activeChannel
     ? `${activeChannel.type === "dm" ? "" : "# "}${activeChannel.name ?? "untitled"}`
     : agentCallsign;
-  const eligibleChannelAgentCallsigns = eligibleChannelAgents.map((agent) => `@${agent.callsign}`);
-  const channelAgentHint = eligibleChannelAgentCallsigns.length > 0
-    ? `mention ${eligibleChannelAgentCallsigns.slice(0, 2).join(" or ")} to invite an agent`
+  const mentionableChannelAgentCallsigns = mentionableChannelAgents.map((agent) => `@${agent.callsign}`);
+  const channelAgentHint = mentionableChannelAgentCallsigns.length > 0
+    ? `mention ${mentionableChannelAgentCallsigns.slice(0, 2).join(" or ")} to invite an agent`
     : "no shared agents in this channel";
   const composerPlaceholder = isPaused
     ? `Say "${agentCallsign}" or @${agentCallsign} to resume...`

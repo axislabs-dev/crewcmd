@@ -238,7 +238,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
       relaySessionId: "relay_1",
       callId: "call_1",
-      result: { text: "The repo is a CrewCMD app." },
+      result: { result: "The repo is a CrewCMD app." },
     });
     expect(mockHoldClient).toHaveBeenCalledWith(client);
     expect(mockReleaseClient).toHaveBeenCalledWith(client);
@@ -395,7 +395,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
       relaySessionId: "relay_1",
       callId: "call_1",
-      result: { text: "The README describes the ClutchCut content engine." },
+      result: { result: "The README describes the ClutchCut content engine." },
     });
     expect(mockReleaseClient).toHaveBeenCalledWith(client);
   });
@@ -464,7 +464,75 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
       relaySessionId: "relay_1",
       callId: "call_1",
-      result: { text: "Recovered from the durable transcript." },
+      result: { result: "Recovered from the durable transcript." },
+    });
+  });
+
+  it("recovers generic done realtime consult finals from chat history", async () => {
+    let gatewayHandler: ((payload: unknown) => void) | null = null;
+    const client = {
+      realtimeClientToolCall: vi.fn().mockResolvedValue({ ok: true, runId: "run_1" }),
+      realtimeRelayToolResult: vi.fn().mockResolvedValue({ ok: true }),
+      chatHistory: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Can you summarize the README?" }],
+          },
+          {
+            role: "assistant",
+            idempotencyKey: "run_1",
+            content: [{ type: "text", text: "The README describes product-videogen as a video generation tool." }],
+          },
+        ],
+      }),
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") gatewayHandler = handler;
+      }),
+      off: vi.fn(),
+    };
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue(client);
+
+    const responsePromise = POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/relay", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "toolCall",
+          relaySessionId: "relay_1",
+          sessionKey: "main",
+          callId: "call_1",
+          name: "openclaw_agent_consult",
+          args: { question: "Can you summarize the README?" },
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    await vi.waitFor(() => expect(gatewayHandler).toBeTypeOf("function"));
+
+    (gatewayHandler as ((payload: unknown) => void) | null)?.({
+      event: "chat",
+      runId: "run_1",
+      state: "final",
+      message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
+    });
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      result: {
+        delegated: true,
+        runId: "run_1",
+        finalText: "The README describes product-videogen as a video generation tool.",
+        result: { ok: true },
+      },
+    });
+    expect(client.chatHistory).toHaveBeenCalledWith({ sessionKey: "main", limit: 25 });
+    expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { result: "The README describes product-videogen as a video generation tool." },
     });
   });
 

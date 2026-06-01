@@ -438,6 +438,7 @@ function ChatComposer({
   onEnterAgentMode,
   showAgentMode = true,
   agentButtonTitle = "Enter agent mode (hands-free)",
+  agentModeDisabled = false,
   addMenuLabel = "Add to Chat",
   isDragOver = false,
   onDragOver,
@@ -460,6 +461,7 @@ function ChatComposer({
   onEnterAgentMode: () => void;
   showAgentMode?: boolean;
   agentButtonTitle?: string;
+  agentModeDisabled?: boolean;
   addMenuLabel?: string;
   isDragOver?: boolean;
   onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -638,8 +640,9 @@ function ChatComposer({
             ) : showAgentMode ? (
               <button
                 onClick={onEnterAgentMode}
+                disabled={agentModeDisabled}
                 title={agentButtonTitle}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[var(--border-medium)] disabled:hover:text-[var(--text-secondary)]"
               >
                 <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
@@ -2586,6 +2589,18 @@ export default function ChatPage() {
       return true;
     });
   }, [activeChannel, agents, channelAgentMemberById]);
+  const selectedAgentCanSpeakInActiveChannel = useMemo(() => {
+    if (!activeChannelId) return true;
+    if (!selectedAgent) return false;
+    return eligibleChannelAgents.some((agent) => sameAgent(agent, selectedAgent));
+  }, [activeChannelId, eligibleChannelAgents, selectedAgent]);
+  const channelAgentModeBlockReason = useMemo(() => {
+    if (!activeChannelId || selectedAgentCanSpeakInActiveChannel) return null;
+    const channelName = activeChannel?.name ? `#${activeChannel.name}` : "this channel";
+    return selectedAgent
+      ? `Invite @${selectedAgent.callsign} to ${channelName} before using agent mode.`
+      : `Select an agent member of ${channelName} before using agent mode.`;
+  }, [activeChannel?.name, activeChannelId, selectedAgent, selectedAgentCanSpeakInActiveChannel]);
   const visibleMessages = useMemo(
     () => uniqueMessagesById(
       messages.filter(isVisibleChatMessage)
@@ -3847,6 +3862,10 @@ export default function ChatPage() {
 
       const metadata = attachments.length > 0 ? { attachments } : null;
       const respondingAgent = addressedAgent ?? selectedAgent;
+      if (activeChannelId && !addressedAgent && options.forceVoiceResponse && channelAgentModeBlockReason) {
+        setChannelNotice(channelAgentModeBlockReason);
+        return;
+      }
       const respondingDelegatedViaAgent = addressedAgent && defaultAgent && !sameAgent(addressedAgent, defaultAgent)
         ? defaultAgent
         : delegatedViaAgent;
@@ -4309,7 +4328,7 @@ export default function ChatPage() {
         }, 0);
       }
     },
-    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode, pageContext]
+    [visibleMessages, queueSentenceForTTS, selectedAgent, speakResponses, agentAudioMuted, pendingFiles, agents, activeChannel?.type, eligibleChannelAgents, isPaused, stopWords, activeChannelId, chatCompanyId, chatWorkspaceId, selectedSessionKey, defaultAgent, delegatedViaAgent, persistExecutionSnapshot, refreshSessionPreview, enqueueMainMessage, setMainLoading, agentCallsign, voiceMode, pageContext, channelAgentModeBlockReason]
   );
 
   const sendThreadMessage = useCallback(async (
@@ -4352,6 +4371,10 @@ export default function ChatPage() {
     }
 
     const metadata = attachments.length > 0 ? { attachments } : null;
+    if (activeChannelId && channelAgentModeBlockReason) {
+      setChannelNotice(channelAgentModeBlockReason);
+      return;
+    }
 
     const optimisticId = `optimistic-${createClientId()}`;
     const userMsg: Message = {
@@ -4424,6 +4447,7 @@ export default function ChatPage() {
             : undefined,
           companyId: chatCompanyId,
           workspaceId: chatWorkspaceId,
+          channelId: activeChannelId,
           metadata,
           pageContext,
           sessionKey: thread.sessionKey,
@@ -4596,7 +4620,7 @@ export default function ChatPage() {
         }, 0);
       }
     }
-  }, [activeThread, agentAudioMuted, agentModeSessionKey, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, pageContext, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
+  }, [activeChannelId, activeThread, agentAudioMuted, agentModeSessionKey, channelAgentModeBlockReason, chatCompanyId, chatWorkspaceId, delegatedViaAgent, enqueueThreadMessage, pageContext, queueSentenceForTTS, selectedAgent, setThreadLoading, speakResponses, threadInput, threadMessages, threadPendingFiles, voiceMode]);
 
   const interruptAudio = useCallback(() => {
     if (audioRef.current) {
@@ -4640,6 +4664,11 @@ export default function ChatPage() {
   );
 
   const enterAgentMode = useCallback((sessionKey: string, overlayMode: AgentOverlayMode = "transcript") => {
+    if (channelAgentModeBlockReason) {
+      setChannelNotice(channelAgentModeBlockReason);
+      return;
+    }
+
     if (!isNativeCapacitorApp() && audioRef.current) {
       audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
       audioRef.current.play().catch(() => {});
@@ -4651,7 +4680,7 @@ export default function ChatPage() {
     setVoiceMode("agent");
     setSpeakResponses(true);
     setAgentOverlayMode(overlayMode);
-  }, [handleAgentAudioMutedChange, handleAgentMicMutedChange, setTrayIsPlayingAudio]);
+  }, [channelAgentModeBlockReason, handleAgentAudioMutedChange, handleAgentMicMutedChange, setTrayIsPlayingAudio]);
 
   const exitAgentMode = useCallback(() => {
     stopAllAudio();
@@ -4664,6 +4693,12 @@ export default function ChatPage() {
     setTrayIsPlayingAudio(false);
     setTrayVoiceState("idle");
   }, [handleAgentAudioMutedChange, handleAgentMicMutedChange, setTrayIsPlayingAudio, setTrayVoiceState, stopAllAudio]);
+
+  useEffect(() => {
+    if (voiceMode !== "agent" || !channelAgentModeBlockReason) return;
+    exitAgentMode();
+    setChannelNotice(channelAgentModeBlockReason);
+  }, [channelAgentModeBlockReason, exitAgentMode, voiceMode]);
 
   useEffect(() => {
     const handleTrayStop = () => {
@@ -5070,6 +5105,7 @@ export default function ChatPage() {
                     agent={selectedAgent?.callsign}
                     gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
                     companyId={company?.id}
+                    channelId={activeChannelId}
                     sessionKey={activeThread.sessionKey}
                     realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
                     voiceSettings={resolvedVoiceSettings}
@@ -5101,7 +5137,8 @@ export default function ChatPage() {
                     enterAgentMode(activeThread.sessionKey);
                   }
                 }}
-                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : "Enter thread agent mode"}
+                agentButtonTitle={voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey ? "Exit thread agent mode" : channelAgentModeBlockReason ?? "Enter thread agent mode"}
+                agentModeDisabled={!(voiceMode === "agent" && agentModeSessionKey === activeThread.sessionKey) && Boolean(channelAgentModeBlockReason)}
               />
             </>
           )}
@@ -6052,7 +6089,8 @@ export default function ChatPage() {
                 enterAgentMode(activeSessionKey);
               }
             }}
-            agentButtonTitle={voiceMode === "agent" ? "Exit agent mode" : "Enter agent mode"}
+            agentButtonTitle={voiceMode === "agent" ? "Exit agent mode" : channelAgentModeBlockReason ?? "Enter agent mode"}
+            agentModeDisabled={voiceMode !== "agent" && Boolean(channelAgentModeBlockReason)}
             isDragOver={isDragOver}
             onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
             onDragLeave={(event) => { event.preventDefault(); setIsDragOver(false); }}
@@ -6104,6 +6142,7 @@ export default function ChatPage() {
                   agent={selectedAgent?.callsign}
                   gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
                   companyId={company?.id}
+                  channelId={activeChannelId}
                   sessionKey={selectedSessionBelongsToAgent(selectedSessionKey, selectedAgent?.callsign)
                     ? selectedSessionKey ?? gatewaySessionKeyForAgent(selectedAgent)
                     : gatewaySessionKeyForAgent(selectedAgent)}

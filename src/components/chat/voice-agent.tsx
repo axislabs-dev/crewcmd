@@ -58,6 +58,7 @@ interface VoiceAgentProps {
   agent?: string;
   gatewayAgent?: string;
   companyId?: string;
+  channelId?: string | null;
   sessionKey?: string;
   realtimeRuntimeId?: string;
   voiceSettings?: AgentVoiceSettings | null;
@@ -124,6 +125,7 @@ export function VoiceAgent({
   agent,
   gatewayAgent,
   companyId,
+  channelId,
   sessionKey,
   realtimeRuntimeId,
   voiceSettings,
@@ -195,6 +197,7 @@ export function VoiceAgent({
         realtimeTransport: realtimeSession?.transport ?? null,
         agent: agent ?? null,
         gatewayAgent: gatewayAgent ?? null,
+        channelId: channelId ?? null,
         sessionKey: sessionKey ?? null,
         isPlayingAudio,
         isMicMuted,
@@ -202,7 +205,7 @@ export function VoiceAgent({
         ...detail,
       },
     });
-  }, [agent, gatewayAgent, isActive, isAgentMuted, isMicMuted, isPlayingAudio, realtimeSession?.transport, sessionKey, state]);
+  }, [agent, channelId, gatewayAgent, isActive, isAgentMuted, isMicMuted, isPlayingAudio, realtimeSession?.transport, sessionKey, state]);
 
   const transcribe = useCallback(
     async (audioBlob: Blob) => {
@@ -481,6 +484,8 @@ export function VoiceAgent({
         runtimeId: realtimeRuntimeId,
         sessionKey,
         agentId: gatewayAgent ?? agent,
+        channelId,
+        channelAgentId: agent,
         ...realtimeVoiceSettings,
       });
       setRealtimeSession(session);
@@ -561,7 +566,7 @@ export function VoiceAgent({
       });
       return false;
     }
-  }, [agent, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey, voiceSettings]);
+  }, [agent, channelId, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey, voiceSettings]);
 
   const activate = useCallback(async () => {
     onMicMutedChange?.(false);
@@ -781,7 +786,7 @@ export function VoiceAgent({
         setError("Microphone access denied. Please allow mic access and retry.");
       }
     }
-  }, [agent, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, recordVoiceBreadcrumb, requestWakeLock, sessionKey, startRealtimeRelay]);
+  }, [agent, channelId, companyId, gatewayAgent, isAgentMuted, isMicMuted, isPlayingAudio, onAgentMutedChange, onMicMutedChange, recordVoiceBreadcrumb, requestWakeLock, sessionKey, startRealtimeRelay]);
 
   const deactivate = useCallback((options: { silence?: boolean } = {}) => {
     const sessionId = diagnosticSessionRef.current ?? undefined;

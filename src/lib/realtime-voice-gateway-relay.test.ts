@@ -35,7 +35,7 @@ describe("realtime gateway relay barge-in detection", () => {
     }
   });
 
-  it("ignores mobile speaker echo during the output grace window", () => {
+  it("does not trigger mobile barge-in during the output grace window", () => {
     const result = detectRealtimeBargeIn({
       input: inputWithLevel(0.3),
       activeOutput: true,
@@ -46,7 +46,7 @@ describe("realtime gateway relay barge-in detection", () => {
       profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
     });
 
-    expect(result).toEqual({ triggered: false, speechFrames: 0, suppressInput: true });
+    expect(result).toEqual({ triggered: false, speechFrames: 1, suppressInput: false });
   });
 
   it("requires sustained stronger speech before mobile barge-in", () => {
@@ -79,7 +79,7 @@ describe("realtime gateway relay barge-in detection", () => {
     expect(result.suppressInput).toBe(false);
   });
 
-  it("does not interrupt mobile output for short speech bursts", () => {
+  it("keeps likely mobile speech audible while waiting to confirm barge-in", () => {
     let speechFrames = 0;
     for (let i = 0; i < MOBILE_REALTIME_BARGE_IN_PROFILE.frames - 2; i += 1) {
       const result = detectRealtimeBargeIn({
@@ -93,13 +93,13 @@ describe("realtime gateway relay barge-in detection", () => {
       });
       speechFrames = result.speechFrames;
       expect(result.triggered).toBe(false);
-      expect(result.suppressInput).toBe(true);
+      expect(result.suppressInput).toBe(false);
     }
   });
 
-  it("suppresses mobile playback echo until barge-in is confirmed", () => {
+  it("suppresses mobile playback echo until likely speech starts", () => {
     const echo = detectRealtimeBargeIn({
-      input: inputWithLevel(0.08),
+      input: inputWithLevel(0.04),
       activeOutput: true,
       cancelRequested: false,
       speechFrames: 0,

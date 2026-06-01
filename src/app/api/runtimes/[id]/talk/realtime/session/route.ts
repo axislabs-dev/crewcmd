@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { companyRuntimes } from "@/db/schema";
+import { agents, channelMembers, companyRuntimes } from "@/db/schema";
 import { buildRuntimeReadWhere, getAgentAccessContext } from "@/lib/agent-access";
 import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
 
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 
 const REALTIME_SLOW_SPEECH_SILENCE_MS = 2000;
 const REALTIME_SLOW_SPEECH_PREFIX_PADDING_MS = 500;
+const CHANNEL_AGENT_SPEAKING_ROLES = new Set(["owner", "admin", "member", "contributor"]);
+const CHANNEL_AGENT_SPEAKING_MODES = new Set(["mention_only", "proactive", "on_call"]);
 
 export async function POST(
   request: Request,
@@ -32,6 +34,16 @@ export async function POST(
     if (!runtime) return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));
+    const channelId = readOptionalString(body.channelId);
+    const channelAgentId = readOptionalString(body.channelAgentId) ?? readOptionalString(body.agentId);
+    if (channelId) {
+      const violation = await resolveRealtimeChannelAgentViolation({
+        channelId,
+        agentCallsign: channelAgentId,
+      });
+      if (violation) return NextResponse.json({ error: violation }, { status: 403 });
+    }
+
     const client = await getGatewayClientForRuntime(runtime.id);
     const session = await client.realtimeTalkSession({
       sessionKey: readOptionalString(body.sessionKey),
@@ -49,6 +61,47 @@ export async function POST(
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 502 });
   }
+}
+
+async function resolveRealtimeChannelAgentViolation(params: {
+  channelId: string;
+  agentCallsign?: string;
+}) {
+  const callsign = params.agentCallsign?.trim();
+  if (!callsign) return "Channel agent mention is required.";
+
+  const [agent] = await withRetry(() =>
+    db!
+      .select({ id: agents.id })
+      .from(agents)
+      .where(eq(agents.callsign, callsign))
+      .limit(1)
+  );
+  if (!agent) return "Agent is not a member of this channel.";
+
+  const [member] = await withRetry(() =>
+    db!
+      .select({
+        role: channelMembers.role,
+        agentParticipationMode: channelMembers.agentParticipationMode,
+      })
+      .from(channelMembers)
+      .where(and(
+        eq(channelMembers.channelId, params.channelId),
+        eq(channelMembers.memberType, "agent"),
+        eq(channelMembers.agentId, agent.id),
+      ))
+      .limit(1)
+  );
+
+  if (!member) return "Agent is not a member of this channel.";
+  if (!CHANNEL_AGENT_SPEAKING_ROLES.has(member.role)) {
+    return "Agent cannot post in this channel.";
+  }
+  if (!CHANNEL_AGENT_SPEAKING_MODES.has(member.agentParticipationMode ?? "mention_only")) {
+    return "Agent is not configured to respond in this channel.";
+  }
+  return null;
 }
 
 function readOptionalString(value: unknown) {

@@ -14,6 +14,8 @@ export interface RealtimeVoiceSessionRequest {
   model?: string;
   voice?: string;
   agentId?: string;
+  channelId?: string | null;
+  channelAgentId?: string | null;
 }
 
 export interface RealtimeVoiceSession {
@@ -72,6 +74,8 @@ export async function startRealtimeVoiceSession(
       model: request.model,
       voice: request.voice,
       agentId: request.agentId,
+      channelId: request.channelId,
+      channelAgentId: request.channelAgentId,
     }),
   });
 

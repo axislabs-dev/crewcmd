@@ -5,33 +5,84 @@ type RuntimeRow = {
   ownerUserId: string | null;
 };
 
-type Field = { key: keyof RuntimeRow };
-type Predicate = (row: RuntimeRow) => boolean;
+type AgentRow = {
+  id: string;
+  callsign: string;
+};
 
-const { mockRuntimeRows, mockGetGatewayClientForRuntime } = vi.hoisted(() => ({
+type ChannelMemberRow = {
+  id: string;
+  channelId: string;
+  memberType: "user" | "agent";
+  agentId: string | null;
+  role: string;
+  agentParticipationMode: string | null;
+};
+
+type DbRow = RuntimeRow | AgentRow | ChannelMemberRow;
+type Field = { table: string; key: string };
+type Predicate = (row: DbRow) => boolean;
+
+const { mockRuntimeRows, mockAgentRows, mockChannelMemberRows, mockGetGatewayClientForRuntime } = vi.hoisted(() => ({
   mockRuntimeRows: [] as RuntimeRow[],
+  mockAgentRows: [] as AgentRow[],
+  mockChannelMemberRows: [] as ChannelMemberRow[],
   mockGetGatewayClientForRuntime: vi.fn(),
 }));
 
 vi.mock("@/db/schema", () => ({
   companyRuntimes: {
-    id: { key: "id" },
-    ownerUserId: { key: "ownerUserId" },
+    __table: "companyRuntimes",
+    id: { table: "companyRuntimes", key: "id" },
+    ownerUserId: { table: "companyRuntimes", key: "ownerUserId" },
+  },
+  agents: {
+    __table: "agents",
+    id: { table: "agents", key: "id" },
+    callsign: { table: "agents", key: "callsign" },
+  },
+  channelMembers: {
+    __table: "channelMembers",
+    id: { table: "channelMembers", key: "id" },
+    channelId: { table: "channelMembers", key: "channelId" },
+    memberType: { table: "channelMembers", key: "memberType" },
+    agentId: { table: "channelMembers", key: "agentId" },
+    role: { table: "channelMembers", key: "role" },
+    agentParticipationMode: { table: "channelMembers", key: "agentParticipationMode" },
   },
 }));
 
 vi.mock("drizzle-orm", () => ({
-  eq: (field: Field, value: unknown): Predicate => (row) => row[field.key] === value,
+  eq: (field: Field, value: unknown): Predicate => (row) => (row as Record<string, unknown>)[field.key] === value,
   and: (...predicates: Array<Predicate | undefined>): Predicate => (row) =>
     predicates.every((predicate) => predicate?.(row) ?? true),
 }));
 
+function rowsForTable(table: { __table: string }) {
+  if (table.__table === "companyRuntimes") return mockRuntimeRows;
+  if (table.__table === "agents") return mockAgentRows;
+  if (table.__table === "channelMembers") return mockChannelMemberRows;
+  return [];
+}
+
+function projectRows(rows: DbRow[], selection: Record<string, Field>) {
+  return rows.map((row) =>
+    Object.fromEntries(
+      Object.entries(selection).map(([key, field]) => [
+        key,
+        (row as Record<string, unknown>)[field.key],
+      ]),
+    ),
+  );
+}
+
 vi.mock("@/db", () => ({
   db: {
-    select: () => ({
-      from: () => ({
+    select: (selection: Record<string, Field>) => ({
+      from: (table: { __table: string }) => ({
         where: (predicate: Predicate) => ({
-          limit: (count: number) => Promise.resolve(mockRuntimeRows.filter(predicate).slice(0, count)),
+          limit: (count: number) =>
+            Promise.resolve(projectRows(rowsForTable(table).filter(predicate).slice(0, count), selection)),
         }),
       }),
     }),
@@ -41,7 +92,7 @@ vi.mock("@/db", () => ({
 
 vi.mock("@/lib/agent-access", () => ({
   getAgentAccessContext: () => ({ userId: "user_1", activeCompanyId: null, memberships: [] }),
-  buildRuntimeReadWhere: () => (row: RuntimeRow) => row.ownerUserId === "user_1",
+  buildRuntimeReadWhere: () => (row: DbRow) => (row as RuntimeRow).ownerUserId === "user_1",
 }));
 
 vi.mock("@/lib/gateway-chat-pool", () => ({
@@ -54,6 +105,8 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRuntimeRows.length = 0;
+    mockAgentRows.length = 0;
+    mockChannelMemberRows.length = 0;
   });
 
   it("proxies realtime talk session requests through an accessible runtime", async () => {
@@ -121,6 +174,69 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
       silenceDurationMs: 2400,
       prefixPaddingMs: 650,
       vadThreshold: 0.45,
+    }));
+  });
+
+  it("rejects channel-scoped realtime sessions for agents outside the channel", async () => {
+    const realtimeTalkSession = vi.fn();
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockAgentRows.push({ id: "agent_1", callsign: "neo" });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ realtimeTalkSession });
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session", {
+        method: "POST",
+        body: JSON.stringify({
+          agentId: "main",
+          channelAgentId: "neo",
+          channelId: "channel_crew",
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Agent is not a member of this channel.",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+    expect(realtimeTalkSession).not.toHaveBeenCalled();
+  });
+
+  it("allows channel-scoped realtime sessions for eligible channel agents", async () => {
+    const realtimeTalkSession = vi.fn().mockResolvedValue({
+      transport: "gateway-relay",
+      relaySessionId: "relay_1",
+    });
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockAgentRows.push({ id: "agent_1", callsign: "neo" });
+    mockChannelMemberRows.push({
+      id: "member_1",
+      channelId: "channel_crew",
+      memberType: "agent",
+      agentId: "agent_1",
+      role: "member",
+      agentParticipationMode: "mention_only",
+    });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ realtimeTalkSession });
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionKey: "main",
+          agentId: "main",
+          channelAgentId: "neo",
+          channelId: "channel_crew",
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(realtimeTalkSession).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "main",
+      sessionKey: "main",
     }));
   });
 

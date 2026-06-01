@@ -4622,12 +4622,21 @@ export default function ChatPage() {
     }).finally(abortLocalStream);
   }, []);
 
+  const handleAgentMicMutedChange = useCallback(
+    (muted: boolean) => {
+      setAgentMicMuted(muted);
+      setTrayMicMuted(muted);
+    },
+    [setTrayMicMuted]
+  );
+
   const handleAgentAudioMutedChange = useCallback(
     (muted: boolean) => {
       if (muted) stopAllAudio();
       setAgentAudioMuted(muted);
+      setTrayAudioMuted(muted);
     },
-    [stopAllAudio]
+    [setTrayAudioMuted, stopAllAudio]
   );
 
   const enterAgentMode = useCallback((sessionKey: string, overlayMode: AgentOverlayMode = "transcript") => {
@@ -4635,22 +4644,26 @@ export default function ChatPage() {
       audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
       audioRef.current.play().catch(() => {});
     }
-    setAgentMicMuted(false);
-    setAgentAudioMuted(false);
+    handleAgentMicMutedChange(false);
+    handleAgentAudioMutedChange(false);
+    setTrayIsPlayingAudio(false);
     setAgentModeSessionKey(sessionKey);
     setVoiceMode("agent");
     setSpeakResponses(true);
     setAgentOverlayMode(overlayMode);
-  }, []);
+  }, [handleAgentAudioMutedChange, handleAgentMicMutedChange, setTrayIsPlayingAudio]);
 
   const exitAgentMode = useCallback(() => {
     stopAllAudio();
+    setIsPlayingAudio(false);
     setVoiceMode("off");
     setAgentModeSessionKey(null);
     setAgentOverlayMode("transcript");
-    setAgentMicMuted(false);
-    setAgentAudioMuted(false);
-  }, [stopAllAudio]);
+    handleAgentMicMutedChange(false);
+    handleAgentAudioMutedChange(false);
+    setTrayIsPlayingAudio(false);
+    setTrayVoiceState("idle");
+  }, [handleAgentAudioMutedChange, handleAgentMicMutedChange, setTrayIsPlayingAudio, setTrayVoiceState, stopAllAudio]);
 
   useEffect(() => {
     const handleTrayStop = () => {
@@ -5052,7 +5065,7 @@ export default function ChatPage() {
                     compact
                     isMicMuted={agentMicMuted}
                     isAgentMuted={agentAudioMuted}
-                    onMicMutedChange={setAgentMicMuted}
+                    onMicMutedChange={handleAgentMicMutedChange}
                     onAgentMutedChange={handleAgentAudioMutedChange}
                     agent={selectedAgent?.callsign}
                     gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}
@@ -6086,7 +6099,7 @@ export default function ChatPage() {
                   immersive={agentOverlayMode === "immersive"}
                   isMicMuted={agentMicMuted}
                   isAgentMuted={agentAudioMuted}
-                  onMicMutedChange={setAgentMicMuted}
+                  onMicMutedChange={handleAgentMicMutedChange}
                   onAgentMutedChange={handleAgentAudioMutedChange}
                   agent={selectedAgent?.callsign}
                   gatewayAgent={delegatedViaAgent?.callsign ?? selectedAgent?.callsign}

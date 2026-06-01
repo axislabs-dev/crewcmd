@@ -308,16 +308,62 @@ function extractSourceReplyText(value: unknown, seen = new WeakSet<object>()): s
 
   const sourceReply = asRecord(record.sourceReply) ?? asRecord(record.source_reply);
   const direct = sourceReply
-    ? firstString(sourceReply.text, sourceReply.message, sourceReply.content)
+    ? firstString(sourceReply.text, sourceReply.message, sourceReply.content) || extractText(sourceReply)
     : firstString(record.sourceReplyText, record.source_reply_text);
-  if (direct && !isAssistantDeliveryPlaceholder(direct)) return direct;
+  if (direct && !isChatCompletionPlaceholderText(direct)) return direct;
 
-  for (const key of ["content", "text", "output", "result", "data", "payload", "message"]) {
+  for (const key of [
+    "content",
+    "text",
+    "output",
+    "result",
+    "response",
+    "data",
+    "payload",
+    "message",
+    "details",
+    "metadata",
+    "__openclaw",
+    "toolResult",
+    "tool_result",
+    "arguments",
+    "args",
+  ]) {
     const text = extractSourceReplyText(record[key], seen);
     if (text) return text;
   }
 
   return "";
+}
+
+function isChatCompletionPlaceholderText(text: string) {
+  if (isAssistantDeliveryPlaceholder(text)) return true;
+
+  const normalized = text.trim().replace(/\s+/g, " ").toLowerCase().replace(/[.!?]+$/g, "");
+  const ascii = normalized.replace(/[’‘]/g, "'");
+  const mentionsMissingResult = ascii.includes("the result didn't include") ||
+    ascii.includes("the result did not include") ||
+    ascii.includes("result didn't include") ||
+    ascii.includes("result did not include") ||
+    ascii.includes("just a completion status") ||
+    ascii.includes("only a completion status") ||
+    ascii.includes("completion status");
+  const asksForInputAgain = ascii.includes("paste the readme") ||
+    ascii.includes("share the readme text") ||
+    ascii.includes("run the check again") ||
+    ascii.includes("without the actual text") ||
+    ascii.includes("without the actual content") ||
+    ascii.includes("don't have the openclaw result") ||
+    ascii.includes("do not have the openclaw result");
+
+  return normalized === "done" ||
+    normalized === "complete" ||
+    normalized === "completed" ||
+    normalized === "ok" ||
+    normalized === "okay" ||
+    normalized === "all set" ||
+    mentionsMissingResult ||
+    asksForInputAgain;
 }
 
 function isToolOnlyMessage(value: unknown): boolean {
@@ -571,10 +617,13 @@ function extractHistoryMessages(result: unknown) {
     .map((item) => {
       const message = asRecord(item);
       const role = firstString(message?.role, message?.type, message?.author);
-      const content = extractText(message?.content ?? message?.message ?? message);
+      const content = extractSourceReplyText(message) || extractText(message?.content ?? message?.message ?? message);
       return { role, content };
     })
-    .filter((message) => message.content);
+    .filter((message) =>
+      message.content &&
+      !(message.role === "assistant" && isChatCompletionPlaceholderText(message.content))
+    );
 }
 
 function gatewaySessionSortValue(session: Record<string, unknown>) {
@@ -1299,7 +1348,12 @@ export async function POST(request: NextRequest) {
     };
 
     const recoverMissingAssistantText = async () => {
-      if ((!historySnapshotStreamed && fullAssistantText) || !client) return;
+      if (
+        (!historySnapshotStreamed &&
+          fullAssistantText &&
+          !(hasToolActivity && isChatCompletionPlaceholderText(fullAssistantText))) ||
+        !client
+      ) return;
       const recovered = await recoverAssistantTextFromGateway({
         client,
         allowedSessions: allowedEventSessions,
@@ -1594,9 +1648,31 @@ export async function POST(request: NextRequest) {
         const finalMessage = p.message || p;
         const toolOnlyFinal = isToolOnlyMessage(finalMessage);
         const extractedFinalText = toolOnlyFinal ? "" : extractText(finalMessage);
-        const finalText = extractedFinalText && isAssistantDeliveryPlaceholder(extractedFinalText)
+        const finalIsPlaceholder = Boolean(extractedFinalText && isChatCompletionPlaceholderText(extractedFinalText));
+        const shouldTreatFinalAsPlaceholder = finalIsPlaceholder && (hasToolActivity || Boolean(deliveredSourceReplyText));
+        const finalText = extractedFinalText && shouldTreatFinalAsPlaceholder
           ? deliveredSourceReplyText
           : extractedFinalText;
+        if (!finalText && shouldTreatFinalAsPlaceholder) {
+          if (fullAssistantText && !isChatCompletionPlaceholderText(fullAssistantText)) {
+            finishStream(false);
+            return;
+          }
+          publishAgentModeDiagnostic({
+            scope: "api-chat",
+            event: hasToolActivity ? "chat-final.placeholder-after-tool" : "chat-final.placeholder",
+            sessionId: diagnosticSessionId,
+            detail: {
+              activeRunId,
+              elapsedMs: Date.now() - requestStartedAt,
+            },
+          });
+          deferCompletionUntilAssistantText(
+            hasToolActivity ? "placeholder-chat-final-after-tool" : "placeholder-chat-final",
+            hasToolActivity,
+          );
+          return;
+        }
         if (finalText && !streamAssistantSnapshot(finalText)) {
           fullAssistantText = finalText;
         }

@@ -400,6 +400,74 @@ describe("POST /api/runtimes/[id]/talk/realtime/relay", () => {
     expect(mockReleaseClient).toHaveBeenCalledWith(client);
   });
 
+  it("recovers empty final realtime consult events from chat history", async () => {
+    let gatewayHandler: ((payload: unknown) => void) | null = null;
+    const client = {
+      realtimeClientToolCall: vi.fn().mockResolvedValue({ ok: true, runId: "run_1" }),
+      realtimeRelayToolResult: vi.fn().mockResolvedValue({ ok: true }),
+      chatHistory: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Inspect this repo" }],
+          },
+          {
+            role: "assistant",
+            idempotencyKey: "run_1",
+            content: [{ type: "text", text: "Recovered from the durable transcript." }],
+          },
+        ],
+      }),
+      on: vi.fn((event: string, handler: (payload: unknown) => void) => {
+        if (event === "*") gatewayHandler = handler;
+      }),
+      off: vi.fn(),
+    };
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue(client);
+
+    const responsePromise = POST(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/relay", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "toolCall",
+          relaySessionId: "relay_1",
+          sessionKey: "main",
+          callId: "call_1",
+          name: "openclaw_agent_consult",
+          args: { prompt: "Inspect this repo" },
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    await vi.waitFor(() => expect(gatewayHandler).toBeTypeOf("function"));
+
+    (gatewayHandler as ((payload: unknown) => void) | null)?.({
+      event: "chat",
+      runId: "run_1",
+      state: "final",
+      message: { role: "assistant", content: [] },
+    });
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      result: {
+        delegated: true,
+        runId: "run_1",
+        finalText: "Recovered from the durable transcript.",
+        result: { ok: true },
+      },
+    });
+    expect(client.chatHistory).toHaveBeenCalledWith({ sessionKey: "main", limit: 25 });
+    expect(client.realtimeRelayToolResult).toHaveBeenNthCalledWith(2, {
+      relaySessionId: "relay_1",
+      callId: "call_1",
+      result: { text: "Recovered from the durable transcript." },
+    });
+  });
+
   it("rejects invalid relay actions before calling the gateway", async () => {
     mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
 

@@ -38,6 +38,30 @@ describe("realtime voice client helpers", () => {
     });
   });
 
+  it("sends channel scope for realtime channel agent mode", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ session: { transport: "gateway-relay", relaySessionId: "relay_1" } }),
+    } as Response);
+
+    await startRealtimeVoiceSession({
+      runtimeId: "rt_1",
+      sessionKey: "main",
+      agentId: "main",
+      channelId: "channel_crew",
+      channelAgentId: "neo",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtimes/rt_1/talk/realtime/session", expect.objectContaining({
+      body: JSON.stringify({
+        sessionKey: "main",
+        agentId: "main",
+        channelId: "channel_crew",
+        channelAgentId: "neo",
+      }),
+    }));
+  });
+
   it("sends relay audio through the runtime relay route", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,

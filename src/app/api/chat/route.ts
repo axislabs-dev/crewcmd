@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
 import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
-import { agents, channelMembers, chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
+import { agents, channelMembers, channels, chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
 import { eq, desc, and, isNull, sql } from "drizzle-orm";
 import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
 import { isAssistantDeliveryPlaceholder, selectRecoveredAssistantText } from "@/lib/chat-recovery";
@@ -27,7 +27,8 @@ const ACTIVE_HISTORY_POLL_INTERVAL_MS = 1_500;
 const ACTIVE_HISTORY_POLL_MAX_ATTEMPTS = 80;
 const AGENT_MODE_THINKING_LEVEL = "low";
 const CHANNEL_AGENT_SPEAKING_ROLES = new Set(["owner", "admin", "member", "contributor"]);
-const CHANNEL_AGENT_SPEAKING_MODES = new Set(["mention_only", "proactive", "on_call"]);
+const CHANNEL_AGENT_MENTION_MODES = new Set(["mention_only", "proactive", "on_call"]);
+const CHANNEL_AGENT_ACTIVE_MODES = new Set(["proactive", "on_call"]);
 
 type ChatProgressEventName =
   | "run_started"
@@ -812,6 +813,9 @@ async function resolveChannelAgentInvocationViolation(params: {
   channelId: string;
   companyId: string | null;
   agentCallsign: string;
+  agentMode: boolean;
+  invocationMode: "active" | "mention";
+  messageText: string;
 }) {
   if (!db) return null;
   const callsign = params.agentCallsign.trim().toLowerCase();
@@ -821,6 +825,7 @@ async function resolveChannelAgentInvocationViolation(params: {
     db!.select({
       agent: agents,
       member: channelMembers,
+      channel: channels,
     })
       .from(agents)
       .innerJoin(
@@ -830,6 +835,7 @@ async function resolveChannelAgentInvocationViolation(params: {
           eq(channelMembers.channelId, params.channelId),
         ),
       )
+      .innerJoin(channels, eq(channels.id, channelMembers.channelId))
       .where(sql`lower(${agents.callsign}) = ${callsign}`)
       .limit(1)
   );
@@ -838,8 +844,18 @@ async function resolveChannelAgentInvocationViolation(params: {
   if (!CHANNEL_AGENT_SPEAKING_ROLES.has(row.member.role)) {
     return "Agent cannot post in this channel.";
   }
-  if (!CHANNEL_AGENT_SPEAKING_MODES.has(row.member.agentParticipationMode ?? "mention_only")) {
+  const participationMode = row.member.agentParticipationMode ?? "mention_only";
+  const isDirectAgentDm = row.channel.type === "dm";
+  const isActiveParticipant = isDirectAgentDm || CHANNEL_AGENT_ACTIVE_MODES.has(participationMode);
+  const isExplicitMention = !params.agentMode &&
+    params.invocationMode === "mention" &&
+    messageMentionsAgent(params.messageText, callsign, row.agent.name);
+
+  if (isExplicitMention && !CHANNEL_AGENT_MENTION_MODES.has(participationMode) && !isDirectAgentDm) {
     return "Agent is not configured to respond in this channel.";
+  }
+  if (!isExplicitMention && !isActiveParticipant) {
+    return "Agent is not an active participant in this channel.";
   }
   if (params.companyId) {
     const ownerCompanyId = row.agent.ownerCompanyId ?? row.agent.companyId ?? null;
@@ -848,6 +864,23 @@ async function resolveChannelAgentInvocationViolation(params: {
     }
   }
   return null;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function messageMentionsAgent(message: string, callsign: string, name?: string | null) {
+  const aliases = [callsign, name].filter((value): value is string => Boolean(value?.trim()));
+  return aliases.some((alias) => {
+    const escaped = escapeRegExp(alias.trim().toLowerCase());
+    return [
+      new RegExp(`^@${escaped}\\b`, "i"),
+      new RegExp(`^${escaped}[,:\\s]`, "i"),
+      new RegExp(`^hey\\s+${escaped}\\b`, "i"),
+      new RegExp(`\\b@${escaped}\\b`, "i"),
+    ].some((pattern) => pattern.test(message));
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -867,6 +900,7 @@ export async function POST(request: NextRequest) {
       channelId: bodyChannelId,
       sessionKey: bodySessionKey,
       agentMode: bodyAgentMode,
+      channelInvocationMode: bodyChannelInvocationMode,
       clientVisibility: bodyClientVisibility,
       notifyOnCompletion: bodyNotifyOnCompletion,
       threadContext: bodyThreadContext,
@@ -927,6 +961,9 @@ export async function POST(request: NextRequest) {
       request.cookies.get("active_workspace")?.value ||
       null;
     const channelId = typeof bodyChannelId === "string" && bodyChannelId.trim() ? bodyChannelId.trim() : null;
+    const channelInvocationMode = firstString(bodyChannelInvocationMode)?.toLowerCase() === "mention"
+      ? "mention"
+      : "active";
     const persistenceScope: ChatPersistenceScope = { companyId, workspaceId, channelId };
     if (companyId || workspaceId) {
       const accessibleWorkspace = await resolveAccessibleWorkspace({
@@ -950,6 +987,9 @@ export async function POST(request: NextRequest) {
           channelId,
           companyId: accessibleWorkspace.companyId,
           agentCallsign: targetAgentCallsign || agentId,
+          agentMode: bodyAgentMode === true,
+          invocationMode: channelInvocationMode,
+          messageText: asString(lastUserMessage.content) ?? "",
         });
         if (violation) {
           return Response.json({ error: violation }, { status: 403 });

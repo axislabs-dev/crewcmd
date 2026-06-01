@@ -16,10 +16,10 @@ export type RealtimeVoiceStatus = "idle" | "listening" | "processing" | "speakin
 const BARGE_IN_RMS_THRESHOLD = 0.03;
 const BARGE_IN_PEAK_THRESHOLD = 0.1;
 const BARGE_IN_FRAMES = 3;
-const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.075;
-const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.22;
-const MOBILE_BARGE_IN_FRAMES = 7;
-const MOBILE_BARGE_IN_GRACE_MS = 1200;
+const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.055;
+const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.16;
+const MOBILE_BARGE_IN_FRAMES = 3;
+const MOBILE_BARGE_IN_GRACE_MS = 450;
 const REALTIME_VOICE_CONTEXT_LIMIT = 8;
 
 export interface RealtimeBargeInProfile {
@@ -451,8 +451,7 @@ export function detectRealtimeBargeIn(input: RealtimeBargeInDetectionInput) {
   if (
     !input.activeOutput ||
     input.cancelRequested ||
-    input.input.length === 0 ||
-    isWithinGraceWindow(input)
+    input.input.length === 0
   ) {
     return {
       triggered: false,
@@ -475,9 +474,9 @@ export function detectRealtimeBargeIn(input: RealtimeBargeInDetectionInput) {
     : 0;
 
   return {
-    triggered: speechFrames >= input.profile.frames,
+    triggered: !isWithinGraceWindow(input) && speechFrames >= input.profile.frames,
     speechFrames,
-    suppressInput: input.profile.suppressEchoInput && input.activeOutput && speechFrames < input.profile.frames,
+    suppressInput: input.profile.suppressEchoInput && input.activeOutput && speechFrames === 0,
   };
 }
 

@@ -187,7 +187,7 @@ async function runRealtimeToolCall(
       const result = await client.realtimeRelayToolResult({
         relaySessionId: params.relaySessionId,
         callId: params.callId,
-        result: { text },
+        result: { result: text },
       });
       void audit.publish("run_completed");
       return { delegated: true, runId, result, finalText: text };
@@ -235,7 +235,8 @@ function waitForChatFinal(params: {
     let settled = false;
     let historyPollInFlight = false;
     let historyPollTimeout: ReturnType<typeof setTimeout> | null = null;
-    let emptyFinalDeadlineMs: number | null = null;
+    let deferredFinalText: string | null = null;
+    let deferredFinalDeadlineMs: number | null = null;
 
     const timer = setTimeout(() => {
       void recoverFromHistory("timeout").then((recovered) => {
@@ -259,9 +260,9 @@ function waitForChatFinal(params: {
       resolve(text);
     };
 
-    const maybeResolveEmptyFinal = () => {
-      if (settled || emptyFinalDeadlineMs === null || Date.now() < emptyFinalDeadlineMs) return false;
-      resolveWithText("OpenClaw completed without returning text.");
+    const maybeResolveDeferredFinal = () => {
+      if (settled || deferredFinalDeadlineMs === null || Date.now() < deferredFinalDeadlineMs) return false;
+      resolveWithText(deferredFinalText ?? "OpenClaw completed without returning text.");
       return true;
     };
 
@@ -287,13 +288,13 @@ function waitForChatFinal(params: {
           resolveWithText(recovered);
           return recovered;
         }
-        if (!maybeResolveEmptyFinal()) scheduleHistoryPoll();
+        if (!maybeResolveDeferredFinal()) scheduleHistoryPoll();
         return "";
       } catch (error) {
         if (reason !== "poll") {
           console.error(`[api/realtime/relay] Failed to recover realtime consult text from history (${reason}):`, error);
         }
-        if (!maybeResolveEmptyFinal()) scheduleHistoryPoll();
+        if (!maybeResolveDeferredFinal()) scheduleHistoryPoll();
         return "";
       } finally {
         historyPollInFlight = false;
@@ -313,10 +314,17 @@ function waitForChatFinal(params: {
       if (state === "final" || state === "complete" || state === "completed") {
         const text = extractText(event.message) || extractText(event);
         if (text) {
+          if (isRealtimeConsultPlaceholderText(text)) {
+            deferredFinalText = text;
+            deferredFinalDeadlineMs ??= Date.now() + REALTIME_EMPTY_FINAL_HISTORY_GRACE_MS;
+            void recoverFromHistory("placeholder-final");
+            return;
+          }
           resolveWithText(text);
           return;
         }
-        emptyFinalDeadlineMs ??= Date.now() + REALTIME_EMPTY_FINAL_HISTORY_GRACE_MS;
+        deferredFinalText = "OpenClaw completed without returning text.";
+        deferredFinalDeadlineMs ??= Date.now() + REALTIME_EMPTY_FINAL_HISTORY_GRACE_MS;
         void recoverFromHistory("empty-final");
         return;
       }
@@ -477,6 +485,16 @@ function buildRealtimeConsultChatMessage(args: unknown) {
     firstString(record?.context) ? `Context:\n${firstString(record?.context)}` : null,
     firstString(record?.responseStyle) ? `Spoken style:\n${firstString(record?.responseStyle)}` : null,
   ].filter(Boolean).join("\n\n");
+}
+
+function isRealtimeConsultPlaceholderText(text: string) {
+  const normalized = normalizeHistoryText(text).replace(/[.!?]+$/g, "");
+  return normalized === "done" ||
+    normalized === "complete" ||
+    normalized === "completed" ||
+    normalized === "ok" ||
+    normalized === "okay" ||
+    normalized === "all set";
 }
 
 function readRealtimeConsultQuestion(args: unknown) {

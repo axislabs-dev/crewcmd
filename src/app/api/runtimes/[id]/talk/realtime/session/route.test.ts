@@ -85,6 +85,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
       },
     });
     expect(realtimeTalkSession).toHaveBeenCalledWith({
+      transport: "gateway-relay",
       sessionKey: "main",
       provider: "openai",
       model: "gpt-realtime-1.5",

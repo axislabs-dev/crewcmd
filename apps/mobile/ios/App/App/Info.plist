@@ -24,7 +24,7 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-																			<key>NSMicrophoneUsageDescription</key>
+																				<key>NSMicrophoneUsageDescription</key>
 	<string>CrewCmd uses the microphone for hands-free agent mode voice conversations.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>CrewCmd can transcribe speech to send voice messages to your agents.</string>

@@ -28,7 +28,7 @@
     "managedMetadataLabel": "Acme CrewCmd Mobile"
   },
   "server": {
-    "defaultBaseUrl": "https://crewcmd.acme.tailnet.ts.net",
+    "defaultBaseUrl": "https://taim4.tail82c33.ts.net",
     "bootstrapMode": "qr-or-url",
     "lockToSingleServer": true,
     "tailscaleRequired": true

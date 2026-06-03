@@ -1,16 +1,26 @@
 {
-  "appId": "dev.axislabs.crewcmd.mobile",
-  "appName": "CrewCmd Mobile",
+  "appId": "com.acme.crewcmd",
+  "appName": "Acme CrewCmd",
   "webDir": "web",
   "bundledWebRuntime": false,
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "allowNavigation": [
+      "taim4.tail82c33.ts.net"
+    ]
   },
   "plugins": {
     "SplashScreen": {
-      "launchAutoHide": false,
-      "backgroundColor": "#020405",
+      "launchAutoHide": true,
+      "backgroundColor": "#0A7B83",
       "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
   }
 }

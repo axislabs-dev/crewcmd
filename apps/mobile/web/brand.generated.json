@@ -4,7 +4,7 @@
   "profileId": "acme-prod",
   "primaryColor": "#0A7B83",
   "secondaryColor": "#F7B500",
-  "defaultBaseUrl": "https://crewcmd.acme.tailnet.ts.net",
+  "defaultBaseUrl": "https://taim4.tail82c33.ts.net",
   "bootstrapMode": "qr-or-url",
   "lockToSingleServer": true,
   "tailscaleRequired": true,
@@ -13,6 +13,8 @@
   "environmentLabel": "Production",
   "deepLinkScheme": "crewcmd",
   "deepLinkHost": "mobile",
-  "iconPath": "../../../docs/examples/mobile/branding/icon.svg",
-  "splashPath": "../../../docs/examples/mobile/branding/splash.svg"
+  "iconPath": "./.generated/branding/icon.svg",
+  "iconLightPath": "./.generated/branding/icon-light.svg",
+  "iconDarkPath": "./.generated/branding/icon-dark.svg",
+  "splashPath": "./.generated/branding/splash.svg"
 }

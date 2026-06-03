@@ -1,0 +1,43 @@
+{
+  "$schema": "./org.mobile.schema.json",
+  "app": {
+    "slug": "AxisLabs crewcmd",
+    "displayName": "AxisLabs CrewCmd",
+    "iosBundleId": "com.axislabs.crewcmd",
+    "androidApplicationId": "com.axislabs.crewcmd"
+  },
+  "branding": {
+    "orgName": "Axis Labs",
+    "profileId": "axislabs-prod",
+    "primaryColor": "#0A7B83",
+    "secondaryColor": "#F7B500",
+    "iconPath": "./branding/icon.svg",
+    "splashPath": "./branding/splash.svg"
+  },
+  "distribution": {
+    "channel": "private-enterprise",
+    "ios": {
+      "teamName": "Axis Labs",
+      "distributionNote": "Use Apple Business Manager Custom App or MDM for employee-only rollout."
+    },
+    "android": {
+      "distributionNote": "Use Managed Google Play private app or MDM-managed APK deployment."
+    },
+    "managedMetadataLabel": "Axis Labs CrewCmd Mobile"
+  },
+  "server": {
+    "defaultBaseUrl": "https://taim4.tail82c33.ts.net:3000",
+    "bootstrapMode": "qr-or-url",
+    "lockToSingleServer": true,
+    "tailscaleRequired": true
+  },
+  "deepLinks": {
+    "scheme": "crewcmd",
+    "host": "mobile"
+  },
+  "managedConfig": {
+    "allowManualServerOverride": false,
+    "supportEmail": "hello@axislabs.dev",
+    "environmentLabel": "Production"
+  }
+}

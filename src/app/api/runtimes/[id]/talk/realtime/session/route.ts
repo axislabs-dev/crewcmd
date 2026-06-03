@@ -46,6 +46,7 @@ export async function POST(
 
     const client = await getGatewayClientForRuntime(runtime.id);
     const session = await client.realtimeTalkSession({
+      transport: "gateway-relay",
       sessionKey: readOptionalString(body.sessionKey),
       provider: readOptionalString(body.provider),
       model: readOptionalString(body.model),

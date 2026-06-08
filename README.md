@@ -160,6 +160,16 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000), create the first account, and run `pnpm typecheck && pnpm test` before opening a PR. Use `pnpm dev:https` only when you need HTTPS-only browser features such as microphone access.
 
+Run the focused verification gates before shipping changes:
+
+```bash
+pnpm lint:check
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm release:check
+```
+
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contributor workflow and [docs/README.md](./docs/README.md) for the documentation index.
 
 ## License

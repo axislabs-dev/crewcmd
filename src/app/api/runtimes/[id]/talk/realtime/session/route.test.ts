@@ -156,6 +156,7 @@ describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
       model: "gpt-realtime-1.5",
       voice: "marin",
       agentId: undefined,
+      transport: "gateway-relay",
       vadThreshold: undefined,
       silenceDurationMs: 2000,
       prefixPaddingMs: 500,

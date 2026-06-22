@@ -11,19 +11,17 @@ The org chart shows:
 - **Reporting lines** — Who reports to whom
 - **Delegation rules** — What can be delegated and to whom
 
-## Team Templates
+## Team Blueprints
 
-One-click team deployment with pre-built templates:
+CrewCmd ships with three built-in team blueprints:
 
 | Template | Includes |
 |---|---|
-| Solo Founder Kit | CEO agent, full-stack dev, marketer |
-| Dev Squad | Lead dev, frontend, backend, code reviewer |
-| Marketing Team | Content writer, social media, SEO analyst |
-| Support Ops | Triage agent, knowledge base, escalation |
-| Full Company | All of the above, with org structure |
+| Solo Founder Kit | Chief of staff, full-stack engineer, growth specialist |
+| Startup Dev Squad | Tech lead, frontend, backend, reviewer, platform engineer |
+| Growth Team | Growth lead, content strategist, research analyst, revenue ops |
 
-Templates are customizable before deployment. Adjust roles, models, and hierarchy to fit your needs.
+Blueprints are customizable before deployment. Adjust agent names, callsigns, roles, and prompt templates to fit your workspace before launching the team.
 
 ## Escalation Paths
 

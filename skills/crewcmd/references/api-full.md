@@ -343,7 +343,7 @@ Create a custom blueprint.
 
 ### `POST /api/blueprints/deploy`
 
-Deploy a blueprint (creates agents, org chart, skills in one click).
+Deploy a blueprint into a workspace. The endpoint creates or updates the blueprint agents, org chart, and associated skills, and accepts optional agent customizations before launch.
 
 ---
 

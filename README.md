@@ -28,7 +28,7 @@ Other platforms bolt AI onto an existing chat tool, or make every conversation f
 
 - **Personal runtime privacy** — Each user can have private OpenClaw-backed conversations, agents, tasks, and context that never leak into shared channels by default.
 - **Shared AI channels when it matters** — Bring humans and approved team/org agents into durable channels, project rooms, task threads, voice sessions, inbox items, and approvals when collaboration is useful.
-- **Deploy a full team in one click** — Pre-built team templates let you spin up a dev squad, marketing team, support crew, solo founder setup, and more. Customize roles, hierarchy, and skills before deploying, or just hit go.
+- **Deploy a full team from a blueprint** — Built-in blueprints currently cover the Solo Founder Kit, Startup Dev Squad, and Growth Team. Customize roles, hierarchy, and skills before deploying, or launch the blueprint as-is.
 - **Bring your own OpenClaw agents** — Import agents from an OpenClaw runtime and manage them in CrewCmd. Teams can bring their own personal OpenClaw agents, and companies can also provide shared or dedicated OpenClaw agents for team members.
 - **One inbox for everything** — Agents surface decisions, blockers, and completed work with priority tiers. No more checking 7 different tools. Review and approve from one place.
 - **Skills management** — Install, configure, and sync skills to your agents. CrewCmd includes built-in skills and can browse curated external skill sources, but the experience today is primarily about managing installed skills.
@@ -125,7 +125,7 @@ pnpm dev
 |---|---|
 | **Private Personal Runtime** | Personal conversations, agents, tasks, and runtime-backed context stay private unless selected outputs are explicitly shared. |
 | **Shared AI Channels** | Team channels coordinate multiple humans and approved shared agents across conversations, task boards, inboxes, voice sessions, and approvals. |
-| **Team Blueprints** | Pre-built agent team templates. One click to deploy a full team with roles, hierarchy, and skills. |
+| **Team Blueprints** | Built-in agent team templates for solo-founder, development, and growth workflows, with optional customization before deployment. |
 | **OpenClaw Runtime Import** | Import and manage agents from an OpenClaw runtime, including runtime metadata, ownership, visibility, and sync. |
 | **Scope-Aware Inbox** | Centralized communication hub for visible decisions, blockers, approvals, mentions, and agent updates across private, channel, project, team, and org scopes. |
 | **Scope-Aware Skills Management** | Install, configure, and manage private, team, and org-approved skills, including curated browse/import flows and runtime sync. |

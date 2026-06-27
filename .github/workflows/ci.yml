@@ -24,3 +24,4 @@ jobs:
       - run: pnpm --filter crewcmd run test
       - run: pnpm --filter crewcmd run smoke
       - run: pnpm build
+      - run: pnpm release:check

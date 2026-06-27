@@ -170,6 +170,10 @@ pnpm build
 pnpm release:check
 ```
 
+`pnpm release:check` is the canonical pre-release gate. It includes the app
+typecheck, unit tests, workspace smoke checks, npm package dry-run, and server
+release dry-run so CI verifies the same release surface maintainers run locally.
+
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contributor workflow and [docs/README.md](./docs/README.md) for the documentation index.
 
 ## License

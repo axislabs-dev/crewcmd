@@ -119,6 +119,12 @@ pnpm dev
 - Node.js 22+ and pnpm
 - Docker (optional, for containerized deployment)
 
+## Limitations
+
+- CrewCmd is still early software; verify auth, database, and OpenClaw gateway settings in a non-production environment before using it with a real team.
+- Docker Compose and LAN HTTPS flows are preview paths and should be validated on the target host and network.
+- Governance and approval primitives exist, but broader guardrail workflows are still in progress and should not be treated as complete compliance controls.
+
 ## Features
 
 | Feature | Description |

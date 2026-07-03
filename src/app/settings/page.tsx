@@ -4,6 +4,8 @@ import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "re
 import { signOut } from "next-auth/react";
 import { Avatar } from "@/components/avatar";
 import { useWorkspace } from "@/components/company-context";
+import { RuntimeDiscoverySummary } from "@/components/runtime-discovery-summary";
+import { RuntimeHealthIndicator } from "@/components/runtime-health-indicator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserPresenceBadge } from "@/components/user-presence";
 import { labelRuntimeType, summarizeRuntimeCapabilities } from "@/lib/runtime-capability-summary";
@@ -535,6 +537,7 @@ export default function SettingsPage() {
                                 <span className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
                                   {labelRuntimeType(runtime.runtimeType)}
                                 </span>
+                                <RuntimeHealthIndicator runtimeId={runtime.id} runtimeType={runtime.runtimeType} />
                               </div>
                               <p className="mt-2 truncate font-mono text-[11px] text-[var(--text-secondary)]">{runtime.gatewayUrl}</p>
                               <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
@@ -560,6 +563,11 @@ export default function SettingsPage() {
                                   )}
                                 </div>
                               )}
+                              <RuntimeDiscoverySummary
+                                runtimeId={runtime.id}
+                                runtimeType={runtime.runtimeType}
+                                className="mt-2 text-[11px] text-[var(--text-tertiary)]"
+                              />
                             </div>
                             <button
                               type="button"

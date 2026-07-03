@@ -62,6 +62,8 @@ vi.mock("@/lib/gateway-chat-pool", () => ({
 
 import { POST } from "./route";
 import { GET } from "./[runId]/route";
+import { POST as approveRun } from "./[runId]/approval/route";
+import { POST as stopRun } from "./[runId]/stop/route";
 
 function addRuntime(runtimeType = "hermes") {
   mockRuntimeRows.push({
@@ -180,6 +182,98 @@ describe("runtime run endpoints", () => {
     expect(response.status).toBe(501);
     await expect(response.json()).resolves.toEqual({
       error: "OpenClaw Gateway does not support runtime run creation",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("stops Hermes runs through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ status: "stopping" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await stopRun(new Request("http://localhost/api/runtimes/rt_hermes/runs/run_123/stop"), {
+      params: Promise.resolve({ id: "rt_hermes", runId: "run_123" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      run: {
+        runId: "run_123",
+        status: "stopping",
+        raw: { status: "stopping" },
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/v1/runs/run_123/stop", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("submits Hermes run approvals through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ run_id: "run_123", status: "running" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await approveRun(
+      new Request("http://localhost/api/runtimes/rt_hermes/runs/run_123/approval", {
+        method: "POST",
+        body: JSON.stringify({
+          decision: "approved",
+          approvalId: "approval_1",
+          reason: "Allowed by operator",
+          payload: { tool: "terminal" },
+        }),
+      }),
+      { params: Promise.resolve({ id: "rt_hermes", runId: "run_123" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      run: {
+        runId: "run_123",
+        status: "running",
+        raw: { run_id: "run_123", status: "running" },
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/v1/runs/run_123/approval", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        decision: "approved",
+        approval_id: "approval_1",
+        reason: "Allowed by operator",
+        payload: { tool: "terminal" },
+      }),
+    });
+  });
+
+  it("reports unsupported run stop for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await stopRun(new Request("http://localhost/api/runtimes/rt_openclaw/runs/run_123/stop"), {
+      params: Promise.resolve({ id: "rt_openclaw", runId: "run_123" }),
+    });
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime run stop",
     });
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });

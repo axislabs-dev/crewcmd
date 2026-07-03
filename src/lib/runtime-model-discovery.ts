@@ -1,18 +1,38 @@
-import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
 import type { GatewayModel } from "@/lib/gateway-client";
+import { db, withRetry } from "@/db";
+import { companyRuntimes } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { getRuntimeProvider, type RuntimeDiscoveredModel } from "@/lib/runtimes/providers";
 
-export interface RuntimeDiscoveredModel {
-  runtimeId: string;
-  provider: string;
-  id: string;
-  name: string;
-}
+export type { RuntimeDiscoveredModel } from "@/lib/runtimes/providers";
 
 export async function discoverRuntimeModels(runtimeId: string): Promise<RuntimeDiscoveredModel[]> {
-  const client = await getGatewayClientForRuntime(runtimeId);
-  const result = await client.listModels();
+  if (!db) throw new Error("Database not available");
 
-  return normalizeRuntimeModels(runtimeId, result.models);
+  const [runtime] = await withRetry(() =>
+    db!
+      .select()
+      .from(companyRuntimes)
+      .where(eq(companyRuntimes.id, runtimeId))
+      .limit(1)
+  );
+  if (!runtime) throw new Error(`Runtime not found: ${runtimeId}`);
+
+  const metadata =
+    runtime.metadata && typeof runtime.metadata === "object" && !Array.isArray(runtime.metadata)
+      ? (runtime.metadata as Record<string, unknown>)
+      : null;
+  const provider = getRuntimeProvider(runtime.runtimeType);
+
+  return provider.discoverModels({
+    id: runtime.id,
+    runtimeType: runtime.runtimeType,
+    name: runtime.name,
+    gatewayUrl: runtime.gatewayUrl,
+    httpUrl: runtime.httpUrl,
+    authToken: runtime.authToken,
+    metadata,
+  });
 }
 
 export function normalizeRuntimeModels(

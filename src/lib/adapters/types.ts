@@ -30,6 +30,8 @@ export interface AdapterConfig {
   baseUrl?: string;
   /** Model identifier */
   model?: string;
+  /** Stable Hermes memory/session scope */
+  sessionKey?: string;
 }
 
 /** Result of spawning a long-running agent process */

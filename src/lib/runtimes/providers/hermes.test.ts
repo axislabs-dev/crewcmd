@@ -103,6 +103,32 @@ describe("HermesRuntimeProvider runs", () => {
     });
   });
 
+  it("streams Hermes run events", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response("event: run.completed\ndata: {\"run_id\":\"run_123\"}\n\n", {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.getRunEvents(hermesRuntime(), "run_123", { lastEventId: "evt_1" });
+
+    expect(result.runId).toBe("run_123");
+    expect(result.contentType).toBe("text/event-stream");
+    await expect(new Response(result.stream).text()).resolves.toBe(
+      "event: run.completed\ndata: {\"run_id\":\"run_123\"}\n\n"
+    );
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/v1/runs/run_123/events", {
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: "Bearer secret",
+        "Last-Event-ID": "evt_1",
+      },
+    });
+  });
+
   it("stops Hermes runs", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ status: "stopping" }), {

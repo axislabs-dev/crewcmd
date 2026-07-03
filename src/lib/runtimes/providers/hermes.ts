@@ -10,6 +10,8 @@ import type {
   RuntimeRunControlResult,
   RuntimeRunCreateInput,
   RuntimeRunCreateResult,
+  RuntimeRunEventsInput,
+  RuntimeRunEventsResult,
   RuntimeRunStatus,
 } from "./types";
 
@@ -145,6 +147,37 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     };
   }
 
+  async getRunEvents(
+    runtime: RuntimeConnectionRecord,
+    runId: string,
+    input: RuntimeRunEventsInput = {}
+  ): Promise<RuntimeRunEventsResult> {
+    const normalizedRunId = normalizeString(runId);
+    if (!normalizedRunId) throw new Error("runId is required");
+
+    const lastEventId = normalizeString(input.lastEventId);
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesResponse(
+      rootUrl,
+      runtime.authToken,
+      `/v1/runs/${encodeURIComponent(normalizedRunId)}/events`,
+      {
+        auth: true,
+        headers: {
+          Accept: "text/event-stream",
+          ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
+        },
+      }
+    );
+    if (!response.body) throw new Error("Hermes run events response did not include a stream");
+
+    return {
+      runId: normalizedRunId,
+      contentType: response.headers.get("Content-Type") || "text/event-stream",
+      stream: response.body,
+    };
+  }
+
   async stopRun(runtime: RuntimeConnectionRecord, runId: string): Promise<RuntimeRunControlResult> {
     const normalizedRunId = normalizeString(runId);
     if (!normalizedRunId) throw new Error("runId is required");
@@ -234,6 +267,16 @@ export async function fetchHermesJson(
   path: string,
   options: { auth: boolean; method?: string; headers?: Record<string, string>; body?: unknown }
 ): Promise<unknown> {
+  const response = await fetchHermesResponse(rootUrl, token, path, options);
+  return response.json();
+}
+
+async function fetchHermesResponse(
+  rootUrl: string,
+  token: string | null | undefined,
+  path: string,
+  options: { auth: boolean; method?: string; headers?: Record<string, string>; body?: unknown }
+): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json", ...(options.headers ?? {}) };
   if (options.auth && token) headers.Authorization = `Bearer ${token}`;
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
@@ -247,7 +290,7 @@ export async function fetchHermesJson(
     const body = await response.text().catch(() => "");
     throw new Error(`Hermes ${response.status}: ${body || response.statusText}`);
   }
-  return response.json();
+  return response;
 }
 
 function runtimeHttpRoot(runtime: RuntimeConnectionRecord): string {

@@ -8,6 +8,7 @@ import {
   nameToCallsign,
   ROLES,
   GATEWAY_ADAPTERS,
+  HERMES_ADAPTERS,
   HTTP_ADAPTERS,
 } from "./agent-config-fields";
 
@@ -88,6 +89,11 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
         if (values.gatewayToken.trim()) {
           adapterConfig.headers = { "x-openclaw-token": values.gatewayToken.trim() };
         }
+      } else if (HERMES_ADAPTERS.includes(values.adapterType)) {
+        if (values.hermesApiUrl.trim()) adapterConfig.url = values.hermesApiUrl.trim();
+        if (values.hermesApiKey.trim()) {
+          adapterConfig.headers = { Authorization: toBearerToken(values.hermesApiKey) };
+        }
       } else if (HTTP_ADAPTERS.includes(values.adapterType)) {
         if (values.httpUrl.trim()) adapterConfig.url = values.httpUrl.trim();
         if (values.httpAuthHeader.trim()) {
@@ -106,7 +112,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
           color: values.color || "#00f0ff",
           adapterType: values.adapterType,
           adapterConfig,
-          provider: values.provider || null,
+          provider: HERMES_ADAPTERS.includes(values.adapterType) ? "hermes" : values.provider || null,
           role: values.role,
           model: values.model.trim() || null,
           workspacePath: values.workspacePath.trim() || null,
@@ -219,4 +225,9 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
       </div>
     </div>
   );
+}
+
+function toBearerToken(value: string) {
+  const token = value.trim();
+  return /^Bearer\s+/i.test(token) ? token : `Bearer ${token}`;
 }

@@ -48,7 +48,7 @@ const COLORS = [
  * POST /api/runtimes/import
  *
  * Import discovered agents into CrewCmd's database, linked to a runtime.
- * Creates agent records with adapter_type=openclaw_gateway.
+ * Creates agent records with the adapter type required by the selected runtime.
  *
  * Body: { runtimeId, agents: DiscoveredAgent[] }
  */
@@ -216,20 +216,14 @@ export async function POST(request: Request) {
             typeof agentToReattach.runtimeConfig === "object" && agentToReattach.runtimeConfig !== null
               ? (agentToReattach.runtimeConfig as Record<string, unknown>)
               : {};
-          const operatingLayer = buildOperatingLayerConfig({
-            mode: "imported-overlay",
-            rolePack: inferRolePack({
-              role: agentToReattach.role ?? null,
-              title: agent.title ?? agentToReattach.title,
-              callsign,
-            }),
+          const runtimeSpecificConfig = buildRuntimeSpecificConfig({
+            runtimeType: runtime.runtimeType,
+            existingConfig: existingRuntimeConfig,
+            agent,
+            title: agent.title ?? agentToReattach.title,
             callsign,
+            role: agentToReattach.role ?? null,
             workspaceId: targetWorkspace.id,
-            mirroredFiles: {
-              identityRaw: agent.identityRaw,
-              soulRaw: agent.soulRaw,
-              agentsRaw: agent.agentsRaw,
-            },
           });
           const conflictingRow = existingAgents.find((row) => {
             if (row.id === agentToReattach.id) return false;
@@ -258,13 +252,9 @@ export async function POST(request: Request) {
               color: agentToReattach.color || COLORS[i % COLORS.length],
               status: "online",
               soulContent: agent.soulRaw || agent.description || null,
-              adapterType: "openclaw_gateway",
-              adapterConfig: {
-                url: runtime.httpUrl,
-                headers: runtime.authToken
-                  ? { Authorization: `Bearer ${runtime.authToken}` }
-                  : undefined,
-              },
+              adapterType: adapterTypeForRuntime(runtime.runtimeType),
+              adapterConfig: adapterConfigForRuntime(runtime),
+              provider: runtime.runtimeType === "hermes" ? "hermes" : agentToReattach.provider,
               role: agentToReattach.role || "engineer",
               model: agent.model || null,
               workspacePath: agent.workspace || null,
@@ -272,10 +262,7 @@ export async function POST(request: Request) {
               runtimeRef: agent.id,
               reportsTo: agent.reportsTo || null,
               avatarUrl: agent.avatarUrl || null,
-              runtimeConfig: {
-                ...existingRuntimeConfig,
-                operatingLayer,
-              },
+              runtimeConfig: runtimeSpecificConfig,
               ownerType: agentToReattach.ownerType || effectiveOwnerType,
               ownerUserId: agentToReattach.ownerUserId ?? effectiveOwnerUserId,
               ownerCompanyId: agentToReattach.ownerCompanyId ?? effectiveOwnerCompanyId,
@@ -340,19 +327,14 @@ export async function POST(request: Request) {
       const color = COLORS[i % COLORS.length];
 
       try {
-        const operatingLayer = buildOperatingLayerConfig({
-          mode: "imported-overlay",
-          rolePack: inferRolePack({
-            title: agent.title,
-            callsign: finalCallsign,
-          }),
+        const runtimeSpecificConfig = buildRuntimeSpecificConfig({
+          runtimeType: runtime.runtimeType,
+          existingConfig: {},
+          agent,
+          title: agent.title,
           callsign: finalCallsign,
+          role: null,
           workspaceId: targetWorkspace.id,
-          mirroredFiles: {
-            identityRaw: agent.identityRaw,
-            soulRaw: agent.soulRaw,
-            agentsRaw: agent.agentsRaw,
-          },
         });
         const [created_agent] = await withRetry(() => db!
           .insert(agents)
@@ -365,19 +347,13 @@ export async function POST(request: Request) {
             status: "online",
             soulContent: agent.soulRaw || agent.description || null,
             companyId: targetWorkspace.companyId,
-            adapterType: "openclaw_gateway",
-            adapterConfig: {
-              url: runtime.httpUrl,
-              headers: runtime.authToken
-                ? { Authorization: `Bearer ${runtime.authToken}` }
-                : undefined,
-            },
+            adapterType: adapterTypeForRuntime(runtime.runtimeType),
+            adapterConfig: adapterConfigForRuntime(runtime),
+            provider: providerForRuntime(runtime.runtimeType),
             role: "engineer",
             model: agent.model || null,
             workspacePath: agent.workspace || null,
-            runtimeConfig: {
-              operatingLayer,
-            },
+            runtimeConfig: runtimeSpecificConfig,
             runtimeId,
             runtimeRef: agent.id,
             reportsTo: agent.reportsTo || null,
@@ -415,21 +391,25 @@ export async function POST(request: Request) {
     // This keeps existing linked agents updated even when this import pass
     // did not create or reattach any new database rows.
     const warnings: string[] = [];
-    try {
-      await pushSkillToRuntime(runtimeId);
-    } catch (skillErr) {
-      const message = skillErr instanceof Error ? skillErr.message : String(skillErr);
-      warnings.push(`CrewCmd skill sync failed: ${message}`);
-      console.warn("[api/runtimes/import] CrewCmd skill sync failed:", message);
-    }
+    if (runtime.runtimeType === "hermes") {
+      warnings.push("runtime skill sync is not supported for hermes");
+    } else {
+      try {
+        await pushSkillToRuntime(runtimeId);
+      } catch (skillErr) {
+        const message = skillErr instanceof Error ? skillErr.message : String(skillErr);
+        warnings.push(`CrewCmd skill sync failed: ${message}`);
+        console.warn("[api/runtimes/import] CrewCmd skill sync failed:", message);
+      }
 
-    try {
-      await ensureCrewCmdRuntimeOperatingLayer(runtimeId);
-    } catch (operatingLayerErr) {
-      const message =
-        operatingLayerErr instanceof Error ? operatingLayerErr.message : String(operatingLayerErr);
-      warnings.push(`CrewCmd automation provisioning failed: ${message}`);
-      console.warn("[api/runtimes/import] CrewCmd automation provisioning failed:", message);
+      try {
+        await ensureCrewCmdRuntimeOperatingLayer(runtimeId);
+      } catch (operatingLayerErr) {
+        const message =
+          operatingLayerErr instanceof Error ? operatingLayerErr.message : String(operatingLayerErr);
+        warnings.push(`CrewCmd automation provisioning failed: ${message}`);
+        console.warn("[api/runtimes/import] CrewCmd automation provisioning failed:", message);
+      }
     }
 
     const responseBody = {
@@ -456,6 +436,56 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function adapterTypeForRuntime(runtimeType: string): string {
+  return runtimeType === "hermes" ? "hermes_api" : "openclaw_gateway";
+}
+
+function providerForRuntime(runtimeType: string): string | null {
+  return runtimeType === "hermes" ? "hermes" : null;
+}
+
+function adapterConfigForRuntime(runtime: typeof companyRuntimes.$inferSelect): Record<string, unknown> {
+  return {
+    url: runtime.httpUrl,
+    headers: runtime.authToken
+      ? { Authorization: `Bearer ${runtime.authToken}` }
+      : undefined,
+  };
+}
+
+function buildRuntimeSpecificConfig(params: {
+  runtimeType: string;
+  existingConfig: Record<string, unknown>;
+  agent: DiscoveredAgent;
+  title?: string | null;
+  callsign: string;
+  role?: string | null;
+  workspaceId: string;
+}): Record<string, unknown> {
+  if (params.runtimeType === "hermes") {
+    return { ...params.existingConfig };
+  }
+
+  return {
+    ...params.existingConfig,
+    operatingLayer: buildOperatingLayerConfig({
+      mode: "imported-overlay",
+      rolePack: inferRolePack({
+        role: params.role ?? null,
+        title: params.title ?? params.agent.title,
+        callsign: params.callsign,
+      }),
+      callsign: params.callsign,
+      workspaceId: params.workspaceId,
+      mirroredFiles: {
+        identityRaw: params.agent.identityRaw,
+        soulRaw: params.agent.soulRaw,
+        agentsRaw: params.agent.agentsRaw,
+      },
+    }),
+  };
 }
 
 function isLegacyDuplicate(

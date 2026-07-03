@@ -193,3 +193,62 @@ describe("HermesRuntimeProvider runs", () => {
     });
   });
 });
+
+describe("HermesRuntimeProvider sessions", () => {
+  it("lists Hermes sessions with pagination filters", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ sessions: [{ id: "sess_1", title: "Main" }], total: 1 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.listSessions(hermesRuntime(), {
+      limit: 25,
+      offset: 5,
+      source: " crewcmd ",
+      includeChildren: true,
+    });
+
+    expect(result).toEqual({
+      sessions: [{ id: "sess_1", title: "Main" }],
+      raw: { sessions: [{ id: "sess_1", title: "Main" }], total: 1 },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8642/api/sessions?limit=25&offset=5&source=crewcmd&include_children=true",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer secret",
+        },
+      }
+    );
+  });
+
+  it("reads Hermes session messages", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ messages: [{ role: "assistant", content: "Done." }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.getSessionMessages(hermesRuntime(), "sess_1");
+
+    expect(result).toEqual({
+      sessionId: "sess_1",
+      messages: [{ role: "assistant", content: "Done." }],
+      raw: { messages: [{ role: "assistant", content: "Done." }] },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/messages", {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+});

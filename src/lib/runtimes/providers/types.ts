@@ -89,6 +89,24 @@ export interface RuntimeRunApprovalInput {
   payload?: Record<string, unknown> | null;
 }
 
+export interface RuntimeSessionListInput {
+  limit?: number | null;
+  offset?: number | null;
+  source?: string | null;
+  includeChildren?: boolean | null;
+}
+
+export interface RuntimeSessionListResult {
+  sessions: unknown[];
+  raw: unknown;
+}
+
+export interface RuntimeSessionMessagesResult {
+  sessionId: string;
+  messages: unknown[];
+  raw: unknown;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -112,4 +130,12 @@ export interface RuntimeProvider {
     runId: string,
     input: RuntimeRunApprovalInput
   ): Promise<RuntimeRunControlResult>;
+  listSessions?(
+    runtime: RuntimeConnectionRecord,
+    input?: RuntimeSessionListInput
+  ): Promise<RuntimeSessionListResult>;
+  getSessionMessages?(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string
+  ): Promise<RuntimeSessionMessagesResult>;
 }

@@ -9,8 +9,7 @@ import {
   readTeamVisualSettings,
   type AgentVisualSettings,
 } from "@/lib/agent-visual-settings";
-import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
-import { labelModelProfile, listSupportedModelProfiles } from "@/lib/model-profiles";
+import { labelRuntimeType, summarizeRuntimeCapabilities } from "@/lib/runtime-capability-summary";
 
 interface Company {
   id: string;
@@ -53,7 +52,7 @@ interface RuntimeRecord {
   status: string;
   lastPing: string | null;
   metadata: Record<string, unknown> | null;
-  capabilitySnapshot?: RuntimeCapabilitySnapshot | null;
+  capabilitySnapshot?: Record<string, unknown> | null;
   createdAt: string;
   ownerType: "user" | "company";
   ownerUserId: string | null;
@@ -912,7 +911,7 @@ export default function CompanySettingsPage() {
           <div>
             <h2 className="text-xs font-bold tracking-wider text-[var(--text-secondary)]">RUNTIMES</h2>
             <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-              Manage connected OpenClaw runtimes available to this workspace.
+              Manage connected runtimes available to this workspace.
             </p>
           </div>
           <a
@@ -924,76 +923,77 @@ export default function CompanySettingsPage() {
         </div>
 
         <div className="mt-4 space-y-2">
-          {runtimes.map((runtime) => (
-            <div
-              key={runtime.id}
-              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
-                    {runtime.isPrimary && (
-                      <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
-                        PRIMARY
-                      </span>
-                    )}
-                    <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
-                      {runtime.ownerType === "company" ? "TEAM" : "PERSONAL"}
-                    </span>
-                    <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
-                      {runtime.runtimeType.toUpperCase()}
-                    </span>
-                    <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] tracking-wider ${
-                      runtime.status === "connected"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : runtime.status === "error"
-                          ? "bg-red-500/20 text-red-400"
-                          : "bg-amber-500/20 text-amber-400"
-                    }`}>
-                      {runtime.status.toUpperCase()}
-                    </span>
-                  </div>
-                  <p className="mt-2 truncate font-mono text-[10px] text-[var(--text-secondary)]">
-                    {runtime.gatewayUrl}
-                  </p>
-                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    {runtime.lastPing
-                      ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
-                      : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
-                  </p>
-                  {runtime.capabilitySnapshot && (
-                    <div className="mt-2 space-y-1 text-[10px] text-[var(--text-tertiary)]">
-                      <p>
-                        {runtime.capabilitySnapshot.providerCount} providers · default model{" "}
-                        <span className="font-mono">{runtime.capabilitySnapshot.defaultModel || "not set"}</span>
-                      </p>
-                      {listSupportedModelProfiles(runtime.capabilitySnapshot).length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {listSupportedModelProfiles(runtime.capabilitySnapshot).map((profile) => (
-                            <span
-                              key={profile}
-                              className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]"
-                            >
-                              {labelModelProfile(profile).toUpperCase()}
-                            </span>
-                          ))}
-                        </div>
+          {runtimes.map((runtime) => {
+            const capabilitySummary = summarizeRuntimeCapabilities(runtime.capabilitySnapshot);
+            return (
+              <div
+                key={runtime.id}
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
+                      {runtime.isPrimary && (
+                        <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
+                          PRIMARY
+                        </span>
                       )}
+                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                        {runtime.ownerType === "company" ? "TEAM" : "PERSONAL"}
+                      </span>
+                      <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                        {labelRuntimeType(runtime.runtimeType)}
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] tracking-wider ${
+                        runtime.status === "connected"
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : runtime.status === "error"
+                            ? "bg-red-500/20 text-red-400"
+                            : "bg-amber-500/20 text-amber-400"
+                      }`}>
+                        {runtime.status.toUpperCase()}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <p className="mt-2 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                      {runtime.gatewayUrl}
+                    </p>
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                      {runtime.lastPing
+                        ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
+                        : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
+                    </p>
+                    {capabilitySummary && (
+                      <div className="mt-2 space-y-1 text-[10px] text-[var(--text-tertiary)]">
+                        <p>{capabilitySummary.primary}</p>
+                        {capabilitySummary.secondary && <p>{capabilitySummary.secondary}</p>}
+                        {capabilitySummary.modelProfiles.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {capabilitySummary.modelProfiles.map((profile) => (
+                              <span
+                                key={profile}
+                                className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]"
+                              >
+                                {profile}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                <button
-                  onClick={() => void handleDeleteRuntime(runtime)}
-                  disabled={deletingRuntimeId === runtime.id}
-                  className="shrink-0 rounded-lg border border-red-500/30 px-3 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {deletingRuntimeId === runtime.id ? "DELETING..." : "DELETE"}
-                </button>
+                  <button
+                    onClick={() => void handleDeleteRuntime(runtime)}
+                    disabled={deletingRuntimeId === runtime.id}
+                    className="shrink-0 rounded-lg border border-red-500/30 px-3 py-2 font-mono text-[10px] tracking-wider text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingRuntimeId === runtime.id ? "DELETING..." : "DELETE"}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {runtimes.length === 0 && (
             <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">No runtimes connected</p>
           )}

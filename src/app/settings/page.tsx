@@ -6,8 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { useWorkspace } from "@/components/company-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserPresenceBadge } from "@/components/user-presence";
-import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
-import { labelModelProfile, listSupportedModelProfiles } from "@/lib/model-profiles";
+import { labelRuntimeType, summarizeRuntimeCapabilities } from "@/lib/runtime-capability-summary";
 
 interface Profile {
   id: string;
@@ -33,7 +32,7 @@ interface RuntimeRecord {
   lastPing: string | null;
   createdAt: string;
   ownerType: "user" | "company";
-  capabilitySnapshot?: RuntimeCapabilitySnapshot | null;
+  capabilitySnapshot?: Record<string, unknown> | null;
 }
 
 const USER_PROFILE_UPDATED_EVENT = "crewcmd:user-profile-updated";
@@ -503,7 +502,7 @@ export default function SettingsPage() {
                   <div>
                     <h2 className="text-lg font-semibold text-[var(--text-primary)]">Personal Runtime</h2>
                     <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      Connect and manage the OpenClaw runtime that powers your personal agents.
+                      Connect and manage runtimes that power your personal agents.
                     </p>
                   </div>
                   <a
@@ -520,59 +519,60 @@ export default function SettingsPage() {
                   ) : runtimes.length === 0 ? (
                     <p className="text-sm text-[var(--text-secondary)]">No personal runtimes connected yet.</p>
                   ) : (
-                    runtimes.map((runtime) => (
-                      <div key={runtime.id} className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
-                              {runtime.isPrimary ? (
-                                <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
-                                  PRIMARY
+                    runtimes.map((runtime) => {
+                      const capabilitySummary = summarizeRuntimeCapabilities(runtime.capabilitySnapshot);
+                      return (
+                        <div key={runtime.id} className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface-hover)] px-4 py-3">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-mono text-xs text-[var(--text-primary)]">{runtime.name}</p>
+                                {runtime.isPrimary ? (
+                                  <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--accent)]">
+                                    PRIMARY
+                                  </span>
+                                ) : null}
+                                <span className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
+                                  {labelRuntimeType(runtime.runtimeType)}
                                 </span>
-                              ) : null}
-                              <span className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]">
-                                {runtime.runtimeType.toUpperCase()}
-                              </span>
-                            </div>
-                            <p className="mt-2 truncate font-mono text-[11px] text-[var(--text-secondary)]">{runtime.gatewayUrl}</p>
-                            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                              {runtime.lastPing
-                                ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
-                                : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
-                            </p>
-                            {runtime.capabilitySnapshot && (
-                              <div className="mt-2 space-y-1 text-[11px] text-[var(--text-tertiary)]">
-                                <p>
-                                  {runtime.capabilitySnapshot.providerCount} providers · default model{" "}
-                                  <span className="font-mono">{runtime.capabilitySnapshot.defaultModel || "not set"}</span>
-                                </p>
-                                {listSupportedModelProfiles(runtime.capabilitySnapshot).length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {listSupportedModelProfiles(runtime.capabilitySnapshot).map((profile) => (
-                                      <span
-                                        key={profile}
-                                        className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]"
-                                      >
-                                        {labelModelProfile(profile).toUpperCase()}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
                               </div>
-                            )}
+                              <p className="mt-2 truncate font-mono text-[11px] text-[var(--text-secondary)]">{runtime.gatewayUrl}</p>
+                              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                                {runtime.lastPing
+                                  ? `Last ping: ${new Date(runtime.lastPing).toLocaleString()}`
+                                  : `Added: ${new Date(runtime.createdAt).toLocaleString()}`}
+                              </p>
+                              {capabilitySummary && (
+                                <div className="mt-2 space-y-1 text-[11px] text-[var(--text-tertiary)]">
+                                  <p>{capabilitySummary.primary}</p>
+                                  {capabilitySummary.secondary && <p>{capabilitySummary.secondary}</p>}
+                                  {capabilitySummary.modelProfiles.length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {capabilitySummary.modelProfiles.map((profile) => (
+                                        <span
+                                          key={profile}
+                                          className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-[var(--text-tertiary)]"
+                                        >
+                                          {profile}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteRuntime(runtime.id)}
+                              disabled={deletingRuntimeId === runtime.id}
+                              className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
+                            >
+                              {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteRuntime(runtime.id)}
-                            disabled={deletingRuntimeId === runtime.id}
-                            className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
-                          >
-                            {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
-                          </button>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

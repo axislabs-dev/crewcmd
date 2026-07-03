@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { probeGateway } from "@/lib/gateway-client";
 import { parseOpenClawConfig } from "@/lib/openclaw-config-parser";
 import { requireAuth } from "@/lib/require-auth";
+import { getRuntimeProvider } from "@/lib/runtimes/providers";
 
 /**
  * POST /api/runtimes/probe
@@ -31,6 +32,36 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const runtimeType = body.runtimeType;
+    if (runtimeType === "hermes") {
+      const provider = getRuntimeProvider(runtimeType);
+      if (!provider.probe) {
+        return NextResponse.json({ error: "Runtime probe is not supported for hermes" }, { status: 400 });
+      }
+
+      const url = body.url;
+      if (!url || typeof url !== "string") {
+        return NextResponse.json({ error: "Hermes API URL is required" }, { status: 400 });
+      }
+
+      try {
+        const result = await provider.probe({
+          url,
+          token: typeof body.token === "string" ? body.token : null,
+          name: typeof body.name === "string" ? body.name : null,
+        });
+
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error || "Failed to connect to Hermes" }, { status: 502 });
+        }
+
+        return NextResponse.json(result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to connect to Hermes";
+        return NextResponse.json({ error: message }, { status: 502 });
+      }
+    }
+
     const mode = body.mode || "gateway";
 
     // ── Gateway mode (preferred) ──

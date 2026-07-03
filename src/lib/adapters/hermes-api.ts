@@ -22,9 +22,17 @@ export class HermesApiAdapter implements AdapterExecutor {
     }
 
     const timeoutMs = (config.timeoutSec ?? 300) * 1000;
+    let sessionHeaders: Record<string, string>;
+    try {
+      sessionHeaders = hermesSessionHeaders(config);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { output: `Hermes request failed: ${message}`, exitCode: 1 };
+    }
     const headers = {
       "Content-Type": "application/json",
       ...authHeaders(config),
+      ...sessionHeaders,
       ...(config.headers ?? {}),
     };
 
@@ -71,4 +79,23 @@ function authHeaders(config: AdapterConfig): Record<string, string> {
   if (config.headers?.Authorization) return {};
   if (!config.apiKey) return {};
   return { Authorization: `Bearer ${config.apiKey}` };
+}
+
+function hermesSessionHeaders(config: AdapterConfig): Record<string, string> {
+  const sessionKey = normalizeSessionKey(config.sessionKey);
+  if (!sessionKey || config.headers?.["X-Hermes-Session-Key"]) return {};
+  return { "X-Hermes-Session-Key": sessionKey };
+}
+
+function normalizeSessionKey(value: string | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.length > 256) {
+    throw new Error("Hermes sessionKey must be 256 characters or fewer");
+  }
+  if (/[\r\n\u0000]/.test(normalized)) {
+    throw new Error("Hermes sessionKey cannot contain control characters");
+  }
+  return normalized;
 }

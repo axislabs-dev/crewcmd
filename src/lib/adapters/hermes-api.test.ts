@@ -55,6 +55,66 @@ describe("HermesApiAdapter", () => {
     expect(requestInit.headers).toMatchObject({ Authorization: "Bearer secret" });
   });
 
+  it("sends Hermes session keys as stable memory headers", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const adapter = new HermesApiAdapter();
+    await adapter.executeTask("hello", {
+      url: "http://localhost:8642",
+      sessionKey: " crewcmd:agent:hermes ",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(requestInit.headers).toMatchObject({
+      "X-Hermes-Session-Key": "crewcmd:agent:hermes",
+    });
+  });
+
+  it("does not override explicit Hermes session key headers", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const adapter = new HermesApiAdapter();
+    await adapter.executeTask("hello", {
+      url: "http://localhost:8642",
+      sessionKey: "config-key",
+      headers: { "X-Hermes-Session-Key": "header-key" },
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(requestInit.headers).toMatchObject({
+      "X-Hermes-Session-Key": "header-key",
+    });
+  });
+
+  it("rejects invalid Hermes session keys before sending", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const adapter = new HermesApiAdapter();
+    const result = await adapter.executeTask("hello", {
+      url: "http://localhost:8642",
+      sessionKey: "bad\nkey",
+    });
+
+    expect(result).toEqual({
+      output: "Hermes request failed: Hermes sessionKey cannot contain control characters",
+      exitCode: 1,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns failed task output for non-2xx responses", async () => {
     globalThis.fetch = vi.fn(async () => new Response("bad token", { status: 401 })) as typeof fetch;
 

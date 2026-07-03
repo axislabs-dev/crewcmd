@@ -140,6 +140,7 @@ export interface AgentConfigValues {
   gatewayToken: string;
   hermesApiUrl: string;
   hermesApiKey: string;
+  hermesSessionKey: string;
   httpUrl: string;
   httpAuthHeader: string;
   openrouterApiKey: string;
@@ -193,6 +194,7 @@ export function defaultAgentConfigValues(): AgentConfigValues {
     gatewayToken: "",
     hermesApiUrl: "http://localhost:8642",
     hermesApiKey: "",
+    hermesSessionKey: "",
     httpUrl: "",
     httpAuthHeader: "",
     openrouterApiKey: "",
@@ -1110,6 +1112,16 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
                   placeholder="Hermes API key"
                 />
               </div>
+            </div>
+            <div>
+              <label className={labelClass}>SESSION KEY</label>
+              <input
+                type="text"
+                value={values.hermesSessionKey}
+                onChange={(e) => onChange({ hermesSessionKey: e.target.value })}
+                placeholder="crewcmd:agent:main"
+                className={`mt-1 ${inputClass}`}
+              />
             </div>
           </div>
         </Section>

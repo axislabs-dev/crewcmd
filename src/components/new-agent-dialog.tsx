@@ -91,6 +91,7 @@ export function NewAgentDialog({ companyId, onCreated, onClose, defaultReportsTo
         }
       } else if (HERMES_ADAPTERS.includes(values.adapterType)) {
         if (values.hermesApiUrl.trim()) adapterConfig.url = values.hermesApiUrl.trim();
+        if (values.hermesSessionKey.trim()) adapterConfig.sessionKey = values.hermesSessionKey.trim();
         if (values.hermesApiKey.trim()) {
           adapterConfig.headers = { Authorization: toBearerToken(values.hermesApiKey) };
         }

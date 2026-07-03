@@ -292,6 +292,7 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
       gatewayToken: "",
       hermesApiUrl: HERMES_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "http://localhost:8642",
       hermesApiKey: "",
+      hermesSessionKey: HERMES_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.sessionKey as string) ?? "" : "",
       httpUrl: HTTP_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "",
       httpAuthHeader: "",
       openrouterApiKey: "",
@@ -564,6 +565,7 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
         }
       } else if (HERMES_ADAPTERS.includes(configValues.adapterType)) {
         if (configValues.hermesApiUrl) nextAdapterConfig.url = configValues.hermesApiUrl;
+        if (configValues.hermesSessionKey.trim()) nextAdapterConfig.sessionKey = configValues.hermesSessionKey.trim();
         const existingHeaders = (adapterConfig.headers ?? {}) as Record<string, unknown>;
         if (configValues.hermesApiKey) {
           nextAdapterConfig.headers = { Authorization: toBearerToken(configValues.hermesApiKey) };

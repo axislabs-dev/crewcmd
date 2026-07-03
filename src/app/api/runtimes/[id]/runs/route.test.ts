@@ -63,6 +63,7 @@ vi.mock("@/lib/gateway-chat-pool", () => ({
 import { POST } from "./route";
 import { GET } from "./[runId]/route";
 import { POST as approveRun } from "./[runId]/approval/route";
+import { GET as getRunEvents } from "./[runId]/events/route";
 import { POST as stopRun } from "./[runId]/stop/route";
 
 function addRuntime(runtimeType = "hermes") {
@@ -186,6 +187,35 @@ describe("runtime run endpoints", () => {
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });
 
+  it("streams Hermes run events through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response("event: run.completed\ndata: {\"run_id\":\"run_123\"}\n\n", {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await getRunEvents(
+      new Request("http://localhost/api/runtimes/rt_hermes/runs/run_123/events", {
+        headers: { "Last-Event-ID": "evt_1" },
+      }),
+      { params: Promise.resolve({ id: "rt_hermes", runId: "run_123" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    await expect(response.text()).resolves.toBe("event: run.completed\ndata: {\"run_id\":\"run_123\"}\n\n");
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/v1/runs/run_123/events", {
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: "Bearer secret",
+        "Last-Event-ID": "evt_1",
+      },
+    });
+  });
+
   it("stops Hermes runs through the runtime provider", async () => {
     addRuntime();
     const fetchMock = vi.fn(async () =>
@@ -274,6 +304,21 @@ describe("runtime run endpoints", () => {
     expect(response.status).toBe(501);
     await expect(response.json()).resolves.toEqual({
       error: "OpenClaw Gateway does not support runtime run stop",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("reports unsupported run events for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await getRunEvents(
+      new Request("http://localhost/api/runtimes/rt_openclaw/runs/run_123/events"),
+      { params: Promise.resolve({ id: "rt_openclaw", runId: "run_123" }) }
+    );
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime run events",
     });
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });

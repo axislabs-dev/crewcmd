@@ -227,4 +227,29 @@ describe("POST /api/runtimes primary scoping", () => {
       isPrimary: false,
     });
   });
+
+  it("normalizes Hermes runtime URLs and metadata", async () => {
+    const runtime = await createRuntime("user_a", {
+      runtimeType: "hermes",
+      name: "Hermes",
+      gatewayUrl: "http://localhost:8642/v1",
+      httpUrl: "http://localhost:8642/v1",
+      authToken: "secret",
+      metadata: { label: "local" },
+    });
+
+    expect(runtime).toMatchObject({
+      runtimeType: "hermes",
+      gatewayUrl: "http://localhost:8642",
+      httpUrl: "http://localhost:8642",
+      authToken: "secret",
+      metadata: {
+        label: "local",
+        provider: "hermes",
+        apiBaseUrl: "http://localhost:8642/v1",
+        callbackBaseUrl: "http://localhost:3000",
+        workspaceId: "ws_co_1",
+      },
+    });
+  });
 });

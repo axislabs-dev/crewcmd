@@ -7,6 +7,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { getRequestOrigin } from "@/lib/runtime-callback-url";
 import { deriveRuntimeTrustSummary } from "@/lib/runtime-trust";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
+import { normalizeHermesRootUrl } from "@/lib/runtimes/providers/hermes";
 
 export const dynamic = "force-dynamic";
 
@@ -111,19 +112,26 @@ export async function POST(request: NextRequest) {
 
     const isPrimary = existing.length === 0;
 
+    const normalizedRuntime = normalizeRuntimeCreateInput({
+      runtimeType,
+      gatewayUrl,
+      httpUrl,
+      metadata: (metadata || {}) as Record<string, unknown>,
+    });
+
     const [runtime] = await withRetry(() => db!
       .insert(companyRuntimes)
       .values({
-        runtimeType: runtimeType || "openclaw",
+        runtimeType: normalizedRuntime.runtimeType,
         name,
-        gatewayUrl,
-        httpUrl,
+        gatewayUrl: normalizedRuntime.gatewayUrl,
+        httpUrl: normalizedRuntime.httpUrl,
         authToken: authToken || null,
         isPrimary,
         status: "connected",
         lastPing: new Date(),
         metadata: {
-          ...((metadata || {}) as Record<string, unknown>),
+          ...normalizedRuntime.metadata,
           callbackBaseUrl,
           workspaceId: targetWorkspace.id,
           ...(capabilitySnapshot ? { capabilitySnapshot } : {}),
@@ -165,6 +173,34 @@ function buildRuntimePrimaryScopeWhere(ownership: ReturnType<typeof runtimeOwner
       )
     )
   );
+}
+
+function normalizeRuntimeCreateInput(params: {
+  runtimeType?: string | null;
+  gatewayUrl: string;
+  httpUrl: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (params.runtimeType === "hermes") {
+    const rootUrl = normalizeHermesRootUrl(params.httpUrl || params.gatewayUrl);
+    return {
+      runtimeType: "hermes",
+      gatewayUrl: rootUrl,
+      httpUrl: rootUrl,
+      metadata: {
+        ...params.metadata,
+        provider: "hermes",
+        apiBaseUrl: `${rootUrl}/v1`,
+      },
+    };
+  }
+
+  return {
+    runtimeType: params.runtimeType || "openclaw",
+    gatewayUrl: params.gatewayUrl,
+    httpUrl: params.httpUrl,
+    metadata: params.metadata,
+  };
 }
 
 function readCapabilitySnapshot(metadata: unknown): Record<string, unknown> | null {

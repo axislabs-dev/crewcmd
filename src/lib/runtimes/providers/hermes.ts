@@ -204,11 +204,11 @@ export async function fetchHermesJson(
   if (options.auth && token) headers.Authorization = `Bearer ${token}`;
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
-  const response = await fetch(hermesApiUrl(rootUrl, path), {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  const init: RequestInit = { headers };
+  if (options.method) init.method = options.method;
+  if (options.body !== undefined) init.body = JSON.stringify(options.body);
+
+  const response = await fetch(hermesApiUrl(rootUrl, path), init);
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(`Hermes ${response.status}: ${body || response.statusText}`);

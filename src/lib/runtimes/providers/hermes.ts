@@ -6,6 +6,9 @@ import type {
   RuntimeProbeInput,
   RuntimeProbeResult,
   RuntimeProvider,
+  RuntimeRunCreateInput,
+  RuntimeRunCreateResult,
+  RuntimeRunStatus,
 } from "./types";
 
 const DEFAULT_HERMES_MODEL = "hermes-agent";
@@ -94,6 +97,52 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     return this.discoverList(runtime, "/v1/toolsets");
   }
 
+  async createRun(
+    runtime: RuntimeConnectionRecord,
+    input: RuntimeRunCreateInput
+  ): Promise<RuntimeRunCreateResult> {
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(rootUrl, runtime.authToken, "/v1/runs", {
+      auth: true,
+      method: "POST",
+      headers: hermesSessionHeaders(input.sessionKey),
+      body: hermesRunRequestBody(input),
+    });
+    if (!isRecord(response)) throw new Error("Hermes run response was not an object");
+    const runId = normalizeString(response.run_id) ?? normalizeString(response.id);
+    if (!runId) throw new Error("Hermes run response did not include run_id");
+
+    return {
+      runId,
+      status: normalizeString(response.status) ?? "started",
+      raw: response,
+    };
+  }
+
+  async getRun(runtime: RuntimeConnectionRecord, runId: string): Promise<RuntimeRunStatus> {
+    const normalizedRunId = normalizeString(runId);
+    if (!normalizedRunId) throw new Error("runId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/v1/runs/${encodeURIComponent(normalizedRunId)}`,
+      { auth: true }
+    );
+    if (!isRecord(response)) throw new Error("Hermes run status response was not an object");
+
+    return {
+      runId: normalizeString(response.run_id) ?? normalizeString(response.id) ?? normalizedRunId,
+      status: normalizeString(response.status) ?? "unknown",
+      sessionId: normalizeString(response.session_id),
+      model: normalizeString(response.model),
+      output: normalizeString(response.output),
+      usage: isRecord(response.usage) ? response.usage : null,
+      raw: response,
+    };
+  }
+
   private async discoverList(runtime: RuntimeConnectionRecord, path: string): Promise<unknown[]> {
     const rootUrl = runtimeHttpRoot(runtime);
     const response = await fetchHermesJson(rootUrl, runtime.authToken, path, { auth: true });
@@ -149,12 +198,17 @@ export async function fetchHermesJson(
   rootUrl: string,
   token: string | null | undefined,
   path: string,
-  options: { auth: boolean }
+  options: { auth: boolean; method?: string; headers?: Record<string, string>; body?: unknown }
 ): Promise<unknown> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json", ...(options.headers ?? {}) };
   if (options.auth && token) headers.Authorization = `Bearer ${token}`;
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
-  const response = await fetch(hermesApiUrl(rootUrl, path), { headers });
+  const response = await fetch(hermesApiUrl(rootUrl, path), {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(`Hermes ${response.status}: ${body || response.statusText}`);
@@ -193,4 +247,28 @@ function normalizeString(value: unknown): string | null {
 
 function isHealthyStatus(status: string): boolean {
   return ["ok", "healthy", "ready", "up"].includes(status.toLowerCase());
+}
+
+function hermesRunRequestBody(input: RuntimeRunCreateInput): Record<string, unknown> {
+  const body: Record<string, unknown> = { input: input.input };
+  const sessionId = normalizeString(input.sessionId);
+  const instructions = normalizeString(input.instructions);
+  const previousResponseId = normalizeString(input.previousResponseId);
+  const model = normalizeString(input.model);
+
+  if (sessionId) body.session_id = sessionId;
+  if (instructions) body.instructions = instructions;
+  if (previousResponseId) body.previous_response_id = previousResponseId;
+  if (model) body.model = model;
+  if (Array.isArray(input.conversationHistory)) body.conversation_history = input.conversationHistory;
+
+  return body;
+}
+
+function hermesSessionHeaders(sessionKey: string | null | undefined): Record<string, string> {
+  const normalized = normalizeString(sessionKey);
+  if (!normalized) return {};
+  if (normalized.length > 256) throw new Error("Hermes sessionKey must be 256 characters or fewer");
+  if (/[\r\n\u0000]/.test(normalized)) throw new Error("Hermes sessionKey cannot contain control characters");
+  return { "X-Hermes-Session-Key": normalized };
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCompany } from "@/components/company-context";
+import { RuntimeDiscoverySummary } from "@/components/runtime-discovery-summary";
 import { RuntimeHealthIndicator } from "@/components/runtime-health-indicator";
 import { VoiceSelectModal, VisualSummary } from "@/components/voice-select-modal";
 import {
@@ -983,6 +984,11 @@ export default function CompanySettingsPage() {
                         )}
                       </div>
                     )}
+                    <RuntimeDiscoverySummary
+                      runtimeId={runtime.id}
+                      runtimeType={runtime.runtimeType}
+                      className="mt-2 text-[10px] text-[var(--text-tertiary)]"
+                    />
                   </div>
 
                   <button

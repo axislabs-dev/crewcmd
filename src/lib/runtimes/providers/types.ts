@@ -101,6 +101,12 @@ export interface RuntimeSessionListResult {
   raw: unknown;
 }
 
+export interface RuntimeSessionResult {
+  sessionId: string;
+  session: unknown;
+  raw: unknown;
+}
+
 export interface RuntimeSessionMessagesResult {
   sessionId: string;
   messages: unknown[];
@@ -134,6 +140,10 @@ export interface RuntimeProvider {
     runtime: RuntimeConnectionRecord,
     input?: RuntimeSessionListInput
   ): Promise<RuntimeSessionListResult>;
+  getSession?(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string
+  ): Promise<RuntimeSessionResult>;
   getSessionMessages?(
     runtime: RuntimeConnectionRecord,
     sessionId: string

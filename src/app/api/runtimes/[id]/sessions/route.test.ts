@@ -61,6 +61,7 @@ vi.mock("@/lib/gateway-chat-pool", () => ({
 }));
 
 import { GET } from "./route";
+import { GET as getSession } from "./[sessionId]/route";
 import { GET as getSessionMessages } from "./[sessionId]/messages/route";
 
 function addRuntime(runtimeType = "hermes") {
@@ -143,6 +144,35 @@ describe("runtime session endpoints", () => {
     });
   });
 
+  it("reads Hermes session metadata through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "sess_1", title: "Main", source: "crewcmd" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await getSession(
+      new Request("http://localhost/api/runtimes/rt_hermes/sessions/sess_1"),
+      { params: Promise.resolve({ id: "rt_hermes", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      sessionId: "sess_1",
+      session: { id: "sess_1", title: "Main", source: "crewcmd" },
+      raw: { id: "sess_1", title: "Main", source: "crewcmd" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1", {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
   it("reports unsupported sessions for OpenClaw runtimes", async () => {
     addRuntime("openclaw");
 
@@ -153,6 +183,21 @@ describe("runtime session endpoints", () => {
     expect(response.status).toBe(501);
     await expect(response.json()).resolves.toEqual({
       error: "OpenClaw Gateway does not support runtime sessions",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("reports unsupported session detail for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await getSession(
+      new Request("http://localhost/api/runtimes/rt_openclaw/sessions/sess_1"),
+      { params: Promise.resolve({ id: "rt_openclaw", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime session detail",
     });
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });

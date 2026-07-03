@@ -6,6 +6,7 @@ import { PiAdapter } from "./pi";
 import { ProcessAdapter } from "./process";
 import { HttpAdapter } from "./http";
 import { OpenClawGatewayAdapter } from "./openclaw-gateway";
+import { HermesApiAdapter } from "./hermes-api";
 import { CursorAdapter } from "./cursor";
 import type { AdapterExecutor } from "./types";
 
@@ -24,6 +25,7 @@ const adapterRegistry: Record<string, AdapterExecutor> = {
   process: new ProcessAdapter(),
   http: new HttpAdapter(),
   openclaw_gateway: new OpenClawGatewayAdapter(),
+  hermes_api: new HermesApiAdapter(),
   cursor: new CursorAdapter(),
 };
 

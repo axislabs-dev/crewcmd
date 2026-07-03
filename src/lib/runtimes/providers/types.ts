@@ -66,6 +66,29 @@ export interface RuntimeRunStatus {
   raw: Record<string, unknown>;
 }
 
+export interface RuntimeRunControlResult {
+  runId: string;
+  status: string;
+  raw: Record<string, unknown>;
+}
+
+export interface RuntimeRunEventsInput {
+  lastEventId?: string | null;
+}
+
+export interface RuntimeRunEventsResult {
+  runId: string;
+  contentType: string;
+  stream: ReadableStream<Uint8Array>;
+}
+
+export interface RuntimeRunApprovalInput {
+  decision: string;
+  approvalId?: string | null;
+  reason?: string | null;
+  payload?: Record<string, unknown> | null;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -78,4 +101,15 @@ export interface RuntimeProvider {
   discoverToolsets?(runtime: RuntimeConnectionRecord): Promise<unknown[]>;
   createRun?(runtime: RuntimeConnectionRecord, input: RuntimeRunCreateInput): Promise<RuntimeRunCreateResult>;
   getRun?(runtime: RuntimeConnectionRecord, runId: string): Promise<RuntimeRunStatus>;
+  getRunEvents?(
+    runtime: RuntimeConnectionRecord,
+    runId: string,
+    input?: RuntimeRunEventsInput
+  ): Promise<RuntimeRunEventsResult>;
+  stopRun?(runtime: RuntimeConnectionRecord, runId: string): Promise<RuntimeRunControlResult>;
+  approveRun?(
+    runtime: RuntimeConnectionRecord,
+    runId: string,
+    input: RuntimeRunApprovalInput
+  ): Promise<RuntimeRunControlResult>;
 }

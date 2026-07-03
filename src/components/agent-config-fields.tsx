@@ -15,6 +15,7 @@ export const ADAPTER_TYPES = [
   { value: "cursor", label: "Cursor (Local)" },
   { value: "pi_local", label: "Pi (Local)" },
   { value: "openclaw_gateway", label: "OpenClaw Gateway" },
+  { value: "hermes_api", label: "Hermes Agent API" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "process", label: "Process" },
   { value: "http", label: "HTTP" },
@@ -59,6 +60,7 @@ export const ROLES = [
 
 export const LOCAL_ADAPTERS = ["claude_local", "codex_local", "gemini_local", "opencode_local", "cursor", "pi_local"];
 export const GATEWAY_ADAPTERS = ["openclaw_gateway"];
+export const HERMES_ADAPTERS = ["hermes_api"];
 export const HTTP_ADAPTERS = ["http"];
 export const OPENROUTER_ADAPTERS = ["openrouter"];
 
@@ -67,6 +69,7 @@ export const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
   { value: "google", label: "Google" },
+  { value: "hermes", label: "Hermes" },
   { value: "openrouter", label: "OpenRouter" },
 ];
 
@@ -75,6 +78,7 @@ export const ADAPTER_TO_PROVIDER: Record<string, string> = {
   claude_local: "anthropic",
   codex_local: "openai",
   gemini_local: "google",
+  hermes_api: "hermes",
   openrouter: "openrouter",
 };
 
@@ -83,6 +87,7 @@ const MODEL_PLACEHOLDERS: Record<string, string> = {
   codex_local: "e.g. o4-mini",
   gemini_local: "e.g. gemini-2.5-pro",
   cursor: "e.g. claude-sonnet-4-20250514",
+  hermes_api: "e.g. hermes-agent",
   openrouter: "e.g. anthropic/claude-sonnet-4-20250514",
   openclaw_gateway: "e.g. claude-sonnet-4-20250514",
   opencode_local: "e.g. claude-sonnet-4-20250514",
@@ -133,6 +138,8 @@ export interface AgentConfigValues {
   reportsTo: string;
   gatewayUrl: string;
   gatewayToken: string;
+  hermesApiUrl: string;
+  hermesApiKey: string;
   httpUrl: string;
   httpAuthHeader: string;
   openrouterApiKey: string;
@@ -184,6 +191,8 @@ export function defaultAgentConfigValues(): AgentConfigValues {
     reportsTo: "",
     gatewayUrl: "",
     gatewayToken: "",
+    hermesApiUrl: "http://localhost:8642",
+    hermesApiKey: "",
     httpUrl: "",
     httpAuthHeader: "",
     openrouterApiKey: "",
@@ -829,6 +838,7 @@ function SkillsGrid({
 export function AgentConfigFields({ values, onChange, existingAgents, companySkills, companyId, workspaceId }: AgentConfigFieldsProps) {
   const isLocal = LOCAL_ADAPTERS.includes(values.adapterType);
   const isGateway = GATEWAY_ADAPTERS.includes(values.adapterType);
+  const isHermes = HERMES_ADAPTERS.includes(values.adapterType);
   const isHttp = HTTP_ADAPTERS.includes(values.adapterType);
   const isOpenRouter = OPENROUTER_ADAPTERS.includes(values.adapterType);
   const showModel = values.adapterType !== "http";
@@ -990,7 +1000,7 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
             <div>
               <label className={labelClass}>MODEL</label>
               <div className="mt-1">
-                {values.provider && companyId ? (
+                {values.provider && companyId && !isHermes ? (
                   <DynamicModelSelector
                     value={values.model}
                     provider={values.provider}
@@ -1070,6 +1080,34 @@ export function AgentConfigFields({ values, onChange, existingAgents, companySki
                   value={values.gatewayToken}
                   onChange={(v) => onChange({ gatewayToken: v })}
                   placeholder="OpenClaw gateway token"
+                />
+              </div>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* ── HERMES API CONFIG ── */}
+      {isHermes && (
+        <Section title="Hermes API Config" defaultOpen collapsible={false}>
+          <div className="space-y-3">
+            <div>
+              <label className={labelClass}>API URL</label>
+              <input
+                type="text"
+                value={values.hermesApiUrl}
+                onChange={(e) => onChange({ hermesApiUrl: e.target.value })}
+                placeholder="http://localhost:8642"
+                className={`mt-1 ${inputClass}`}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>API KEY</label>
+              <div className="mt-1">
+                <PasswordInput
+                  value={values.hermesApiKey}
+                  onChange={(v) => onChange({ hermesApiKey: v })}
+                  placeholder="Hermes API key"
                 />
               </div>
             </div>

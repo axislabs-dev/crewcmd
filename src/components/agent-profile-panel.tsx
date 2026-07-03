@@ -9,6 +9,7 @@ import {
   defaultAgentConfigValues,
   ROLES,
   GATEWAY_ADAPTERS,
+  HERMES_ADAPTERS,
   HTTP_ADAPTERS,
   OPENROUTER_ADAPTERS,
 } from "@/components/agent-config-fields";
@@ -132,6 +133,7 @@ const adapterLabels: Record<string, string> = {
   gemini_local: "GEMINI",
   opencode_local: "OPENCODE",
   openclaw_gateway: "OPENCLAW",
+  hermes_api: "HERMES",
   cursor: "CURSOR",
   pi_local: "PI",
   process: "PROCESS",
@@ -288,6 +290,8 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
       reportsTo: nextAgent.reportsTo ?? "",
       gatewayUrl: GATEWAY_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "",
       gatewayToken: "",
+      hermesApiUrl: HERMES_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "http://localhost:8642",
+      hermesApiKey: "",
       httpUrl: HTTP_ADAPTERS.includes(nextAgent.adapterType) ? (nextAdapterConfig.url as string) ?? "" : "",
       httpAuthHeader: "",
       openrouterApiKey: "",
@@ -558,6 +562,14 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
         if (configValues.gatewayToken) {
           nextAdapterConfig.headers = { "x-openclaw-token": configValues.gatewayToken };
         }
+      } else if (HERMES_ADAPTERS.includes(configValues.adapterType)) {
+        if (configValues.hermesApiUrl) nextAdapterConfig.url = configValues.hermesApiUrl;
+        const existingHeaders = (adapterConfig.headers ?? {}) as Record<string, unknown>;
+        if (configValues.hermesApiKey) {
+          nextAdapterConfig.headers = { Authorization: toBearerToken(configValues.hermesApiKey) };
+        } else if (typeof existingHeaders.Authorization === "string") {
+          nextAdapterConfig.headers = { Authorization: existingHeaders.Authorization };
+        }
       } else if (HTTP_ADAPTERS.includes(configValues.adapterType)) {
         if (configValues.httpUrl) nextAdapterConfig.url = configValues.httpUrl;
         if (configValues.httpAuthHeader) {
@@ -584,7 +596,7 @@ export function AgentProfilePanel({ callsign, companyId, onClose, onSaved, onDel
             voice: configValues.voiceSettings,
             visual: configValues.visualSettings,
           },
-          provider: configValues.provider || null,
+          provider: HERMES_ADAPTERS.includes(configValues.adapterType) ? "hermes" : configValues.provider || null,
           role: configValues.role,
           model: configValues.model.trim() || null,
           workspacePath: configValues.workspacePath.trim() || null,
@@ -1985,4 +1997,9 @@ function activityIcon(actionType: string): string {
   if (actionType.includes("start") || actionType.includes("run")) return "▶";
   if (actionType.includes("stop") || actionType.includes("exit")) return "■";
   return "•";
+}
+
+function toBearerToken(value: string) {
+  const token = value.trim();
+  return /^Bearer\s+/i.test(token) ? token : `Bearer ${token}`;
 }

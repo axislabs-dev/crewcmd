@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUILT_IN_BLUEPRINTS, type BuiltInBlueprint } from "@/lib/blueprints-data";
 import { labelModelProfile, normalizeModelProfile } from "@/lib/model-profiles";
-import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 
 // ─── Category pills ──────────────────────────────────────────────────
 
@@ -43,7 +42,8 @@ export default function OnboardingPage() {
   const [agentRole, setAgentRole] = useState("engineer");
 
   // Step 2c: Connect runtime
-  const [connectMode, setConnectMode] = useState<"choose" | "gateway" | "local">("gateway");
+  const [runtimeProvider, setRuntimeProvider] = useState<"openclaw" | "hermes">("openclaw");
+  const [connectMode, setConnectMode] = useState<"choose" | "gateway" | "hermes" | "local">("choose");
   const [gatewayUrl, setGatewayUrl] = useState("localhost:18789");
   const [authToken, setAuthToken] = useState("");
   const [probeResult, setProbeResult] = useState<{
@@ -53,7 +53,7 @@ export default function OnboardingPage() {
     pairingInstructions?: string;
     agents: { id: string; name: string; emoji: string; title: string; description: string; model?: string; reportsTo?: string }[];
     models: { id: string; name: string; provider: string }[];
-    capabilities?: RuntimeCapabilitySnapshot;
+    capabilities?: Record<string, unknown>;
     defaultAgentId?: string;
     devicePrivateKeyPem?: string;
   } | null>(null);
@@ -86,7 +86,7 @@ export default function OnboardingPage() {
     if (mode === "connect") {
       setStep(2);
       setTeamMode("connect");
-      setConnectMode("gateway");
+      setConnectMode("choose");
       if (requestedOwnerType === "user" || requestedOwnerType === "company") {
         setImportOwnerType(requestedOwnerType);
         if (requestedOwnerType === "user") setImportVisibility("private");
@@ -202,16 +202,18 @@ export default function OnboardingPage() {
     if (!gatewayUrl.trim() || !authToken.trim()) return;
     setProbing(true);
     setProbeResult(null);
+    const isHermes = runtimeProvider === "hermes";
     try {
       const res = await fetch("/api/runtimes/probe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "gateway",
+          mode: isHermes ? undefined : "gateway",
+          runtimeType: isHermes ? "hermes" : undefined,
           url: gatewayUrl.trim(),
           token: authToken.trim(),
           // Reuse device key so the gateway sees the same device on retry
-          deviceKeyPem: deviceKeyPem,
+          deviceKeyPem: isHermes ? undefined : deviceKeyPem,
         }),
       });
       const data = await res.json();
@@ -235,7 +237,7 @@ export default function OnboardingPage() {
         setSelectedAgentIds(new Set(data.agents.map((a: { id: string }) => a.id)));
       }
     } catch {
-      setProbeResult({ ok: false, error: "Failed to connect to gateway", agents: [], models: [] });
+      setProbeResult({ ok: false, error: isHermes ? "Failed to connect to Hermes API" : "Failed to connect to gateway", agents: [], models: [] });
     } finally {
       setProbing(false);
     }
@@ -289,15 +291,20 @@ export default function OnboardingPage() {
       }
 
       // First, create or update the runtime
+      const isHermes = runtimeProvider === "hermes";
+      const openClawGatewayUrl = gatewayUrl.trim().startsWith("ws") ? gatewayUrl.trim() : `ws://${gatewayUrl.trim()}`;
+      const openClawHttpUrl = gatewayUrl.trim().startsWith("http") ? gatewayUrl.trim() : `http://${gatewayUrl.trim()}`;
+      const hermesRootUrl = normalizeHermesRootUrl(gatewayUrl);
       const runtimeRes = await fetch("/api/runtimes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "OpenClaw Gateway",
-          runtimeType: "openclaw",
-          gatewayUrl: gatewayUrl.trim().startsWith("ws") ? gatewayUrl.trim() : `ws://${gatewayUrl.trim()}`,
-          httpUrl: gatewayUrl.trim().startsWith("http") ? gatewayUrl.trim() : `http://${gatewayUrl.trim()}`,
+          name: isHermes ? "Hermes Agent API" : "OpenClaw Gateway",
+          runtimeType: isHermes ? "hermes" : "openclaw",
+          gatewayUrl: isHermes ? hermesRootUrl : openClawGatewayUrl,
+          httpUrl: isHermes ? hermesRootUrl : openClawHttpUrl,
           authToken: authToken.trim() || null,
+          metadata: isHermes ? { provider: "hermes", apiBaseUrl: `${hermesRootUrl}/v1` } : undefined,
           capabilitySnapshot: probeResult.capabilities,
           workspaceId,
           companyId,
@@ -354,13 +361,20 @@ export default function OnboardingPage() {
               title: agent.title || "Agent",
               emoji: agent.emoji || "🤖",
               color: "#00f0ff",
-              adapterType: "openclaw_gateway",
-              adapterConfig: {
-                gatewayUrl: `ws://${gatewayUrl.trim()}`,
-                agentId: agent.id,
-                model: agent.model,
-                devicePrivateKeyPem: probeResult.devicePrivateKeyPem,
-              },
+              adapterType: isHermes ? "hermes_api" : "openclaw_gateway",
+              adapterConfig: isHermes
+                ? {
+                    url: hermesRootUrl,
+                    headers: { Authorization: toBearerToken(authToken) },
+                    model: agent.model,
+                  }
+                : {
+                    gatewayUrl: openClawGatewayUrl,
+                    agentId: agent.id,
+                    model: agent.model,
+                    devicePrivateKeyPem: probeResult.devicePrivateKeyPem,
+                  },
+              provider: isHermes ? "hermes" : null,
               role: "agent",
               workspaceId,
               companyId,
@@ -420,6 +434,9 @@ export default function OnboardingPage() {
   const btnSecondary =
     "rounded-lg border border-[var(--border-medium)] px-4 py-2.5 text-xs tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface-hover)]";
   const isPersonalFlow = importOwnerType === "user" || workspaceType === "personal";
+  const runtimeCapabilitySummary = probeResult?.capabilities
+    ? summarizeRuntimeCapabilities(probeResult.capabilities)
+    : null;
 
   const filteredBlueprints =
     categoryFilter === "all"
@@ -519,7 +536,7 @@ export default function OnboardingPage() {
                   BUILD YOUR TEAM
                 </h2>
                 <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                  Start with a blueprint, import an existing OpenClaw crew, or create your first agent from scratch.
+                  Start with a blueprint, import an existing runtime crew, or create your first agent from scratch.
                 </p>
               </div>
 
@@ -540,7 +557,7 @@ export default function OnboardingPage() {
 
                 {/* Connect runtime option */}
                 <button
-                  onClick={() => { setTeamMode("connect"); setConnectMode("gateway"); setProbeResult(null); }}
+                  onClick={() => { setTeamMode("connect"); setConnectMode("choose"); setProbeResult(null); }}
                   className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
                 >
                   <div className="text-2xl">🔌</div>
@@ -548,7 +565,7 @@ export default function OnboardingPage() {
                     CONNECT RUNTIME
                   </h3>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Import your existing OpenClaw agents. Gateway is the recommended path; local auto-detect is fallback for same-machine setups.
+                    Import agents from OpenClaw Gateway or Hermes Agent API.
                   </p>
                 </button>
 
@@ -727,10 +744,10 @@ export default function OnboardingPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
-                    CONNECT TO OPENCLAW
+                    CONNECT RUNTIME
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Gateway-first import is the recommended path. Use local auto-detect only when CrewCmd and OpenClaw are running on the same machine.
+                    Choose a runtime provider, then discover agents and models through its API.
                   </p>
                 </div>
                 <button
@@ -741,14 +758,20 @@ export default function OnboardingPage() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <button
-                  onClick={() => setConnectMode("gateway")}
+                  onClick={() => {
+                    setRuntimeProvider("openclaw");
+                    setConnectMode("gateway");
+                    setGatewayUrl("localhost:18789");
+                    setAuthToken("");
+                    setProbeResult(null);
+                  }}
                   className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
                 >
                   <div className="text-2xl">🔌</div>
                   <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
-                    RECOMMENDED: GATEWAY
+                    OPENCLAW GATEWAY
                   </h3>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
                     Best for remote hosts and shared setups. Paste the gateway URL and token to discover agents.
@@ -757,6 +780,26 @@ export default function OnboardingPage() {
 
                 <button
                   onClick={() => {
+                    setRuntimeProvider("hermes");
+                    setConnectMode("hermes");
+                    setGatewayUrl("http://localhost:8642");
+                    setAuthToken("");
+                    setProbeResult(null);
+                  }}
+                  className="group rounded-xl border border-[var(--border-medium)] p-5 text-left transition-all hover:border-[var(--accent-medium)] hover:bg-[var(--accent-soft)]/30"
+                >
+                  <div className="text-2xl">✦</div>
+                  <h3 className="mt-2 text-xs font-bold tracking-wider text-[var(--text-primary)]">
+                    HERMES AGENT API
+                  </h3>
+                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                    Connect a Hermes API server, discover models, then import a Hermes-backed agent.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setRuntimeProvider("openclaw");
                     setConnectMode("local");
                     handleProbeLocal();
                   }}
@@ -779,7 +822,7 @@ export default function OnboardingPage() {
                     <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Only use this if CrewCmd and OpenClaw are running on the same computer and you want us to read local config files.</p>
                   </div>
                   <button
-                    onClick={() => { setConnectMode("local"); handleProbeLocal(); }}
+                    onClick={() => { setRuntimeProvider("openclaw"); setConnectMode("local"); handleProbeLocal(); }}
                     className="shrink-0 rounded-lg border border-[var(--border-medium)] px-3 py-2 text-[10px] tracking-wider text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
                   >
                     TRY LOCAL
@@ -866,15 +909,17 @@ export default function OnboardingPage() {
           )}
 
           {/* ── Step 2c: Connect runtime — gateway connect ── */}
-          {step === 2 && teamMode === "connect" && connectMode === "gateway" && !probeResult?.ok && !probeResult?.pairingRequired && (
+          {step === 2 && teamMode === "connect" && (connectMode === "gateway" || connectMode === "hermes") && !probeResult?.ok && !probeResult?.pairingRequired && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-bold tracking-wider text-[var(--text-primary)]">
-                    CONNECT TO GATEWAY
+                    {runtimeProvider === "hermes" ? "CONNECT TO HERMES" : "CONNECT TO GATEWAY"}
                   </h2>
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Recommended for almost all imports. Connect through the gateway, then choose where imported agents should live.
+                    {runtimeProvider === "hermes"
+                      ? "Connect to the Hermes Agent API server, then choose where the imported agent should live."
+                      : "Connect through the OpenClaw gateway, then choose where imported agents should live."}
                   </p>
                 </div>
                 <button
@@ -887,32 +932,34 @@ export default function OnboardingPage() {
 
               <div className="space-y-3">
                 <div>
-                  <label className={labelClass}>GATEWAY URL</label>
+                  <label className={labelClass}>{runtimeProvider === "hermes" ? "API URL" : "GATEWAY URL"}</label>
                   <input
                     type="text"
                     value={gatewayUrl}
                     onChange={(e) => setGatewayUrl(e.target.value)}
-                    placeholder="localhost:18789"
+                    placeholder={runtimeProvider === "hermes" ? "http://localhost:8642" : "localhost:18789"}
                     className={`${inputClass} font-mono text-[11px]`}
                     autoFocus
                   />
                   <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Default: <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">localhost:18789</code> — use your remote IP for non-local gateways
+                    Default: <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">{runtimeProvider === "hermes" ? "http://localhost:8642" : "localhost:18789"}</code>
                   </p>
                 </div>
 
                 <div>
-                  <label className={labelClass}>AUTH TOKEN</label>
+                  <label className={labelClass}>{runtimeProvider === "hermes" ? "API KEY" : "AUTH TOKEN"}</label>
                   <input
                     type="password"
                     value={authToken}
                     onChange={(e) => setAuthToken(e.target.value)}
-                    placeholder="Your gateway auth token"
+                    placeholder={runtimeProvider === "hermes" ? "Hermes API key" : "Your gateway auth token"}
                     className={`${inputClass} font-mono text-[11px]`}
                   />
-                  <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                    Find in <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">openclaw.json</code> → <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">gateway.auth.token</code>
-                  </p>
+                  {runtimeProvider !== "hermes" && (
+                    <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                      Find in <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">openclaw.json</code> → <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5">gateway.auth.token</code>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -936,7 +983,7 @@ export default function OnboardingPage() {
                   disabled={probing || !gatewayUrl.trim() || !authToken.trim()}
                   className={`flex-1 ${btnPrimary}`}
                 >
-                  {probing ? "CONNECTING..." : "CONNECT & DISCOVER"}
+                  {probing ? "CONNECTING..." : runtimeProvider === "hermes" ? "CONNECT HERMES" : "CONNECT & DISCOVER"}
                 </button>
               </div>
             </div>
@@ -1093,23 +1140,22 @@ export default function OnboardingPage() {
                     MODELS & PROVIDERS: {probeResult.models.length} detected
                   </span>
                   <p className="mt-0.5 text-[9px] text-[var(--text-tertiary)] line-clamp-1">
-                    {probeResult.models.join(", ")}
+                    {probeResult.models.map((model) => `${model.provider}/${model.id}`).join(", ")}
                   </p>
                 </div>
               )}
 
-              {probeResult.capabilities && (
+              {runtimeCapabilitySummary && (
                 <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] px-3 py-2">
                   <span className="text-[10px] tracking-wider text-[var(--text-tertiary)]">
                     RUNTIME CAPABILITIES
                   </span>
                   <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
-                    {probeResult.capabilities.providerCount} providers, {probeResult.capabilities.agentCount} agents, default model{" "}
-                    {probeResult.capabilities.defaultModel || "not set"}
+                    {runtimeCapabilitySummary.primary}
                   </p>
-                  {probeResult.capabilities.configuredProviders.length > 0 && (
+                  {runtimeCapabilitySummary.secondary && (
                     <p className="mt-1 text-[9px] text-[var(--text-tertiary)] line-clamp-2">
-                      Providers: {probeResult.capabilities.configuredProviders.map((provider) => provider.id).join(", ")}
+                      {runtimeCapabilitySummary.secondary}
                     </p>
                   )}
                 </div>
@@ -1389,3 +1435,58 @@ const SIMPLE_ROLES = [
   { value: "support", label: "Support" },
   { value: "custom", label: "Custom" },
 ];
+
+function normalizeHermesRootUrl(value: string) {
+  const raw = value.trim();
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+  const url = new URL(withProtocol);
+  url.hash = "";
+  url.search = "";
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  if (url.pathname === "/v1") url.pathname = "";
+  else if (url.pathname.endsWith("/v1")) url.pathname = url.pathname.slice(0, -3).replace(/\/+$/, "");
+  return url.toString().replace(/\/+$/, "");
+}
+
+function toBearerToken(value: string) {
+  const token = value.trim();
+  return /^Bearer\s+/i.test(token) ? token : `Bearer ${token}`;
+}
+
+function summarizeRuntimeCapabilities(capabilities: Record<string, unknown>) {
+  const providerCount = typeof capabilities.providerCount === "number" ? capabilities.providerCount : null;
+  const agentCount = typeof capabilities.agentCount === "number" ? capabilities.agentCount : null;
+  const defaultModel = typeof capabilities.defaultModel === "string" ? capabilities.defaultModel : null;
+  const configuredProviders = Array.isArray(capabilities.configuredProviders)
+    ? capabilities.configuredProviders
+        .map((provider) => isRecord(provider) && typeof provider.id === "string" ? provider.id : null)
+        .filter((provider): provider is string => !!provider)
+    : [];
+
+  if (providerCount !== null || agentCount !== null || defaultModel) {
+    return {
+      primary: `${providerCount ?? "Unknown"} providers, ${agentCount ?? "unknown"} agents, default model ${defaultModel ?? "not set"}`,
+      secondary: configuredProviders.length > 0 ? `Providers: ${configuredProviders.join(", ")}` : null,
+    };
+  }
+
+  const platform = typeof capabilities.platform === "string"
+    ? capabilities.platform
+    : typeof capabilities.object === "string"
+      ? capabilities.object
+      : "Hermes API";
+  const features = isRecord(capabilities.features)
+    ? Object.entries(capabilities.features)
+        .filter(([, enabled]) => enabled === true)
+        .map(([feature]) => feature.replace(/_/g, " "))
+    : [];
+
+  return {
+    primary: features.length > 0 ? `${platform} · ${features.length} features` : platform,
+    secondary: features.length > 0 ? `Features: ${features.join(", ")}` : null,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}

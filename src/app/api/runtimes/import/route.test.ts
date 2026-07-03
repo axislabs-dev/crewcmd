@@ -200,6 +200,7 @@ describe("POST /api/runtimes/import Hermes", () => {
       adapterConfig: {
         url: "http://localhost:8642",
         headers: { Authorization: "Bearer secret" },
+        sessionKey: "crewcmd:workspace:ws_personal:runtime:rt_hermes:agent:hermes-agent",
       },
       model: "hermes-agent",
       runtimeId: "rt_hermes",

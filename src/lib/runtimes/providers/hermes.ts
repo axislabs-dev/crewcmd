@@ -6,6 +6,8 @@ import type {
   RuntimeProbeInput,
   RuntimeProbeResult,
   RuntimeProvider,
+  RuntimeRunApprovalInput,
+  RuntimeRunControlResult,
   RuntimeRunCreateInput,
   RuntimeRunCreateResult,
   RuntimeRunStatus,
@@ -143,6 +145,38 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     };
   }
 
+  async stopRun(runtime: RuntimeConnectionRecord, runId: string): Promise<RuntimeRunControlResult> {
+    const normalizedRunId = normalizeString(runId);
+    if (!normalizedRunId) throw new Error("runId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/v1/runs/${encodeURIComponent(normalizedRunId)}/stop`,
+      { auth: true, method: "POST" }
+    );
+    return normalizeRunControlResponse(response, normalizedRunId, "stopping");
+  }
+
+  async approveRun(
+    runtime: RuntimeConnectionRecord,
+    runId: string,
+    input: RuntimeRunApprovalInput
+  ): Promise<RuntimeRunControlResult> {
+    const normalizedRunId = normalizeString(runId);
+    if (!normalizedRunId) throw new Error("runId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/v1/runs/${encodeURIComponent(normalizedRunId)}/approval`,
+      { auth: true, method: "POST", body: hermesApprovalRequestBody(input) }
+    );
+    return normalizeRunControlResponse(response, normalizedRunId, "submitted");
+  }
+
   private async discoverList(runtime: RuntimeConnectionRecord, path: string): Promise<unknown[]> {
     const rootUrl = runtimeHttpRoot(runtime);
     const response = await fetchHermesJson(rootUrl, runtime.authToken, path, { auth: true });
@@ -271,4 +305,32 @@ function hermesSessionHeaders(sessionKey: string | null | undefined): Record<str
   if (normalized.length > 256) throw new Error("Hermes sessionKey must be 256 characters or fewer");
   if (/[\r\n\u0000]/.test(normalized)) throw new Error("Hermes sessionKey cannot contain control characters");
   return { "X-Hermes-Session-Key": normalized };
+}
+
+function hermesApprovalRequestBody(input: RuntimeRunApprovalInput): Record<string, unknown> {
+  const body: Record<string, unknown> = { decision: input.decision };
+  const approvalId = normalizeString(input.approvalId);
+  const reason = normalizeString(input.reason);
+
+  if (approvalId) body.approval_id = approvalId;
+  if (reason) body.reason = reason;
+  if (input.payload && isRecord(input.payload)) body.payload = input.payload;
+
+  return body;
+}
+
+function normalizeRunControlResponse(
+  response: unknown,
+  fallbackRunId: string,
+  fallbackStatus: string
+): RuntimeRunControlResult {
+  if (!isRecord(response)) {
+    return { runId: fallbackRunId, status: fallbackStatus, raw: {} };
+  }
+
+  return {
+    runId: normalizeString(response.run_id) ?? normalizeString(response.id) ?? fallbackRunId,
+    status: normalizeString(response.status) ?? fallbackStatus,
+    raw: response,
+  };
 }

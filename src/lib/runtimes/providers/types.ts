@@ -40,6 +40,32 @@ export interface RuntimeHealthResult {
   details: Record<string, unknown> | null;
 }
 
+export interface RuntimeRunCreateInput {
+  input: string;
+  sessionId?: string | null;
+  sessionKey?: string | null;
+  instructions?: string | null;
+  conversationHistory?: unknown[] | null;
+  previousResponseId?: string | null;
+  model?: string | null;
+}
+
+export interface RuntimeRunCreateResult {
+  runId: string;
+  status: string;
+  raw: Record<string, unknown>;
+}
+
+export interface RuntimeRunStatus {
+  runId: string;
+  status: string;
+  sessionId: string | null;
+  model: string | null;
+  output: string | null;
+  usage: Record<string, unknown> | null;
+  raw: Record<string, unknown>;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -50,4 +76,6 @@ export interface RuntimeProvider {
   discoverHealth?(runtime: RuntimeConnectionRecord): Promise<RuntimeHealthResult>;
   discoverSkills?(runtime: RuntimeConnectionRecord): Promise<unknown[]>;
   discoverToolsets?(runtime: RuntimeConnectionRecord): Promise<unknown[]>;
+  createRun?(runtime: RuntimeConnectionRecord, input: RuntimeRunCreateInput): Promise<RuntimeRunCreateResult>;
+  getRun?(runtime: RuntimeConnectionRecord, runId: string): Promise<RuntimeRunStatus>;
 }

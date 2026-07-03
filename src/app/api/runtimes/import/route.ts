@@ -253,7 +253,10 @@ export async function POST(request: Request) {
               status: "online",
               soulContent: agent.soulRaw || agent.description || null,
               adapterType: adapterTypeForRuntime(runtime.runtimeType),
-              adapterConfig: adapterConfigForRuntime(runtime),
+              adapterConfig: adapterConfigForRuntime(runtime, {
+                runtimeRef: agent.id,
+                workspaceId: targetWorkspace.id,
+              }),
               provider: runtime.runtimeType === "hermes" ? "hermes" : agentToReattach.provider,
               role: agentToReattach.role || "engineer",
               model: agent.model || null,
@@ -348,7 +351,10 @@ export async function POST(request: Request) {
             soulContent: agent.soulRaw || agent.description || null,
             companyId: targetWorkspace.companyId,
             adapterType: adapterTypeForRuntime(runtime.runtimeType),
-            adapterConfig: adapterConfigForRuntime(runtime),
+            adapterConfig: adapterConfigForRuntime(runtime, {
+              runtimeRef: agent.id,
+              workspaceId: targetWorkspace.id,
+            }),
             provider: providerForRuntime(runtime.runtimeType),
             role: "engineer",
             model: agent.model || null,
@@ -446,13 +452,47 @@ function providerForRuntime(runtimeType: string): string | null {
   return runtimeType === "hermes" ? "hermes" : null;
 }
 
-function adapterConfigForRuntime(runtime: typeof companyRuntimes.$inferSelect): Record<string, unknown> {
-  return {
+function adapterConfigForRuntime(
+  runtime: typeof companyRuntimes.$inferSelect,
+  params: { runtimeRef?: string | null; workspaceId?: string | null } = {}
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
     url: runtime.httpUrl,
     headers: runtime.authToken
       ? { Authorization: `Bearer ${runtime.authToken}` }
       : undefined,
   };
+
+  if (runtime.runtimeType === "hermes") {
+    config.sessionKey = buildHermesSessionKey({
+      runtimeId: runtime.id,
+      runtimeRef: params.runtimeRef,
+      workspaceId: params.workspaceId,
+    });
+  }
+
+  return config;
+}
+
+function buildHermesSessionKey(params: {
+  runtimeId: string;
+  runtimeRef?: string | null;
+  workspaceId?: string | null;
+}): string {
+  const key = [
+    "crewcmd",
+    "workspace",
+    sessionKeySegment(params.workspaceId) || "unknown",
+    "runtime",
+    sessionKeySegment(params.runtimeId) || "unknown",
+    "agent",
+    sessionKeySegment(params.runtimeRef) || "default",
+  ].join(":");
+  return key.slice(0, 256);
+}
+
+function sessionKeySegment(value?: string | null): string {
+  return (value ?? "").trim().replace(/[\r\n\u0000]/g, "").replace(/\s+/g, "-");
 }
 
 function buildRuntimeSpecificConfig(params: {

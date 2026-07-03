@@ -2,6 +2,7 @@ import type { GatewayModel } from "@/lib/gateway-client";
 import type {
   RuntimeConnectionRecord,
   RuntimeDiscoveredModel,
+  RuntimeHealthResult,
   RuntimeProbeInput,
   RuntimeProbeResult,
   RuntimeProvider,
@@ -67,6 +68,22 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     const rootUrl = runtimeHttpRoot(runtime);
     return fetchHermesJson(rootUrl, runtime.authToken, "/v1/capabilities", { auth: true })
       .then((value) => (isRecord(value) ? value : null));
+  }
+
+  async discoverHealth(runtime: RuntimeConnectionRecord): Promise<RuntimeHealthResult> {
+    const rootUrl = runtimeHttpRoot(runtime);
+    const health = await fetchHermesJson(rootUrl, runtime.authToken, "/health/detailed", { auth: false })
+      .catch(() => fetchHermesJson(rootUrl, runtime.authToken, "/v1/health/detailed", { auth: false }))
+      .catch(() => fetchHermesJson(rootUrl, runtime.authToken, "/health", { auth: false }))
+      .catch(() => fetchHermesJson(rootUrl, runtime.authToken, "/v1/health", { auth: false }));
+    const details = isRecord(health) ? health : null;
+    const status = normalizeString(details?.status) ?? "ok";
+
+    return {
+      ok: isHealthyStatus(status),
+      status,
+      details,
+    };
   }
 
   async discoverSkills(runtime: RuntimeConnectionRecord): Promise<unknown[]> {
@@ -172,4 +189,8 @@ function normalizeString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function isHealthyStatus(status: string): boolean {
+  return ["ok", "healthy", "ready", "up"].includes(status.toLowerCase());
 }

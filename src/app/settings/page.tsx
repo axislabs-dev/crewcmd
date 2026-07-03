@@ -4,6 +4,7 @@ import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "re
 import { signOut } from "next-auth/react";
 import { Avatar } from "@/components/avatar";
 import { useWorkspace } from "@/components/company-context";
+import { RuntimeDiscoverySummary } from "@/components/runtime-discovery-summary";
 import { RuntimeHealthIndicator } from "@/components/runtime-health-indicator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserPresenceBadge } from "@/components/user-presence";
@@ -562,6 +563,11 @@ export default function SettingsPage() {
                                   )}
                                 </div>
                               )}
+                              <RuntimeDiscoverySummary
+                                runtimeId={runtime.id}
+                                runtimeType={runtime.runtimeType}
+                                className="mt-2 text-[11px] text-[var(--text-tertiary)]"
+                              />
                             </div>
                             <button
                               type="button"

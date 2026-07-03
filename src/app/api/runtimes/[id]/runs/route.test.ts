@@ -159,12 +159,10 @@ describe("runtime run endpoints", () => {
       },
     });
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/v1/runs/run_123", {
-      method: "GET",
       headers: {
         Accept: "application/json",
         Authorization: "Bearer secret",
       },
-      body: undefined,
     });
   });
 

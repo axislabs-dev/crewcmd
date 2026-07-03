@@ -96,12 +96,10 @@ describe("HermesRuntimeProvider runs", () => {
       usage: { total_tokens: 25 },
     });
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/v1/runs/run_123", {
-      method: "GET",
       headers: {
         Accept: "application/json",
         Authorization: "Bearer secret",
       },
-      body: undefined,
     });
   });
 });

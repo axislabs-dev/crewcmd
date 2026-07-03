@@ -34,6 +34,12 @@ export interface RuntimeDiscoveredModel {
   name: string;
 }
 
+export interface RuntimeHealthResult {
+  ok: boolean;
+  status: string;
+  details: Record<string, unknown> | null;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -41,6 +47,7 @@ export interface RuntimeProvider {
   probe?(input: RuntimeProbeInput): Promise<RuntimeProbeResult>;
   discoverModels(runtime: RuntimeConnectionRecord): Promise<RuntimeDiscoveredModel[]>;
   discoverCapabilities?(runtime: RuntimeConnectionRecord): Promise<Record<string, unknown> | null>;
+  discoverHealth?(runtime: RuntimeConnectionRecord): Promise<RuntimeHealthResult>;
   discoverSkills?(runtime: RuntimeConnectionRecord): Promise<unknown[]>;
   discoverToolsets?(runtime: RuntimeConnectionRecord): Promise<unknown[]>;
 }

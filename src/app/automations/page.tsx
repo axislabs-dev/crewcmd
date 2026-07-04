@@ -136,6 +136,7 @@ export default function AutomationsPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [runs, setRuns] = useState<Record<string, RunEntry[]>>({});
+  const [runErrors, setRunErrors] = useState<Record<string, string>>({});
   const [runsLoading, setRunsLoading] = useState<string | null>(null);
 
   /* Routines state */
@@ -184,12 +185,22 @@ export default function AutomationsPage() {
     setRunsLoading(jobId);
     try {
       const res = await fetch(`/api/automations/runs?job_id=${jobId}&limit=20`);
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const data = await res.json();
         setRuns((prev) => ({ ...prev, [jobId]: data.runs ?? [] }));
+        setRunErrors((prev) => {
+          const next = { ...prev };
+          delete next[jobId];
+          return next;
+        });
+      } else {
+        const message = typeof data.error === "string" ? data.error : "Run history unavailable";
+        setRuns((prev) => ({ ...prev, [jobId]: [] }));
+        setRunErrors((prev) => ({ ...prev, [jobId]: message }));
       }
     } catch {
-      /* empty */
+      setRuns((prev) => ({ ...prev, [jobId]: [] }));
+      setRunErrors((prev) => ({ ...prev, [jobId]: "Run history unavailable" }));
     }
     setRunsLoading(null);
   }, []);
@@ -225,7 +236,7 @@ export default function AutomationsPage() {
       return;
     }
     setExpandedJob(jobId);
-    if (!runs[jobId]) fetchRuns(jobId);
+    if (!runs[jobId] && !runErrors[jobId]) fetchRuns(jobId);
   }
 
   /* ─── Routines data ─── */
@@ -354,7 +365,7 @@ export default function AutomationsPage() {
     if (cId) fetchRoutines(cId);
     else setRoutinesLoading(false);
 
-    // Auto-sync schedules from OpenClaw on mount
+    // Auto-sync schedules from the connected runtime on mount
     syncJobs();
   }, [fetchRoutines, syncJobs]);
 
@@ -433,15 +444,16 @@ export default function AutomationsPage() {
             </div>
           ) : jobs.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--border-medium)] py-12 text-center">
-              <p className="text-xs text-[var(--text-tertiary)]">No cron jobs found</p>
+              <p className="text-xs text-[var(--text-tertiary)]">No runtime jobs found</p>
               <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                OpenClaw cron jobs will appear here once synced.
+                Connected runtime jobs will appear here once synced.
               </p>
             </div>
           ) : (
             jobs.map((job) => {
               const isExpanded = expandedJob === job.id;
               const jobRuns = runs[job.id];
+              const runError = runErrors[job.id];
               const isLoadingRuns = runsLoading === job.id;
 
               return (
@@ -547,6 +559,10 @@ export default function AutomationsPage() {
                         <div className="flex items-center justify-center py-8">
                           <div className="h-4 w-4 animate-spin rounded-full border-2 border-neo/30 border-t-neo" />
                         </div>
+                      ) : runError ? (
+                        <p className="mt-3 text-center font-mono text-[10px] text-[var(--text-tertiary)]">
+                          {runError}
+                        </p>
                       ) : !jobRuns || jobRuns.length === 0 ? (
                         <p className="mt-3 text-center font-mono text-[10px] text-[var(--text-tertiary)]">
                           No run history available

@@ -3,8 +3,10 @@ import type {
   RuntimeConnectionRecord,
   RuntimeDiscoveredModel,
   RuntimeHealthResult,
+  RuntimeJobActionResult,
   RuntimeJobListResult,
   RuntimeJobResult,
+  RuntimeJobWriteInput,
   RuntimeProbeInput,
   RuntimeProbeResult,
   RuntimeProvider,
@@ -307,13 +309,49 @@ export class HermesRuntimeProvider implements RuntimeProvider {
       `/api/jobs/${encodeURIComponent(normalizedJobId)}`,
       { auth: true }
     );
-    const job = isRecord(response) && response.job !== undefined ? response.job : response;
+    return normalizeJobResult(response, normalizedJobId);
+  }
 
-    return {
-      jobId: normalizeRecordId(job) ?? normalizedJobId,
-      job,
-      raw: response,
-    };
+  async createJob(runtime: RuntimeConnectionRecord, input: RuntimeJobWriteInput): Promise<RuntimeJobResult> {
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(rootUrl, runtime.authToken, "/api/jobs", {
+      auth: true,
+      method: "POST",
+      body: input.body,
+    });
+
+    return normalizeJobResult(response);
+  }
+
+  async updateJob(
+    runtime: RuntimeConnectionRecord,
+    jobId: string,
+    input: RuntimeJobWriteInput
+  ): Promise<RuntimeJobResult> {
+    const normalizedJobId = normalizeString(jobId);
+    if (!normalizedJobId) throw new Error("jobId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/jobs/${encodeURIComponent(normalizedJobId)}`,
+      { auth: true, method: "PATCH", body: input.body }
+    );
+
+    return normalizeJobResult(response, normalizedJobId);
+  }
+
+  async pauseJob(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult> {
+    return this.postJobAction(runtime, jobId, "pause", "paused");
+  }
+
+  async resumeJob(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult> {
+    return this.postJobAction(runtime, jobId, "resume", "resumed");
+  }
+
+  async runJobNow(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult> {
+    return this.postJobAction(runtime, jobId, "run", "started");
   }
 
   async forkSession(
@@ -404,6 +442,26 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     if (isRecord(response) && Array.isArray(response.data)) return response.data;
     if (isRecord(response) && Array.isArray(response.items)) return response.items;
     return [];
+  }
+
+  private async postJobAction(
+    runtime: RuntimeConnectionRecord,
+    jobId: string,
+    action: "pause" | "resume" | "run",
+    fallbackStatus: string
+  ): Promise<RuntimeJobActionResult> {
+    const normalizedJobId = normalizeString(jobId);
+    if (!normalizedJobId) throw new Error("jobId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/jobs/${encodeURIComponent(normalizedJobId)}/${action}`,
+      { auth: true, method: "POST" }
+    );
+
+    return normalizeJobActionResult(response, normalizedJobId, fallbackStatus);
   }
 }
 
@@ -594,6 +652,36 @@ function normalizeSessionId(session: unknown): string | null {
 function normalizeRecordId(value: unknown): string | null {
   if (!isRecord(value)) return null;
   return normalizeString(value.id);
+}
+
+function normalizeJobResult(response: unknown, fallbackJobId?: string): RuntimeJobResult {
+  const job = isRecord(response) && response.job !== undefined ? response.job : response;
+  const jobId = normalizeRecordId(job) ?? fallbackJobId;
+  if (!jobId) throw new Error("Hermes job response did not include job id");
+
+  return {
+    jobId,
+    job,
+    raw: response,
+  };
+}
+
+function normalizeJobActionResult(
+  response: unknown,
+  fallbackJobId: string,
+  fallbackStatus: string
+): RuntimeJobActionResult {
+  if (!isRecord(response)) {
+    return { jobId: fallbackJobId, status: fallbackStatus, runId: null, raw: response };
+  }
+  const job = response.job;
+
+  return {
+    jobId: normalizeRecordId(job) ?? normalizeString(response.job_id) ?? normalizeString(response.id) ?? fallbackJobId,
+    status: normalizeString(response.status) ?? (isRecord(job) ? normalizeString(job.status) : null) ?? fallbackStatus,
+    runId: normalizeString(response.run_id),
+    raw: response,
+  };
 }
 
 function normalizeStringFromResponse(response: unknown, keys: string[]): string | null {

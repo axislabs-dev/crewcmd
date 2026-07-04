@@ -124,6 +124,17 @@ export interface RuntimeJobResult {
   raw: unknown;
 }
 
+export interface RuntimeJobWriteInput {
+  body: Record<string, unknown>;
+}
+
+export interface RuntimeJobActionResult {
+  jobId: string;
+  status: string;
+  runId: string | null;
+  raw: unknown;
+}
+
 export interface RuntimeSessionForkInput {
   title?: string | null;
 }
@@ -188,6 +199,15 @@ export interface RuntimeProvider {
   ): Promise<RuntimeSessionMessagesResult>;
   listJobs?(runtime: RuntimeConnectionRecord): Promise<RuntimeJobListResult>;
   getJob?(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobResult>;
+  createJob?(runtime: RuntimeConnectionRecord, input: RuntimeJobWriteInput): Promise<RuntimeJobResult>;
+  updateJob?(
+    runtime: RuntimeConnectionRecord,
+    jobId: string,
+    input: RuntimeJobWriteInput
+  ): Promise<RuntimeJobResult>;
+  pauseJob?(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult>;
+  resumeJob?(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult>;
+  runJobNow?(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult>;
   forkSession?(
     runtime: RuntimeConnectionRecord,
     sessionId: string,

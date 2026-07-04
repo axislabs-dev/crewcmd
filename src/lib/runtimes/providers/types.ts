@@ -124,6 +124,27 @@ export interface RuntimeJobResult {
   raw: unknown;
 }
 
+export interface RuntimeSessionForkInput {
+  title?: string | null;
+}
+
+export interface RuntimeSessionForkResult {
+  sessionId: string;
+  session: unknown;
+  raw: unknown;
+}
+
+export interface RuntimeSessionChatInput {
+  input: string;
+  sessionKey?: string | null;
+}
+
+export interface RuntimeSessionChatResult {
+  sessionId: string;
+  output: string | null;
+  raw: unknown;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -161,4 +182,14 @@ export interface RuntimeProvider {
   ): Promise<RuntimeSessionMessagesResult>;
   listJobs?(runtime: RuntimeConnectionRecord): Promise<RuntimeJobListResult>;
   getJob?(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobResult>;
+  forkSession?(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string,
+    input?: RuntimeSessionForkInput
+  ): Promise<RuntimeSessionForkResult>;
+  chatSession?(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string,
+    input: RuntimeSessionChatInput
+  ): Promise<RuntimeSessionChatResult>;
 }

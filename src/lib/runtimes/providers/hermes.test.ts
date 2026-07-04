@@ -276,6 +276,66 @@ describe("HermesRuntimeProvider sessions", () => {
       },
     });
   });
+
+  it("forks Hermes sessions", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ session: { id: "sess_branch", title: "Explore alt path" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.forkSession(hermesRuntime(), "sess_1", { title: " Explore alt path " });
+
+    expect(result).toEqual({
+      sessionId: "sess_branch",
+      session: { id: "sess_branch", title: "Explore alt path" },
+      raw: { session: { id: "sess_branch", title: "Explore alt path" } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/fork", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "Explore alt path" }),
+    });
+  });
+
+  it("runs synchronous Hermes session chat", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ session_id: "sess_1", output: "Done." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.chatSession(hermesRuntime(), "sess_1", {
+      input: "Do the work",
+      sessionKey: "crewcmd:thread:1",
+    });
+
+    expect(result).toEqual({
+      sessionId: "sess_1",
+      output: "Done.",
+      raw: { session_id: "sess_1", output: "Done." },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/chat", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Key": "crewcmd:thread:1",
+      },
+      body: JSON.stringify({ input: "Do the work" }),
+    });
+  });
 });
 
 describe("HermesRuntimeProvider jobs", () => {

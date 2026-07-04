@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
+import {
+  listCronJobsFromRuntime,
+  resolvePrimaryReadableRuntimeForActiveWorkspace,
+} from "@/lib/runtime-cron-sync";
 import { GatewayClient, resolveDeviceIdentity } from "@/lib/gateway-client";
 import { requireAuth } from "@/lib/require-auth";
 
@@ -17,6 +20,21 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const selectedRuntime = await resolvePrimaryReadableRuntimeForActiveWorkspace();
+    if (!selectedRuntime) {
+      return NextResponse.json({ runs: [] });
+    }
+    if (selectedRuntime.runtimeType !== "openclaw") {
+      return NextResponse.json(
+        {
+          runs: [],
+          unsupported: true,
+          error: `${runtimeDisplayName(selectedRuntime.runtimeType)} run history is not supported yet`,
+        },
+        { status: 501 }
+      );
+    }
+
     const { runtime } = await listCronJobsFromRuntime();
     if (!runtime) {
       return NextResponse.json({ runs: [] });
@@ -46,4 +64,9 @@ export async function GET(req: NextRequest) {
     console.error("[api/automations/runs] Error:", err);
     return NextResponse.json({ error: "Failed to read run history" }, { status: 500 });
   }
+}
+
+function runtimeDisplayName(runtimeType: string | null | undefined) {
+  if (runtimeType === "hermes") return "Hermes Agent API";
+  return runtimeType || "Runtime";
 }

@@ -479,4 +479,85 @@ describe("HermesRuntimeProvider jobs", () => {
       body: JSON.stringify({ prompt: "Check status", paused: false }),
     });
   });
+
+  it("pauses Hermes jobs", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", status: "paused" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.pauseJob(hermesRuntime(), "job_1");
+
+    expect(result).toEqual({
+      jobId: "job_1",
+      status: "paused",
+      runId: null,
+      raw: { job_id: "job_1", status: "paused" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/pause", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("resumes Hermes jobs", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", status: "resumed" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.resumeJob(hermesRuntime(), "job_1");
+
+    expect(result).toEqual({
+      jobId: "job_1",
+      status: "resumed",
+      runId: null,
+      raw: { job_id: "job_1", status: "resumed" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/resume", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("runs Hermes jobs immediately", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", run_id: "run_1", status: "started" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.runJobNow(hermesRuntime(), "job_1");
+
+    expect(result).toEqual({
+      jobId: "job_1",
+      status: "started",
+      runId: "run_1",
+      raw: { job_id: "job_1", run_id: "run_1", status: "started" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/run", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
 });

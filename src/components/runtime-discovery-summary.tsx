@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type DiscoveryState =
   | { kind: "loading" }
-  | { kind: "ready"; skills: number; toolsets: number }
+  | { kind: "ready"; skills: number; toolsets: number; sessions: number; jobs: number }
   | { kind: "error" }
   | { kind: "unsupported" };
 
@@ -28,11 +28,13 @@ export function RuntimeDiscoverySummary({ runtimeId, runtimeType, className }: R
 
     async function loadDiscovery() {
       try {
-        const [skills, toolsets] = await Promise.all([
+        const [skills, toolsets, sessions, jobs] = await Promise.all([
           fetchRuntimeListCount(runtimeId, "skills"),
           fetchRuntimeListCount(runtimeId, "toolsets"),
+          fetchRuntimeListCount(runtimeId, "sessions"),
+          fetchRuntimeListCount(runtimeId, "jobs"),
         ]);
-        if (active) setState({ kind: "ready", skills, toolsets });
+        if (active) setState({ kind: "ready", skills, toolsets, sessions, jobs });
       } catch (error) {
         if (active) {
           setState(isUnsupportedDiscovery(error) ? { kind: "unsupported" } : { kind: "error" });
@@ -55,7 +57,7 @@ export function RuntimeDiscoverySummary({ runtimeId, runtimeType, className }: R
   );
 }
 
-async function fetchRuntimeListCount(runtimeId: string, listName: "skills" | "toolsets") {
+async function fetchRuntimeListCount(runtimeId: string, listName: "skills" | "toolsets" | "sessions" | "jobs") {
   const response = await fetch(`/api/runtimes/${encodeURIComponent(runtimeId)}/${listName}`, {
     cache: "no-store",
   });
@@ -71,7 +73,12 @@ function discoveryLabel(state: DiscoveryState) {
   if (state.kind === "loading") return "Loading discovery...";
   if (state.kind === "error") return "Discovery unavailable";
   if (state.kind === "unsupported") return "";
-  return `${state.skills} ${pluralize("skill", state.skills)} · ${state.toolsets} ${pluralize("toolset", state.toolsets)}`;
+  return [
+    `${state.skills} ${pluralize("skill", state.skills)}`,
+    `${state.toolsets} ${pluralize("toolset", state.toolsets)}`,
+    `${state.sessions} ${pluralize("session", state.sessions)}`,
+    `${state.jobs} ${pluralize("job", state.jobs)}`,
+  ].join(" · ");
 }
 
 function pluralize(value: string, count: number) {

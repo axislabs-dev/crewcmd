@@ -61,6 +61,9 @@ vi.mock("@/lib/gateway-chat-pool", () => ({
 }));
 
 import { GET } from "./route";
+import { POST as chatSession } from "./[sessionId]/chat/route";
+import { POST as streamSessionChat } from "./[sessionId]/chat/stream/route";
+import { POST as forkSession } from "./[sessionId]/fork/route";
 import { GET as getSession } from "./[sessionId]/route";
 import { GET as getSessionMessages } from "./[sessionId]/messages/route";
 
@@ -198,6 +201,146 @@ describe("runtime session endpoints", () => {
     expect(response.status).toBe(501);
     await expect(response.json()).resolves.toEqual({
       error: "OpenClaw Gateway does not support runtime session detail",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("forks Hermes sessions through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ session: { id: "sess_branch", title: "Explore alt path" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await forkSession(
+      new Request("http://localhost/api/runtimes/rt_hermes/sessions/sess_1/fork", {
+        method: "POST",
+        body: JSON.stringify({ title: "Explore alt path" }),
+      }),
+      { params: Promise.resolve({ id: "rt_hermes", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      sessionId: "sess_branch",
+      session: { id: "sess_branch", title: "Explore alt path" },
+      raw: { session: { id: "sess_branch", title: "Explore alt path" } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/fork", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "Explore alt path" }),
+    });
+  });
+
+  it("runs Hermes session chat through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ session_id: "sess_1", output: "Done." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await chatSession(
+      new Request("http://localhost/api/runtimes/rt_hermes/sessions/sess_1/chat", {
+        method: "POST",
+        body: JSON.stringify({ input: "Do the work", sessionKey: "crewcmd:thread:1" }),
+      }),
+      { params: Promise.resolve({ id: "rt_hermes", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      sessionId: "sess_1",
+      output: "Done.",
+      raw: { session_id: "sess_1", output: "Done." },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/chat", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Key": "crewcmd:thread:1",
+      },
+      body: JSON.stringify({ input: "Do the work" }),
+    });
+  });
+
+  it("reports unsupported session chat for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await chatSession(
+      new Request("http://localhost/api/runtimes/rt_openclaw/sessions/sess_1/chat", {
+        method: "POST",
+        body: JSON.stringify({ input: "Do the work" }),
+      }),
+      { params: Promise.resolve({ id: "rt_openclaw", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime session chat",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("streams Hermes session chat through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response("event: assistant.delta\ndata: {\"delta\":\"Done\"}\n\n", {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await streamSessionChat(
+      new Request("http://localhost/api/runtimes/rt_hermes/sessions/sess_1/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ input: "Do the work", sessionKey: "crewcmd:thread:1" }),
+      }),
+      { params: Promise.resolve({ id: "rt_hermes", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    await expect(response.text()).resolves.toBe("event: assistant.delta\ndata: {\"delta\":\"Done\"}\n\n");
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/chat/stream", {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Key": "crewcmd:thread:1",
+      },
+      body: JSON.stringify({ input: "Do the work" }),
+    });
+  });
+
+  it("reports unsupported session chat streaming for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await streamSessionChat(
+      new Request("http://localhost/api/runtimes/rt_openclaw/sessions/sess_1/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ input: "Do the work" }),
+      }),
+      { params: Promise.resolve({ id: "rt_openclaw", sessionId: "sess_1" }) }
+    );
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime session chat streaming",
     });
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });

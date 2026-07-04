@@ -13,6 +13,10 @@ import type {
   RuntimeRunEventsInput,
   RuntimeRunEventsResult,
   RuntimeRunStatus,
+  RuntimeSessionListInput,
+  RuntimeSessionListResult,
+  RuntimeSessionMessagesResult,
+  RuntimeSessionResult,
 } from "./types";
 
 const DEFAULT_HERMES_MODEL = "hermes-agent";
@@ -210,6 +214,71 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     return normalizeRunControlResponse(response, normalizedRunId, "submitted");
   }
 
+  async listSessions(
+    runtime: RuntimeConnectionRecord,
+    input: RuntimeSessionListInput = {}
+  ): Promise<RuntimeSessionListResult> {
+    const params = new URLSearchParams();
+    if (typeof input.limit === "number" && Number.isFinite(input.limit)) params.set("limit", String(input.limit));
+    if (typeof input.offset === "number" && Number.isFinite(input.offset)) params.set("offset", String(input.offset));
+    const source = normalizeString(input.source);
+    if (source) params.set("source", source);
+    if (typeof input.includeChildren === "boolean") {
+      params.set("include_children", input.includeChildren ? "true" : "false");
+    }
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const path = `/api/sessions${params.size > 0 ? `?${params.toString()}` : ""}`;
+    const response = await fetchHermesJson(rootUrl, runtime.authToken, path, { auth: true });
+
+    return {
+      sessions: normalizeResponseList(response, "sessions"),
+      raw: response,
+    };
+  }
+
+  async getSession(runtime: RuntimeConnectionRecord, sessionId: string): Promise<RuntimeSessionResult> {
+    const normalizedSessionId = normalizeString(sessionId);
+    if (!normalizedSessionId) throw new Error("sessionId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/sessions/${encodeURIComponent(normalizedSessionId)}`,
+      { auth: true }
+    );
+    const session = isRecord(response) && response.session !== undefined ? response.session : response;
+
+    return {
+      sessionId: normalizeSessionId(session) ?? normalizedSessionId,
+      session,
+      raw: response,
+    };
+  }
+
+  async getSessionMessages(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string
+  ): Promise<RuntimeSessionMessagesResult> {
+    const normalizedSessionId = normalizeString(sessionId);
+    if (!normalizedSessionId) throw new Error("sessionId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/sessions/${encodeURIComponent(normalizedSessionId)}/messages`,
+      { auth: true }
+    );
+
+    return {
+      sessionId: normalizedSessionId,
+      messages: normalizeResponseList(response, "messages"),
+      raw: response,
+    };
+  }
+
   private async discoverList(runtime: RuntimeConnectionRecord, path: string): Promise<unknown[]> {
     const rootUrl = runtimeHttpRoot(runtime);
     const response = await fetchHermesJson(rootUrl, runtime.authToken, path, { auth: true });
@@ -376,4 +445,19 @@ function normalizeRunControlResponse(
     status: normalizeString(response.status) ?? fallbackStatus,
     raw: response,
   };
+}
+
+function normalizeResponseList(response: unknown, preferredKey: string): unknown[] {
+  if (Array.isArray(response)) return response;
+  if (!isRecord(response)) return [];
+  const preferred = response[preferredKey];
+  if (Array.isArray(preferred)) return preferred;
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.items)) return response.items;
+  return [];
+}
+
+function normalizeSessionId(session: unknown): string | null {
+  if (!isRecord(session)) return null;
+  return normalizeString(session.id) ?? normalizeString(session.session_id);
 }

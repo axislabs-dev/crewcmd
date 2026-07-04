@@ -277,3 +277,54 @@ describe("HermesRuntimeProvider sessions", () => {
     });
   });
 });
+
+describe("HermesRuntimeProvider jobs", () => {
+  it("lists Hermes jobs", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ jobs: [{ id: "job_1", prompt: "Check status" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.listJobs(hermesRuntime());
+
+    expect(result).toEqual({
+      jobs: [{ id: "job_1", prompt: "Check status" }],
+      raw: { jobs: [{ id: "job_1", prompt: "Check status" }] },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs", {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("reads Hermes job detail", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job: { id: "job_1", prompt: "Check status" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.getJob(hermesRuntime(), "job_1");
+
+    expect(result).toEqual({
+      jobId: "job_1",
+      job: { id: "job_1", prompt: "Check status" },
+      raw: { job: { id: "job_1", prompt: "Check status" } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1", {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+});

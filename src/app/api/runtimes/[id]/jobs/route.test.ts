@@ -64,6 +64,7 @@ import { GET, POST } from "./route";
 import { GET as getJob, PATCH as updateJob } from "./[jobId]/route";
 import { POST as pauseJob } from "./[jobId]/pause/route";
 import { POST as resumeJob } from "./[jobId]/resume/route";
+import { POST as runJobNow } from "./[jobId]/run/route";
 
 function addRuntime(runtimeType = "hermes") {
   mockRuntimeRows.push({
@@ -312,6 +313,50 @@ describe("runtime job endpoints", () => {
     expect(response.status).toBe(501);
     await expect(response.json()).resolves.toEqual({
       error: "OpenClaw Gateway does not support runtime job pause",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("runs Hermes jobs immediately through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", run_id: "run_1", status: "started" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await runJobNow(new Request("http://localhost/api/runtimes/rt_hermes/jobs/job_1/run"), {
+      params: Promise.resolve({ id: "rt_hermes", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jobId: "job_1",
+      status: "started",
+      runId: "run_1",
+      raw: { job_id: "job_1", run_id: "run_1", status: "started" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/run", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("reports unsupported job run-now for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await runJobNow(new Request("http://localhost/api/runtimes/rt_openclaw/jobs/job_1/run"), {
+      params: Promise.resolve({ id: "rt_openclaw", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime job run-now",
     });
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });

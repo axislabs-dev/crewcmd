@@ -113,6 +113,17 @@ export interface RuntimeSessionMessagesResult {
   raw: unknown;
 }
 
+export interface RuntimeJobListResult {
+  jobs: unknown[];
+  raw: unknown;
+}
+
+export interface RuntimeJobResult {
+  jobId: string;
+  job: unknown;
+  raw: unknown;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -148,4 +159,6 @@ export interface RuntimeProvider {
     runtime: RuntimeConnectionRecord,
     sessionId: string
   ): Promise<RuntimeSessionMessagesResult>;
+  listJobs?(runtime: RuntimeConnectionRecord): Promise<RuntimeJobListResult>;
+  getJob?(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobResult>;
 }

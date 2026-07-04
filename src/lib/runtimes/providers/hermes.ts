@@ -3,6 +3,8 @@ import type {
   RuntimeConnectionRecord,
   RuntimeDiscoveredModel,
   RuntimeHealthResult,
+  RuntimeJobListResult,
+  RuntimeJobResult,
   RuntimeProbeInput,
   RuntimeProbeResult,
   RuntimeProvider,
@@ -279,6 +281,36 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     };
   }
 
+  async listJobs(runtime: RuntimeConnectionRecord): Promise<RuntimeJobListResult> {
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(rootUrl, runtime.authToken, "/api/jobs", { auth: true });
+
+    return {
+      jobs: normalizeResponseList(response, "jobs"),
+      raw: response,
+    };
+  }
+
+  async getJob(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobResult> {
+    const normalizedJobId = normalizeString(jobId);
+    if (!normalizedJobId) throw new Error("jobId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/jobs/${encodeURIComponent(normalizedJobId)}`,
+      { auth: true }
+    );
+    const job = isRecord(response) && response.job !== undefined ? response.job : response;
+
+    return {
+      jobId: normalizeRecordId(job) ?? normalizedJobId,
+      job,
+      raw: response,
+    };
+  }
+
   private async discoverList(runtime: RuntimeConnectionRecord, path: string): Promise<unknown[]> {
     const rootUrl = runtimeHttpRoot(runtime);
     const response = await fetchHermesJson(rootUrl, runtime.authToken, path, { auth: true });
@@ -459,5 +491,10 @@ function normalizeResponseList(response: unknown, preferredKey: string): unknown
 
 function normalizeSessionId(session: unknown): string | null {
   if (!isRecord(session)) return null;
-  return normalizeString(session.id) ?? normalizeString(session.session_id);
+  return normalizeRecordId(session) ?? normalizeString(session.session_id);
+}
+
+function normalizeRecordId(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  return normalizeString(value.id);
 }

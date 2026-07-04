@@ -419,4 +419,64 @@ describe("HermesRuntimeProvider jobs", () => {
       },
     });
   });
+
+  it("creates Hermes jobs", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job: { id: "job_1", prompt: "Check status" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.createJob(hermesRuntime(), {
+      body: { prompt: "Check status", schedule: "*/15 * * * *", skills: ["status"] },
+    });
+
+    expect(result).toEqual({
+      jobId: "job_1",
+      job: { id: "job_1", prompt: "Check status" },
+      raw: { job: { id: "job_1", prompt: "Check status" } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Check status", schedule: "*/15 * * * *", skills: ["status"] }),
+    });
+  });
+
+  it("updates Hermes jobs", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job: { id: "job_1", prompt: "Check status", paused: false } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.updateJob(hermesRuntime(), "job_1", {
+      body: { prompt: "Check status", paused: false },
+    });
+
+    expect(result).toEqual({
+      jobId: "job_1",
+      job: { id: "job_1", prompt: "Check status", paused: false },
+      raw: { job: { id: "job_1", prompt: "Check status", paused: false } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1", {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Check status", paused: false }),
+    });
+  });
 });

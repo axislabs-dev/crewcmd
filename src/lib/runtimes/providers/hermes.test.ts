@@ -336,4 +336,36 @@ describe("HermesRuntimeProvider sessions", () => {
       body: JSON.stringify({ input: "Do the work" }),
     });
   });
+
+  it("streams Hermes session chat", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response("event: assistant.delta\ndata: {\"delta\":\"Done\"}\n\n", {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.streamSessionChat(hermesRuntime(), "sess_1", {
+      input: "Do the work",
+      sessionKey: "crewcmd:thread:1",
+    });
+
+    expect(result.sessionId).toBe("sess_1");
+    expect(result.contentType).toBe("text/event-stream");
+    await expect(new Response(result.stream).text()).resolves.toBe(
+      "event: assistant.delta\ndata: {\"delta\":\"Done\"}\n\n"
+    );
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1/chat/stream", {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Key": "crewcmd:thread:1",
+      },
+      body: JSON.stringify({ input: "Do the work" }),
+    });
+  });
 });

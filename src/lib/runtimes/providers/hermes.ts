@@ -15,6 +15,7 @@ import type {
   RuntimeRunStatus,
   RuntimeSessionChatInput,
   RuntimeSessionChatResult,
+  RuntimeSessionChatStreamResult,
   RuntimeSessionForkInput,
   RuntimeSessionForkResult,
   RuntimeSessionListInput,
@@ -332,6 +333,35 @@ export class HermesRuntimeProvider implements RuntimeProvider {
       sessionId: normalizeSessionId(response) ?? normalizedSessionId,
       output: normalizeStringFromResponse(response, ["output", "message", "content", "text"]),
       raw: response,
+    };
+  }
+
+  async streamSessionChat(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string,
+    input: RuntimeSessionChatInput
+  ): Promise<RuntimeSessionChatStreamResult> {
+    const normalizedSessionId = normalizeString(sessionId);
+    if (!normalizedSessionId) throw new Error("sessionId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesResponse(
+      rootUrl,
+      runtime.authToken,
+      `/api/sessions/${encodeURIComponent(normalizedSessionId)}/chat/stream`,
+      {
+        auth: true,
+        method: "POST",
+        headers: { Accept: "text/event-stream", ...hermesSessionHeaders(input.sessionKey) },
+        body: hermesSessionChatRequestBody(input),
+      }
+    );
+    if (!response.body) throw new Error("Hermes session chat stream response did not include a stream");
+
+    return {
+      sessionId: normalizedSessionId,
+      contentType: response.headers.get("Content-Type") || "text/event-stream",
+      stream: response.body,
     };
   }
 

@@ -10,6 +10,8 @@ import {
 } from "./runtime-operating-layer";
 import { getWorkspaceAccessContext, getWorkspaceById } from "./workspace";
 import { listRuntimeManagedResources } from "./runtime-managed-resources";
+import { getRuntimeProvider } from "./runtimes/providers";
+import { normalizeHermesJobForSchedule } from "./runtime-job-normalization";
 
 function humanSchedule(sched: Record<string, unknown>): string {
   if (!sched || typeof sched !== "object") return "unknown";
@@ -108,6 +110,18 @@ export async function listCronJobsFromRuntime() {
   const runtime = await resolvePrimaryReadableRuntimeForActiveWorkspace();
   if (!runtime) {
     return { runtime: null, jobs: [] as GatewayCronJob[] };
+  }
+
+  if (runtime.runtimeType === "hermes") {
+    const provider = getRuntimeProvider(runtime.runtimeType);
+    if (!provider.listJobs) return { runtime, jobs: [] as GatewayCronJob[] };
+    const result = await provider.listJobs(runtime);
+    return {
+      runtime,
+      jobs: result.jobs
+        .map(normalizeHermesJobForSchedule)
+        .filter((job): job is GatewayCronJob => job !== null),
+    };
   }
 
   const managedResources = await listRuntimeManagedResources(runtime.id);

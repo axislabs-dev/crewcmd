@@ -227,6 +227,31 @@ describe("HermesRuntimeProvider sessions", () => {
     );
   });
 
+  it("reads Hermes session metadata", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "sess_1", title: "Main", source: "crewcmd" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new HermesRuntimeProvider();
+    const result = await provider.getSession(hermesRuntime(), "sess_1");
+
+    expect(result).toEqual({
+      sessionId: "sess_1",
+      session: { id: "sess_1", title: "Main", source: "crewcmd" },
+      raw: { id: "sess_1", title: "Main", source: "crewcmd" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/sessions/sess_1", {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
   it("reads Hermes session messages", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ messages: [{ role: "assistant", content: "Done." }] }), {

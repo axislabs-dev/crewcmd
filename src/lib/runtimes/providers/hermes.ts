@@ -16,6 +16,7 @@ import type {
   RuntimeSessionListInput,
   RuntimeSessionListResult,
   RuntimeSessionMessagesResult,
+  RuntimeSessionResult,
 } from "./types";
 
 const DEFAULT_HERMES_MODEL = "hermes-agent";
@@ -236,6 +237,26 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     };
   }
 
+  async getSession(runtime: RuntimeConnectionRecord, sessionId: string): Promise<RuntimeSessionResult> {
+    const normalizedSessionId = normalizeString(sessionId);
+    if (!normalizedSessionId) throw new Error("sessionId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/sessions/${encodeURIComponent(normalizedSessionId)}`,
+      { auth: true }
+    );
+    const session = isRecord(response) && response.session !== undefined ? response.session : response;
+
+    return {
+      sessionId: normalizeSessionId(session) ?? normalizedSessionId,
+      session,
+      raw: response,
+    };
+  }
+
   async getSessionMessages(
     runtime: RuntimeConnectionRecord,
     sessionId: string
@@ -434,4 +455,9 @@ function normalizeResponseList(response: unknown, preferredKey: string): unknown
   if (Array.isArray(response.data)) return response.data;
   if (Array.isArray(response.items)) return response.items;
   return [];
+}
+
+function normalizeSessionId(session: unknown): string | null {
+  if (!isRecord(session)) return null;
+  return normalizeString(session.id) ?? normalizeString(session.session_id);
 }

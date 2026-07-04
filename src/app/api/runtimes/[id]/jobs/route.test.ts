@@ -60,8 +60,11 @@ vi.mock("@/lib/gateway-chat-pool", () => ({
   getGatewayClientForRuntime: (...args: unknown[]) => mockGetGatewayClientForRuntime(...args),
 }));
 
-import { GET } from "./route";
-import { GET as getJob } from "./[jobId]/route";
+import { GET, POST } from "./route";
+import { GET as getJob, PATCH as updateJob } from "./[jobId]/route";
+import { POST as pauseJob } from "./[jobId]/pause/route";
+import { POST as resumeJob } from "./[jobId]/resume/route";
+import { POST as runJobNow } from "./[jobId]/run/route";
 
 function addRuntime(runtimeType = "hermes") {
   mockRuntimeRows.push({
@@ -148,6 +151,212 @@ describe("runtime job endpoints", () => {
     expect(response.status).toBe(501);
     await expect(response.json()).resolves.toEqual({
       error: "OpenClaw Gateway does not support runtime jobs",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("creates Hermes jobs through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job: { id: "job_1", prompt: "Check status" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_hermes/jobs", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Check status", schedule: "*/15 * * * *", skills: ["status"] }),
+      }),
+      { params: Promise.resolve({ id: "rt_hermes" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jobId: "job_1",
+      job: { id: "job_1", prompt: "Check status" },
+      raw: { job: { id: "job_1", prompt: "Check status" } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Check status", schedule: "*/15 * * * *", skills: ["status"] }),
+    });
+  });
+
+  it("updates Hermes jobs through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job: { id: "job_1", prompt: "Check status", paused: false } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await updateJob(
+      new Request("http://localhost/api/runtimes/rt_hermes/jobs/job_1", {
+        method: "PATCH",
+        body: JSON.stringify({ prompt: "Check status", paused: false }),
+      }),
+      { params: Promise.resolve({ id: "rt_hermes", jobId: "job_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jobId: "job_1",
+      job: { id: "job_1", prompt: "Check status", paused: false },
+      raw: { job: { id: "job_1", prompt: "Check status", paused: false } },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1", {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Check status", paused: false }),
+    });
+  });
+
+  it("reports unsupported job creation for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await POST(
+      new Request("http://localhost/api/runtimes/rt_openclaw/jobs", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Check status" }),
+      }),
+      { params: Promise.resolve({ id: "rt_openclaw" }) }
+    );
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime job creation",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("pauses Hermes jobs through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", status: "paused" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await pauseJob(new Request("http://localhost/api/runtimes/rt_hermes/jobs/job_1/pause"), {
+      params: Promise.resolve({ id: "rt_hermes", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jobId: "job_1",
+      status: "paused",
+      runId: null,
+      raw: { job_id: "job_1", status: "paused" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/pause", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("resumes Hermes jobs through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", status: "resumed" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await resumeJob(new Request("http://localhost/api/runtimes/rt_hermes/jobs/job_1/resume"), {
+      params: Promise.resolve({ id: "rt_hermes", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jobId: "job_1",
+      status: "resumed",
+      runId: null,
+      raw: { job_id: "job_1", status: "resumed" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/resume", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("reports unsupported job pause for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await pauseJob(new Request("http://localhost/api/runtimes/rt_openclaw/jobs/job_1/pause"), {
+      params: Promise.resolve({ id: "rt_openclaw", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime job pause",
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("runs Hermes jobs immediately through the runtime provider", async () => {
+    addRuntime();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job_id: "job_1", run_id: "run_1", status: "started" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await runJobNow(new Request("http://localhost/api/runtimes/rt_hermes/jobs/job_1/run"), {
+      params: Promise.resolve({ id: "rt_hermes", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jobId: "job_1",
+      status: "started",
+      runId: "run_1",
+      raw: { job_id: "job_1", run_id: "run_1", status: "started" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8642/api/jobs/job_1/run", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer secret",
+      },
+    });
+  });
+
+  it("reports unsupported job run-now for OpenClaw runtimes", async () => {
+    addRuntime("openclaw");
+
+    const response = await runJobNow(new Request("http://localhost/api/runtimes/rt_openclaw/jobs/job_1/run"), {
+      params: Promise.resolve({ id: "rt_openclaw", jobId: "job_1" }),
+    });
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toEqual({
+      error: "OpenClaw Gateway does not support runtime job run-now",
     });
     expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
   });

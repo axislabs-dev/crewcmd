@@ -3,7 +3,10 @@ import { db, withRetry } from "@/db";
 import { cronJobs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "@/lib/require-auth";
-import { listCronJobsFromRuntime } from "@/lib/runtime-cron-sync";
+import {
+  listCronJobsFromRuntime,
+  resolvePrimaryReadableRuntimeForActiveWorkspace,
+} from "@/lib/runtime-cron-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +29,17 @@ export async function PATCH(
 
     if (typeof enabled !== "boolean") {
       return NextResponse.json({ error: "enabled (boolean) is required" }, { status: 400 });
+    }
+
+    const selectedRuntime = await resolvePrimaryReadableRuntimeForActiveWorkspace();
+    if (!selectedRuntime) {
+      return NextResponse.json({ error: "No connected runtime found" }, { status: 404 });
+    }
+    if (selectedRuntime.runtimeType !== "openclaw") {
+      return NextResponse.json(
+        { error: `${runtimeDisplayName(selectedRuntime.runtimeType)} schedule toggles are not supported yet` },
+        { status: 501 }
+      );
     }
 
     const { runtime, jobs } = await listCronJobsFromRuntime();
@@ -72,4 +86,9 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
+}
+
+function runtimeDisplayName(runtimeType: string | null | undefined) {
+  if (runtimeType === "hermes") return "Hermes Agent API";
+  return runtimeType || "Runtime";
 }

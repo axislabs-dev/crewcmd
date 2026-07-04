@@ -3,6 +3,7 @@ import type {
   RuntimeConnectionRecord,
   RuntimeDiscoveredModel,
   RuntimeHealthResult,
+  RuntimeJobActionResult,
   RuntimeJobListResult,
   RuntimeJobResult,
   RuntimeJobWriteInput,
@@ -341,6 +342,18 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     return normalizeJobResult(response, normalizedJobId);
   }
 
+  async pauseJob(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult> {
+    return this.postJobAction(runtime, jobId, "pause", "paused");
+  }
+
+  async resumeJob(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult> {
+    return this.postJobAction(runtime, jobId, "resume", "resumed");
+  }
+
+  async runJobNow(runtime: RuntimeConnectionRecord, jobId: string): Promise<RuntimeJobActionResult> {
+    return this.postJobAction(runtime, jobId, "run", "started");
+  }
+
   async forkSession(
     runtime: RuntimeConnectionRecord,
     sessionId: string,
@@ -429,6 +442,26 @@ export class HermesRuntimeProvider implements RuntimeProvider {
     if (isRecord(response) && Array.isArray(response.data)) return response.data;
     if (isRecord(response) && Array.isArray(response.items)) return response.items;
     return [];
+  }
+
+  private async postJobAction(
+    runtime: RuntimeConnectionRecord,
+    jobId: string,
+    action: "pause" | "resume" | "run",
+    fallbackStatus: string
+  ): Promise<RuntimeJobActionResult> {
+    const normalizedJobId = normalizeString(jobId);
+    if (!normalizedJobId) throw new Error("jobId is required");
+
+    const rootUrl = runtimeHttpRoot(runtime);
+    const response = await fetchHermesJson(
+      rootUrl,
+      runtime.authToken,
+      `/api/jobs/${encodeURIComponent(normalizedJobId)}/${action}`,
+      { auth: true, method: "POST" }
+    );
+
+    return normalizeJobActionResult(response, normalizedJobId, fallbackStatus);
   }
 }
 
@@ -629,6 +662,24 @@ function normalizeJobResult(response: unknown, fallbackJobId?: string): RuntimeJ
   return {
     jobId,
     job,
+    raw: response,
+  };
+}
+
+function normalizeJobActionResult(
+  response: unknown,
+  fallbackJobId: string,
+  fallbackStatus: string
+): RuntimeJobActionResult {
+  if (!isRecord(response)) {
+    return { jobId: fallbackJobId, status: fallbackStatus, runId: null, raw: response };
+  }
+  const job = response.job;
+
+  return {
+    jobId: normalizeRecordId(job) ?? normalizeString(response.job_id) ?? normalizeString(response.id) ?? fallbackJobId,
+    status: normalizeString(response.status) ?? (isRecord(job) ? normalizeString(job.status) : null) ?? fallbackStatus,
+    runId: normalizeString(response.run_id),
     raw: response,
   };
 }

@@ -145,6 +145,12 @@ export interface RuntimeSessionChatResult {
   raw: unknown;
 }
 
+export interface RuntimeSessionChatStreamResult {
+  sessionId: string;
+  contentType: string;
+  stream: ReadableStream<Uint8Array>;
+}
+
 export interface RuntimeProvider {
   readonly type: SupportedRuntimeType;
   readonly displayName: string;
@@ -192,4 +198,9 @@ export interface RuntimeProvider {
     sessionId: string,
     input: RuntimeSessionChatInput
   ): Promise<RuntimeSessionChatResult>;
+  streamSessionChat?(
+    runtime: RuntimeConnectionRecord,
+    sessionId: string,
+    input: RuntimeSessionChatInput
+  ): Promise<RuntimeSessionChatStreamResult>;
 }

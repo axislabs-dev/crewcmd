@@ -1,450 +1,590 @@
-# Voice Agent Mode — Long-Form Input Reliability (v1)
+# Voice Turn Reliability for Hands-Free Agent Mode
 
-> Scope: CrewCmd voice agent mode in `src/components/chat/voice-agent.tsx` and STT handoff in `src/app/api/stt/route.ts`.
+> Status: design proposal
+> Scope: long-form hands-free voice turns across recorded voice agent mode and live/realtime agent mode.
+> Related: `docs/specs/native-background-agent-session.md`, `docs/plans/realtime-voice-openclaw-passthrough.md`.
 
 ## Problem Statement
 
-Today, agent mode captures a single browser-side recording until VAD decides speech has ended, then uploads the entire blob to `/api/stt` and waits for a single transcript before handing text to `/api/chat`.
+Roger is using CrewCMD hands-free in agent mode while driving. Voice input appears to cut off after a similar number of characters or words, not only after pauses. That points to more than ordinary VAD silence handling: a browser, STT provider, request body, transcript field, realtime event, gateway relay, or chat handoff may be truncating a single large audio/transcript unit, or the system may be finalizing a voice turn before the user is done.
 
-That is fragile for long-form hands-free use:
+CrewCMD currently has two voice paths with different reliability risks:
 
-- a long utterance is buffered entirely in memory before any transcript exists
-- a single failed upload/transcription loses the whole turn
-- there is no chunk identity, retry, or resumable delivery
-- there is no user-visible indication that partial speech was captured but not yet committed
-- server-side STT is synchronous and request-scoped, so large uploads are more likely to hit timeouts / provider limits / network failures
+- **Recorded voice agent mode** in `src/components/chat/voice-agent.tsx` records one browser-side blob until VAD stops the turn, posts it to `/api/stt`, waits for one transcript, then calls the existing chat send path.
+- **Live/realtime agent mode** starts an OpenClaw realtime session through `src/lib/realtime-voice-client.ts`, streams PCM frames through `RealtimeGatewayRelaySession`, persists only final transcript events, and cancels assistant output on local barge-in detection.
 
-This makes driving-style continuous voice interaction unreliable and can fail silently.
+Both paths lack a shared voice-turn reliability contract. They do not consistently track turn IDs, segment indexes, finalization gates, partial failure states, transcript length limits, interruption causality, or mobile lifecycle constraints.
 
-## User Story
+## Goals
 
-As a user in agent mode, I can keep speaking naturally for an extended turn, including pauses, and CrewCmd will:
+1. Never silently lose or truncate a long hands-free user turn.
+2. Make recorded STT mode resilient to audio/request/transcript length caps by chunking capture and STT.
+3. Make live/realtime mode resilient to premature turn finalization, lost final transcript events, relay disconnects, and accidental assistant interruption.
+4. Share turn IDs, sequencing, assembly, diagnostics, and UI states across both modes.
+5. Keep mode-specific adapters small: blob STT mode owns `MediaRecorder` and `/api/stt`; realtime mode owns PCM relay and realtime events.
+6. Support mobile/iOS browser and Capacitor constraints without pretending JavaScript timers keep running while a WebView is suspended.
+7. Make the first implementation PR obvious and reviewable.
 
-- capture my speech incrementally instead of as one giant blob
-- continue making forward progress even if one chunk upload/transcription fails
-- never silently drop a long utterance
-- clearly show when part of my speech is pending, retrying, or needs confirmation
-- only send a final chat turn once the system has either assembled a complete transcript or explicitly surfaced a partial-failure state
+## Non-Goals
 
-## Acceptance Criteria
+- Replacing the existing chat send path or OpenClaw gateway protocol.
+- Implementing provider-native streaming STT for recorded mode in the first slice.
+- Persisting raw audio permanently.
+- Cross-device recovery after browser reload.
+- Wake-word detection while the app is terminated.
+- Solving native iOS background capture in this document; that remains covered by `native-background-agent-session.md`.
 
-### Functional
+## Current Code Path Findings
 
-1. Agent mode records audio in rolling chunks while voice activity remains active.
-2. Each chunk is assigned a `turnId` and `chunkIndex` on the client.
-3. Chunks are uploaded independently to `/api/stt` with enough metadata for ordered reassembly.
-4. The client maintains an in-progress transcript buffer for the active voice turn.
-5. If one chunk transcription fails, the system retries that chunk without discarding successful sibling chunks.
-6. When speech ends, the turn is finalized only after all chunks are either:
-   - transcribed successfully, or
-   - marked failed and surfaced to the user.
-7. If a turn finalizes with failed chunks, the UI shows a clear partial-capture warning before sending, with an action such as:
-   - `Send partial transcript`
-   - `Retry missing audio`
-   - `Discard turn`
-8. If all chunks succeed, the assembled transcript is sent once to the existing `sendMessage` / `/api/chat` flow.
-9. The system does not silently auto-drop a turn because it exceeded a single upload/transcription limit.
+### Recorded Voice Agent Mode
 
-### Reliability
+Relevant files:
 
-1. A transient failure for one chunk does not invalidate the entire turn.
-2. Duplicate chunk uploads are idempotent at the client turn-assembly layer.
-3. If the network drops during capture, the UI reflects `Reconnecting / retrying voice chunk` instead of returning to idle silently.
-4. The client emits telemetry for chunk lifecycle and final turn outcome.
+- `src/components/chat/voice-agent.tsx`
+- `src/components/chat/voice-recorder.tsx`
+- `src/app/api/stt/route.ts`
 
-### Non-Goals for v1
+Current behavior:
 
-- full duplex streaming STT with token-by-token interim transcripts
-- backend persistence of raw audio chunks
-- cross-device resumption after browser reload
-- speaker diarization
-- semantic punctuation repair beyond what STT returns
-- redesign of the OpenClaw agent chat transport
+- `VoiceAgent` starts `MediaRecorder` when VAD sees speech.
+- `recorder.start(100)` emits small `dataavailable` blobs, but the client only appends them to `chunksRef`.
+- On VAD silence, `recorder.stop()` builds one large `Blob` and posts one multipart request to `/api/stt`.
+- `/api/stt` accepts one `audio` blob, writes one temp file, tries local Whisper with a 30s transcription timeout, then optionally falls back to OpenAI Whisper.
+- The response is a single `{ text, provider }` payload with no chunk metadata, partial result, retry contract, or structured length diagnostic.
 
-## Current Failure Points
+Failure risks:
 
-## 0. iOS/native audio-session gaps
+- Long speech becomes one memory blob, one HTTP request, one provider call, and one transcript handoff.
+- Any upload, timeout, provider cap, temp-file decode failure, or response truncation loses the whole turn.
+- VAD finalization and STT failure both collapse into generic UI states.
+- There is no transcript length guard before the normal chat send flow.
 
-CrewCmd already has browser-side voice agent mode, wake-lock reacquisition, Media Session metadata, and mobile push recovery. The missing mobile/iOS layer was native audio-session hardening:
+### Live / Realtime Agent Mode
 
-- no generated `NSMicrophoneUsageDescription` contract for iOS review/runtime prompts
-- no generated `UIBackgroundModes = audio` contract for long-running voice sessions
-- no app-delegate `AVAudioSession` setup for `playAndRecord` + `voiceChat`
-- web capture assumed `audio/webm`, which is not the best compatibility target for iOS WebKit/Capacitor
+Relevant files:
 
-Fixes added in this branch:
+- `src/lib/realtime-voice-client.ts`
+- `src/lib/realtime-voice-gateway-relay.ts`
+- `src/lib/realtime-voice-audio.ts`
+- `src/components/chat/voice-agent.tsx`
+- `src/app/chat/page.tsx`
 
-- `apps/mobile/scripts/ensure-ios-audio-session.mjs` idempotently patches the iOS native project when present and writes `.generated/ios-audio-session.json` when it is not present yet
-- `apps/mobile/scripts/apply-branding.mjs` runs that guard during normal mobile branding
-- `src/lib/audio-capture.ts` centralizes MediaRecorder format detection and prefers iOS-compatible `audio/mp4`/`.m4a` when WebM is unavailable
-- `VoiceAgent` and `VoiceRecorder` now upload the actual recorder MIME type and matching filename instead of hard-coding `audio.webm`
+Current behavior:
 
-Platform limit: if the web view process is fully suspended by iOS after backgrounding, browser JavaScript VAD/timers cannot keep progressing indefinitely. The native audio session/background-audio mode keeps CrewCmd in the correct class of app behavior, but true indefinite background hot-mic behavior may still require a native audio capture plugin if testing shows WebKit suspends the capture loop too aggressively.
+- `VoiceAgent` starts realtime mode when `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE=1`, a runtime ID exists, and OpenClaw returns a `gateway-relay` transport.
+- `RealtimeGatewayRelaySession` captures mic audio with `getUserMedia`, converts audio frames to PCM16, posts base64 audio chunks via `/talk/realtime/relay`, and receives relay events over SSE.
+- Realtime transcript events are forwarded to chat; `src/app/chat/page.tsx` persists only `final` transcript events.
+- Local barge-in detection cancels assistant output and sends `cancelOutput`.
 
-## 1. Single-blob capture in agent mode
+Failure risks:
 
-Current code in `src/components/chat/voice-agent.tsx`:
+- PCM frame posts are fire-and-forget; failures call `onError` but do not sequence, retry, or mark missing audio ranges.
+- Transcript finality is provider/relay-driven. A premature final event can create a durable chat message before the user has finished.
+- Lost SSE events, relay reconnects, or provider turn caps can drop final transcript state without an assembled local turn state.
+- Barge-in can cancel assistant audio while user speech is still uncertain, and the cancellation is not tied to a turn/segment diagnostic.
+- Mobile browser throttling can pause frame upload or event handling without a clear partial-turn status.
 
-- starts `MediaRecorder`
-- accumulates `chunksRef.current`
-- stops only after `SILENCE_END_MS`
-- posts one `audio.webm` blob to `/api/stt`
+## Design Principle: One Reliability Layer, Two Adapters
 
-Risk:
+Add a shared **voice-turn reliability layer** that owns the lifecycle of a spoken user turn, independent of transport.
 
-- long speech means larger blob, longer request, higher timeout probability
-- one failed request loses the whole utterance
+```text
+Voice UI / Agent Mode
+  -> Shared VoiceTurnCoordinator
+      - turn IDs and segment IDs
+      - sequencing and idempotency
+      - active/finalizing/partial-failed/sent state
+      - transcript assembly and length guardrails
+      - finalization gates
+      - diagnostics and telemetry
+      - mobile lifecycle status
+      -> BlobSttAdapter
+          - MediaRecorder chunk rotation
+          - /api/stt chunk upload
+          - per-chunk retry
+      -> RealtimeVoiceAdapter
+          - PCM frame sequencing
+          - relay event correlation
+          - transcript delta/final assembly
+          - interruption/cancel correlation
+```
 
-## 2. `/api/stt` is single-request, all-or-nothing
+The coordinator should be a plain TypeScript module or hook with deterministic unit tests. UI components should subscribe to coordinator state rather than deriving long-form reliability from `listening`, `processing`, and `speaking` alone.
 
-Current `src/app/api/stt/route.ts`:
-
-- accepts one `audio` file
-- writes temp file
-- runs local Whisper or OpenAI transcription synchronously
-- returns one final `text`
-
-Risk:
-
-- no chunk metadata
-- no partial transcript response
-- no retry semantics beyond redoing the whole request
-- local whisper timeout is hard-coded to `30000ms`
-
-## 3. No explicit turn state machine
-
-Agent mode currently has UI states like `listening`, `processing`, `speaking`, but no structured state for:
-
-- active turn ID
-- pending chunk count
-- chunk retry count
-- partial transcript readiness
-- partial failure requiring user decision
-
-Risk:
-
-- failures collapse into generic `Transcription failed. Try speaking again.`
-- the user cannot tell whether some speech was preserved
-
-## 4. No protection against oversized handoff to `/api/chat`
-
-Once transcript text is returned, it is passed directly into normal chat send flow. For pathological transcripts, we currently have no explicit transcript-length guard, segmentation rule, or voice-specific warning.
-
-## Recommended v1 Architecture
-
-## Overview
-
-Keep the existing agent chat transport. Fix reliability one layer earlier by adding **chunked voice-turn capture and transcript assembly on the client**, with **chunk-aware STT** on the server.
-
-### Why this is the right v1
-
-- smallest surface area change
-- preserves existing `/api/chat` and OpenClaw integration
-- solves the most likely failure mode: long utterances being treated as one fragile request
-- enables retries and visibility without committing to full realtime STT infra yet
-
-## Client Architecture
-
-Add a voice-turn coordinator inside `voice-agent.tsx` or a small extracted hook such as `useVoiceTurnCapture()`.
-
-### Proposed client model
+## Shared Voice Turn Model
 
 ```ts
-type VoiceTurnState = {
+type VoiceMode = "recorded-stt" | "realtime-relay" | "native-recorded" | "native-realtime";
+
+type VoiceTurnStatus =
+  | "idle"
+  | "capturing"
+  | "assistant-speaking"
+  | "interrupted"
+  | "finalizing"
+  | "ready"
+  | "partial-failed"
+  | "needs-confirmation"
+  | "sending"
+  | "sent"
+  | "discarded";
+
+type VoiceSegmentStatus =
+  | "queued"
+  | "uploading"
+  | "streaming"
+  | "transcribed"
+  | "retrying"
+  | "missing"
+  | "failed"
+  | "cancelled";
+
+type VoiceTurn = {
   turnId: string;
+  mode: VoiceMode;
+  status: VoiceTurnStatus;
   startedAt: number;
-  status: "capturing" | "finalizing" | "ready" | "partial-failed" | "sending";
-  chunks: Array<{
-    chunkIndex: number;
-    status: "queued" | "uploading" | "transcribed" | "retrying" | "failed";
-    attemptCount: number;
-    durationMs: number;
-    transcriptText?: string;
-    error?: string;
-  }>;
+  endedAt?: number;
+  lastInputAt?: number;
+  finalizedBy?: "vad" | "provider" | "user-stop" | "relay-close" | "visibility" | "error";
+  segments: VoiceSegment[];
   assembledTranscript: string;
-  pendingChunks: number;
-  failedChunks: number;
+  transcriptChars: number;
+  pendingSegments: number;
+  failedSegments: number;
+  warnings: VoiceTurnWarning[];
+};
+
+type VoiceTurnWarning = {
+  code: "transcript_too_long" | "segment_missing" | "capture_degraded" | "background_unverified";
+  message: string;
+  requiresConfirmation: boolean;
+};
+
+type VoiceSegment = {
+  turnId: string;
+  segmentIndex: number;
+  transportSequenceStart?: number;
+  transportSequenceEnd?: number;
+  status: VoiceSegmentStatus;
+  attemptCount: number;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+  sizeBytes?: number;
+  transcriptText?: string;
+  final?: boolean;
+  errorCode?: string;
 };
 ```
 
-### Chunking strategy
+### Coordinator Responsibilities
 
-While recording is active:
+- Create a `turnId` on first confirmed user speech.
+- Assign monotonic `segmentIndex` values for recorded chunks and realtime transcript/audio windows.
+- Reject duplicate segment completions by `turnId + segmentIndex + attempt`.
+- Track all pending work before final send.
+- Assemble transcripts deterministically in segment order.
+- Gate finalization until the active mode reports an end-of-turn signal and all required segments are resolved.
+- Surface partial failure instead of auto-sending a questionable transcript.
+- Record why a turn ended and whether assistant output was interrupted.
+- Enforce transcript size guardrails before calling the chat send path.
 
-- create a new `turnId` when speech starts
-- use `MediaRecorder.start(timeslice)` with a chunk interval of roughly `4000-8000ms`
-- keep recording continuously across chunks until VAD decides the turn is over
-- on each `dataavailable`, enqueue the chunk for async upload/transcription immediately
+## Recorded STT Adapter
 
-Notes:
+The recorded adapter should keep the current `/api/chat` handoff but stop treating a long utterance as one blob.
 
-- This is not “stop speaking every 5 seconds”. `MediaRecorder` can emit periodic blobs during a continuous recording.
-- Keep a small final-tail chunk on stop so the last audio is not stranded.
+### Capture Strategy
 
-### Finalization strategy
+- Use `MediaRecorder.start(timeslice)` with a production chunk interval of `4000-8000ms`; keep the current short internal `dataavailable` cadence only if needed to build stable chunks.
+- Rotate uploadable chunks while the user keeps speaking; do not require the user to pause every few seconds.
+- Keep a final tail chunk on stop so trailing speech is not stranded.
+- Retain chunk blobs in memory until the turn is sent, discarded, or the user resolves a partial failure.
+- Bound retained audio by both time and bytes; if exceeded, move to `needs-confirmation` with a clear warning.
 
-When VAD ends the turn:
+### `/api/stt` Contract
 
-1. stop recorder
-2. flush final chunk
-3. mark turn `finalizing`
-4. wait for all outstanding chunk jobs
-5. assemble transcript in `chunkIndex` order
-6. if no failed chunks, call existing `onTranscript(assembledTranscript)`
-7. if any failed chunks, surface partial-failure UI instead of silently sending
-
-### Retry policy
-
-Per chunk:
-
-- retry up to `2` additional times (`3` total attempts)
-- exponential backoff: `500ms`, `1500ms`
-- retry on network errors and `5xx`
-- do not blindly retry `4xx` except `408` / `429`
-- if offline, pause retries until connectivity returns
-
-### UX states
-
-Add agent-mode copy for voice capture reliability:
-
-- `Listening…`
-- `Transcribing speech… 3 parts pending`
-- `Retrying 1 failed part…`
-- `Part of your speech could not be transcribed`
-- `Send partial transcript` / `Retry missing part` / `Discard`
-
-Minimum visible indicators:
-
-- pending chunk count while finalizing
-- partial transcript preview when failed
-- non-silent error banner
-
-## Server Architecture
-
-Extend `/api/stt` to accept chunk-aware metadata while remaining backward-compatible.
-
-### Request shape
-
-Continue multipart upload with `audio`, plus optional fields:
+Keep existing callers working, but accept optional metadata:
 
 - `turnId`
-- `chunkIndex`
-- `isFinalChunk`
+- `segmentIndex`
+- `isFinalSegment`
 - `durationMs`
 - `mimeType`
+- `captureStartedAt`
+- `captureEndedAt`
 
-### Response shape
+Response shape:
 
 ```json
 {
-  "text": "partial transcript for this chunk",
-  "provider": "local" | "openai",
-  "turnId": "...",
-  "chunkIndex": 4,
-  "isFinalChunk": false,
-  "durationMs": 5230
+  "text": "transcript for this segment",
+  "provider": "local",
+  "turnId": "voice_turn_123",
+  "segmentIndex": 4,
+  "isFinalSegment": false,
+  "durationMs": 5230,
+  "elapsedMs": 821
 }
 ```
 
-### Backend behavior for v1
+Error shape:
 
-- transcribe each chunk independently
-- return transcript for that chunk only
-- do not persist server-side chunk assembly yet
-- log chunk metadata and result status for telemetry
-- keep existing non-chunk callers working
+```json
+{
+  "error": "Transcription timed out",
+  "errorCode": "provider_timeout",
+  "retryable": true,
+  "turnId": "voice_turn_123",
+  "segmentIndex": 4
+}
+```
 
-### STT backend adjustments
+### Retry Policy
 
-Recommended small changes in `src/app/api/stt/route.ts`:
+- Retry network errors, `408`, `429`, and `5xx`.
+- Do not retry validation errors or unsupported audio containers without changing the request.
+- Use 3 total attempts with backoff around `500ms`, `1500ms`, and `3500ms`.
+- Pause retries while offline and resume on `online`.
+- Preserve successful sibling segments.
 
-1. raise or make configurable local whisper timeout for chunk jobs
-2. return structured error codes (`provider_timeout`, `decode_failed`, `backend_unavailable`)
-3. include provider and elapsed time in success/failure logs
-4. validate chunk metadata and echo it back in the response
+### Assembly Rules
 
-## Transcript Assembly Rules
+- Sort by `segmentIndex`.
+- Trim outer whitespace per segment.
+- Join with a single space.
+- Collapse repeated whitespace.
+- Do not attempt aggressive overlap removal until intentional overlap is introduced and tested.
 
-Chunk transcript assembly should be deterministic and conservative.
+## Realtime Voice Adapter
 
-### v1 rules
+Realtime mode should keep its low-latency relay but add enough structure to diagnose and survive long turns.
 
-- sort by `chunkIndex`
-- trim outer whitespace per chunk
-- join with a single space
-- collapse accidental double spaces
-- do not attempt aggressive deduplication in v1
+### Audio Uplink Sequencing
 
-Reason: adjacent chunk overlap handling is useful, but a clean first release should avoid clever merge logic unless overlap is intentionally introduced.
+- Attach a monotonic `audioSequence` or `frameIndex` to each PCM relay post.
+- Track send latency and failed posts by sequence range.
+- Batch small frames into bounded windows if network overhead becomes a bottleneck, but keep windows short enough for low-latency barge-in.
+- On a failed frame post, mark the sequence range `missing` and surface realtime degradation instead of silently continuing as if capture is intact.
 
-## Telemetry Requirements
+### Transcript Event Correlation
 
-Emit structured client and server logs/events for every turn.
+The relay/provider may emit interim and final transcript events. The adapter should normalize them into coordinator segments:
 
-### Client events
+- interim transcript: updates the current open segment
+- final transcript: closes a segment or turn only when the provider/relay gives a reliable end-of-turn signal
+- duplicate final transcript: idempotent update, not a second chat message
+- empty final: diagnostic event, not a turn by itself
+
+### Finalization Guard
+
+A realtime user turn should not become durable merely because one `final` transcript event arrived. The coordinator should require one of:
+
+- provider/relay event explicitly marks user turn complete
+- assistant tool call begins and all preceding user transcript segments are stable
+- a local silence/end-of-turn timeout fires after the last transcript/audio activity
+- the user manually stops realtime mode
+
+The first implementation can use a conservative grace window, for example `700-1200ms` after the last final transcript or local input activity, before persisting the user transcript.
+
+### Assistant Interruption and Barge-In
+
+When local barge-in cancels assistant output:
+
+- create or continue the active user `turnId`
+- record `interruptionId`, output playback position, and current input sequence
+- suppress echo frames as today, but log the suppressed sequence range
+- do not mark the previous assistant response as fully heard unless a mark/ack confirms playback completion
+- surface repeated false barge-ins as a mobile tuning diagnostic
+
+### Relay Reconnect / Loss
+
+For v1, if the SSE stream or relay post path fails during an active turn:
+
+- stop auto-sending realtime transcript finals
+- mark the turn `partial-failed` or `needs-confirmation`
+- leave the visible transcript preview in place
+- offer fallback to recorded STT mode for the next turn
+
+Reliable replay of live PCM after disconnect is out of scope for the first implementation unless the gateway adds an acknowledged sequence protocol.
+
+## Mobile and iOS Constraints
+
+Mobile web and Capacitor should share the coordinator but use different capture guarantees.
+
+- Foreground web capture may rely on `MediaRecorder`, `AudioContext`, `requestAnimationFrame`, and SSE while the screen is active.
+- iOS Safari/WebView may throttle or suspend JavaScript timers, audio callbacks, fetches, and EventSource while backgrounded or locked.
+- Capacitor native mode should eventually provide native turn/segment events using the contract in `native-background-agent-session.md`.
+- The UI must distinguish `foreground reliable` from `background capable`.
+- If background capture cannot be proven for the current platform, CrewCMD should say so in state text and diagnostics.
+
+Minimum mobile diagnostics:
+
+- visibility changes during active turn
+- audio context suspend/resume
+- media recorder pause/stop/error
+- EventSource close/error
+- relay post failures
+- native session availability/background capability
+- wake-lock acquire/release
+
+## UX Requirements
+
+Hands-free users need short, decisive states that do not require reading while driving.
+
+Required states:
+
+- `Listening`
+- `Capturing long turn`
+- `Transcribing 3 parts`
+- `Retrying 1 part`
+- `Live voice reconnecting`
+- `Partial speech captured`
+- `Review before sending`
+
+Required actions when a turn is partial:
+
+- `Send captured text`
+- `Retry missing audio`
+- `Discard`
+
+Rules:
+
+- Never return to idle after a failed long turn without a visible reason.
+- Never auto-send a transcript when required segments are missing.
+- Do not auto-split long transcripts into multiple chat messages in v1; warn and ask for confirmation.
+- Keep partial transcript preview available until the user resolves the turn or starts a new one.
+
+## Telemetry and Diagnostics
+
+Use one shared event vocabulary and include `mode` on every event.
+
+Client events:
 
 - `voice_turn_started`
-  - `turnId`
-  - `voiceMode`
-- `voice_chunk_enqueued`
-  - `turnId`, `chunkIndex`, `durationMs`, `sizeBytes`
-- `voice_chunk_attempt`
-  - `turnId`, `chunkIndex`, `attemptCount`
-- `voice_chunk_succeeded`
-  - `turnId`, `chunkIndex`, `latencyMs`, `provider`
-- `voice_chunk_failed`
-  - `turnId`, `chunkIndex`, `attemptCount`, `errorCode`
+- `voice_segment_created`
+- `voice_segment_sent`
+- `voice_segment_retrying`
+- `voice_segment_transcribed`
+- `voice_segment_missing`
+- `voice_segment_failed`
+- `voice_turn_finalization_requested`
 - `voice_turn_ready`
-  - `turnId`, `chunkCount`, `transcriptChars`
+- `voice_turn_needs_confirmation`
 - `voice_turn_partial_failed`
-  - `turnId`, `chunkCount`, `failedChunks`, `partialTranscriptChars`
 - `voice_turn_sent`
-  - `turnId`, `chunkCount`, `transcriptChars`
 - `voice_turn_discarded`
-  - `turnId`, `reason`
+- `voice_realtime_interruption`
+- `voice_realtime_relay_error`
+- `voice_mobile_lifecycle_change`
 
-### Server logs / metrics
+Server events:
 
-- `stt_chunk_received`
-- `stt_chunk_transcribed`
-- `stt_chunk_failed`
+- `stt_segment_received`
+- `stt_segment_transcribed`
+- `stt_segment_failed`
+- `realtime_relay_audio_received`
+- `realtime_relay_audio_failed`
+- `realtime_relay_transcript_event`
+- `realtime_relay_turn_finalized`
 
-Include:
+Common fields:
 
 - `turnId`
-- `chunkIndex`
+- `mode`
+- `segmentIndex`
+- `audioSequenceStart`
+- `audioSequenceEnd`
 - `durationMs`
 - `sizeBytes`
+- `attemptCount`
 - `provider`
 - `elapsedMs`
-- `outcome`
-- `statusCode` / `errorCode`
+- `errorCode`
+- `retryable`
+- `finalizedBy`
+- `transcriptChars`
+- `userAgent`
+- `visibilityState`
+- `nativeBackgroundCapable`
 
-## UX Fallback Requirements
+Diagnostics should be useful without raw audio. Do not log full transcript text by default; log character counts and hashes only when needed.
 
-If reliability cannot be guaranteed, the user should know exactly what happened.
+## Acceptance Criteria
 
-### Required fallback behavior
+### Shared Reliability
 
-1. **Backend unavailable before capture**
-   - current behavior may fall back to browser STT in tap-to-record mode
-   - in agent mode, do not silently promise reliability if only browser speech fallback exists
-   - show: `Reliable long-form voice requires server speech transcription. Agent mode may be limited right now.`
+1. Every captured user voice turn has a stable `turnId`.
+2. Every audio/transcript unit has an ordered segment or sequence identity.
+3. Duplicate segment completions are idempotent.
+4. A turn is sent only after finalization gates pass.
+5. Missing segments create a visible partial-failure or confirmation state.
+6. Transcript length guardrails prevent silent chat handoff truncation.
+7. Client diagnostics identify whether a turn ended by VAD, provider finality, user stop, relay close, visibility change, or error.
 
-2. **Partial turn failure after capture**
-   - retain transcribed chunks in memory
-   - present partial transcript
-   - allow retry of missing chunks if raw chunk blobs are still retained locally
+### Recorded STT Mode
 
-3. **Transcript too large for a single chat send**
-   - split into numbered sequential user messages only if a defined size threshold is exceeded
-   - otherwise warn and request confirmation
+1. Long speech is transcribed from rolling chunks instead of one blob.
+2. One failed chunk can retry without discarding successful chunks.
+3. `/api/stt` remains backward-compatible for single-blob callers.
+4. `/api/stt` returns structured error codes and echoes chunk metadata.
+5. Final transcript assembly is deterministic and tested.
 
-For v1, preferred path is **warn + manual confirm**, not automatic multi-message splitting.
+### Realtime Mode
 
-## In Scope
+1. PCM uplink frames or windows are sequenced and measured.
+2. Relay post and SSE failures move active turns into a visible degraded state.
+3. Interim/final realtime transcripts are normalized before durable persistence.
+4. A single premature final transcript event cannot immediately commit a long user turn.
+5. Barge-in cancellation records the active user turn and interruption diagnostic.
 
-- chunked recording in voice agent mode
-- per-chunk STT upload/transcription
-- turn/chunk state tracking in client
-- per-chunk retries with backoff
-- partial-failure UI
-- telemetry for chunk and turn lifecycle
-- backward-compatible `/api/stt` metadata support
-- modest STT timeout/error-code improvements
+### Mobile
 
-## Out of Scope
+1. Foreground web reliability and native background capability are reported separately.
+2. Visibility/audio-context/media-recorder/SSE lifecycle changes are recorded during active turns.
+3. iOS limitations are visible in diagnostics and user state, not hidden as generic transcription failures.
 
-- websocket or bidirectional streaming STT provider integration
-- storing audio chunks in DB/object storage
-- server-side turn assembly service
-- transcript confidence scoring
-- multilingual routing or language auto-detect
-- redesigning VAD thresholds beyond small tuning needed for chunking
-- changes to OpenClaw gateway chat protocol
+## Phased Implementation Slices
 
-## Suggested Implementation Plan
+### PR 1: Shared Voice Turn Types and Recorded STT Metadata
 
-### Step 1 — Chunk-aware STT contract
+Files likely touched:
 
-Update `/api/stt` to:
-
-- accept optional chunk metadata fields
-- echo chunk metadata in response
-- return structured errors
-- add logging around provider choice and latency
-
-### Step 2 — Client turn coordinator
-
-Refactor `voice-agent.tsx` to maintain an active voice turn object with:
-
-- `turnId`
-- `chunkIndex`
-- pending upload map
-- retry counters
-- assembled partial transcript
-
-### Step 3 — Rolling chunk upload
-
-Switch continuous recording to periodic `dataavailable` handling and enqueue chunk transcription jobs while recording continues.
-
-### Step 4 — Finalization + partial failure UX
-
-On silence/end:
-
-- stop capture
-- await outstanding chunks
-- assemble transcript
-- either send completed transcript or show partial-failure action sheet/banner
-
-### Step 5 — Telemetry + guardrails
-
-Add console/server logs first; wire to analytics later if desired.
-
-## Open Questions / Unknowns
-
-1. **Practical chunk duration:** start with `~5s`, but test on mobile Safari and Chrome while screen-locked / navigating.
-2. **Browser behavior:** confirm `MediaRecorder.start(timeslice)` is stable in the mobile browsers Roger actually uses while driving.
-3. **Provider limits:** define a transcript char threshold before `/api/chat` should warn instead of send blindly.
-4. **Chunk retry retention:** if a failed chunk should be retryable after turn end, keep the original blob until the user resolves the turn.
-5. **Offline behavior:** whether to queue unsent chunks briefly or require the user to retry once connectivity returns.
-
-## Recommended First Task Breakdown
-
-### Task A
-**Title:** Add chunk-aware STT contract and telemetry for voice turns
+- `src/lib/voice-turn-reliability.ts`
+- `src/app/api/stt/route.ts`
+- focused tests for metadata parsing, error shapes, and assembly helpers
 
 Deliverables:
 
-- `/api/stt` metadata support
-- structured error codes
-- latency/provider logging
-- compatibility with existing `VoiceRecorder`
+- shared turn/segment types
+- transcript assembly helper
+- `/api/stt` chunk metadata parsing and response echo
+- structured STT error codes
+- diagnostics fields, still compatible with existing callers
 
-### Task B
-**Title:** Implement chunked long-form capture and retry flow in voice agent mode
+### PR 2: Chunked Recorded Agent Capture
 
-Deliverables:
+Files likely touched:
 
-- turn/chunk state machine
-- rolling chunk uploads
-- finalize/wait/assemble behavior
-- partial failure UI
-
-### Task C
-**Title:** Add transcript size guardrails and voice reliability UX copy
+- `src/components/chat/voice-agent.tsx`
+- `src/lib/voice-turn-reliability.ts`
+- component/unit tests as feasible
 
 Deliverables:
 
-- transcript length threshold
-- warning/confirm flow for oversized turn send
-- clear status/error copy in agent mode
+- rolling chunk upload from agent mode
+- per-chunk retry
+- finalization gate before `onTranscript`
+- partial-failure UI state
+- transcript size confirmation
 
-## Recommendation
+### PR 3: Realtime Turn Normalization
 
-Yes — this should become a Forge implementation task next.
+Files likely touched:
 
-Best next task title:
+- `src/lib/realtime-voice-gateway-relay.ts`
+- `src/lib/realtime-voice-client.ts`
+- `src/app/chat/page.tsx`
+- realtime tests
 
-**Implement reliable chunked long-form voice capture for agent mode**
+Deliverables:
+
+- sequence metadata on PCM relay posts where protocol permits
+- normalized transcript events through the shared coordinator
+- final transcript grace/finalization gate
+- relay failure degradation state
+- interruption diagnostics
+
+### PR 4: Mobile Reliability Diagnostics
+
+Files likely touched:
+
+- `src/components/chat/voice-agent.tsx`
+- `src/lib/native-voice-session.ts`
+- mobile/native docs or tests as needed
+
+Deliverables:
+
+- lifecycle diagnostics during active turns
+- explicit foreground/background capability status
+- handoff path for native turn events to the shared coordinator
+
+## Test Plan
+
+Unit tests:
+
+- transcript assembly orders segments and ignores duplicates
+- finalization refuses to send with pending or failed required segments
+- retry policy classifies network, `408`, `429`, `5xx`, and validation failures correctly
+- realtime transcript normalization handles interim, final, duplicate final, empty final, and premature final events
+- barge-in diagnostics include interruption and active turn IDs
+
+Integration tests:
+
+- `/api/stt` accepts old single-blob requests unchanged
+- `/api/stt` echoes chunk metadata for chunked requests
+- `/api/stt` returns structured retryable errors for timeout-like failures
+- recorded agent mode sends exactly one assembled transcript after all chunks succeed
+- recorded agent mode shows partial failure if one chunk exhausts retries
+- realtime relay failure prevents silent durable transcript persistence
+
+Manual/mobile validation:
+
+- 2, 5, and 10 minute hands-free monologues in desktop Chrome
+- same tests in mobile Safari or Capacitor foreground
+- network drop during recorded chunk upload
+- network drop during realtime relay/SSE
+- assistant speaking while user barges in
+- lock/background/resume where platform permits, verifying state text and diagnostics
+
+## Production Validation Plan
+
+1. Ship diagnostics first behind existing voice mode behavior.
+2. Enable chunked recorded STT for local/dev users behind a feature flag.
+3. Record per-turn metrics: chunk count, retry count, failed chunks, finalization reason, transcript chars, and time to send.
+4. Compare truncation reports before/after chunking.
+5. Roll out realtime finalization gating behind `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE` or a narrower runtime capability flag.
+6. Keep a visible fallback to recorded STT when realtime relay quality degrades.
+7. Review logs for any spike in partial-failure prompts before making chunked mode default.
+
+Success metrics:
+
+- no silent long-turn drops in manual driving-style tests
+- partial failures are visible and recoverable
+- P95 recorded turn finalization remains acceptable for normal utterances
+- realtime premature-final reports trend down
+- diagnostics can identify whether failures are capture, upload, STT, relay, finality, or chat handoff
+
+## Risks
+
+- Independent STT chunks may introduce punctuation gaps or repeated words at boundaries.
+- More requests may increase server load and provider cost.
+- Retaining retryable audio chunks in memory can pressure mobile browsers.
+- Conservative realtime finalization gates may delay visible chat persistence.
+- Provider realtime protocols may not expose enough turn metadata for perfect finalization.
+- iOS background behavior cannot be guaranteed from WebView JavaScript alone.
+- Too much UI warning can distract hands-free users if not designed carefully.
+
+Mitigations:
+
+- Start with 4-8 second chunks and no overlap.
+- Bound retained chunks by time and bytes.
+- Keep retries small and observable.
+- Use feature flags for recorded chunking and realtime gating.
+- Prefer short state text and optional review surfaces.
+- Route true background capture through the native session design.
+
+## First Implementation PR
+
+Recommended first PR:
+
+**Title:** `feat: add voice turn reliability primitives and STT metadata`
+
+Reviewable scope:
+
+- create the shared turn/segment model and transcript assembly helper
+- extend `/api/stt` with optional metadata echo and structured error shape
+- add unit tests for assembly, idempotency, and metadata parsing
+- do not change capture behavior yet
+
+That PR gives later recorded and realtime adapters a common contract without widening the first implementation into UI, audio capture, realtime relay, and server behavior all at once.

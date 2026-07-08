@@ -5,7 +5,7 @@ import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-
 import { db, withRetry } from "@/db";
 import { agents, channelMembers, channels, chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
 import { eq, desc, and, isNull, sql } from "drizzle-orm";
-import { publishChatEvent, publishChatProgressEvent } from "@/lib/chat-pubsub";
+import { appendRealtimeChatMessageEvent } from "@/lib/realtime-events";
 import { isAssistantDeliveryPlaceholder, selectRecoveredAssistantText } from "@/lib/chat-recovery";
 import { resolveCurrentUser } from "@/lib/resolve-user";
 import { sendAgentReplyNotification } from "@/lib/mobile-push";
@@ -840,19 +840,18 @@ async function persistAndPublish(
   );
 
   if (companyId) {
-    publishChatEvent({
-      id: message.id,
-      sessionId,
-      agentId: agentId.toLowerCase(),
-      companyId,
-      sessionKey: gatewaySessionKey || null,
-      channelId,
-      role,
-      content,
-      metadata: metadata || null,
-      createdAt: message.createdAt.toISOString(),
-      interrupted,
-    });
+    const [session] = await withRetry(() =>
+      db!.select().from(chatSessions)
+        .where(eq(chatSessions.id, sessionId))
+        .limit(1)
+    );
+    if (session) {
+      await appendRealtimeChatMessageEvent({
+        session,
+        message,
+        interrupted,
+      });
+    }
   }
 
   return message;
@@ -1177,7 +1176,6 @@ export async function POST(request: NextRequest) {
       };
 
       if (sessionId && companyId) {
-        const persistedPayload = payload as unknown as Record<string, unknown>;
         void persistChatProgressEvent({
           sessionId,
           companyId,
@@ -1186,17 +1184,6 @@ export async function POST(request: NextRequest) {
           payload: payload as Parameters<typeof persistChatProgressEvent>[0]["payload"],
         }).catch((error) => {
           console.error("[api/chat] Failed to persist chat progress:", error);
-        });
-        publishChatProgressEvent({
-          type: "chat_progress",
-          sessionId,
-          agentId: agentId.toLowerCase(),
-          companyId,
-          sessionKey,
-          channelId,
-          event,
-          at: payload.at,
-          payload: persistedPayload,
         });
       }
 

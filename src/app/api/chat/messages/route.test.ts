@@ -46,6 +46,11 @@ vi.mock("@/lib/chat-session-access", () => ({
   canAccessChatSession: (...a: unknown[]) => mockCanAccessChatSession(...a),
 }));
 
+const mockAppendRealtimeChatMessageEvent = vi.fn().mockResolvedValue(null);
+vi.mock("@/lib/realtime-events", () => ({
+  appendRealtimeChatMessageEvent: (...a: unknown[]) => mockAppendRealtimeChatMessageEvent(...a),
+}));
+
 import { GET, POST } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {

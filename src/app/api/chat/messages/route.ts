@@ -7,6 +7,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { buildChatExecutionSnapshot, loadChatExecutionEvents } from "@/lib/chat-session-events";
 import { loadThreadHistoryForParent, type ChatPersistenceScope } from "@/lib/chat-thread-history";
 import { canAccessChatSession } from "@/lib/chat-session-access";
+import { appendRealtimeChatMessageEvent } from "@/lib/realtime-events";
 
 function forbiddenResponse() {
   return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -357,10 +358,12 @@ export async function POST(request: NextRequest) {
     if ((body.companyId || body.workspaceId) && !requestedScope) return forbiddenResponse();
 
     let sessionId = body.sessionId;
+    let resolvedSession: typeof chatSessions.$inferSelect | null = null;
 
     if (sessionId) {
-      const { allowed } = await loadAccessibleSessionById(request, sessionId);
+      const { session, allowed } = await loadAccessibleSessionById(request, sessionId);
       if (!allowed) return forbiddenResponse();
+      resolvedSession = session;
     }
 
     // Auto-resolve session: find or create for this agent
@@ -386,6 +389,7 @@ export async function POST(request: NextRequest) {
       if (existing.length > 0) {
         if (!(await canAccessChatSession(request, existing[0]))) return forbiddenResponse();
         sessionId = existing[0].id;
+        resolvedSession = existing[0];
       } else {
         // Create a new session
         const [newSession] = await withRetry(() =>
@@ -398,6 +402,7 @@ export async function POST(request: NextRequest) {
           }).returning()
         );
         sessionId = newSession.id;
+        resolvedSession = newSession;
       }
     }
 
@@ -424,6 +429,13 @@ export async function POST(request: NextRequest) {
         .set({ updatedAt: new Date() })
         .where(eq(chatSessions.id, sessionId!))
     );
+
+    if (resolvedSession) {
+      await appendRealtimeChatMessageEvent({
+        session: resolvedSession,
+        message,
+      });
+    }
 
     return Response.json({ message, sessionId }, { status: 201 });
   } catch (error) {

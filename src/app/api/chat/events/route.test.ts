@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/db", () => ({
-  db: null,
+  db: {},
   withRetry: vi.fn((fn: () => unknown) => fn()),
 }));
 
@@ -25,6 +25,21 @@ vi.mock("@/lib/chat-session-access", () => ({
   canAccessChatSession: (...a: unknown[]) => mockCanAccessChatSession(...a),
 }));
 
+const mockLoadRealtimeEventsAfterCursor = vi.fn().mockResolvedValue([]);
+const mockLoadRealtimeEventBySequence = vi.fn().mockResolvedValue(null);
+const mockToClientRealtimeEvent = vi.fn((event: Record<string, unknown>) => ({
+  id: event.id,
+  sequence: String(event.sequence),
+  type: event.type,
+  payload: event.payload,
+}));
+vi.mock("@/lib/realtime-events", () => ({
+  loadRealtimeEventsAfterCursor: (...a: unknown[]) => mockLoadRealtimeEventsAfterCursor(...a),
+  loadRealtimeEventBySequence: (...a: unknown[]) => mockLoadRealtimeEventBySequence(...a),
+  normalizeRealtimeCursor: (value: string | null | undefined) => value ? Number(value) : null,
+  toClientRealtimeEvent: (event: Record<string, unknown>) => mockToClientRealtimeEvent(event),
+}));
+
 import { GET } from "./route";
 
 function makeRequest(url: string, init?: RequestInit) {
@@ -39,6 +54,8 @@ describe("GET /api/chat/events", () => {
     mockRequireAuth.mockResolvedValue(null);
     mockResolveAccessibleWorkspace.mockResolvedValue({ id: "ws-1", companyId: "co-1" });
     mockCanAccessChatSession.mockResolvedValue(true);
+    mockLoadRealtimeEventsAfterCursor.mockResolvedValue([]);
+    mockLoadRealtimeEventBySequence.mockResolvedValue(null);
   });
 
   it("requires a company scope", async () => {
@@ -73,5 +90,34 @@ describe("GET /api/chat/events", () => {
     expect(mockSubscribeChatEvents).toHaveBeenCalledTimes(1);
 
     await res.body?.cancel();
+  });
+
+  it("replays durable events after Last-Event-ID", async () => {
+    mockLoadRealtimeEventsAfterCursor.mockResolvedValueOnce([
+      {
+        id: "evt-1",
+        sequence: 42,
+        type: "chat.message.created",
+        companyId: "co-1",
+        sessionId: null,
+        payload: { message: { id: "msg-1" } },
+      },
+    ]);
+
+    const res = await GET(makeRequest("/api/chat/events?companyId=co-1", {
+      headers: { "Last-Event-ID": "41" },
+    }));
+    const reader = res.body!.getReader();
+    const chunk = await reader.read();
+    await reader.cancel();
+    const text = new TextDecoder().decode(chunk.value);
+
+    expect(mockLoadRealtimeEventsAfterCursor).toHaveBeenCalledWith({
+      companyId: "co-1",
+      lastEventId: 41,
+    });
+    expect(text).toContain("id: 42");
+    expect(text).toContain("event: chat.message.created");
+    expect(text).toContain('"sequence":"42"');
   });
 });

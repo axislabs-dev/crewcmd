@@ -6,6 +6,7 @@ import {
   jsonb,
   pgEnum,
   integer,
+  bigserial,
   boolean,
   serial,
   unique,
@@ -1124,6 +1125,36 @@ export const chatSessionEvents = pgTable("chat_session_events", {
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const realtimeEvents = pgTable("realtime_events", {
+  sequence: bigserial("sequence", { mode: "number" }).primaryKey(),
+  id: uuid("id").defaultRandom().notNull(),
+  type: text("type").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  companyId: uuid("company_id")
+    .references(() => companies.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  channelId: uuid("channel_id")
+    .references(() => channels.id, { onDelete: "set null" }),
+  sessionId: uuid("session_id")
+    .references(() => chatSessions.id, { onDelete: "cascade" }),
+  sessionKey: text("session_key"),
+  threadParentSessionKey: text("thread_parent_session_key"),
+  threadSessionKey: text("thread_session_key"),
+  actorType: text("actor_type"),
+  actorId: text("actor_id"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  companySequenceIdx: index("realtime_events_company_sequence_idx").on(table.companyId, table.sequence),
+  workspaceSequenceIdx: index("realtime_events_workspace_sequence_idx").on(table.workspaceId, table.sequence),
+  channelSequenceIdx: index("realtime_events_channel_sequence_idx").on(table.channelId, table.sequence),
+  sessionSequenceIdx: index("realtime_events_session_sequence_idx").on(table.sessionId, table.sequence),
+  createdAtIdx: index("realtime_events_created_at_idx").on(table.createdAt),
+}));
 
 // ─── Mobile Push & Chat Runs ─────────────────────────────────────
 

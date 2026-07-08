@@ -3,6 +3,14 @@
   "version": "0.1.1",
   "private": true,
   "description": "Open-source agent crew orchestration. Your crew. Your command.",
+  "keywords": [
+    "agent",
+    "orchestration",
+    "crew",
+    "multi-agent",
+    "workflow",
+    "open-source"
+  ],
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

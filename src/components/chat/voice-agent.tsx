@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useOrientationLock } from "@/hooks/use-orientation-lock";
-import { AgentVisualizer } from "@/components/chat/agent-visualizer";
+import { AgentVisualizer, type AgentVisualState } from "@/components/chat/agent-visualizer";
 import {
   buildMediaRecorderOptions,
   createBrowserAudioContext,
@@ -31,8 +31,18 @@ import {
 import { RealtimeGatewayRelaySession, type RealtimeVoiceStatus } from "@/lib/realtime-voice-gateway-relay";
 import type { AgentVoiceSettings } from "@/lib/tts-voices";
 import type { AgentVisualSettings } from "@/lib/agent-visual-settings";
+import {
+  appendVoiceSttMetadata,
+  assembleVoiceTranscript,
+  createVoiceTurnId,
+  getSttRetryDelayMs,
+  isRetryableSttFailure,
+  summarizeVoiceTurn,
+  type VoiceSegment,
+  type VoiceTurnFinalizedBy,
+} from "@/lib/voice-turn-reliability";
 
-type AgentState = "listening" | "processing" | "speaking" | "muted" | "idle";
+type AgentState = "listening" | "capturing" | "processing" | "retrying" | "partial-failed" | "speaking" | "muted" | "idle";
 
 export interface VoiceAgentRealtimeTranscript {
   role: "user" | "assistant";
@@ -82,6 +92,36 @@ const SPEECH_START_MS = 200; // ms of sound to trigger recording
 const BARGEIN_START_MS = 600; // ms of sustained loud sound to interrupt TTS
 const SILENCE_END_MS = 2000; // ms of silence to stop recording (2s for natural pauses)
 const MIN_RECORDING_MS = 500; // minimum recording length to send
+const RECORDED_STT_CHUNK_MS = 6000;
+const RECORDED_STT_MAX_ATTEMPTS = 3;
+const RECORDED_STT_TRANSCRIPT_CONFIRM_CHARS = 24000;
+
+interface RecordedVoiceSegment extends VoiceSegment {
+  blob: Blob;
+}
+
+interface RecordedVoiceTurnSession {
+  turnId: string;
+  startedAt: number;
+  endedAt?: number;
+  finalizedBy?: VoiceTurnFinalizedBy;
+  recorderFormat: ReturnType<typeof selectAudioRecorderFormat>;
+  mimeType: string;
+  activeParts: Blob[];
+  activeSegmentStartedAt: number;
+  nextSegmentIndex: number;
+  segments: Map<number, RecordedVoiceSegment>;
+  uploads: Set<Promise<void>>;
+  chunkTimer: number | null;
+  cancelled: boolean;
+  partialReason?: "failed" | "too-long";
+}
+
+interface PartialTurnActions {
+  canSend: boolean;
+  failedCount: number;
+  transcriptChars: number;
+}
 
 function isNativeCapacitorShell() {
   if (typeof window === "undefined") return false;
@@ -138,12 +178,14 @@ export function VoiceAgent({
   const [nativeBackgroundCapable, setNativeBackgroundCapable] = useState(false);
   const [nativeSessionActive, setNativeSessionActive] = useState(false);
   const [realtimeSession, setRealtimeSession] = useState<RealtimeVoiceSession | null>(null);
+  const [partialTurnActions, setPartialTurnActions] = useState<PartialTurnActions | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recordedTurnRef = useRef<RecordedVoiceTurnSession | null>(null);
+  const partialRecordedTurnRef = useRef<RecordedVoiceTurnSession | null>(null);
   const rafRef = useRef<number>(0);
   const hasAutoActivatedRef = useRef(false);
   const diagnosticSessionRef = useRef<string | null>(null);
@@ -207,75 +249,319 @@ export function VoiceAgent({
     });
   }, [agent, channelId, gatewayAgent, isActive, isAgentMuted, isMicMuted, isPlayingAudio, realtimeSession?.transport, sessionKey, state]);
 
-  const transcribe = useCallback(
-    async (audioBlob: Blob) => {
-      recordVoiceBreadcrumb("stt.fetch.start", { bytes: audioBlob.size, type: audioBlob.type });
-      setState("processing");
+  const waitForSttRetry = useCallback(async (attemptCount: number) => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      await new Promise<void>((resolve) => {
+        window.addEventListener("online", () => resolve(), { once: true });
+      });
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, getSttRetryDelayMs(attemptCount)));
+  }, []);
+
+  const getRecordedTurnSegments = useCallback((turn: RecordedVoiceTurnSession): VoiceSegment[] => (
+    Array.from(turn.segments.values()).map(({ blob: _blob, ...segment }) => segment)
+  ), []);
+
+  const updatePartialTurnActions = useCallback((turn: RecordedVoiceTurnSession) => {
+    const segments = getRecordedTurnSegments(turn);
+    const transcript = assembleVoiceTranscript(segments);
+    setPartialTurnActions({
+      canSend: Boolean(transcript),
+      failedCount: segments.filter((segment) => segment.status === "failed" || segment.status === "missing").length,
+      transcriptChars: transcript.length,
+    });
+  }, [getRecordedTurnSegments]);
+
+  const uploadRecordedSegment = useCallback(async (
+    turn: RecordedVoiceTurnSession,
+    segment: RecordedVoiceSegment,
+    isFinalSegment: boolean,
+  ) => {
+    for (let attempt = 1; attempt <= RECORDED_STT_MAX_ATTEMPTS; attempt++) {
+      if (turn.cancelled) {
+        segment.status = "cancelled";
+        return;
+      }
+
+      segment.attemptCount = attempt;
+      segment.status = attempt === 1 ? "uploading" : "retrying";
+      if (attempt > 1) {
+        setState("retrying");
+      }
+
+      recordVoiceBreadcrumb(attempt === 1 ? "voice_segment_sent" : "voice_segment_retrying", {
+        turnId: turn.turnId,
+        segmentIndex: segment.segmentIndex,
+        attemptCount: attempt,
+        bytes: segment.sizeBytes,
+        durationMs: segment.durationMs,
+      });
       publishAgentModeDiagnostic({
         scope: "voice-agent",
-        event: "stt.fetch.start",
+        event: attempt === 1 ? "voice_segment_sent" : "voice_segment_retrying",
         sessionId: diagnosticSessionRef.current ?? undefined,
-        detail: { bytes: audioBlob.size, type: audioBlob.type },
+        detail: {
+          turnId: turn.turnId,
+          segmentIndex: segment.segmentIndex,
+          attemptCount: attempt,
+          bytes: segment.sizeBytes,
+          durationMs: segment.durationMs,
+        },
       });
+
       try {
         const formData = new FormData();
-        const uploadFormat = selectAudioRecorderFormat();
-        const uploadMimeType = audioBlob.type || uploadFormat.mimeType || "audio/webm";
-        formData.append("audio", audioBlob, getAudioFilenameForMime(uploadMimeType, uploadFormat));
-        formData.append("mimeType", uploadMimeType);
+        formData.append(
+          "audio",
+          segment.blob,
+          getAudioFilenameForMime(turn.mimeType, turn.recorderFormat, `voice-${turn.turnId}-${segment.segmentIndex}`),
+        );
+        appendVoiceSttMetadata(formData, {
+          turnId: turn.turnId,
+          segmentIndex: segment.segmentIndex,
+          isFinalSegment,
+          durationMs: segment.durationMs,
+          mimeType: turn.mimeType,
+          captureStartedAt: segment.startedAt,
+          captureEndedAt: segment.endedAt,
+        });
 
         const response = await fetch("/api/stt", {
           method: "POST",
           body: formData,
         });
+        const data = await response.json().catch(() => null) as {
+          text?: string;
+          provider?: string;
+          error?: string;
+          errorCode?: string;
+          retryable?: boolean;
+          elapsedMs?: number;
+        } | null;
 
-        if (!response.ok) {
-          recordVoiceBreadcrumb("stt.fetch.error", { status: response.status });
+        if (response.ok) {
+          segment.status = "transcribed";
+          segment.transcriptText = data?.text?.trim() ?? "";
+          segment.errorCode = undefined;
+          segment.retryable = false;
+          recordVoiceBreadcrumb("voice_segment_transcribed", {
+            turnId: turn.turnId,
+            segmentIndex: segment.segmentIndex,
+            attemptCount: attempt,
+            characters: segment.transcriptText.length,
+            provider: data?.provider,
+            elapsedMs: data?.elapsedMs,
+          });
           publishAgentModeDiagnostic({
             scope: "voice-agent",
-            event: "stt.fetch.error",
+            event: "voice_segment_transcribed",
             sessionId: diagnosticSessionRef.current ?? undefined,
-            detail: { status: response.status },
+            detail: {
+              turnId: turn.turnId,
+              segmentIndex: segment.segmentIndex,
+              attemptCount: attempt,
+              characters: segment.transcriptText.length,
+              provider: data?.provider,
+              elapsedMs: data?.elapsedMs,
+            },
           });
-          setError(response.status === 503
-            ? "Speech server unavailable. Deactivate and retry."
-            : "Transcription failed. Try speaking again.");
-          setState("listening");
           return;
         }
 
-        const { text } = await response.json();
-        recordVoiceBreadcrumb("stt.fetch.complete", { hasText: Boolean(text && text.trim()) });
-        publishAgentModeDiagnostic({
-          scope: "voice-agent",
-          event: "stt.fetch.complete",
-          sessionId: diagnosticSessionRef.current ?? undefined,
-          detail: { hasText: Boolean(text && text.trim()) },
+        const errorCode = data?.errorCode ?? `http_${response.status}`;
+        const retryable = data?.retryable ?? isRetryableSttFailure(response.status);
+        segment.errorCode = errorCode;
+        segment.retryable = retryable;
+        recordVoiceBreadcrumb("voice_segment_failed", {
+          turnId: turn.turnId,
+          segmentIndex: segment.segmentIndex,
+          attemptCount: attempt,
+          status: response.status,
+          errorCode,
+          retryable,
         });
-        if (text && text.trim()) {
-          setError(null);
-          onTranscript(text.trim());
-        } else {
-          setState("listening");
+
+        if (!retryable || attempt === RECORDED_STT_MAX_ATTEMPTS) {
+          segment.status = "failed";
+          return;
         }
       } catch (error) {
-        recordVoiceBreadcrumb("stt.fetch.exception", { message: error instanceof Error ? error.message : String(error) });
-        publishAgentModeDiagnostic({
-          scope: "voice-agent",
-          event: "stt.fetch.exception",
-          sessionId: diagnosticSessionRef.current ?? undefined,
-          detail: { message: error instanceof Error ? error.message : String(error) },
+        segment.errorCode = "network_error";
+        segment.retryable = true;
+        recordVoiceBreadcrumb("voice_segment_failed", {
+          turnId: turn.turnId,
+          segmentIndex: segment.segmentIndex,
+          attemptCount: attempt,
+          errorCode: "network_error",
+          message: error instanceof Error ? error.message : String(error),
+          retryable: attempt < RECORDED_STT_MAX_ATTEMPTS,
         });
-        setError("Speech server unreachable. Check your connection.");
-        setState("listening");
+        if (attempt === RECORDED_STT_MAX_ATTEMPTS) {
+          segment.status = "failed";
+          return;
+        }
       }
-    },
-    [onTranscript, recordVoiceBreadcrumb]
-  );
+
+      await waitForSttRetry(attempt);
+    }
+  }, [recordVoiceBreadcrumb, waitForSttRetry]);
+
+  const finalizeRecordedTurn = useCallback(async (
+    turn: RecordedVoiceTurnSession,
+    finalizedBy: VoiceTurnFinalizedBy,
+  ) => {
+    turn.finalizedBy = finalizedBy;
+    turn.endedAt = Date.now();
+    setState("processing");
+    recordVoiceBreadcrumb("voice_turn_finalization_requested", {
+      turnId: turn.turnId,
+      finalizedBy,
+      pendingSegments: turn.uploads.size,
+      segments: turn.segments.size,
+    });
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "voice_turn_finalization_requested",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: {
+        turnId: turn.turnId,
+        finalizedBy,
+        pendingSegments: turn.uploads.size,
+        segments: turn.segments.size,
+      },
+    });
+
+    await Promise.allSettled(Array.from(turn.uploads));
+    if (turn.cancelled) return;
+
+    const summary = summarizeVoiceTurn({
+      turnId: turn.turnId,
+      mode: "recorded-stt",
+      status: "finalizing",
+      startedAt: turn.startedAt,
+      endedAt: turn.endedAt,
+      lastInputAt: turn.endedAt,
+      finalizedBy,
+      segments: getRecordedTurnSegments(turn),
+      warnings: [],
+    });
+
+    if (summary.failedSegments > 0 || summary.pendingSegments > 0) {
+      turn.partialReason = "failed";
+      partialRecordedTurnRef.current = turn;
+      updatePartialTurnActions(turn);
+      setError(`Partial speech captured. ${summary.failedSegments || summary.pendingSegments} part${(summary.failedSegments || summary.pendingSegments) === 1 ? "" : "s"} need attention.`);
+      setState("partial-failed");
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "voice_turn_partial_failed",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: {
+          turnId: turn.turnId,
+          finalizedBy,
+          failedSegments: summary.failedSegments,
+          pendingSegments: summary.pendingSegments,
+          transcriptChars: summary.transcriptChars,
+        },
+      });
+      return;
+    }
+
+    if (summary.transcriptChars > RECORDED_STT_TRANSCRIPT_CONFIRM_CHARS) {
+      turn.partialReason = "too-long";
+      partialRecordedTurnRef.current = turn;
+      updatePartialTurnActions(turn);
+      setError("Review before sending. The captured voice turn is unusually long.");
+      setState("partial-failed");
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "voice_turn_needs_confirmation",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: {
+          turnId: turn.turnId,
+          transcriptChars: summary.transcriptChars,
+        },
+      });
+      return;
+    }
+
+    recordedTurnRef.current = null;
+    partialRecordedTurnRef.current = null;
+    setPartialTurnActions(null);
+    if (summary.assembledTranscript) {
+      setError(null);
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "voice_turn_sent",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: {
+          turnId: turn.turnId,
+          segments: summary.segments.length,
+          transcriptChars: summary.transcriptChars,
+        },
+      });
+      onTranscript(summary.assembledTranscript);
+    } else {
+      setState("listening");
+    }
+  }, [getRecordedTurnSegments, onTranscript, recordVoiceBreadcrumb, updatePartialTurnActions]);
+
+  const flushRecordedSegment = useCallback((turn: RecordedVoiceTurnSession, isFinalSegment: boolean) => {
+    if (turn.cancelled || turn.activeParts.length === 0) return;
+
+    const now = Date.now();
+    const segmentIndex = turn.nextSegmentIndex++;
+    const blob = new Blob(turn.activeParts, { type: turn.mimeType });
+    turn.activeParts = [];
+    const segment: RecordedVoiceSegment = {
+      turnId: turn.turnId,
+      segmentIndex,
+      status: "queued",
+      attemptCount: 0,
+      startedAt: turn.activeSegmentStartedAt,
+      endedAt: now,
+      durationMs: now - turn.activeSegmentStartedAt,
+      sizeBytes: blob.size,
+      final: isFinalSegment,
+      blob,
+    };
+    turn.activeSegmentStartedAt = now;
+    turn.segments.set(segmentIndex, segment);
+
+    recordVoiceBreadcrumb("voice_segment_created", {
+      turnId: turn.turnId,
+      segmentIndex,
+      isFinalSegment,
+      bytes: blob.size,
+      durationMs: segment.durationMs,
+    });
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "voice_segment_created",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: {
+        turnId: turn.turnId,
+        segmentIndex,
+        isFinalSegment,
+        bytes: blob.size,
+        durationMs: segment.durationMs,
+      },
+    });
+
+    const uploadPromise = uploadRecordedSegment(turn, segment, isFinalSegment).finally(() => {
+      turn.uploads.delete(uploadPromise);
+    });
+    turn.uploads.add(uploadPromise);
+  }, [recordVoiceBreadcrumb, uploadRecordedSegment]);
 
   const stopRecording = useCallback(() => {
     if (!isRecordingRef.current) return;
     isRecordingRef.current = false;
+    const turn = recordedTurnRef.current;
+    if (turn?.chunkTimer) {
+      window.clearInterval(turn.chunkTimer);
+      turn.chunkTimer = null;
+    }
 
     if (
       mediaRecorderRef.current &&
@@ -294,31 +580,54 @@ export function VoiceAgent({
     if (isRecordingRef.current || !streamRef.current) return;
     isRecordingRef.current = true;
     recordingStartTimeRef.current = Date.now();
-    chunksRef.current = [];
+    setPartialTurnActions(null);
+    partialRecordedTurnRef.current = null;
 
     const recorderFormat = selectAudioRecorderFormat();
     const recorder = new MediaRecorder(streamRef.current, buildMediaRecorderOptions(recorderFormat));
+    const mimeType = getAudioBlobType(recorder.mimeType, recorderFormat);
+    const turn: RecordedVoiceTurnSession = {
+      turnId: createVoiceTurnId(),
+      startedAt: recordingStartTimeRef.current,
+      recorderFormat,
+      mimeType,
+      activeParts: [],
+      activeSegmentStartedAt: recordingStartTimeRef.current,
+      nextSegmentIndex: 0,
+      segments: new Map(),
+      uploads: new Set(),
+      chunkTimer: null,
+      cancelled: false,
+    };
+    recordedTurnRef.current = turn;
 
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
+      if (e.data.size > 0 && !turn.cancelled) {
+        turn.activeParts.push(e.data);
       }
     };
 
     recorder.onstop = () => {
+      if (turn.chunkTimer) {
+        window.clearInterval(turn.chunkTimer);
+        turn.chunkTimer = null;
+      }
       if (discardRecordingRef.current) {
         discardRecordingRef.current = false;
-        chunksRef.current = [];
+        turn.cancelled = true;
+        turn.activeParts = [];
+        recordedTurnRef.current = null;
+        setPartialTurnActions(null);
         setState(isMicMuted ? "muted" : "listening");
         return;
       }
       const duration = Date.now() - recordingStartTimeRef.current;
-      if (duration >= MIN_RECORDING_MS && chunksRef.current.length > 0) {
-        const blob = new Blob(chunksRef.current, {
-          type: getAudioBlobType(mediaRecorderRef.current?.mimeType, recorderFormat),
-        });
-        transcribe(blob);
+      if (duration >= MIN_RECORDING_MS && (turn.activeParts.length > 0 || turn.segments.size > 0)) {
+        flushRecordedSegment(turn, true);
+        void finalizeRecordedTurn(turn, "vad");
       } else {
+        turn.cancelled = true;
+        recordedTurnRef.current = null;
         setState("listening");
       }
     };
@@ -328,10 +637,95 @@ export function VoiceAgent({
       scope: "voice-agent",
       event: "media-recorder.start",
       sessionId: diagnosticSessionRef.current ?? undefined,
-      detail: { mimeType: recorder.mimeType, extension: recorderFormat.extension },
+      detail: { mimeType: recorder.mimeType, extension: recorderFormat.extension, turnId: turn.turnId },
     });
-    recorder.start(100); // collect in 100ms chunks
-  }, [isMicMuted, transcribe]);
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "voice_turn_started",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: { turnId: turn.turnId, mode: "recorded-stt" },
+    });
+    turn.chunkTimer = window.setInterval(() => {
+      flushRecordedSegment(turn, false);
+    }, RECORDED_STT_CHUNK_MS);
+    recorder.start(1000); // collect short blobs, upload bounded chunks while speech continues
+    setState("capturing");
+  }, [finalizeRecordedTurn, flushRecordedSegment, isMicMuted]);
+
+  const sendPartialRecordedTurn = useCallback(() => {
+    const turn = partialRecordedTurnRef.current;
+    if (!turn) return;
+    const segments = getRecordedTurnSegments(turn);
+    const transcript = assembleVoiceTranscript(segments);
+    if (!transcript) {
+      setError("No transcribed speech is available yet.");
+      updatePartialTurnActions(turn);
+      return;
+    }
+
+    recordedTurnRef.current = null;
+    partialRecordedTurnRef.current = null;
+    setPartialTurnActions(null);
+    setError(null);
+    setState("processing");
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "voice_turn_sent",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: {
+        turnId: turn.turnId,
+        partial: turn.partialReason === "failed",
+        transcriptChars: transcript.length,
+        failedSegments: segments.filter((segment) => segment.status === "failed" || segment.status === "missing").length,
+      },
+    });
+    onTranscript(transcript);
+  }, [getRecordedTurnSegments, onTranscript, updatePartialTurnActions]);
+
+  const retryPartialRecordedTurn = useCallback(() => {
+    const turn = partialRecordedTurnRef.current;
+    if (!turn) return;
+
+    const retryableSegments = Array.from(turn.segments.values()).filter((segment) =>
+      segment.status === "failed" && segment.retryable !== false
+    );
+    if (retryableSegments.length === 0) {
+      setError("No retryable audio parts are available.");
+      updatePartialTurnActions(turn);
+      return;
+    }
+
+    setError(null);
+    setPartialTurnActions(null);
+    setState("retrying");
+    for (const segment of retryableSegments) {
+      segment.status = "queued";
+      segment.errorCode = undefined;
+      const uploadPromise = uploadRecordedSegment(turn, segment, Boolean(segment.final)).finally(() => {
+        turn.uploads.delete(uploadPromise);
+      });
+      turn.uploads.add(uploadPromise);
+    }
+    void finalizeRecordedTurn(turn, "retry");
+  }, [finalizeRecordedTurn, updatePartialTurnActions, uploadRecordedSegment]);
+
+  const discardPartialRecordedTurn = useCallback(() => {
+    const turn = partialRecordedTurnRef.current;
+    if (turn) {
+      turn.cancelled = true;
+      publishAgentModeDiagnostic({
+        scope: "voice-agent",
+        event: "voice_turn_discarded",
+        sessionId: diagnosticSessionRef.current ?? undefined,
+        detail: { turnId: turn.turnId, reason: turn.partialReason ?? "user-discard" },
+      });
+    }
+    partialRecordedTurnRef.current = null;
+    recordedTurnRef.current = null;
+    setPartialTurnActions(null);
+    setError(null);
+    setState(isMicMuted ? "muted" : "listening");
+  }, [isMicMuted]);
 
   // VAD loop using AnalyserNode
   const runVAD = useCallback(() => {
@@ -853,9 +1247,20 @@ export function VoiceAgent({
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state === "recording"
     ) {
+      discardRecordingRef.current = true;
+      if (recordedTurnRef.current?.chunkTimer) {
+        window.clearInterval(recordedTurnRef.current.chunkTimer);
+        recordedTurnRef.current.chunkTimer = null;
+      }
+      if (recordedTurnRef.current) {
+        recordedTurnRef.current.cancelled = true;
+      }
       mediaRecorderRef.current.stop();
     }
     isRecordingRef.current = false;
+    recordedTurnRef.current = null;
+    partialRecordedTurnRef.current = null;
+    setPartialTurnActions(null);
 
     // Release mic
     if (streamRef.current) {
@@ -1174,7 +1579,7 @@ export function VoiceAgent({
     } else if (isMicMuted) {
       setState("muted");
     } else if (!isRecordingRef.current) {
-      setState("listening");
+      setState((current) => current === "partial-failed" || current === "retrying" ? current : "listening");
     }
   }, [isActive, isMicMuted, isPlayingAudio, isLoading]);
 
@@ -1186,7 +1591,10 @@ export function VoiceAgent({
   const stateLabel: Record<AgentState, string> = {
     idle: "ACTIVATE AGENT",
     listening: "LISTENING",
+    capturing: "CAPTURING LONG TURN",
     processing: "THINKING",
+    retrying: "RETRYING 1 PART",
+    "partial-failed": "PARTIAL SPEECH CAPTURED",
     speaking: "SPEAKING",
     muted: "MUTED",
   };
@@ -1198,12 +1606,22 @@ export function VoiceAgent({
   const listeningRgb = "var(--voice-listening-rgb)";
   const speakingRgb = "var(--voice-speaking-rgb)";
   const processingRgb = "var(--voice-processing-rgb)";
+  const visualState: AgentVisualState =
+    state === "capturing"
+      ? "listening"
+      : state === "retrying" || state === "partial-failed"
+        ? "processing"
+        : state;
+  const statusState: AgentState =
+    isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
+  const displayState: AgentVisualState =
+    isMicMuted && !isPlayingAudio && !isLoading ? "muted" : visualState;
   const stateColor =
     isMicMuted && !isPlayingAudio && !isLoading
       ? "var(--text-tertiary)"
-      : state === "listening"
+      : state === "listening" || state === "capturing"
       ? listeningColor
-      : state === "processing"
+      : state === "processing" || state === "retrying" || state === "partial-failed"
         ? processingColor
         : state === "speaking"
           ? speakingColor
@@ -1212,29 +1630,28 @@ export function VoiceAgent({
   const realtimeRelayActive = Boolean(realtimeRelayRef.current);
   const baseReactiveLevel = state === "speaking"
     ? 0.36
-    : state === "listening"
+    : state === "listening" || state === "capturing"
       ? 0.22
-      : state === "processing"
+      : state === "processing" || state === "retrying" || state === "partial-failed"
         ? 0.28
         : 0;
   const visualVolume = Math.min(1, Math.max(baseReactiveLevel, volumeLevel * (nativeSessionActive || realtimeRelayActive ? 1.25 : 0.8)));
   const motionLevel =
     state === "speaking"
       ? Math.min(0.82, 0.24 + visualVolume * 0.78)
-      : state === "listening"
+      : state === "listening" || state === "capturing"
         ? Math.min(0.58, visualVolume)
-        : state === "processing"
+        : state === "processing" || state === "retrying" || state === "partial-failed"
           ? Math.min(0.34, 0.18 + visualVolume * 0.32)
           : 0;
   const haloSize = immersive ? 285 + motionLevel * 75 : compact ? 104 + motionLevel * 28 : 170 + motionLevel * 90;
   const orbScale = immersive
     ? 1.22 + motionLevel * (state === "speaking" ? 0.06 : 0.045)
     : 1 + motionLevel * 0.06;
-  const listeningActive = isActive && state === "listening";
+  const listeningActive = isActive && (state === "listening" || state === "capturing");
   const speakingActive = isActive && state === "speaking" && !isAgentMuted;
-  const thinkingActive = isActive && state === "processing";
+  const thinkingActive = isActive && (state === "processing" || state === "retrying" || state === "partial-failed");
   const showCompactStatus = !immersive;
-  const displayState: AgentState = isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
 
   return (
     <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : compact ? "gap-1.5 py-0" : "gap-2 py-1"}`}>
@@ -1247,7 +1664,36 @@ export function VoiceAgent({
             color: "var(--danger)",
           }}
         >
-          {error}
+          <div>{error}</div>
+          {partialTurnActions ? (
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={sendPartialRecordedTurn}
+                disabled={!partialTurnActions.canSend}
+                className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45"
+                title={`${partialTurnActions.transcriptChars} transcribed characters`}
+              >
+                Send captured text
+              </button>
+              {partialTurnActions.failedCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={retryPartialRecordedTurn}
+                  className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-primary)]"
+                >
+                  Retry missing audio
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={discardPartialRecordedTurn}
+                className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-primary)]"
+              >
+                Discard
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -1282,7 +1728,7 @@ export function VoiceAgent({
               backgroundColor: state === "idle" ? "var(--bg-surface)" : `color-mix(in srgb, ${stateColor} 10%, transparent)`,
             }}
           >
-            {stateLabel[displayState]}
+            {stateLabel[statusState]}
           </span>
           {isActive && !compact && (
             <div className="flex items-center gap-3">
@@ -1320,6 +1766,12 @@ export function VoiceAgent({
                 ? "MIC MUTED"
                 : state === "speaking"
                 ? "SPEAK TO INTERRUPT"
+                : state === "capturing"
+                  ? "CAPTURING LONG TURN"
+                : state === "retrying"
+                  ? "RETRYING MISSING AUDIO"
+                : state === "partial-failed"
+                  ? "REVIEW BEFORE SENDING"
                 : state === "listening"
                   ? nativeSessionActive && nativeBackgroundCapable
                     ? "NATIVE MIC SESSION ACTIVE"
@@ -1405,11 +1857,11 @@ export function VoiceAgent({
                   )
                 )}px`,
                 backgroundColor:
-                  state === "listening"
+                  state === "listening" || state === "capturing"
                     ? listeningColor
                     : state === "speaking"
                       ? speakingColor
-                      : state === "processing"
+                      : state === "processing" || state === "retrying" || state === "partial-failed"
                         ? processingColor
                         : "var(--text-tertiary)",
                 opacity:

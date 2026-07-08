@@ -1,6 +1,6 @@
 # Voice Turn Reliability for Hands-Free Agent Mode
 
-> Status: design proposal
+> Status: design proposal; first recorded-STT implementation slice in progress
 > Scope: long-form hands-free voice turns across recorded voice agent mode and live/realtime agent mode.
 > Related: `docs/specs/native-background-agent-session.md`, `docs/plans/realtime-voice-openclaw-passthrough.md`.
 
@@ -477,6 +477,10 @@ Deliverables:
 - finalization gate before `onTranscript`
 - partial-failure UI state
 - transcript size confirmation
+
+Implementation note:
+
+- The first combined implementation slice keeps live/realtime behavior unchanged, but recorded agent mode now creates a stable turn ID, uploads bounded chunks while capture continues, retries each failed chunk independently, assembles successful segments in order, and requires an explicit user action before sending partial or unusually long captured text.
 
 ### PR 3: Realtime Turn Normalization
 

@@ -6,6 +6,7 @@ import { writeFile, unlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { parseVoiceSttMetadata } from "@/lib/voice-turn-reliability";
 
 export const dynamic = "force-dynamic";
 
@@ -43,21 +44,28 @@ export async function POST(request: NextRequest) {
   const bearerToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const authError = isValidVoiceUploadToken(bearerToken) ? null : await requireAuth(request);
   if (authError) return authError;
+  const startedAt = Date.now();
 
   try {
     const formData = await request.formData();
     const audio = formData.get("audio");
+    const metadata = parseVoiceSttMetadata(formData);
 
     if (!audio || !(audio instanceof Blob)) {
       return Response.json(
-        { error: "audio file is required" },
+        {
+          error: "audio file is required",
+          errorCode: "validation_error",
+          retryable: false,
+          ...metadata,
+          elapsedMs: Date.now() - startedAt,
+        },
         { status: 400 }
       );
     }
 
     const audioFile = audio as Blob & { name?: string; type?: string };
-    const declaredMimeType = formData.get("mimeType");
-    const audioMimeType = typeof declaredMimeType === "string" ? declaredMimeType : audioFile.type;
+    const audioMimeType = metadata.mimeType || audioFile.type;
     const audioFilename = audioFile.name || getAudioFilenameForMime(audioMimeType);
 
     // Write audio to temp file for local whisper using the browser's actual container.
@@ -66,27 +74,51 @@ export async function POST(request: NextRequest) {
     const tempAudioPath = join(tmpdir(), `crewcmd-stt-${tempId}.${getAudioExtension(audioFilename, audioMimeType)}`);
 
     // 1. Try local whisper CLI
+    const localBackendAvailable = Boolean(await findWhisperBin());
     const localResult = await tryLocalWhisper(audioBuffer, tempAudioPath);
     if (localResult) {
-      return Response.json({ text: localResult, provider: "local" });
+      return Response.json({
+        text: localResult,
+        provider: "local",
+        ...metadata,
+        elapsedMs: Date.now() - startedAt,
+      });
     }
 
     // 2. Try OpenAI Whisper API
     if (OPENAI_API_KEY) {
       const openaiResult = await tryOpenAIWhisper(audio, audioFilename);
       if (openaiResult) {
-        return Response.json({ text: openaiResult, provider: "openai" });
+        return Response.json({
+          text: openaiResult,
+          provider: "openai",
+          ...metadata,
+          elapsedMs: Date.now() - startedAt,
+        });
       }
     }
 
     // 3. No backend available — tell frontend to use browser fallback
+    const errorCode = localBackendAvailable || OPENAI_API_KEY ? "provider_failed" : "backend_unavailable";
     return Response.json(
-      { error: "No STT backend available", fallback: "browser" },
-      { status: 503 }
+      {
+        error: errorCode === "backend_unavailable" ? "No STT backend available" : "No STT backend succeeded",
+        errorCode,
+        retryable: errorCode === "provider_failed",
+        fallback: errorCode === "backend_unavailable" ? "browser" : undefined,
+        ...metadata,
+        elapsedMs: Date.now() - startedAt,
+      },
+      { status: errorCode === "backend_unavailable" ? 503 : 502 }
     );
   } catch (error) {
     console.error("[api/stt] Error:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return Response.json({
+      error: "Internal server error",
+      errorCode: "internal_error",
+      retryable: true,
+      elapsedMs: Date.now() - startedAt,
+    }, { status: 500 });
   }
 }
 

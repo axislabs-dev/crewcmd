@@ -6,15 +6,22 @@ import { db, withRetry } from "@/db";
 import { chatMessages, chatSessionEvents, chatSessions } from "@/db/schema";
 import { eq, and, gt, asc } from "drizzle-orm";
 import { canAccessChatSession } from "@/lib/chat-session-access";
+import {
+  loadRealtimeEventBySequence,
+  loadRealtimeEventsAfterCursor,
+  normalizeRealtimeCursor,
+  toClientRealtimeEvent,
+  type RealtimeEventRow,
+} from "@/lib/realtime-events";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/chat/events?companyId=xxx&since=<ISO timestamp>
+ * GET /api/chat/events?companyId=xxx&lastEventId=<sequence>
  *
- * SSE endpoint that streams chat message events for a company.
- * On connect: sends any messages newer than `since`.
- * Then: streams new messages as they are persisted in real-time.
+ * SSE endpoint that streams durable chat sync events for a company.
+ * On connect: replays realtime_events after the cursor.
+ * Then: streams new committed events as they are persisted in real-time.
  * Heartbeat ping every 30s to keep connection alive.
  */
 export async function GET(request: NextRequest) {
@@ -24,6 +31,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const companyId = searchParams.get("companyId") ||
     request.cookies.get("active_company")?.value || "";
+  const lastEventId = normalizeRealtimeCursor(
+    request.headers.get("Last-Event-ID") ?? searchParams.get("lastEventId")
+  );
   const since = searchParams.get("since");
 
   if (!companyId) {
@@ -64,13 +74,33 @@ export async function GET(request: NextRequest) {
     }
     return cached;
   };
+  const sendRealtimeEvent = async (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    event: RealtimeEventRow,
+  ) => {
+    if (closed || event.companyId !== companyId) return;
+    if (event.sessionId && !(await canReadSessionId(event.sessionId))) return;
+
+    const data = JSON.stringify(toClientRealtimeEvent(event));
+    controller.enqueue(encoder.encode(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${data}\n\n`));
+  };
 
   const stream = new ReadableStream({
     start(controller) {
-      // 1. Send any messages newer than `since`
+      // 1. Replay durable events after the cursor. Fall back to legacy timestamp catch-up.
       const sendCatchup = async () => {
-        if (!db || !since) return;
+        if (!db) return;
         try {
+          if (lastEventId !== null) {
+            const events = await loadRealtimeEventsAfterCursor({ companyId, lastEventId });
+            for (const event of events) {
+              if (closed) return;
+              await sendRealtimeEvent(controller, event);
+            }
+            return;
+          }
+
+          if (!since) return;
           const sinceDate = new Date(since);
           // Get all sessions for this company
           const sessions = await withRetry(() =>
@@ -149,21 +179,18 @@ export async function GET(request: NextRequest) {
 
       sendCatchup();
 
-      // 2. Subscribe to real-time events
+      // 2. Subscribe to committed realtime event descriptors
       const unsubscribe = subscribeChatEvents((event) => {
         if (closed || event.companyId !== companyId) return;
-        void canReadSessionId(event.sessionId).then((allowed) => {
-          if (closed || !allowed) return;
-          const data = JSON.stringify(event.type === "chat_progress"
-            ? { ...event.payload, type: "chat_progress", sessionId: event.sessionId, agentId: event.agentId, companyId: event.companyId, sessionKey: event.sessionKey, channelId: event.channelId ?? null }
-            : { type: "message", ...event });
+        void loadRealtimeEventBySequence(event.sequence).then(async (realtimeEvent) => {
+          if (!realtimeEvent || closed) return;
           try {
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            await sendRealtimeEvent(controller, realtimeEvent);
           } catch {
             // Stream closed
           }
         }).catch((err) => {
-          console.error("[api/chat/events] Subscription access check error:", err);
+          console.error("[api/chat/events] Subscription replay error:", err);
         });
       });
 
@@ -174,7 +201,7 @@ export async function GET(request: NextRequest) {
           return;
         }
         try {
-          controller.enqueue(encoder.encode(`: ping\n\n`));
+          controller.enqueue(encoder.encode(`: ping ${new Date().toISOString()}\n\n`));
         } catch {
           clearInterval(heartbeat);
         }
@@ -195,8 +222,9 @@ export async function GET(request: NextRequest) {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

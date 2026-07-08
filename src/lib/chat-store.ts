@@ -25,6 +25,8 @@ interface ChatStoreState {
   unreadByAgent: Record<string, number>;
   /** Timestamp of the last event received (ISO string) */
   lastEventAt: string | null;
+  /** Durable realtime_events sequence of the last applied event */
+  lastEventId: string | null;
 
   /** Add a single message (from SSE or local). Deduplicates by id. */
   addMessage: (msg: ChatStoreMessage) => void;
@@ -38,12 +40,14 @@ interface ChatStoreState {
   markRead: (agentId: string) => void;
   /** Clear messages for an agent (e.g. on session reset). */
   clearAgent: (agentId: string) => void;
+  setLastEventId: (eventId: string) => void;
 }
 
 export const useChatStore = create<ChatStoreState>((set) => ({
   messagesByAgent: {},
   unreadByAgent: {},
   lastEventAt: null,
+  lastEventId: null,
 
   addMessage: (msg) =>
     set((state) => {
@@ -137,5 +141,10 @@ export const useChatStore = create<ChatStoreState>((set) => ({
     set((state) => ({
       messagesByAgent: { ...state.messagesByAgent, [agentId.toLowerCase()]: [] },
       unreadByAgent: { ...state.unreadByAgent, [agentId.toLowerCase()]: 0 },
+    })),
+
+  setLastEventId: (eventId) =>
+    set((state) => ({
+      lastEventId: eventId || state.lastEventId,
     })),
 }));

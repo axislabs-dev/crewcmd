@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db, withRetry } from "@/db";
-import { chatSessionEvents } from "@/db/schema";
+import { chatSessionEvents, chatSessions } from "@/db/schema";
+import { appendRealtimeChatProgressEvent } from "@/lib/realtime-events";
 
 export type PersistedChatProgressEvent = {
   type: "chat_progress";
@@ -54,7 +55,7 @@ export async function persistChatProgressEvent(input: {
 }) {
   if (!db || !input.sessionId || !input.companyId) return;
 
-  await withRetry(() =>
+  const [event] = await withRetry(() =>
     db!.insert(chatSessionEvents).values({
       sessionId: input.sessionId!,
       companyId: input.companyId!,
@@ -62,8 +63,21 @@ export async function persistChatProgressEvent(input: {
       gatewaySessionKey: input.gatewaySessionKey,
       eventType: input.payload.event ?? "chat_progress",
       payload: input.payload,
-    })
+    }).returning()
   );
+
+  const [session] = await withRetry(() =>
+    db!.select().from(chatSessions)
+      .where(eq(chatSessions.id, input.sessionId!))
+      .limit(1)
+  );
+  if (session) {
+    await appendRealtimeChatProgressEvent({
+      session,
+      progressEventId: event.id,
+      payload: input.payload,
+    });
+  }
 }
 
 export async function loadChatExecutionEvents(sessionId: string, limit = 200) {

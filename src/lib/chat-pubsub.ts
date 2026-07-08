@@ -1,7 +1,6 @@
 /**
- * In-memory pub/sub for chat session events.
- * Single-process only (PGlite). Used by /api/chat to notify
- * /api/chat/events SSE connections when messages or live progress change.
+ * In-memory pub/sub for committed realtime chat events.
+ * Single-process only; durable replay comes from realtime_events.
  */
 
 export interface ChatMessageEvent {
@@ -34,7 +33,15 @@ export interface ChatProgressPubSubEvent {
 
 export type ChatPubSubEvent = ChatMessageEvent | ChatProgressPubSubEvent;
 
-type Listener = (event: ChatPubSubEvent) => void;
+export interface RealtimeChatEventDescriptor {
+  sequence: number;
+  companyId: string | null;
+  workspaceId?: string | null;
+  channelId?: string | null;
+  sessionId?: string | null;
+}
+
+type Listener = (event: RealtimeChatEventDescriptor) => void;
 
 const listeners = new Set<Listener>();
 
@@ -45,20 +52,30 @@ export function subscribeChatEvents(listener: Listener): () => void {
   };
 }
 
-export function publishChatEvent(event: ChatMessageEvent) {
-  publishChatPubSubEvent(event);
-}
-
-export function publishChatProgressEvent(event: ChatProgressPubSubEvent) {
-  publishChatPubSubEvent(event);
-}
-
-function publishChatPubSubEvent(event: ChatPubSubEvent) {
+export function publishRealtimeChatEvent(event: RealtimeChatEventDescriptor) {
   for (const listener of listeners) {
     try {
       listener(event);
     } catch {
       // Don't let one listener break others
+    }
+  }
+}
+
+/** @deprecated Use appendRealtimeChatMessageEvent. */
+export function publishChatEvent(_event: ChatMessageEvent) {}
+
+/** @deprecated Use appendRealtimeChatProgressEvent. */
+export function publishChatProgressEvent(event: ChatProgressPubSubEvent) {
+  if (typeof event.id === "string") {
+    const sequence = Number(event.id);
+    if (Number.isFinite(sequence)) {
+      publishRealtimeChatEvent({
+        sequence,
+        companyId: event.companyId,
+        channelId: event.channelId ?? null,
+        sessionId: event.sessionId,
+      });
     }
   }
 }

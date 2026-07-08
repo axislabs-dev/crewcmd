@@ -96,6 +96,8 @@ const RECORDED_STT_CHUNK_MS = 6000;
 const RECORDED_STT_MAX_ATTEMPTS = 3;
 const RECORDED_STT_TRANSCRIPT_CONFIRM_CHARS = 24000;
 
+type RecordedVoiceRecorderStopReason = "rotate" | "final" | "discard";
+
 interface RecordedVoiceSegment extends VoiceSegment {
   blob: Blob;
 }
@@ -113,6 +115,8 @@ interface RecordedVoiceTurnSession {
   segments: Map<number, RecordedVoiceSegment>;
   uploads: Set<Promise<void>>;
   chunkTimer: number | null;
+  recorderStopping: boolean;
+  pendingStopReason: RecordedVoiceRecorderStopReason | null;
   cancelled: boolean;
   partialReason?: "failed" | "too-long";
 }
@@ -186,6 +190,7 @@ export function VoiceAgent({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedTurnRef = useRef<RecordedVoiceTurnSession | null>(null);
   const partialRecordedTurnRef = useRef<RecordedVoiceTurnSession | null>(null);
+  const startRecordedSegmentRecorderRef = useRef<(turn: RecordedVoiceTurnSession) => boolean>(() => false);
   const rafRef = useRef<number>(0);
   const hasAutoActivatedRef = useRef(false);
   const diagnosticSessionRef = useRef<string | null>(null);
@@ -511,6 +516,9 @@ export function VoiceAgent({
 
     const now = Date.now();
     const segmentIndex = turn.nextSegmentIndex++;
+    // Each uploadable segment is the complete output from one MediaRecorder
+    // start/stop cycle. Some browsers emit non-decodable continuation blobs
+    // from timeslice data, so rotation stops the recorder before this flush.
     const blob = new Blob(turn.activeParts, { type: turn.mimeType });
     turn.activeParts = [];
     const segment: RecordedVoiceSegment = {
@@ -554,52 +562,28 @@ export function VoiceAgent({
     turn.uploads.add(uploadPromise);
   }, [recordVoiceBreadcrumb, uploadRecordedSegment]);
 
-  const stopRecording = useCallback(() => {
-    if (!isRecordingRef.current) return;
-    isRecordingRef.current = false;
-    const turn = recordedTurnRef.current;
-    if (turn?.chunkTimer) {
-      window.clearInterval(turn.chunkTimer);
-      turn.chunkTimer = null;
-    }
+  const startRecordedSegmentRecorder = useCallback((turn: RecordedVoiceTurnSession) => {
+    if (!streamRef.current || turn.cancelled || !isRecordingRef.current) return false;
 
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
-      publishAgentModeDiagnostic({
-        scope: "voice-agent",
-        event: "media-recorder.stop",
-        sessionId: diagnosticSessionRef.current ?? undefined,
+    const segmentIndex = turn.nextSegmentIndex;
+    turn.activeParts = [];
+    turn.activeSegmentStartedAt = Date.now();
+    turn.pendingStopReason = null;
+    turn.recorderStopping = false;
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(streamRef.current, buildMediaRecorderOptions(turn.recorderFormat));
+    } catch (error) {
+      recordVoiceBreadcrumb("media-recorder.segment-start-error", {
+        turnId: turn.turnId,
+        segmentIndex,
+        message: error instanceof Error ? error.message : String(error),
       });
-      mediaRecorderRef.current.stop();
+      return false;
     }
-  }, []);
 
-  const startRecording = useCallback(() => {
-    if (isRecordingRef.current || !streamRef.current) return;
-    isRecordingRef.current = true;
-    recordingStartTimeRef.current = Date.now();
-    setPartialTurnActions(null);
-    partialRecordedTurnRef.current = null;
-
-    const recorderFormat = selectAudioRecorderFormat();
-    const recorder = new MediaRecorder(streamRef.current, buildMediaRecorderOptions(recorderFormat));
-    const mimeType = getAudioBlobType(recorder.mimeType, recorderFormat);
-    const turn: RecordedVoiceTurnSession = {
-      turnId: createVoiceTurnId(),
-      startedAt: recordingStartTimeRef.current,
-      recorderFormat,
-      mimeType,
-      activeParts: [],
-      activeSegmentStartedAt: recordingStartTimeRef.current,
-      nextSegmentIndex: 0,
-      segments: new Map(),
-      uploads: new Set(),
-      chunkTimer: null,
-      cancelled: false,
-    };
-    recordedTurnRef.current = turn;
+    turn.mimeType = getAudioBlobType(recorder.mimeType, turn.recorderFormat);
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0 && !turn.cancelled) {
@@ -608,11 +592,15 @@ export function VoiceAgent({
     };
 
     recorder.onstop = () => {
-      if (turn.chunkTimer) {
-        window.clearInterval(turn.chunkTimer);
-        turn.chunkTimer = null;
+      const stopReason = turn.pendingStopReason ?? (isRecordingRef.current ? "rotate" : "final");
+      const hadParts = turn.activeParts.length > 0;
+      turn.pendingStopReason = null;
+      turn.recorderStopping = false;
+      if (mediaRecorderRef.current === recorder) {
+        mediaRecorderRef.current = null;
       }
-      if (discardRecordingRef.current) {
+
+      if (discardRecordingRef.current || stopReason === "discard" || turn.cancelled) {
         discardRecordingRef.current = false;
         turn.cancelled = true;
         turn.activeParts = [];
@@ -621,9 +609,33 @@ export function VoiceAgent({
         setState(isMicMuted ? "muted" : "listening");
         return;
       }
+
+      if (hadParts) {
+        flushRecordedSegment(turn, stopReason === "final");
+      }
+
+      if (stopReason === "rotate") {
+        if (!startRecordedSegmentRecorderRef.current(turn)) {
+          isRecordingRef.current = false;
+          if (turn.chunkTimer) {
+            window.clearInterval(turn.chunkTimer);
+            turn.chunkTimer = null;
+          }
+          turn.partialReason = "failed";
+          partialRecordedTurnRef.current = turn;
+          updatePartialTurnActions(turn);
+          setError("Voice capture paused before the turn ended. Review before sending.");
+          setState("partial-failed");
+        }
+        return;
+      }
+
+      if (turn.chunkTimer) {
+        window.clearInterval(turn.chunkTimer);
+        turn.chunkTimer = null;
+      }
       const duration = Date.now() - recordingStartTimeRef.current;
-      if (duration >= MIN_RECORDING_MS && (turn.activeParts.length > 0 || turn.segments.size > 0)) {
-        flushRecordedSegment(turn, true);
+      if (duration >= MIN_RECORDING_MS && (hadParts || turn.segments.size > 0)) {
         void finalizeRecordedTurn(turn, "vad");
       } else {
         turn.cancelled = true;
@@ -637,8 +649,87 @@ export function VoiceAgent({
       scope: "voice-agent",
       event: "media-recorder.start",
       sessionId: diagnosticSessionRef.current ?? undefined,
-      detail: { mimeType: recorder.mimeType, extension: recorderFormat.extension, turnId: turn.turnId },
+      detail: { mimeType: recorder.mimeType, extension: turn.recorderFormat.extension, turnId: turn.turnId, segmentIndex },
     });
+    recorder.start();
+    return true;
+  }, [finalizeRecordedTurn, flushRecordedSegment, isMicMuted, recordVoiceBreadcrumb, updatePartialTurnActions]);
+
+  startRecordedSegmentRecorderRef.current = startRecordedSegmentRecorder;
+
+  const stopActiveRecordedSegment = useCallback((
+    turn: RecordedVoiceTurnSession,
+    reason: RecordedVoiceRecorderStopReason,
+  ) => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || turn.cancelled) return false;
+
+    if (turn.recorderStopping) {
+      if (reason !== "rotate") {
+        turn.pendingStopReason = reason;
+      }
+      return true;
+    }
+
+    if (recorder.state !== "recording") return false;
+
+    turn.pendingStopReason = reason;
+    turn.recorderStopping = true;
+    publishAgentModeDiagnostic({
+      scope: "voice-agent",
+      event: "media-recorder.stop",
+      sessionId: diagnosticSessionRef.current ?? undefined,
+      detail: { turnId: turn.turnId, segmentIndex: turn.nextSegmentIndex, reason },
+    });
+    recorder.stop();
+    return true;
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
+    const turn = recordedTurnRef.current;
+    if (turn?.chunkTimer) {
+      window.clearInterval(turn.chunkTimer);
+      turn.chunkTimer = null;
+    }
+
+    if (turn) {
+      const stopped = stopActiveRecordedSegment(turn, "final");
+      if (!stopped && turn.segments.size > 0) {
+        void finalizeRecordedTurn(turn, "vad");
+      } else if (!stopped) {
+        turn.cancelled = true;
+        recordedTurnRef.current = null;
+        setState("listening");
+      }
+    }
+  }, [finalizeRecordedTurn, stopActiveRecordedSegment]);
+
+  const startRecording = useCallback(() => {
+    if (isRecordingRef.current || !streamRef.current) return;
+    isRecordingRef.current = true;
+    recordingStartTimeRef.current = Date.now();
+    setPartialTurnActions(null);
+    partialRecordedTurnRef.current = null;
+
+    const recorderFormat = selectAudioRecorderFormat();
+    const turn: RecordedVoiceTurnSession = {
+      turnId: createVoiceTurnId(),
+      startedAt: recordingStartTimeRef.current,
+      recorderFormat,
+      mimeType: getAudioBlobType(undefined, recorderFormat),
+      activeParts: [],
+      activeSegmentStartedAt: recordingStartTimeRef.current,
+      nextSegmentIndex: 0,
+      segments: new Map(),
+      uploads: new Set(),
+      chunkTimer: null,
+      recorderStopping: false,
+      pendingStopReason: null,
+      cancelled: false,
+    };
+    recordedTurnRef.current = turn;
     publishAgentModeDiagnostic({
       scope: "voice-agent",
       event: "voice_turn_started",
@@ -646,11 +737,24 @@ export function VoiceAgent({
       detail: { turnId: turn.turnId, mode: "recorded-stt" },
     });
     turn.chunkTimer = window.setInterval(() => {
-      flushRecordedSegment(turn, false);
+      if (recordedTurnRef.current === turn && isRecordingRef.current) {
+        stopActiveRecordedSegment(turn, "rotate");
+      }
     }, RECORDED_STT_CHUNK_MS);
-    recorder.start(1000); // collect short blobs, upload bounded chunks while speech continues
+    if (!startRecordedSegmentRecorder(turn)) {
+      if (turn.chunkTimer) {
+        window.clearInterval(turn.chunkTimer);
+        turn.chunkTimer = null;
+      }
+      turn.cancelled = true;
+      recordedTurnRef.current = null;
+      isRecordingRef.current = false;
+      setError("Voice recording could not start in this browser.");
+      setState(isMicMuted ? "muted" : "listening");
+      return;
+    }
     setState("capturing");
-  }, [finalizeRecordedTurn, flushRecordedSegment, isMicMuted]);
+  }, [isMicMuted, startRecordedSegmentRecorder, stopActiveRecordedSegment]);
 
   const sendPartialRecordedTurn = useCallback(() => {
     const turn = partialRecordedTurnRef.current;
@@ -1243,19 +1347,19 @@ export function VoiceAgent({
     }
 
     // Stop recording
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
+    if (recordedTurnRef.current) {
+      const turn = recordedTurnRef.current;
       discardRecordingRef.current = true;
-      if (recordedTurnRef.current?.chunkTimer) {
-        window.clearInterval(recordedTurnRef.current.chunkTimer);
-        recordedTurnRef.current.chunkTimer = null;
+      if (turn.chunkTimer) {
+        window.clearInterval(turn.chunkTimer);
+        turn.chunkTimer = null;
       }
-      if (recordedTurnRef.current) {
-        recordedTurnRef.current.cancelled = true;
+      const stopped = stopActiveRecordedSegment(turn, "discard");
+      turn.cancelled = true;
+      if (!stopped) {
+        turn.activeParts = [];
+        mediaRecorderRef.current = null;
       }
-      mediaRecorderRef.current.stop();
     }
     isRecordingRef.current = false;
     recordedTurnRef.current = null;
@@ -1305,7 +1409,7 @@ export function VoiceAgent({
       sessionId,
     });
     diagnosticSessionRef.current = null;
-  }, [isPlayingAudio, onAgentMutedChange, onInterrupt, onMicMutedChange, recordVoiceBreadcrumb, releaseWakeLock]);
+  }, [isPlayingAudio, onAgentMutedChange, onInterrupt, onMicMutedChange, recordVoiceBreadcrumb, releaseWakeLock, stopActiveRecordedSegment]);
 
   useEffect(() => {
     deactivateRef.current = () => deactivate();

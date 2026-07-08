@@ -196,8 +196,9 @@ The recorded adapter should keep the current `/api/chat` handoff but stop treati
 
 ### Capture Strategy
 
-- Use `MediaRecorder.start(timeslice)` with a production chunk interval of `4000-8000ms`; keep the current short internal `dataavailable` cadence only if needed to build stable chunks.
-- Rotate uploadable chunks while the user keeps speaking; do not require the user to pause every few seconds.
+- Use a production chunk interval of `4000-8000ms`, but make each uploaded chunk a complete `MediaRecorder` start/stop output rather than a continuation blob from `start(timeslice)`.
+- Rotate uploadable chunks by stopping the current recorder and immediately starting a new recorder while the user keeps speaking; do not require the user to pause every few seconds.
+- Treat timeslice `dataavailable` blobs as unsafe for upload unless the browser/container is proven to emit standalone decodable files for every slice.
 - Keep a final tail chunk on stop so trailing speech is not stranded.
 - Retain chunk blobs in memory until the turn is sent, discarded, or the user resolves a partial failure.
 - Bound retained audio by both time and bytes; if exceeded, move to `needs-confirmation` with a clear warning.

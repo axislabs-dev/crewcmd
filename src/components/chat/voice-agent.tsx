@@ -908,7 +908,6 @@ export function VoiceAgent({
               onInterrupt();
             }
             startRecording();
-            setState("listening"); // actively listening/recording
           }
         }
       } else {

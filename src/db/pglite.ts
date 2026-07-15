@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { mkdirSync, readFileSync, readdirSync, existsSync } from "fs";
 import path from "path";
 import * as schema from "./schema";
+import { installPgliteShutdownHandlers } from "./pglite-lifecycle";
 
 const configuredDataDir = process.env.CREWCMD_PGLITE_DATA_DIR;
 const dataDir = configuredDataDir
@@ -14,6 +15,10 @@ const markerFile = path.join(dataDir, ".schema-applied");
 mkdirSync(dataDir, { recursive: true });
 
 const client = new PGlite(dataDir);
+
+if (process.env.NODE_ENV !== "test") {
+  installPgliteShutdownHandlers(client);
+}
 
 /**
  * Write serialization queue for PGlite.

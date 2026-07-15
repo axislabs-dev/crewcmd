@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, existsSync } from "fs";
 import path from "path";
 import * as schema from "./schema";
 import { installPgliteShutdownHandlers } from "./pglite-lifecycle";
+import { acquirePgliteProcessLock } from "./pglite-process-lock";
 
 const configuredDataDir = process.env.CREWCMD_PGLITE_DATA_DIR;
 const dataDir = configuredDataDir
@@ -14,10 +15,18 @@ const markerFile = path.join(dataDir, ".schema-applied");
 // Ensure the data directory exists
 mkdirSync(dataDir, { recursive: true });
 
+const releaseProcessLock = process.env.NODE_ENV !== "test"
+  ? acquirePgliteProcessLock(dataDir)
+  : () => {};
 const client = new PGlite(dataDir);
 
 if (process.env.NODE_ENV !== "test") {
-  installPgliteShutdownHandlers(client);
+  installPgliteShutdownHandlers({
+    close: async () => {
+      await client.close();
+      releaseProcessLock();
+    },
+  });
 }
 
 /**

@@ -8,6 +8,10 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  acquirePgliteProcessLock,
+  getPgliteProcessLockStatus,
+} from "./pglite-process-lock";
 
 interface ArchiveOptions {
   archivePath: string;
@@ -49,6 +53,9 @@ async function assertStopped(dataDir: string): Promise<void> {
     return;
   }
 
+  const lockStatus = getPgliteProcessLockStatus(dataDir);
+  if (lockStatus.state === "stale") return;
+
   throw new Error(
     `PGlite appears to be running at ${dataDir}. Stop CrewCMD before backing it up.`,
   );
@@ -64,14 +71,17 @@ export async function backupPglite({
   }
   await assertStopped(dataDir);
 
-  const client = await PGlite.create(dataDir);
+  const releaseProcessLock = acquirePgliteProcessLock(dataDir);
+  let client: PGlite | undefined;
   try {
+    client = await PGlite.create(dataDir);
     const archive = await client.dumpDataDir("gzip");
     const bytes = new Uint8Array(await archive.arrayBuffer());
     await mkdir(path.dirname(archivePath), { recursive: true });
     await writeFile(archivePath, bytes, { flag: "wx", mode: 0o600 });
   } finally {
-    await client.close();
+    await client?.close();
+    releaseProcessLock();
   }
 }
 
@@ -90,8 +100,13 @@ export async function restorePglite({
   const archive = new Blob([new Uint8Array(archiveBytes)]);
   await mkdir(path.dirname(dataDir), { recursive: true });
 
-  const client = await PGlite.create({ dataDir, loadDataDir: archive });
-  await client.close();
+  const releaseProcessLock = acquirePgliteProcessLock(dataDir);
+  try {
+    const client = await PGlite.create({ dataDir, loadDataDir: archive });
+    await client.close();
+  } finally {
+    releaseProcessLock();
+  }
 }
 
 async function main(): Promise<void> {

@@ -92,6 +92,15 @@ function validateInit({ mode, port, publicUrl, tailscale }) {
   if (publicUrl) {
     const parsed = new URL(publicUrl);
     if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("--public-url must be http or https");
+    if (
+      parsed.pathname !== "/" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error("--public-url must be an origin without credentials, path, query, or fragment");
+    }
   }
 }
 

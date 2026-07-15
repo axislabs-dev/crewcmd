@@ -26,6 +26,17 @@ test("validates Tailscale public URL requirements", () => {
     publicUrl: "https://crewcmd.example.ts.net",
     tailscale: true,
   }));
+  for (const publicUrl of [
+    "https://user:password@crewcmd.example.com",
+    "https://crewcmd.example.com/crewcmd",
+    "https://crewcmd.example.com?tenant=one",
+    "https://crewcmd.example.com#auth",
+  ]) {
+    assert.throws(
+      () => internals.validateInit({ mode: "docker", port: 3000, publicUrl, tailscale: false }),
+      /--public-url must be an origin/,
+    );
+  }
 });
 
 test("generates redacted env output", () => {

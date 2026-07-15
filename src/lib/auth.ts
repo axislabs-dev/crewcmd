@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { trustConfiguredAuthHost } from "@/lib/auth-host";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: trustConfiguredAuthHost(),
   providers: [
     Credentials({
       name: "credentials",

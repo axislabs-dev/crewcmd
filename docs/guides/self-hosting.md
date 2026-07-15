@@ -1,35 +1,49 @@
 # Self-Hosting
 
-CrewCmd is designed to be self-hosted. Your data stays on your infrastructure.
+CrewCmd is designed to be self-hosted. The current supported contract is a
+source checkout with embedded PGlite for contributor evaluation and controlled
+OSS preview use. This is not yet a hardened production support guarantee.
+
+Docker Compose, external Postgres, and platform deployments remain preview
+paths pending the manual evidence in
+[#668](https://github.com/rogerchappel/crewcmd/issues/668). There is currently
+no supported npm CLI, desktop installer, prebuilt server archive, or published
+container image.
 
 ## Deployment Options
 
-### 1. Local Machine (Development)
+### 1. Source Checkout + Embedded PGlite (Supported Preview Path)
 
 ```bash
-pnpm dev:https
+git clone https://github.com/rogerchappel/crewcmd.git
+cd crewcmd
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Uses embedded PGlite. No external services needed.
+Open `http://localhost:3000`. Use `pnpm dev:https` only for HTTPS-only browser
+features or local-network testing. PGlite data is stored in `.data/pglite`.
 
-### 2. Docker Compose (Recommended for Production)
+### 2. Docker Compose + Postgres (Preview)
 
 ```bash
 cp .env.example .env
 # Edit .env and set AUTH_SECRET before exposing this service.
-docker compose up -d
+docker compose up --build -d
+curl --fail http://localhost:3000/api/health
 ```
 
-Includes Postgres and CrewCmd. Put it behind your own reverse proxy or platform TLS layer for public access.
+This includes Postgres and CrewCmd. Validate restart persistence, backup,
+restore, TLS, and teardown on the target host before relying on it.
 
-### 3. VPS / Cloud VM
+### 3. VPS / Cloud VM (Preview)
 
 1. Clone the repo on your server
 2. Set up Postgres (or use embedded PGlite for single-user)
 3. Configure environment variables
 4. Run with `pnpm start` or use PM2/systemd
 
-### 4. Platform Deploy
+### 4. Platform Deploy (Uncertified)
 
 CrewCmd is a Next.js app. Deploy to:
 
@@ -74,10 +88,10 @@ server {
 
 ### PGlite (Embedded)
 
-Data is stored in `.pglite/`. Back up this directory:
+Data is stored in `.data/pglite/`. Stop CrewCmd before copying it:
 
 ```bash
-cp -r .pglite .pglite-backup-$(date +%Y%m%d)
+cp -R .data/pglite ".data/pglite-backup-$(date +%Y%m%d-%H%M%S)"
 ```
 
 ### External Postgres
@@ -88,14 +102,45 @@ Use standard `pg_dump`:
 pg_dump $DATABASE_URL > crewcmd-backup-$(date +%Y%m%d).sql
 ```
 
-## Updating
+For Docker Compose:
 
 ```bash
-git pull origin main
-pnpm install
-pnpm db:migrate  # Apply tracked schema migrations
+docker compose exec -T db pg_dump -U crewcmd crewcmd > crewcmd-backup-$(date +%Y%m%d).sql
+```
+
+Test restoring backups in a disposable environment before depending on them.
+
+## Updating
+
+There are no published stable release artifacts yet. Pin deployments to a
+reviewed commit SHA, record the current SHA, and take a matching data backup
+before updating.
+
+```bash
+git rev-parse HEAD
+git fetch origin
+git checkout REVIEWED_COMMIT_OR_TAG
+pnpm install --frozen-lockfile
 pnpm build
 # Restart the server
 ```
+
+Embedded PGlite applies its tracked schema at startup. External Postgres users
+must back up the database and run `pnpm db:migrate` before restarting.
+
+## Rollback
+
+There is no automated downgrade workflow. To roll back safely:
+
+1. Stop CrewCmd.
+2. Check out the previously recorded commit SHA.
+3. Restore the data backup taken for that exact code revision if the update
+   applied schema changes.
+4. Run `pnpm install --frozen-lockfile`, rebuild, and restart.
+5. Confirm `/api/health`, sign-in, and one read/write workflow before reopening
+   access.
+
+Do not run older code against a newer migrated database without a tested
+compatibility or restore plan.
 
 For migration diagnostics and baselining an older database, see [Database Migrations](database-migrations.md).

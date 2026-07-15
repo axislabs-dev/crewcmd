@@ -45,7 +45,15 @@ Other platforms bolt AI onto an existing chat tool, or make every conversation f
 
 ## Quick Start
 
-No database setup required. CrewCmd runs with embedded Postgres locally.
+The supported path for the controlled OSS preview is a source checkout with
+Node.js 22, pnpm 9.15, and embedded PGlite. It requires no external database.
+
+| Path | Support level |
+|---|---|
+| Source checkout + embedded PGlite | Supported for contributor evaluation and controlled OSS preview use |
+| Docker Compose + Postgres | Preview; complete the environment-specific checks in [#668](https://github.com/rogerchappel/crewcmd/issues/668) before relying on it |
+| External Postgres or platform deployment | Preview; validate migrations, backups, TLS, and restore procedures in your environment |
+| npm CLI, desktop packages, prebuilt server bundles, and published container images | Deferred until versioned public artifacts exist |
 
 For normal local development on the machine running CrewCmd:
 
@@ -123,6 +131,7 @@ pnpm dev
 
 - CrewCmd is still early software; verify auth, database, and OpenClaw gateway settings in a non-production environment before using it with a real team.
 - Docker Compose and LAN HTTPS flows are preview paths and should be validated on the target host and network.
+- No npm CLI, desktop package, prebuilt server archive, or published container image is part of the supported preview contract yet.
 - Governance and approval primitives exist, but broader guardrail workflows are still in progress and should not be treated as complete compliance controls.
 
 ## Features

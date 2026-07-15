@@ -106,6 +106,7 @@ function renderEnv(config) {
     `AUTH_SECRET="${config.authSecret || secret(32, "base64")}"`,
     `HEARTBEAT_SECRET="${config.heartbeatSecret || secret(32, "hex")}"`,
     `NEXT_PUBLIC_APP_URL="${config.publicUrl}"`,
+    `AUTH_URL="${config.publicUrl}"`,
     `APP_PORT=${config.port}`,
     "POSTGRES_PORT=5432",
     `CREWCMD_MODE="${config.mode}"`,
@@ -143,6 +144,7 @@ function renderCompose(config) {
       DATABASE_URL: postgresql://crewcmd:\${POSTGRES_PASSWORD:-crewcmd}@db:5432/crewcmd
       AUTH_SECRET: \${AUTH_SECRET}
       NEXT_PUBLIC_APP_URL: \${NEXT_PUBLIC_APP_URL:-http://localhost:${config.port}}
+      AUTH_URL: \${NEXT_PUBLIC_APP_URL:-http://localhost:${config.port}}
       BLOB_READ_WRITE_TOKEN: \${BLOB_READ_WRITE_TOKEN:-}
       HEARTBEAT_SECRET: \${HEARTBEAT_SECRET:-}
       OPENCLAW_GATEWAY_URL: \${OPENCLAW_GATEWAY_URL:-}

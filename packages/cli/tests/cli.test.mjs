@@ -44,6 +44,7 @@ test("generates redacted env output", () => {
   assert.match(redacted, /POSTGRES_PASSWORD=<redacted>/);
   assert.match(redacted, /DATABASE_URL=<redacted>/);
   assert.doesNotMatch(redacted, /heartbeat/);
+  assert.match(env, /AUTH_URL="http:\/\/localhost:3000"/);
 });
 
 test("generates docker compose using configured port and image", () => {
@@ -53,5 +54,6 @@ test("generates docker compose using configured port and image", () => {
   });
   assert.match(compose, /ghcr\.io\/example\/crewcmd:test/);
   assert.match(compose, /\$\{APP_PORT:-3456\}:3000/);
+  assert.match(compose, /AUTH_URL: \$\{NEXT_PUBLIC_APP_URL:-http:\/\/localhost:3456\}/);
   assert.match(compose, /\/api\/health/);
 });

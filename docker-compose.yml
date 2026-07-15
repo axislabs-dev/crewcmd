@@ -39,6 +39,7 @@ services:
       DATABASE_URL: postgresql://crewcmd:${POSTGRES_PASSWORD:-crewcmd}@db:5432/crewcmd
       AUTH_SECRET: ${AUTH_SECRET:-}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      AUTH_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
       HEARTBEAT_SECRET: ${HEARTBEAT_SECRET:-}
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}

@@ -88,11 +88,33 @@ server {
 
 ### PGlite (Embedded)
 
-Data is stored in `.data/pglite/`. Stop CrewCmd before copying it:
+Data is stored in `.data/pglite/`. Stop CrewCmd completely, then create a
+PGlite archive:
 
 ```bash
-cp -R .data/pglite ".data/pglite-backup-$(date +%Y%m%d-%H%M%S)"
+pnpm db:pglite:backup -- \
+  "./backups/crewcmd-pglite-$(date +%Y%m%d-%H%M%S).tar.gz"
 ```
+
+The backup command refuses to run while the embedded database appears active
+and refuses to overwrite an existing archive. Archives contain account data,
+password hashes, runtime configuration, and any secrets stored in the
+database. They are created with owner-only permissions, but should still be
+encrypted and access-controlled wherever they are retained.
+
+Raw copies of `.data/pglite` are not a supported recovery format. Restore an
+archive into a new, empty data directory with the same reviewed CrewCmd/PGlite
+version that created it:
+
+```bash
+export CREWCMD_PGLITE_DATA_DIR=.data/pglite-restored
+pnpm db:pglite:restore -- ./backups/crewcmd-pglite-YYYYMMDD-HHMMSS.tar.gz
+pnpm dev
+```
+
+The restore command never deletes or overwrites a non-empty target directory.
+Confirm `/api/health`, sign in, and exercise one read/write workflow before
+making the restored directory your normal `CREWCMD_PGLITE_DATA_DIR`.
 
 ### External Postgres
 
@@ -118,6 +140,8 @@ before updating.
 
 ```bash
 git rev-parse HEAD
+# Stop CrewCmd, then archive the current embedded database if applicable.
+pnpm db:pglite:backup -- ./backups/crewcmd-pglite-before-update.tar.gz
 git fetch origin
 git checkout REVIEWED_COMMIT_OR_TAG
 pnpm install --frozen-lockfile

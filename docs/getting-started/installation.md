@@ -20,7 +20,7 @@ No database setup required. CrewCmd runs with embedded Postgres locally via PGli
 ```bash
 git clone https://github.com/rogerchappel/crewcmd.git
 cd crewcmd
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
@@ -30,6 +30,15 @@ Confirm that `http://localhost:3000/api/health` responds successfully, create
 the first account, and keep the generated `.data/pglite` directory with the
 checkout. See the [self-hosting guide](../guides/self-hosting.md) before moving
 or updating an instance.
+
+Before updating, stop CrewCmd and create a versioned archive with
+
+```bash
+pnpm db:pglite:backup -- ./backups/crewcmd-pglite.tar.gz
+```
+
+Do not back up or restore PGlite by copying `.data/pglite`; use the archive
+commands in the [self-hosting guide](../guides/self-hosting.md).
 
 Use `pnpm dev:https` only when you need HTTPS-only browser features such as microphone access, or when testing from another device on your local network.
 

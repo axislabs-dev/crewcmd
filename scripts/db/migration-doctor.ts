@@ -23,8 +23,26 @@ function loadEnv() {
 }
 
 function readJournal() {
-  const journalPath = path.join(process.cwd(), "drizzle", "meta", "_journal.json");
+  const migrationsDir = path.join(process.cwd(), "drizzle");
+  const journalPath = path.join(migrationsDir, "meta", "_journal.json");
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as Journal;
+  const journalTags = journal.entries.map((entry) => entry.tag);
+  const sqlTags = fs.readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .map((file) => file.slice(0, -4));
+  const duplicateTags = journalTags.filter((tag, index) => journalTags.indexOf(tag) !== index);
+  const unjournaled = sqlTags.filter((tag) => !journalTags.includes(tag));
+  const missingFiles = journalTags.filter((tag) => !sqlTags.includes(tag));
+
+  if (duplicateTags.length || unjournaled.length || missingFiles.length) {
+    throw new Error([
+      "Migration journal drift detected.",
+      duplicateTags.length ? `Duplicate journal tags: ${[...new Set(duplicateTags)].join(", ")}.` : "",
+      unjournaled.length ? `Unjournaled SQL files: ${unjournaled.join(", ")}.` : "",
+      missingFiles.length ? `Journal entries without SQL files: ${missingFiles.join(", ")}.` : "",
+    ].filter(Boolean).join(" "));
+  }
+
   return journal.entries;
 }
 
@@ -44,13 +62,13 @@ function hasFlag(name: string) {
 
 async function main() {
   loadEnv();
+  const entries = readJournal();
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     console.log("DATABASE_URL is not set. This install uses local PGlite; run pnpm db:migrate normally.");
     return;
   }
 
-  const entries = readJournal();
   const baselineTag = argValue("--baseline-through");
   const applyBaseline = hasFlag("--apply") && hasFlag("--yes");
 

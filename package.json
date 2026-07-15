@@ -46,7 +46,6 @@
     "drizzle.config.ts",
     "eslint.config.mjs",
     "next.config.ts",
-    "package-lock.json",
     "playwright.config.ts",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
@@ -105,7 +104,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.0.1",
-    "ws": "^8.20.0",
+    "ws": "^8.21.1",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -134,7 +133,8 @@
   },
   "pnpm": {
     "overrides": {
-      "postcss": "^8.5.14"
+      "postcss": "^8.5.14",
+      "undici": "^6.27.0"
     }
   }
 }

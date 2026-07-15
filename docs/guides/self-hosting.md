@@ -28,7 +28,8 @@ features or local-network testing. PGlite data is stored in `.data/pglite`.
 
 ```bash
 cp .env.example .env
-# Edit .env and set AUTH_SECRET before exposing this service.
+# Set AUTH_SECRET and set NEXT_PUBLIC_APP_URL to the exact public origin.
+# Compose derives AUTH_URL from NEXT_PUBLIC_APP_URL.
 docker compose up --build -d
 curl --fail http://localhost:3000/api/health
 ```
@@ -40,8 +41,8 @@ restore, TLS, and teardown on the target host before relying on it.
 
 1. Clone the repo on your server
 2. Set up Postgres (or use embedded PGlite for single-user)
-3. Configure environment variables
-4. Run with `pnpm start` or use PM2/systemd
+3. Set `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, and the same canonical `AUTH_URL`
+4. Build, then run with `pnpm start` or use PM2/systemd
 
 ### 4. Platform Deploy (Uncertified)
 
@@ -63,6 +64,22 @@ For local development, `pnpm dev:https` generates a self-signed certificate.
 
 For production, use a reverse proxy (Nginx, Caddy) with Let's Encrypt, or deploy behind a platform that handles TLS.
 
+## Canonical Authentication Origin
+
+Production source/Node deployments must pin Auth.js to the public origin:
+
+```bash
+export NEXT_PUBLIC_APP_URL=https://crewcmd.example.com
+export AUTH_URL=https://crewcmd.example.com
+pnpm build
+pnpm start
+```
+
+Both values must be the same origin, including any non-default port. Do not
+include a path, credentials, query, or fragment. Docker Compose derives
+`AUTH_URL` from `NEXT_PUBLIC_APP_URL`; generated CLI configurations write both.
+Do not use `AUTH_TRUST_HOST=true` instead of `AUTH_URL`.
+
 ## Reverse Proxy (Nginx)
 
 ```nginx
@@ -79,10 +96,16 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Real-IP $remote_addr;
     }
 }
 ```
+
+The reverse proxy must overwrite, rather than append to, `Host`,
+`X-Forwarded-Host`, and `X-Forwarded-Proto`. Keep the proxy hostname and scheme
+identical to `AUTH_URL`.
 
 ## Backups
 

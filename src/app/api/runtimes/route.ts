@@ -8,6 +8,8 @@ import { getRequestOrigin } from "@/lib/runtime-callback-url";
 import { deriveRuntimeTrustSummary } from "@/lib/runtime-trust";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 import { normalizeHermesRootUrl } from "@/lib/runtimes/providers/hermes";
+import { sealRuntimeAuthToken } from "@/lib/runtime-token-crypto";
+import { toBrowserSafeRuntime } from "@/lib/runtime-api-dto";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +70,9 @@ export async function POST(request: NextRequest) {
     if (!name || !gatewayUrl || !httpUrl) {
       return NextResponse.json({ error: "name, gatewayUrl, and httpUrl are required" }, { status: 400 });
     }
+    if (authToken != null && typeof authToken !== "string") {
+      return NextResponse.json({ error: "authToken must be a string" }, { status: 400 });
+    }
     if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const targetWorkspace = await resolveAccessibleWorkspace({
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
         name,
         gatewayUrl: normalizedRuntime.gatewayUrl,
         httpUrl: normalizedRuntime.httpUrl,
-        authToken: authToken || null,
+        authToken: sealRuntimeAuthToken(authToken),
         isPrimary,
         status: "connected",
         lastPing: new Date(),
@@ -141,7 +146,7 @@ export async function POST(request: NextRequest) {
       .returning());
 
     return NextResponse.json({
-      ...runtime,
+      ...toBrowserSafeRuntime(runtime),
       capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
       trustSummary: deriveRuntimeTrustSummary(runtime),
     });

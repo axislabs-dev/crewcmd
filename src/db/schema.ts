@@ -724,7 +724,7 @@ export const companyRuntimes = pgTable("company_runtimes", {
   name: text("name").notNull(),
   gatewayUrl: text("gateway_url").notNull(), // ws://localhost:18789
   httpUrl: text("http_url").notNull(), // http://localhost:18789
-  authToken: text("auth_token"), // encrypted gateway auth token
+  authToken: text("auth_token"), // versioned ciphertext; use runtime-token-crypto helpers
   isPrimary: boolean("is_primary").notNull().default(false),
   status: text("status").notNull().default("disconnected"), // connected | disconnected | error
   lastPing: timestamp("last_ping", { withTimezone: true }),

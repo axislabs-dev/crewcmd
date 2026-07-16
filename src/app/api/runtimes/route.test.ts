@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { isEncryptedRuntimeAuthToken } from "@/lib/runtime-token-crypto";
 
 type RuntimeRow = {
   id: string;
@@ -18,6 +19,7 @@ type RuntimeRow = {
   metadata: Record<string, unknown> | null;
   createdAt?: Date;
   updatedAt?: Date;
+  hasAuthToken?: boolean;
 };
 
 type Field = { key: keyof RuntimeRow };
@@ -155,6 +157,7 @@ async function createRuntime(userId: string, body: Record<string, unknown> = {})
 
 describe("POST /api/runtimes primary scoping", () => {
   beforeEach(() => {
+    vi.stubEnv("AUTH_SECRET", "runtime-route-test-secret");
     vi.clearAllMocks();
     mockRuntimeRows.length = 0;
     mockResolveAccessibleWorkspace.mockResolvedValue({
@@ -162,6 +165,10 @@ describe("POST /api/runtimes primary scoping", () => {
       type: "company",
       companyId: "co_1",
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("marks user A's first personal runtime as primary", async () => {
@@ -242,7 +249,7 @@ describe("POST /api/runtimes primary scoping", () => {
       runtimeType: "hermes",
       gatewayUrl: "http://localhost:8642",
       httpUrl: "http://localhost:8642",
-      authToken: "secret",
+      hasAuthToken: true,
       metadata: {
         label: "local",
         provider: "hermes",
@@ -251,5 +258,8 @@ describe("POST /api/runtimes primary scoping", () => {
         workspaceId: "ws_co_1",
       },
     });
+    expect(runtime).not.toHaveProperty("authToken");
+    expect(mockRuntimeRows[0].authToken).not.toBe("secret");
+    expect(isEncryptedRuntimeAuthToken(mockRuntimeRows[0].authToken!)).toBe(true);
   });
 });

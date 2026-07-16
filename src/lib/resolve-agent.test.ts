@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sealRuntimeAuthToken } from "./runtime-token-crypto";
 
 type Field = { key: string };
 type Predicate = (row: Record<string, unknown>) => boolean;
@@ -79,15 +80,20 @@ function agent(overrides: Record<string, unknown> = {}) {
 
 describe("resolveAgent runtime credentials", () => {
   beforeEach(() => {
+    vi.stubEnv("AUTH_SECRET", "resolve-agent-test-secret");
     mockState.agents.length = 0;
     mockState.runtimes.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("hydrates the current linked-runtime token for server-side execution", async () => {
     mockState.agents.push(agent());
     mockState.runtimes.push({
       id: "runtime-1",
-      authToken: "current-secret",
+      authToken: sealRuntimeAuthToken("current-secret"),
       metadata: { capabilitySnapshot: { defaultModel: "runtime-model" } },
     });
 

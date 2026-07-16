@@ -14,6 +14,7 @@ import WebSocket from "ws";
 import { deriveRuntimeCapabilitySnapshot } from "./runtime-capabilities";
 import type { RuntimeCapabilitySnapshot } from "./runtime-capabilities";
 import { publishAgentModeDiagnostic } from "./agent-mode-diagnostics";
+import { resolveRuntimeAuthTokenForUse } from "./runtime-token-crypto";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -490,6 +491,7 @@ export class GatewayClient {
   private challengeResolve?: (nonce: string) => void;
   private challengeReject?: (err: Error) => void;
   private eventListeners = new Map<string, Set<(payload: unknown) => void>>();
+  private authToken: string | null;
 
   get isConnected(): boolean {
     return this.connected;
@@ -497,10 +499,12 @@ export class GatewayClient {
 
   constructor(
     private gatewayUrl: string,
-    private authToken: string | null,
+    authToken: string | null,
     private device: DeviceIdentity,
     private timeoutMs = 15000
-  ) {}
+  ) {
+    this.authToken = resolveRuntimeAuthTokenForUse(authToken);
+  }
 
   /**
    * Connect to the gateway with device auth challenge-response.

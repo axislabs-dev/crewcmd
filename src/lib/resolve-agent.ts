@@ -3,6 +3,7 @@ import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { resolveModelDefault, type ModelDefaultSource } from "@/lib/model-default-resolution";
 import { resolveRuntimeAgentAdapterConfig } from "@/lib/runtime-agent-credentials";
+import { resolveRuntimeAuthTokenForUse } from "@/lib/runtime-token-crypto";
 
 /** Agent record from the database with the fields needed by the runtime */
 export interface AgentRecord {
@@ -115,7 +116,7 @@ async function resolveRuntimeContext(runtimeId: string | null): Promise<RuntimeC
       ? (metadata.capabilitySnapshot as Record<string, unknown>)
       : null;
   return {
-    authToken: runtime.authToken,
+    authToken: resolveRuntimeAuthTokenForUse(runtime.authToken),
     defaultModel: typeof snapshot?.defaultModel === "string" ? snapshot.defaultModel : null,
   };
 }

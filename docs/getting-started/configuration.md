@@ -38,8 +38,16 @@ forwarded-host trust without first pinning the public origin.
 | Variable | Description | Default |
 |---|---|---|
 | `HEARTBEAT_SECRET` | API token for agent/cron access | — |
+| `CREWCMD_RUNTIME_TOKEN_KEYS` | JSON keyring of key ID to base64-encoded 32-byte key | Derived from `AUTH_SECRET` |
+| `CREWCMD_RUNTIME_TOKEN_ACTIVE_KEY_ID` | Key ID used for new runtime-token ciphertext | The sole dedicated key, or `auth-secret-v1` |
 
 `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` are present in `.env.example` as reserved GitHub OAuth settings, but the default auth provider currently uses email/password credentials only.
+
+Runtime gateway tokens use versioned AES-256-GCM encryption before persistence
+and decrypt only at server-side runtime transport boundaries. Production
+operators should use a dedicated keyring and follow the
+[runtime token encryption and rotation guide](../guides/runtime-token-encryption.md)
+before upgrading an installation that already contains runtime tokens.
 
 ### AI Providers
 

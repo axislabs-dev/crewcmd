@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRealtimeRelayOutput,
+  getRealtimeVoiceReadiness,
   openRealtimeRelayEvents,
   resolveRealtimeVoiceSessionSettings,
   sendRealtimeRelayAudio,
@@ -11,6 +12,71 @@ import {
 describe("realtime voice client helpers", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("loads server-derived readiness before opening a microphone", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        readiness: {
+          status: "ready",
+          provider: "openai",
+          transport: "gateway-relay",
+          fallback: "classic-stt-tts",
+          availableTransports: ["gateway-relay"],
+          protocolVerified: true,
+          message: "Ready",
+        },
+      }),
+    } as Response);
+
+    await expect(getRealtimeVoiceReadiness({
+      runtimeId: "rt 1",
+      provider: "openai",
+    })).resolves.toMatchObject({ status: "ready", provider: "openai" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/runtimes/rt%201/talk/realtime/session?provider=openai",
+      { headers: { Accept: "application/json" } },
+    );
+  });
+
+  it("surfaces a denied microphone without requesting media", async () => {
+    vi.stubGlobal("navigator", {
+      permissions: {
+        query: vi.fn().mockResolvedValue({ state: "denied" }),
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        readiness: {
+          status: "ready",
+          provider: "openai",
+          transport: "gateway-relay",
+          fallback: "classic-stt-tts",
+          availableTransports: ["gateway-relay"],
+          protocolVerified: true,
+          message: "Ready",
+        },
+      }),
+    } as Response);
+
+    await expect(getRealtimeVoiceReadiness({ runtimeId: "rt_1" })).resolves.toMatchObject({
+      status: "microphone-denied",
+      message: expect.stringContaining("Allow microphone access"),
+    });
+    expect(navigator.permissions.query).toHaveBeenCalledOnce();
+  });
+
+  it("normalizes failed readiness requests to an actionable state", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    await expect(getRealtimeVoiceReadiness({ runtimeId: "rt_1" })).resolves.toMatchObject({
+      status: "unreachable",
+      fallback: "classic-stt-tts",
+    });
   });
 
   it("starts sessions through the runtime realtime talk route", async () => {

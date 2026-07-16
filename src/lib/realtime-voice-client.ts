@@ -4,6 +4,11 @@ import {
   normalizeAgentVoiceSettings,
   type AgentVoiceSettings,
 } from "@/lib/tts-voices";
+import {
+  microphoneDeniedRealtimeVoiceReadiness,
+  unreachableRealtimeVoiceReadiness,
+  type RealtimeVoiceReadiness,
+} from "@/lib/realtime-voice-readiness";
 
 export type RealtimeVoiceTransport = "webrtc-sdp" | "json-pcm-websocket" | "gateway-relay";
 
@@ -16,6 +21,11 @@ export interface RealtimeVoiceSessionRequest {
   agentId?: string;
   channelId?: string | null;
   channelAgentId?: string | null;
+}
+
+export interface RealtimeVoiceReadinessRequest {
+  runtimeId: string;
+  provider?: string;
 }
 
 export interface RealtimeVoiceSession {
@@ -89,6 +99,39 @@ export async function startRealtimeVoiceSession(
     ...session,
     sessionKey: session.sessionKey ?? request.sessionKey ?? "main",
   };
+}
+
+export async function getRealtimeVoiceReadiness(
+  request: RealtimeVoiceReadinessRequest,
+): Promise<RealtimeVoiceReadiness> {
+  const params = new URLSearchParams();
+  if (request.provider) params.set("provider", request.provider);
+  const query = params.size > 0 ? `?${params.toString()}` : "";
+
+  try {
+    const response = await fetch(
+      `/api/runtimes/${encodeURIComponent(request.runtimeId)}/talk/realtime/session${query}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!response.ok) {
+      return unreachableRealtimeVoiceReadiness(
+        await readRealtimeVoiceError(response, "Readiness check failed"),
+      );
+    }
+
+    const data = await response.json().catch(() => null);
+    const readiness = data?.readiness as RealtimeVoiceReadiness | undefined;
+    if (!readiness || typeof readiness.status !== "string") {
+      return unreachableRealtimeVoiceReadiness("OpenClaw readiness response was invalid");
+    }
+
+    if (readiness.status === "ready" && await isMicrophonePermissionDenied()) {
+      return microphoneDeniedRealtimeVoiceReadiness(readiness);
+    }
+    return readiness;
+  } catch {
+    return unreachableRealtimeVoiceReadiness("Readiness check failed");
+  }
 }
 
 export function resolveRealtimeVoiceSessionSettings(
@@ -200,4 +243,14 @@ async function postRealtimeRelay(runtimeId: string, body: Record<string, unknown
 async function readRealtimeVoiceError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null);
   return typeof data?.error === "string" && data.error.trim().length > 0 ? data.error : fallback;
+}
+
+async function isMicrophonePermissionDenied() {
+  if (typeof navigator === "undefined" || !navigator.permissions?.query) return false;
+  try {
+    const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
+    return permission.state === "denied";
+  } catch {
+    return false;
+  }
 }

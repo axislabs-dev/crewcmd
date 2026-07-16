@@ -24,6 +24,7 @@ import {
   type WorkspaceRecord,
 } from "@/lib/workspace";
 import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
+import { toPublicAgentDto } from "@/lib/agent-public-dto";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
     const agents = await Promise.all(dbAgents.map(async (agent) => {
       const hb = heartbeatMap.get(agent.callsign.toLowerCase());
       const workspaceIds = await getAgentWorkspaceIds(agent.id);
-      return {
+      return toPublicAgentDto({
         id: agent.id,
         callsign: agent.callsign,
         name: agent.name,
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest) {
         visibility: agent.visibility,
         workspaceIds,
         tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
-      };
+      });
     }));
 
     return NextResponse.json({ agents, source: agents.length > 0 ? "db" : "none" });
@@ -288,7 +289,7 @@ export async function POST(request: NextRequest) {
       grantedBy: access.userId,
     });
 
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(toPublicAgentDto(created), { status: 201 });
   } catch (err) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "An agent with that callsign already exists" }, { status: 409 });

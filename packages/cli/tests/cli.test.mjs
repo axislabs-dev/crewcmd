@@ -66,5 +66,6 @@ test("generates docker compose using configured port and image", () => {
   assert.match(compose, /ghcr\.io\/example\/crewcmd:test/);
   assert.match(compose, /\$\{APP_PORT:-3456\}:3000/);
   assert.match(compose, /AUTH_URL: \$\{NEXT_PUBLIC_APP_URL:-http:\/\/localhost:3456\}/);
-  assert.match(compose, /\/api\/health/);
+  assert.match(compose, /wget -qO- http:\/\/127\.0\.0\.1:3000\/api\/health/);
+  assert.doesNotMatch(compose, /wget -qO- http:\/\/localhost:3000\/api\/health/);
 });

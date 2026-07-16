@@ -230,6 +230,7 @@ export interface GatewayTalkCatalogProvider {
   id: string;
   label?: string;
   configured?: boolean;
+  aliases?: string[];
   modes?: string[];
   transports?: string[];
   brains?: string[];
@@ -246,10 +247,16 @@ export interface GatewayTalkCatalog {
   modes?: string[];
   transports?: string[];
   brains?: string[];
-  speech?: { providers?: GatewayTalkCatalogProvider[] };
-  transcription?: { providers?: GatewayTalkCatalogProvider[] };
-  realtime?: { providers?: GatewayTalkCatalogProvider[] };
+  speech?: GatewayTalkCatalogProviderGroup;
+  transcription?: GatewayTalkCatalogProviderGroup;
+  realtime?: GatewayTalkCatalogProviderGroup;
   [key: string]: unknown;
+}
+
+export interface GatewayTalkCatalogProviderGroup {
+  ready?: boolean;
+  activeProvider?: string;
+  providers?: GatewayTalkCatalogProvider[];
 }
 
 export interface GatewayCronJob {

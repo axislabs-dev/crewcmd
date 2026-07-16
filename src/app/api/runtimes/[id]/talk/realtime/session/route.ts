@@ -4,6 +4,10 @@ import { db, withRetry } from "@/db";
 import { agents, channelMembers, channels, companyRuntimes } from "@/db/schema";
 import { buildRuntimeReadWhere, getAgentAccessContext } from "@/lib/agent-access";
 import { getGatewayClientForRuntime } from "@/lib/gateway-chat-pool";
+import {
+  deriveRealtimeVoiceReadiness,
+  unreachableRealtimeVoiceReadiness,
+} from "@/lib/realtime-voice-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +15,51 @@ const REALTIME_SLOW_SPEECH_SILENCE_MS = 2000;
 const REALTIME_SLOW_SPEECH_PREFIX_PADDING_MS = 500;
 const CHANNEL_AGENT_SPEAKING_ROLES = new Set(["owner", "admin", "member", "contributor"]);
 const CHANNEL_AGENT_ACTIVE_MODES = new Set(["proactive", "on_call"]);
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  if (!db) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+
+  const { id } = await params;
+  const access = await getAgentAccessContext();
+  const readWhere = buildRuntimeReadWhere(access);
+  if (!readWhere) return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
+
+  const [runtime] = await withRetry(() =>
+    db!
+      .select({ id: companyRuntimes.id })
+      .from(companyRuntimes)
+      .where(and(eq(companyRuntimes.id, id), readWhere))
+      .limit(1)
+  );
+  if (!runtime) return NextResponse.json({ error: "Runtime not found" }, { status: 404 });
+
+  const enabled = process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE === "1";
+  const provider = readOptionalString(new URL(request.url).searchParams.get("provider"));
+  if (!enabled) {
+    return NextResponse.json({
+      readiness: deriveRealtimeVoiceReadiness({ enabled }),
+    });
+  }
+
+  try {
+    const client = await getGatewayClientForRuntime(runtime.id);
+    const catalog = await client.talkCatalog();
+    return NextResponse.json({
+      readiness: deriveRealtimeVoiceReadiness({
+        enabled,
+        catalog,
+        requestedProvider: provider,
+      }),
+    });
+  } catch {
+    return NextResponse.json({
+      readiness: unreachableRealtimeVoiceReadiness(),
+    });
+  }
+}
 
 export async function POST(
   request: Request,

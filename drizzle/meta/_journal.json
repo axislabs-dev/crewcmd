@@ -232,6 +232,20 @@
       "when": 1777900000000,
       "tag": "0032_tray_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784159059000,
+      "tag": "0001_jittery_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784159060000,
+      "tag": "0033_realtime_events",
+      "breakpoints": true
     }
   ]
 }

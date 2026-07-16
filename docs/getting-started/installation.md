@@ -1,31 +1,68 @@
 # Installation
 
-## Quick Start (Embedded Postgres)
+## Support Status
+
+CrewCmd currently supports one installation path for contributor evaluation
+and the controlled OSS preview. Other paths are available for testing but are
+not yet certified production release channels.
+
+| Path | Status | Notes |
+|---|---|---|
+| Source checkout + embedded PGlite | **Supported preview path** | Node.js 22, pnpm 9.15, and no external database |
+| Docker Compose + Postgres | **Preview** | Requires clean-host, persistence, backup, and restore QA in [#668](https://github.com/rogerchappel/crewcmd/issues/668) |
+| External Postgres or platform deploy | **Preview** | Validate migrations, TLS, backups, and rollback for the target environment |
+| npm CLI, desktop package, server archive, published container image | **Deferred** | Do not advertise or depend on these until versioned public artifacts exist |
+
+## Supported Preview Path (Embedded PGlite)
 
 No database setup required. CrewCmd runs with embedded Postgres locally via PGlite.
 
 ```bash
 git clone https://github.com/rogerchappel/crewcmd.git
 cd crewcmd
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). That's it.
 
+Confirm that `http://localhost:3000/api/health` responds successfully, create
+the first account, and keep the generated `.data/pglite` directory with the
+checkout. See the [self-hosting guide](../guides/self-hosting.md) before moving
+or updating an instance.
+
+Before updating, stop CrewCmd and create a versioned archive with
+
+```bash
+pnpm db:pglite:backup -- ./backups/crewcmd-pglite.tar.gz
+```
+
+Do not back up or restore PGlite by copying `.data/pglite`; use the archive
+commands in the [self-hosting guide](../guides/self-hosting.md).
+
 Use `pnpm dev:https` only when you need HTTPS-only browser features such as microphone access, or when testing from another device on your local network.
 
-## Docker Compose
+## Docker Compose (Preview)
+
+Do not treat this as a certified production path until the manual checks in
+[#668](https://github.com/rogerchappel/crewcmd/issues/668) are recorded for the
+target host.
 
 ```bash
 git clone https://github.com/rogerchappel/crewcmd.git
 cd crewcmd
 cp .env.example .env
-# Edit .env and set AUTH_SECRET before exposing this service.
-docker compose up
+# Edit .env and set a non-default AUTH_SECRET before exposing this service.
+docker compose up --build -d
+curl --fail http://localhost:3000/api/health
+docker compose logs app
 ```
 
-## External Postgres
+Use `docker compose down` to stop the preview without deleting its database
+volume. Back up Postgres before updates; the commands are in the
+[self-hosting guide](../guides/self-hosting.md).
+
+## External Postgres (Preview)
 
 Use Neon, Supabase, or any Postgres instance:
 
@@ -44,6 +81,13 @@ pnpm dev
 | Node.js | 22+ | Required |
 | pnpm | 9.15.0+ | Required; see `packageManager` in `package.json` |
 | Docker | Latest | Optional, for containerized deployment |
+
+## Published Artifacts
+
+There is currently no supported npm CLI, desktop installer, prebuilt server
+archive, or published container image. Install from a source checkout. Release
+and artifact publication remain tracked in
+[#665](https://github.com/rogerchappel/crewcmd/issues/665).
 
 ## What's Next
 

@@ -13,7 +13,18 @@ No environment variables are required for the default local path. If `DATABASE_U
 | Variable | Description | Default |
 |---|---|---|
 | `AUTH_SECRET` | Auth.js session encryption key | Local-only fallback in dev |
+| `AUTH_URL` | Canonical Auth.js origin for production sign-in | Required in production source/Node deployments |
 | `NEXT_PUBLIC_APP_URL` | Public URL for callbacks and generated links | `http://localhost:3000` |
+
+For production, set `AUTH_URL` and `NEXT_PUBLIC_APP_URL` to the same public
+HTTP(S) origin, including any non-default port. Use an origin only, such as
+`https://crewcmd.example.com`, with no path, credentials, query, or fragment.
+Docker Compose and CrewCMD-generated Docker configurations derive `AUTH_URL`
+from `NEXT_PUBLIC_APP_URL` so the values cannot drift.
+
+CrewCMD does not accept `AUTH_TRUST_HOST=true` as a substitute for a canonical
+`AUTH_URL` in production. This prevents an operator from enabling arbitrary
+forwarded-host trust without first pinning the public origin.
 
 ### Database
 

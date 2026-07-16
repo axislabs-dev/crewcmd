@@ -60,8 +60,48 @@ Provider API keys are configured in the CrewCmd UI under Settings > Provider Key
 | `APP_PORT` | Docker Compose app port | `3000` |
 | `POSTGRES_PORT` | Docker Compose Postgres host port | `5432` |
 | `OPENCLAW_GATEWAY_URL` | Optional OpenClaw gateway URL | — |
+| `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE` | Opt in to OpenClaw Talk realtime voice (`1` enables it) | `0` |
 | `BLOB_READ_WRITE_TOKEN` | Optional Vercel Blob token for uploaded assets | — |
 | `NODE_ENV` | `development` or `production` | `development` |
+
+### Realtime Voice
+
+Realtime voice is an opt-in browser capability. Set
+`NEXT_PUBLIC_CREWCMD_REALTIME_VOICE=1` before starting development or building
+a deployment. Because Next.js embeds `NEXT_PUBLIC_*` variables in the client
+bundle, restart `pnpm dev` after changing the flag and rebuild production or
+Docker images.
+
+The selected OpenClaw runtime must expose a configured realtime provider from
+the secret-free `talk.catalog` RPC with `gateway-relay` transport. CrewCMD uses
+OpenClaw's runtime-selected provider and aliases instead of maintaining a local
+provider priority list. OpenClaw 2026.7.1 and newer exposes authoritative
+`realtime.ready`; the compatible 2026.6.11 shape is shown as ready but
+protocol-unverified until the session-create probe succeeds.
+
+Configure OpenClaw itself with a `talk.realtime` provider, `mode: "realtime"`,
+`transport: "gateway-relay"`, and `brain: "agent-consult"`. Provider API keys
+belong in OpenClaw configuration or SecretRefs and are never returned by the
+CrewCMD readiness endpoint. Verify the safe catalog from the gateway host:
+
+```bash
+openclaw gateway call talk.catalog --params '{}' --json
+```
+
+The voice UI exposes these readiness states before starting realtime capture:
+
+- `disabled`: enable the CrewCMD build flag and rebuild/restart.
+- `provider-missing`: configure or select a ready OpenClaw realtime provider.
+- `unsupported-transport`: the provider does not expose `gateway-relay`.
+- `unreachable`: check the selected runtime URL, gateway service, and pairing.
+- `microphone-denied`: allow microphone permission for the CrewCMD origin.
+- `ready`: the selected provider can start a CrewCMD gateway-relay session.
+
+For browser microphone access, use `localhost` or a trusted HTTPS origin.
+When realtime is unavailable, CrewCMD explicitly falls back to its classic
+recorded STT/TTS path if that path is configured. See the
+[OpenClaw Talk protocol documentation](https://docs.openclaw.ai/nodes/talk)
+for provider-specific configuration.
 
 ## PGlite (Embedded Postgres)
 

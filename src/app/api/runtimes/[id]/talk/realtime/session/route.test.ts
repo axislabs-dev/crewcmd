@@ -111,15 +111,91 @@ vi.mock("@/lib/gateway-chat-pool", () => ({
   getGatewayClientForRuntime: (...args: unknown[]) => mockGetGatewayClientForRuntime(...args),
 }));
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
-describe("POST /api/runtimes/[id]/talk/realtime/session", () => {
+describe("/api/runtimes/[id]/talk/realtime/session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     mockRuntimeRows.length = 0;
     mockAgentRows.length = 0;
     mockChannelRows.length = 0;
     mockChannelMemberRows.length = 0;
+  });
+
+  it("reports disabled readiness without contacting OpenClaw", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CREWCMD_REALTIME_VOICE", "0");
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+
+    const response = await GET(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session"),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      readiness: {
+        status: "disabled",
+        fallback: "classic-stt-tts",
+      },
+    });
+    expect(mockGetGatewayClientForRuntime).not.toHaveBeenCalled();
+  });
+
+  it("derives current OpenClaw readiness for the requested provider", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CREWCMD_REALTIME_VOICE", "1");
+    const talkCatalog = vi.fn().mockResolvedValue({
+      realtime: {
+        ready: true,
+        activeProvider: "openai-realtime",
+        providers: [{
+          id: "openai-realtime",
+          aliases: ["openai"],
+          label: "OpenAI Realtime Voice",
+          configured: true,
+          transports: ["webrtc", "gateway-relay"],
+        }],
+      },
+    });
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockResolvedValue({ talkCatalog });
+
+    const response = await GET(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session?provider=openai"),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      readiness: {
+        status: "ready",
+        provider: "openai-realtime",
+        protocolVerified: true,
+      },
+    });
+    expect(talkCatalog).toHaveBeenCalledOnce();
+  });
+
+  it("returns a secret-free unreachable readiness result", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CREWCMD_REALTIME_VOICE", "1");
+    mockRuntimeRows.push({ id: "rt_1", ownerUserId: "user_1" });
+    mockGetGatewayClientForRuntime.mockRejectedValue(
+      new Error("connection failed with token super-secret"),
+    );
+
+    const response = await GET(
+      new Request("http://localhost/api/runtimes/rt_1/talk/realtime/session"),
+      { params: Promise.resolve({ id: "rt_1" }) },
+    );
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      readiness: {
+        status: "unreachable",
+        fallback: "classic-stt-tts",
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("super-secret");
   });
 
   it("proxies realtime talk session requests through an accessible runtime", async () => {

@@ -24,10 +24,15 @@ import {
   stopNativeVoiceSession,
 } from "@/lib/native-voice-session";
 import {
+  getRealtimeVoiceReadiness,
   resolveRealtimeVoiceSessionSettings,
   startRealtimeVoiceSession,
   type RealtimeVoiceSession,
 } from "@/lib/realtime-voice-client";
+import {
+  deriveRealtimeVoiceReadiness,
+  type RealtimeVoiceReadiness,
+} from "@/lib/realtime-voice-readiness";
 import { RealtimeGatewayRelaySession, type RealtimeVoiceStatus } from "@/lib/realtime-voice-gateway-relay";
 import type { AgentVoiceSettings } from "@/lib/tts-voices";
 import type { AgentVisualSettings } from "@/lib/agent-visual-settings";
@@ -131,6 +136,8 @@ export function VoiceAgent({
   voiceSettings,
   visualSettings,
 }: VoiceAgentProps) {
+  const realtimeEnabled = process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE === "1";
+  const realtimeVoiceProvider = resolveRealtimeVoiceSessionSettings(voiceSettings).provider;
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
@@ -138,6 +145,9 @@ export function VoiceAgent({
   const [nativeBackgroundCapable, setNativeBackgroundCapable] = useState(false);
   const [nativeSessionActive, setNativeSessionActive] = useState(false);
   const [realtimeSession, setRealtimeSession] = useState<RealtimeVoiceSession | null>(null);
+  const [realtimeReadiness, setRealtimeReadiness] = useState<RealtimeVoiceReadiness | null>(
+    () => (realtimeEnabled ? null : deriveRealtimeVoiceReadiness({ enabled: false })),
+  );
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -162,7 +172,28 @@ export function VoiceAgent({
   const nativeSessionActiveRef = useRef(false);
   const realtimeRelayRef = useRef<RealtimeGatewayRelaySession | null>(null);
   const deactivateRef = useRef<() => void>(() => {});
-  const realtimeEnabled = process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE === "1";
+
+  useEffect(() => {
+    if (!realtimeEnabled) {
+      setRealtimeReadiness(deriveRealtimeVoiceReadiness({ enabled: false }));
+      return;
+    }
+    if (!realtimeRuntimeId) {
+      setRealtimeReadiness(null);
+      return;
+    }
+
+    let cancelled = false;
+    void getRealtimeVoiceReadiness({
+      runtimeId: realtimeRuntimeId,
+      provider: realtimeVoiceProvider,
+    }).then((readiness) => {
+      if (!cancelled) setRealtimeReadiness(readiness);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [realtimeEnabled, realtimeRuntimeId, realtimeVoiceProvider]);
 
   useEffect(() => {
     onVoiceLevel?.(volumeLevel);
@@ -480,6 +511,13 @@ export function VoiceAgent({
 
     try {
       const realtimeVoiceSettings = resolveRealtimeVoiceSessionSettings(voiceSettings);
+      const readiness = await getRealtimeVoiceReadiness({
+        runtimeId: realtimeRuntimeId,
+        provider: realtimeVoiceSettings.provider,
+      });
+      setRealtimeReadiness(readiness);
+      if (readiness.status !== "ready") return false;
+
       const session = await startRealtimeVoiceSession({
         runtimeId: realtimeRuntimeId,
         sessionKey,
@@ -1235,9 +1273,34 @@ export function VoiceAgent({
   const thinkingActive = isActive && state === "processing";
   const showCompactStatus = !immersive;
   const displayState: AgentState = isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
+  const readinessTone = realtimeReadiness?.status === "ready"
+    ? "var(--success)"
+    : realtimeReadiness?.status === "microphone-denied"
+      ? "var(--danger)"
+      : "var(--warning)";
+  const readinessMessage = realtimeReadiness?.status === "ready"
+    ? realtimeReadiness.message
+    : realtimeReadiness?.status === "microphone-denied"
+      ? realtimeReadiness.message
+      : realtimeReadiness
+        ? `Realtime unavailable; classic STT/TTS fallback will be used. ${realtimeReadiness.message}`
+        : null;
 
   return (
     <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : compact ? "gap-1.5 py-0" : "gap-2 py-1"}`}>
+      {readinessMessage && (
+        <div
+          className="w-full max-w-sm rounded-2xl border px-4 py-2 text-center text-[11px]"
+          style={{
+            backgroundColor: `color-mix(in srgb, ${readinessTone} 10%, transparent)`,
+            borderColor: `color-mix(in srgb, ${readinessTone} 24%, transparent)`,
+            color: readinessTone,
+          }}
+          data-realtime-readiness={realtimeReadiness?.status}
+        >
+          {readinessMessage}
+        </div>
+      )}
       {error && (
         <div
           className="w-full max-w-sm rounded-2xl border px-4 py-2 text-center text-[11px]"

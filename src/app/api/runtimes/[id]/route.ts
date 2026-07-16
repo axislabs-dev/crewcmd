@@ -10,6 +10,7 @@ import {
   deleteRuntimeManagedResources,
   listRuntimeManagedResources,
 } from "@/lib/runtime-managed-resources";
+import { toBrowserSafeRuntime } from "@/lib/runtime-api-dto";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      ...runtime,
+      ...toBrowserSafeRuntime(runtime),
       capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
     });
   } catch (err) {

@@ -137,6 +137,7 @@ export function VoiceAgent({
   visualSettings,
 }: VoiceAgentProps) {
   const realtimeEnabled = process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE === "1";
+  const realtimeVoiceProvider = resolveRealtimeVoiceSessionSettings(voiceSettings).provider;
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
@@ -145,7 +146,7 @@ export function VoiceAgent({
   const [nativeSessionActive, setNativeSessionActive] = useState(false);
   const [realtimeSession, setRealtimeSession] = useState<RealtimeVoiceSession | null>(null);
   const [realtimeReadiness, setRealtimeReadiness] = useState<RealtimeVoiceReadiness | null>(
-    realtimeEnabled ? null : deriveRealtimeVoiceReadiness({ enabled: false }),
+    () => (realtimeEnabled ? null : deriveRealtimeVoiceReadiness({ enabled: false })),
   );
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -183,14 +184,16 @@ export function VoiceAgent({
     }
 
     let cancelled = false;
-    const provider = resolveRealtimeVoiceSessionSettings(voiceSettings).provider;
-    void getRealtimeVoiceReadiness({ runtimeId: realtimeRuntimeId, provider }).then((readiness) => {
+    void getRealtimeVoiceReadiness({
+      runtimeId: realtimeRuntimeId,
+      provider: realtimeVoiceProvider,
+    }).then((readiness) => {
       if (!cancelled) setRealtimeReadiness(readiness);
     });
     return () => {
       cancelled = true;
     };
-  }, [realtimeEnabled, realtimeRuntimeId, voiceSettings]);
+  }, [realtimeEnabled, realtimeRuntimeId, realtimeVoiceProvider]);
 
   useEffect(() => {
     onVoiceLevel?.(volumeLevel);

@@ -3,6 +3,13 @@ const RUNTIME_AUTH_HEADERS = new Set([
   "xopenclawtoken",
 ]);
 
+/** Persist only non-secret runtime connection metadata on linked agent rows. */
+export function buildRuntimeAgentPersistenceConfig(
+  url: string | null,
+): Record<string, unknown> {
+  return { url };
+}
+
 /**
  * Build the in-memory adapter configuration for a runtime-linked agent.
  * Runtime authentication is authoritative and is never read from the agent row.

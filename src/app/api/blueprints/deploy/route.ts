@@ -9,6 +9,7 @@ import { resolveBlueprintAgentModelSelection } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 import { provisionBlueprintAgentsToRuntime } from "@/lib/blueprint-runtime-provisioning";
 import { pushSkillToRuntime } from "@/lib/push-skill-to-runtime";
+import { buildRuntimeAgentPersistenceConfig } from "@/lib/runtime-agent-credentials";
 import {
   getAgentAccessContext,
   normalizeVisibilityForCreation,
@@ -208,12 +209,7 @@ export async function POST(request: NextRequest) {
         tmpl.callsign.toUpperCase(),
       );
       const runtimeAdapterConfig = runtimeContext.runtime
-        ? {
-            url: runtimeContext.runtime.httpUrl,
-            headers: runtimeContext.runtime.authToken
-              ? { Authorization: `Bearer ${runtimeContext.runtime.authToken}` }
-              : undefined,
-          }
+        ? buildRuntimeAgentPersistenceConfig(runtimeContext.runtime.httpUrl)
         : null;
 
       const callsign = tmpl.callsign.toUpperCase();

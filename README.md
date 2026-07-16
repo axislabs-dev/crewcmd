@@ -97,6 +97,38 @@ When importing your own self-hosted OpenClaw agents, use the gateway import flow
 4. Enter the gateway auth token from `~/.openclaw/openclaw.json` under `gateway.auth.token`.
 5. If pairing is required, run `openclaw devices approve` on the OpenClaw gateway host, then retry the connection.
 
+#### Realtime voice through OpenClaw Talk
+
+CrewCMD can opt into live, bidirectional OpenClaw Talk sessions while retaining
+the recorded speech-to-text/text-to-speech path as a fallback. Current CrewCMD
+realtime visuals require OpenClaw's `gateway-relay` transport.
+
+1. Configure a realtime provider under `talk.realtime` in OpenClaw with
+   `mode: "realtime"`, `transport: "gateway-relay"`, and
+   `brain: "agent-consult"`. Keep the provider API key in OpenClaw; CrewCMD
+   reads only the secret-free `talk.catalog` readiness response. See the
+   [OpenClaw Talk documentation](https://docs.openclaw.ai/nodes/talk).
+2. Confirm the selected gateway catalog without exposing provider secrets:
+
+   ```bash
+   openclaw gateway call talk.catalog --params '{}' --json
+   ```
+
+   The selected realtime provider must be configured and include
+   `gateway-relay` in its transports. OpenClaw 2026.7.1 and newer also returns
+   authoritative group readiness. CrewCMD remains compatible with 2026.6.11,
+   but marks its older catalog as unverified until session creation.
+3. Set `NEXT_PUBLIC_CREWCMD_REALTIME_VOICE=1` in `.env.local` (source/dev) or
+   `.env` (Docker), then rebuild or restart CrewCMD. `NEXT_PUBLIC_*` values are
+   embedded into the browser bundle and cannot be toggled after build time.
+4. Use `localhost` or HTTPS and allow microphone access. The voice UI reports
+   disabled, provider-missing, unsupported-transport, unreachable,
+   microphone-denied, and ready states before starting a realtime session.
+
+If realtime readiness fails, CrewCMD labels the blocker and continues with the
+classic recorded STT/TTS path when that path is configured. Realtime provider
+credentials stay on the OpenClaw gateway.
+
 ### Docker Compose
 
 Docker Compose is intended for containerized self-hosting with a local Postgres container. This path is still less exercised than local dev, so treat it as preview until you have validated it in your environment.

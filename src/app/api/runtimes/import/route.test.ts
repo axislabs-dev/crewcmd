@@ -199,7 +199,6 @@ describe("POST /api/runtimes/import Hermes", () => {
       provider: "hermes",
       adapterConfig: {
         url: "http://localhost:8642",
-        headers: { Authorization: "Bearer secret" },
         sessionKey: "crewcmd:workspace:ws_personal:runtime:rt_hermes:agent:hermes-agent",
       },
       model: "hermes-agent",
@@ -207,6 +206,8 @@ describe("POST /api/runtimes/import Hermes", () => {
       runtimeRef: "hermes-agent",
       runtimeConfig: {},
     });
+    expect(JSON.stringify(mockState.insertedAgents[0])).not.toContain("secret");
+    expect(mockState.insertedAgents[0].adapterConfig).not.toHaveProperty("headers");
     expect(mockPushSkillToRuntime).not.toHaveBeenCalled();
     expect(mockEnsureOperatingLayer).not.toHaveBeenCalled();
   });

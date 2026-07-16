@@ -23,6 +23,7 @@ import {
   resolveRuntimeWorkspace,
 } from "@/lib/workspace";
 import { buildOperatingLayerConfig, inferRolePack } from "@/lib/operating-layer";
+import { buildRuntimeAgentPersistenceConfig } from "@/lib/runtime-agent-credentials";
 
 export const dynamic = "force-dynamic";
 
@@ -456,12 +457,7 @@ function adapterConfigForRuntime(
   runtime: typeof companyRuntimes.$inferSelect,
   params: { runtimeRef?: string | null; workspaceId?: string | null } = {}
 ): Record<string, unknown> {
-  const config: Record<string, unknown> = {
-    url: runtime.httpUrl,
-    headers: runtime.authToken
-      ? { Authorization: `Bearer ${runtime.authToken}` }
-      : undefined,
-  };
+  const config = buildRuntimeAgentPersistenceConfig(runtime.httpUrl);
 
   if (runtime.runtimeType === "hermes") {
     config.sessionKey = buildHermesSessionKey({

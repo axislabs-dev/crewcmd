@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { apiPost, apiGet, apiPatch, apiDelete, uniqueName, loginViaApi } from "./helpers";
+import { apiPost, apiGet, apiPatch, apiDelete, uniqueName, login, loginViaApi } from "./helpers";
 
 test.describe("Tasks lifecycle", () => {
   test.beforeEach(async ({ request }) => {
@@ -33,6 +33,46 @@ test.describe("Tasks lifecycle", () => {
     expect(task.status).toBe("inbox");
     expect(task.priority).toBe("high");
     expect(task.shortId).toBeTruthy();
+  });
+
+  test("task summary counters follow board mutations in board and table views", async ({ page }) => {
+    await login(page);
+    const initialTasksLoaded = page.waitForResponse(
+      (response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/tasks",
+    );
+    await page.goto("/tasks");
+    await initialTasksLoaded;
+
+    const title = uniqueName("E2E-Counter");
+    const inboxStat = page.getByTestId("task-stat-inbox");
+    const doneStat = page.getByTestId("task-stat-done");
+    const inboxColumnCount = page.getByTestId("task-column-count-inbox");
+
+    await expect(inboxStat).toBeVisible();
+    const inboxBefore = Number(await inboxStat.textContent());
+    const doneBefore = Number(await doneStat.textContent());
+
+    await page.getByRole("button", { name: "NEW TASK" }).click();
+    await page.getByPlaceholder("Task title...").fill(title);
+    await page.getByRole("button", { name: "CREATE TASK" }).click();
+
+    const taskCard = page.locator("[data-task-id]").filter({ hasText: title });
+    await expect(taskCard).toBeVisible();
+    await expect(inboxStat).toHaveText(String(inboxBefore + 1));
+    await expect(inboxColumnCount).toHaveText(String(inboxBefore + 1));
+
+    await taskCard.getByTitle("Mark as done").click();
+    await expect(taskCard).toHaveCount(0);
+    await expect(inboxStat).toHaveText(String(inboxBefore));
+    await expect(doneStat).toHaveText(String(doneBefore + 1));
+    await page.getByRole("button", { name: "○ SHOW DONE" }).click();
+    await expect(page.getByTestId("task-column-count-done")).toHaveText(String(doneBefore + 1));
+
+    await page.getByRole("button", { name: "TABLE" }).click();
+    await expect(inboxStat).toHaveText(String(inboxBefore));
+    await expect(doneStat).toHaveText(String(doneBefore + 1));
+    await page.locator("button:visible").filter({ hasText: "SHOW DONE" }).click();
+    await expect(page.getByText(title, { exact: true })).toBeVisible();
   });
 
   test("task lifecycle: inbox → queued → in_progress → review → done", async ({ request }) => {

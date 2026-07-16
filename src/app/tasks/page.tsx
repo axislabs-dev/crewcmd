@@ -341,7 +341,7 @@ export default function TasksPage() {
                       });
                       if (res.ok) {
                         const created = await res.json();
-                        setTasks([...tasks, created]);
+                        setTasks((prev) => [...prev, created]);
                         setNewTask({ title: "", description: "", priority: "medium", status: "inbox", projectId: "" });
                         setShowCreate(false);
                       }
@@ -374,6 +374,9 @@ export default function TasksPage() {
               agentsLoading={agentsLoading}
               agentsError={agentsError}
               openTaskId={deepLinkedTaskId}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDelete}
+              onTasksRefresh={setTasks}
             />
           ) : (
             <TaskTable
@@ -465,7 +468,11 @@ function TaskStat({
         <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
       )}
       <span className="font-mono text-[10px] tracking-wider text-[var(--text-tertiary)]">{label}</span>
-      <span className="font-mono text-sm font-bold" style={{ color: color || "white" }}>
+      <span
+        data-testid={`task-stat-${label.toLowerCase().replaceAll(" ", "-")}`}
+        className="font-mono text-sm font-bold"
+        style={{ color: color || "white" }}
+      >
         {value}
       </span>
     </div>

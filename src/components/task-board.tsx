@@ -35,6 +35,9 @@ interface TaskBoardProps {
   agentsLoading?: boolean;
   agentsError?: string | null;
   openTaskId?: string | null;
+  onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
+  onTaskDelete: (taskId: string) => void;
+  onTasksRefresh: (tasks: Task[]) => void;
 }
 
 const columns: { key: TaskStatus; label: string }[] = [
@@ -70,7 +73,18 @@ function PinIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-export function TaskBoard({ initialTasks, workspaceId = null, agents, projects = [], agentsLoading = false, agentsError = null, openTaskId = null }: TaskBoardProps) {
+export function TaskBoard({
+  initialTasks,
+  workspaceId = null,
+  agents,
+  projects = [],
+  agentsLoading = false,
+  agentsError = null,
+  openTaskId = null,
+  onTaskUpdate,
+  onTaskDelete,
+  onTasksRefresh,
+}: TaskBoardProps) {
   const { pinTarget, pins, removePin } = useAgentVoiceSession();
   const [boardTasks, setBoardTasks] = useState<Task[]>(initialTasks);
   const openedTaskIdRef = useRef<string | null>(null);
@@ -322,11 +336,10 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
         const res = await fetch(`/api/tasks${params}`);
         if (res.ok) {
           const fresh = await res.json();
-          setBoardTasks((current) => {
-            // Don't overwrite if user is actively dragging
-            if (dragRef.current?.isDragging) return current;
-            return fresh;
-          });
+          // Don't overwrite if user is actively dragging.
+          if (dragRef.current?.isDragging) return;
+          setBoardTasks(fresh);
+          onTasksRefresh(fresh);
         }
       } catch {
         // silently ignore refresh failures
@@ -335,7 +348,7 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
 
     const interval = setInterval(refresh, 30_000);
     return () => clearInterval(interval);
-  }, [workspaceId]);
+  }, [onTasksRefresh, workspaceId]);
 
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
@@ -622,6 +635,7 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
       if (res.ok) {
         const updated = await res.json();
         setBoardTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+        onTaskUpdate(updated.id, updated);
         setSelectedTask(updated);
         setEditing(false);
 
@@ -638,6 +652,7 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
       const res = await fetch(`/api/tasks/${selectedTask.id}`, { method: "DELETE" });
       if (res.ok) {
         setBoardTasks((prev) => prev.filter((t) => t.id !== selectedTask.id));
+        onTaskDelete(selectedTask.id);
         setSelectedTask(null);
       }
     } catch { /* empty */ }
@@ -664,6 +679,9 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error("Failed to update task");
+      const updated = await res.json();
+      setBoardTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      onTaskUpdate(taskId, updated);
     } catch {
       setBoardTasks(previousTasks);
     }
@@ -1748,6 +1766,7 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                   </span>
                 </div>
                 <span
+                  data-testid={`task-column-count-${col.key}`}
                   className="flex h-4 w-4 items-center justify-center rounded-full text-[9px]"
                   style={{
                     backgroundColor: `${columnColors[col.key]}20`,
@@ -1898,6 +1917,9 @@ export function TaskBoard({ initialTasks, workspaceId = null, agents, projects =
                                   body: JSON.stringify({ status: "done" }),
                                 });
                                 if (!res.ok) throw new Error();
+                                const updated = await res.json();
+                                setBoardTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+                                onTaskUpdate(task.id, updated);
                               } catch {
                                 setBoardTasks(previousTasks);
                               }

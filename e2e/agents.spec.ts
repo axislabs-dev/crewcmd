@@ -50,6 +50,53 @@ test.describe("Agent management", () => {
     expect(agent.role).toBe("engineer");
   });
 
+  test("agent API responses never expose credential-shaped configuration", async ({ request }) => {
+    const callsign = uniqueName("SAFEAGENT").toUpperCase().replace(/-/g, "");
+    const createSecret = `create-${uniqueName("secret")}`;
+    const updateSecret = `update-${uniqueName("secret")}`;
+    const created = await apiPost(
+      request,
+      "/api/agents",
+      {
+        name: "Browser Safe Agent",
+        callsign,
+        adapterType: "http",
+        adapterConfig: {
+          url: `https://user:${createSecret}@example.com/v1?token=${createSecret}&mode=fast`,
+          headers: { Authorization: `Bearer ${createSecret}` },
+          envVars: { PROVIDER_API_KEY: createSecret },
+          apiKey: createSecret,
+          timeoutSec: 45,
+        },
+      },
+      { expectStatus: 201 },
+    );
+
+    const listed = await apiGet(request, "/api/agents");
+    const listAgent = listed.agents.find((agent: { callsign: string }) => agent.callsign === callsign);
+    const detailed = await apiGet(request, `/api/agents/${callsign}`);
+    const updated = await apiPatch(request, `/api/agents/${callsign}`, {
+      adapterConfig: {
+        ...created.adapterConfig,
+        headers: { Authorization: `Bearer ${updateSecret}` },
+        apiKey: updateSecret,
+      },
+    });
+
+    for (const responseAgent of [created, listAgent, detailed, updated]) {
+      const serialized = JSON.stringify(responseAgent);
+      expect(serialized).not.toContain(createSecret);
+      expect(serialized).not.toContain(updateSecret);
+      expect(responseAgent.adapterConfig).toMatchObject({
+        url: "https://example.com/v1?mode=fast",
+        timeoutSec: 45,
+      });
+      expect(responseAgent.adapterConfig).not.toHaveProperty("headers");
+      expect(responseAgent.adapterConfig).not.toHaveProperty("envVars");
+      expect(responseAgent.adapterConfig).not.toHaveProperty("apiKey");
+    }
+  });
+
   test("POST /api/agents returns 409 for duplicate callsign", async ({ request }) => {
     const callsign = uniqueName("DUP").toUpperCase().replace(/-/g, "");
 

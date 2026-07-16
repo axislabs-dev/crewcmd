@@ -10,6 +10,7 @@ import { assessAgentModelSelection } from "@/lib/model-profiles";
 import type { RuntimeCapabilitySnapshot } from "@/lib/runtime-capabilities";
 import { syncAgentModelToRuntime } from "@/lib/runtime-agent-model-sync";
 import { resolveAgent } from "@/lib/resolve-agent";
+import { toPublicAgentDto } from "@/lib/agent-public-dto";
 
 export const dynamic = "force-dynamic";
 interface RouteParams { params: Promise<{ callsign: string }>; }
@@ -61,7 +62,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       },
       runtimeCapabilities
     );
-    return NextResponse.json({
+    return NextResponse.json(toPublicAgentDto({
       id: agent.id,
       callsign: agent.callsign,
       name: agent.name,
@@ -90,7 +91,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       canvasPosition: agent.canvasPosition ?? null,
       tokenUsage: hb?.rawData ? (hb.rawData as Record<string, unknown>)?.tokenUsage ?? null : null,
       modelAssessment,
-    });
+    }));
   } catch (err) {
     console.error("[api/agents/callsign] Error:", err);
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
@@ -219,7 +220,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json(updated);
+    return NextResponse.json(toPublicAgentDto(updated));
   } catch (err) {
     console.error("[api/agents/callsign] PATCH Error:", err);
     return NextResponse.json({ error: "Failed to update agent" }, { status: 500 });

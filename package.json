@@ -68,6 +68,7 @@
     "db:doctor": "tsx scripts/db/migration-doctor.ts",
     "db:pglite:backup": "tsx src/db/pglite-archive.ts backup",
     "db:pglite:restore": "tsx src/db/pglite-archive.ts restore",
+    "runtime-tokens:migrate": "tsx scripts/runtime-token-migrate.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

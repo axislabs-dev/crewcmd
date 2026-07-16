@@ -1,12 +1,19 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sealRuntimeAuthToken } from "@/lib/runtime-token-crypto";
 import { HermesRuntimeProvider } from "./hermes";
 import type { RuntimeConnectionRecord } from "./types";
 
 const originalFetch = globalThis.fetch;
+const cryptoEnv = { AUTH_SECRET: "hermes-provider-test-secret" };
+
+beforeEach(() => {
+  vi.stubEnv("AUTH_SECRET", cryptoEnv.AUTH_SECRET);
+});
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function hermesRuntime(overrides: Partial<RuntimeConnectionRecord> = {}): RuntimeConnectionRecord {
@@ -16,7 +23,7 @@ function hermesRuntime(overrides: Partial<RuntimeConnectionRecord> = {}): Runtim
     name: "Hermes",
     gatewayUrl: "http://localhost:8642",
     httpUrl: "http://localhost:8642",
-    authToken: "secret",
+    authToken: sealRuntimeAuthToken("secret", cryptoEnv),
     metadata: null,
     ...overrides,
   };

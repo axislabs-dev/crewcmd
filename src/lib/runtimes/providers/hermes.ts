@@ -27,6 +27,7 @@ import type {
   RuntimeSessionMessagesResult,
   RuntimeSessionResult,
 } from "./types";
+import { resolveRuntimeAuthTokenForUse } from "@/lib/runtime-token-crypto";
 
 const DEFAULT_HERMES_MODEL = "hermes-agent";
 
@@ -523,7 +524,8 @@ async function fetchHermesResponse(
   options: { auth: boolean; method?: string; headers?: Record<string, string>; body?: unknown }
 ): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json", ...(options.headers ?? {}) };
-  if (options.auth && token) headers.Authorization = `Bearer ${token}`;
+  const resolvedToken = resolveRuntimeAuthTokenForUse(token);
+  if (options.auth && resolvedToken) headers.Authorization = `Bearer ${resolvedToken}`;
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
   const init: RequestInit = { headers };

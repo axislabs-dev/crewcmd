@@ -1000,19 +1000,27 @@ export async function POST(request: NextRequest) {
       .map((message: { content?: unknown }) => asString(message.content))
       .filter((content: string | null): content is string => Boolean(content));
 
-    // Resolve durable chat scope from body or cookies. Company scope is used
-    // for org workspaces; workspace scope keeps personal workspace chat durable.
-    const companyId = bodyCompanyId ||
-      request.cookies.get("active_company")?.value ||
-      null;
-    const workspaceId = bodyWorkspaceId ||
-      request.cookies.get("active_workspace")?.value ||
-      null;
+    // Explicit request scope is authoritative, including null values. Cookies
+    // are only a fallback when the caller did not send either scope field.
+    const hasExplicitCompanyId = Object.prototype.hasOwnProperty.call(body, "companyId");
+    const hasExplicitWorkspaceId = Object.prototype.hasOwnProperty.call(body, "workspaceId");
+    const hasExplicitScope = hasExplicitCompanyId || hasExplicitWorkspaceId;
+    const explicitCompanyId = hasExplicitCompanyId ? asString(bodyCompanyId) : null;
+    const explicitWorkspaceId = hasExplicitWorkspaceId ? asString(bodyWorkspaceId) : null;
+    let companyId = hasExplicitCompanyId
+      ? explicitCompanyId
+      : hasExplicitScope
+        ? null
+        : asString(request.cookies.get("active_company")?.value);
+    let workspaceId = hasExplicitWorkspaceId
+      ? explicitWorkspaceId
+      : hasExplicitScope
+        ? null
+        : asString(request.cookies.get("active_workspace")?.value);
     const channelId = typeof bodyChannelId === "string" && bodyChannelId.trim() ? bodyChannelId.trim() : null;
     const channelInvocationMode = firstString(bodyChannelInvocationMode)?.toLowerCase() === "mention"
       ? "mention"
       : "active";
-    const persistenceScope: ChatPersistenceScope = { companyId, workspaceId, channelId };
     if (companyId || workspaceId) {
       const accessibleWorkspace = await resolveAccessibleWorkspace({
         request,
@@ -1023,9 +1031,20 @@ export async function POST(request: NextRequest) {
       if (!accessibleWorkspace) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
+      if (
+        (explicitCompanyId && accessibleWorkspace.companyId !== explicitCompanyId) ||
+        (explicitWorkspaceId && accessibleWorkspace.id !== explicitWorkspaceId)
+      ) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      // Downstream policy and persistence must use one canonical scope rather
+      // than a potentially contradictory mix of body and cookie identifiers.
+      companyId = accessibleWorkspace.companyId;
+      workspaceId = accessibleWorkspace.id;
       if (channelId && !(await canAccessChatSession(request, {
-        companyId: accessibleWorkspace.companyId,
-        workspaceId: accessibleWorkspace.id,
+        companyId,
+        workspaceId,
         channelId,
       }))) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -1033,7 +1052,7 @@ export async function POST(request: NextRequest) {
       if (channelId) {
         const violation = await resolveChannelAgentInvocationViolation({
           channelId,
-          companyId: accessibleWorkspace.companyId,
+          companyId,
           agentCallsign: targetAgentCallsign || agentId,
           agentMode: bodyAgentMode === true,
           invocationMode: channelInvocationMode,
@@ -1044,6 +1063,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    const persistenceScope: ChatPersistenceScope = { companyId, workspaceId, channelId };
     const currentUser = await resolveCurrentUser(request);
     try {
       await assertPrimaryRuntimeInvocationAllowedForContext({

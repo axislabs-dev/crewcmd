@@ -67,8 +67,7 @@ export async function POST(request: NextRequest) {
   const manualExpiresAt = readOptionalDate(body.manualExpiresAt);
   const now = new Date();
 
-  const values = {
-    userId: user.id,
+  const updateValues = {
     status,
     customText: customText || null,
     emoji: emoji || null,
@@ -80,10 +79,11 @@ export async function POST(request: NextRequest) {
   const [row] = await withRetry(() =>
     db!
       .insert(userPresence)
-      .values(values)
+      .values({ userId: user.id, ...updateValues })
       .onConflictDoUpdate({
         target: userPresence.userId,
-        set: values,
+        // Updating the conflict-target primary key can spin indefinitely in PGlite.
+        set: updateValues,
       })
       .returning()
   );

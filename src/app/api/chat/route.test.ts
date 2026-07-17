@@ -70,11 +70,11 @@ vi.mock("@/lib/agent-mode-diagnostics", () => ({
 import { PolicyViolation } from "@/lib/collaboration-policy";
 import { POST } from "./route";
 
-function makeRequest(body: Record<string, unknown>) {
+function makeRequest(body: Record<string, unknown>, headers: Record<string, string> = {}) {
   return new NextRequest(new URL("/api/chat", "http://localhost:3000"), {
     method: "POST",
     body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
 }
 
@@ -159,6 +159,82 @@ describe("POST /api/chat", () => {
       explicitWorkspaceId: null,
       requireExplicitForBearer: true,
     }));
+    expect(mockAssertPrimaryRuntimeInvocationAllowedForContext).not.toHaveBeenCalled();
+    expect(mockGetGatewayClient).not.toHaveBeenCalled();
+  });
+
+  it("keeps explicit personal workspace scope when the company cookie is stale", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValueOnce({
+      id: "workspace-personal",
+      companyId: null,
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      companyId: null,
+      workspaceId: "workspace-personal",
+    }, {
+      Cookie: "active_company=company-stale; active_workspace=workspace-personal",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mockResolveAccessibleWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      explicitCompanyId: null,
+      explicitWorkspaceId: "workspace-personal",
+      requireExplicitForBearer: true,
+    }));
+    expect(mockAssertPrimaryRuntimeInvocationAllowedForContext).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: null,
+      workspaceId: "workspace-personal",
+    }));
+
+    await readFirstChunk(response);
+  });
+
+  it("keeps explicit company scope when the workspace cookie is stale", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValueOnce({
+      id: "workspace-company",
+      companyId: "company-1",
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      companyId: "company-1",
+    }, {
+      Cookie: "active_company=company-1; active_workspace=workspace-personal-stale",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mockResolveAccessibleWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      explicitCompanyId: "company-1",
+      explicitWorkspaceId: null,
+      requireExplicitForBearer: true,
+    }));
+    expect(mockAssertPrimaryRuntimeInvocationAllowedForContext).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: "company-1",
+      workspaceId: "workspace-company",
+    }));
+
+    await readFirstChunk(response);
+  });
+
+  it("rejects conflicting explicit company and workspace scopes", async () => {
+    mockResolveAccessibleWorkspace.mockResolvedValueOnce({
+      id: "workspace-personal",
+      companyId: null,
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      companyId: "company-1",
+      workspaceId: "workspace-personal",
+    }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
     expect(mockAssertPrimaryRuntimeInvocationAllowedForContext).not.toHaveBeenCalled();
     expect(mockGetGatewayClient).not.toHaveBeenCalled();
   });

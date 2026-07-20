@@ -9,7 +9,7 @@ import { deriveRuntimeTrustSummary } from "@/lib/runtime-trust";
 import { resolveAccessibleWorkspace } from "@/lib/workspace";
 import { normalizeHermesRootUrl } from "@/lib/runtimes/providers/hermes";
 import { sealRuntimeAuthToken } from "@/lib/runtime-token-crypto";
-import { toBrowserSafeRuntime } from "@/lib/runtime-api-dto";
+import { toBrowserSafeRuntime, toBrowserSafeRuntimeMetadata } from "@/lib/runtime-api-dto";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       runtimes.map((runtime) => ({
         ...runtime,
+        metadata: toBrowserSafeRuntimeMetadata(runtime.metadata),
         capabilitySnapshot: readCapabilitySnapshot(runtime.metadata),
         trustSummary: deriveRuntimeTrustSummary(runtime),
       }))

@@ -332,34 +332,12 @@ export function VoiceSelectModal({
           ) : null}
           {tab === "voice" && !visualOnly ? (
           <>
-          {realtimeAvailable ? (
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={realtimeMode}
-                data-realtime-voice-toggle
-                onClick={() => setRealtimeModeEnabled(!realtimeMode)}
-                className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition ${
-                  realtimeMode
-                    ? "border-[#00f0ff]/45 bg-[#00f0ff]/12 text-[#00f0ff]"
-                    : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)]"
-                }`}
-              >
-                Realtime
-                <span className={`relative h-4 w-7 rounded-full transition ${realtimeMode ? "bg-[#00f0ff]/35" : "bg-[var(--bg-tertiary)]"}`}>
-                  <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-current transition-transform ${realtimeMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
-                </span>
-              </button>
-            </div>
-          ) : null}
-          <div className={`grid gap-3 ${realtimeAvailable ? "mt-3" : "mt-4"} ${realtimeModeActive ? "" : "md:grid-cols-[1fr_auto]"}`}>
+          <div className={`mt-4 grid gap-3 ${realtimeModeActive ? "" : "md:grid-cols-[1fr_auto]"}`}>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search voices"
-              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[#00f0ff]/50"
-              autoFocus
+              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-base text-[var(--text-primary)] outline-none focus:border-[#00f0ff]/50 sm:text-sm"
             />
             {!realtimeModeActive ? <div className="flex flex-wrap gap-2">
               {[{ value: "all", label: "All" }, { value: "favorites", label: "Favorites" }, ...TTS_PROVIDER_OPTIONS.filter((item) => item.value !== "auto")].map((item) => (
@@ -381,11 +359,30 @@ export function VoiceSelectModal({
             </div> : null}
           </div>
           <div className="mt-3 grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3 md:grid-cols-2">
+            {realtimeAvailable ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={realtimeMode}
+                data-realtime-voice-toggle
+                onClick={() => setRealtimeModeEnabled(!realtimeMode)}
+                className="flex min-h-11 items-center justify-between gap-3 rounded-lg px-1 text-sm text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+              >
+                <span>Realtime</span>
+                <span className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors ${
+                  realtimeMode
+                    ? "border-[#00f0ff]/50 bg-[#00f0ff]/30 text-[#00f0ff]"
+                    : "border-[var(--border-medium)] bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]"
+                }`}>
+                  <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-current transition-transform ${realtimeMode ? "translate-x-5" : "translate-x-0"}`} />
+                </span>
+              </button>
+            ) : null}
             <label className="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]">
               <span>Native</span>
               <input type="checkbox" checked={preferNative} onChange={(event) => setPreferNative(event.target.checked)} />
             </label>
-            <label className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
+            <label className={`flex items-center gap-3 text-sm text-[var(--text-secondary)] ${realtimeAvailable ? "md:col-span-2" : ""}`}>
               <span className="whitespace-nowrap">Speed {speed.toFixed(2)}×</span>
               <input className="w-full" type="range" min="0.7" max="1.3" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
             </label>

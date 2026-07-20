@@ -60,7 +60,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -71,6 +71,14 @@ export async function DELETE(
     const access = await getAgentAccessContext();
     if (!access.userId) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const cleanupMode = new URL(request.url).searchParams.get("cleanup") ?? "remote";
+    if (cleanupMode !== "remote" && cleanupMode !== "skip") {
+      return NextResponse.json(
+        { error: 'Invalid cleanup mode. Use "remote" or "skip".' },
+        { status: 400 }
+      );
     }
 
     const { id } = await params;
@@ -105,7 +113,24 @@ export async function DELETE(
       .filter((resource) => resource.resourceType === "cron-job" && resource.externalId)
       .map((resource) => resource.externalId!) ;
 
-    await cleanupCrewCmdRuntimeOperatingLayer(id);
+    if (cleanupMode === "remote") {
+      try {
+        await cleanupCrewCmdRuntimeOperatingLayer(id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown cleanup error";
+        return NextResponse.json(
+          {
+            error: `CrewCMD could not clean up the runtime in OpenClaw: ${message}`,
+            code: "RUNTIME_CLEANUP_FAILED",
+            canSkipCleanup: true,
+            linkedAgents: linkedAgents.length,
+            managedResources: managedResources.length,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     await deleteRuntimeManagedResources(id);
 
     if (cronResourceIds.length > 0) {
@@ -174,6 +199,7 @@ export async function DELETE(
     return NextResponse.json({
       ok: true,
       detachedAgents: linkedAgents.length,
+      cleanupSkipped: cleanupMode === "skip",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

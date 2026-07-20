@@ -120,15 +120,39 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteRuntime(runtimeId: string) {
+    const runtimeName = runtimes.find((runtime) => runtime.id === runtimeId)?.name ?? "this runtime";
+    const confirmed = window.confirm(
+      `Delete "${runtimeName}"?\n\nCrewCMD will attempt to remove its managed resources from OpenClaw before disconnecting it.`
+    );
+    if (!confirmed) return;
+
     setDeletingRuntimeId(runtimeId);
     setMessage(null);
     try {
-      const res = await fetch(`/api/runtimes/${runtimeId}`, { method: "DELETE" });
-      const data = await res.json().catch(() => ({}));
+      let res = await fetch(`/api/runtimes/${runtimeId}`, { method: "DELETE" });
+      let data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data.code === "RUNTIME_CLEANUP_FAILED" && data.canSkipCleanup) {
+        const forgetLocally = window.confirm(
+          `${data.error}\n\nForget this runtime in CrewCMD anyway? Linked agents will be detached and any remaining OpenClaw resources will be left unchanged.`
+        );
+        if (!forgetLocally) {
+          throw new Error("Runtime cleanup failed. The runtime was not removed from CrewCMD.");
+        }
+
+        res = await fetch(`/api/runtimes/${runtimeId}?cleanup=skip`, { method: "DELETE" });
+        data = await res.json().catch(() => ({}));
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Failed to delete runtime");
       }
-      setMessage({ type: "success", text: "Personal runtime deleted." });
+      setMessage({
+        type: "success",
+        text: data.cleanupSkipped
+          ? "Personal runtime forgotten locally. OpenClaw was not changed."
+          : "Personal runtime deleted.",
+      });
       await loadRuntimes();
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to delete runtime" });

@@ -3,6 +3,7 @@ import {
   cancelRealtimeRelayOutput,
   getRealtimeVoiceReadiness,
   openRealtimeRelayEvents,
+  resolveRealtimeVoiceSessionIdentity,
   resolveRealtimeVoiceSessionSettings,
   sendRealtimeRelayAudio,
   sendRealtimeRelayToolCall,
@@ -219,6 +220,28 @@ describe("realtime voice client helpers", () => {
       voice: "cedar",
       model: "gpt-realtime-1.5",
     });
+  });
+
+  it("changes the realtime session identity only for session-scoped voice settings", () => {
+    const cedar = resolveRealtimeVoiceSessionIdentity({
+      enabled: true,
+      provider: "openai",
+      voiceId: "cedar",
+      speed: 1,
+    });
+
+    expect(resolveRealtimeVoiceSessionIdentity({
+      enabled: true,
+      provider: "openai",
+      voiceId: "marin",
+      speed: 1,
+    })).not.toBe(cedar);
+    expect(resolveRealtimeVoiceSessionIdentity({
+      enabled: true,
+      provider: "openai",
+      voiceId: "cedar",
+      speed: 1.2,
+    })).toBe(cedar);
   });
 
   it("maps Google voice selections to realtime session settings", () => {

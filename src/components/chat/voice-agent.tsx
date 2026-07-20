@@ -25,6 +25,7 @@ import {
 } from "@/lib/native-voice-session";
 import {
   getRealtimeVoiceReadiness,
+  resolveRealtimeVoiceSessionIdentity,
   resolveRealtimeVoiceSessionSettings,
   startRealtimeVoiceSession,
   type RealtimeVoiceSession,
@@ -112,7 +113,12 @@ async function isServerSttAvailable() {
   }
 }
 
-export function VoiceAgent({
+export function VoiceAgent(props: VoiceAgentProps) {
+  const realtimeSessionIdentity = resolveRealtimeVoiceSessionIdentity(props.voiceSettings);
+  return <VoiceAgentSession key={realtimeSessionIdentity} {...props} />;
+}
+
+function VoiceAgentSession({
   onTranscript,
   onRealtimeTranscript,
   isPlayingAudio,

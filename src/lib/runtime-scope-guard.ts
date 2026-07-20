@@ -30,12 +30,13 @@ function runtimeBindingTarget(runtime: RuntimeScopeRuntime): RuntimeBindingTarge
     id: runtime.id,
     class: runtimeClass(runtime),
     ownerUserId: runtime.ownerUserId ?? null,
+    ownerCompanyId: runtime.ownerCompanyId ?? runtime.companyId ?? null,
   };
 }
 
 async function resolveScope(ctx: RuntimeScopeContext): Promise<Scope | null> {
   if (ctx.companyId) {
-    return { id: ctx.companyId, type: SCOPE_TYPES.ORG };
+    return { id: ctx.companyId, type: SCOPE_TYPES.ORG, companyId: ctx.companyId };
   }
 
   if (!ctx.workspaceId) return null;
@@ -49,7 +50,11 @@ async function resolveScope(ctx: RuntimeScopeContext): Promise<Scope | null> {
   if (!workspace) return null;
 
   if (workspace.type === "company") {
-    return { id: workspace.id, type: SCOPE_TYPES.ORG };
+    return {
+      id: workspace.id,
+      type: SCOPE_TYPES.ORG,
+      companyId: workspace.companyId ?? undefined,
+    };
   }
 
   return {
@@ -57,6 +62,24 @@ async function resolveScope(ctx: RuntimeScopeContext): Promise<Scope | null> {
     type: SCOPE_TYPES.PRIVATE_USER,
     ownerUserId: workspace.ownerUserId ?? undefined,
   };
+}
+
+async function assertRuntimeAllowedForResolvedScope(
+  runtime: RuntimeScopeRuntime,
+  ctx: RuntimeScopeContext,
+  scope: Scope,
+): Promise<void> {
+  try {
+    assertRuntimeAllowedForScope(runtimeBindingTarget(runtime), scope);
+  } catch (error) {
+    await auditRuntimeScopeRejection({
+      ctx,
+      runtime,
+      scope,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+    throw error;
+  }
 }
 
 async function auditRuntimeScopeRejection(params: {
@@ -98,29 +121,50 @@ export async function assertRuntimeInvocationAllowedForContext(
   const scope = await resolveScope(ctx);
   if (!scope) return;
 
-  try {
-    assertRuntimeAllowedForScope(runtimeBindingTarget(runtime), scope);
-  } catch (error) {
-    await auditRuntimeScopeRejection({
-      ctx,
-      runtime,
-      scope,
-      error: error instanceof Error ? error : new Error(String(error)),
-    });
-    throw error;
-  }
+  await assertRuntimeAllowedForResolvedScope(runtime, ctx, scope);
 }
 
-export async function assertPrimaryRuntimeInvocationAllowedForContext(ctx: RuntimeScopeContext): Promise<void> {
-  if (!db) return;
+export async function assertPrimaryRuntimeInvocationAllowedForContext(
+  ctx: RuntimeScopeContext,
+): Promise<string | null> {
+  if (!db) return null;
+
+  const scope = await resolveScope(ctx);
+  if (!scope) return null;
+  const personalOwnerUserId = scope.ownerUserId ?? "";
+  if (scope.type === SCOPE_TYPES.PRIVATE_USER && !personalOwnerUserId) return null;
 
   const runtime = await withRetry(() =>
     db!.query.companyRuntimes.findFirst({
-      where: eq(companyRuntimes.isPrimary, true),
+      where: (runtime, { and, eq, isNull, or }) => {
+        const primaryRuntime = eq(runtime.isPrimary, true);
+
+        if (scope.type === SCOPE_TYPES.PRIVATE_USER) {
+          return and(
+            primaryRuntime,
+            eq(runtime.ownerType, "user"),
+            eq(runtime.ownerUserId, personalOwnerUserId),
+          );
+        }
+
+        const companyId = scope.companyId ?? scope.id;
+        return and(
+          primaryRuntime,
+          eq(runtime.ownerType, "company"),
+          or(
+            eq(runtime.ownerCompanyId, companyId),
+            and(
+              isNull(runtime.ownerCompanyId),
+              eq(runtime.companyId, companyId),
+            ),
+          ),
+        );
+      },
     })
   );
 
-  if (!runtime) return;
+  if (!runtime) throw new Error("No runtime configured");
 
-  await assertRuntimeInvocationAllowedForContext(runtime, ctx);
+  await assertRuntimeAllowedForResolvedScope(runtime, ctx, scope);
+  return runtime.id;
 }

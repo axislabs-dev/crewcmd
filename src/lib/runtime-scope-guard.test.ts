@@ -5,6 +5,21 @@ const mockFindRuntime = vi.fn();
 const mockFindWorkspace = vi.fn();
 const mockLogAudit = vi.fn();
 
+const runtimeColumns = {
+  isPrimary: "isPrimary",
+  ownerType: "ownerType",
+  ownerUserId: "ownerUserId",
+  ownerCompanyId: "ownerCompanyId",
+  companyId: "companyId",
+};
+
+const queryOperators = {
+  and: (...conditions: unknown[]) => ["and", ...conditions],
+  eq: (column: unknown, value: unknown) => ["eq", column, value],
+  isNull: (column: unknown) => ["isNull", column],
+  or: (...conditions: unknown[]) => ["or", ...conditions],
+};
+
 vi.mock("@/db", () => ({
   db: {
     query: {
@@ -92,6 +107,75 @@ describe("runtime scope guard", () => {
     })).rejects.toMatchObject({
       decision: expect.objectContaining({ code: "runtime_class_scope_mismatch" }),
     });
+  });
+
+  it("selects the primary runtime owned by the personal workspace user", async () => {
+    mockFindWorkspace.mockResolvedValueOnce({
+      id: "workspace-personal",
+      type: "personal",
+      ownerUserId: "user-1",
+      companyId: null,
+    });
+    mockFindRuntime.mockResolvedValueOnce(personalRuntime);
+
+    await expect(assertPrimaryRuntimeInvocationAllowedForContext({
+      workspaceId: "workspace-personal",
+      userId: "user-1",
+    })).resolves.toBe("runtime-personal");
+
+    const [{ where }] = mockFindRuntime.mock.calls[0] as [{
+      where: (columns: typeof runtimeColumns, operators: typeof queryOperators) => unknown;
+    }];
+    expect(where(runtimeColumns, queryOperators)).toEqual([
+      "and",
+      ["eq", "isPrimary", true],
+      ["eq", "ownerType", "user"],
+      ["eq", "ownerUserId", "user-1"],
+    ]);
+    expect(mockFindWorkspace).toHaveBeenCalledTimes(1);
+    expect(mockLogAudit).not.toHaveBeenCalled();
+  });
+
+  it("selects the primary runtime owned by the requested company", async () => {
+    mockFindRuntime.mockResolvedValueOnce(sharedRuntime);
+
+    await expect(assertPrimaryRuntimeInvocationAllowedForContext({
+      companyId: "company-1",
+      userId: "user-1",
+    })).resolves.toBe("runtime-shared");
+
+    const [{ where }] = mockFindRuntime.mock.calls[0] as [{
+      where: (columns: typeof runtimeColumns, operators: typeof queryOperators) => unknown;
+    }];
+    expect(where(runtimeColumns, queryOperators)).toEqual([
+      "and",
+      ["eq", "isPrimary", true],
+      ["eq", "ownerType", "company"],
+      [
+        "or",
+        ["eq", "ownerCompanyId", "company-1"],
+        [
+          "and",
+          ["isNull", "ownerCompanyId"],
+          ["eq", "companyId", "company-1"],
+        ],
+      ],
+    ]);
+  });
+
+  it("fails closed when the workspace has no primary runtime", async () => {
+    mockFindWorkspace.mockResolvedValueOnce({
+      id: "workspace-personal",
+      type: "personal",
+      ownerUserId: "user-1",
+      companyId: null,
+    });
+    mockFindRuntime.mockResolvedValueOnce(null);
+
+    await expect(assertPrimaryRuntimeInvocationAllowedForContext({
+      workspaceId: "workspace-personal",
+      userId: "user-1",
+    })).rejects.toThrow("No runtime configured");
   });
 
   it("preserves personal runtime invocation in the owner's personal workspace", async () => {

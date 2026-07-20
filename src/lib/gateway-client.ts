@@ -18,9 +18,9 @@ import { resolveRuntimeAuthTokenForUse } from "./runtime-token-crypto";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
-const MIN_PROTOCOL_VERSION = 3;
+const MIN_PROTOCOL_VERSION = 4;
 const MAX_PROTOCOL_VERSION = 4;
-const DEFAULT_SCOPES = ["operator.read", "operator.write", "operator.admin"];
+const DEFAULT_SCOPES = ["operator.admin"];
 const CLIENT_ID = "gateway-client";
 const CLIENT_VERSION = "crewcmd/1.0.0";
 const CLIENT_MODE = "backend";
@@ -318,6 +318,7 @@ export interface ProbeResult {
   capabilities?: RuntimeCapabilitySnapshot;
   defaultAgentId?: string;
   devicePrivateKeyPem?: string;
+  deviceAuth?: GatewayDeviceAuth;
 }
 
 export interface DeviceIdentity {
@@ -325,6 +326,23 @@ export interface DeviceIdentity {
   publicKeyRawBase64Url: string;
   privateKeyPem: string;
   source: "configured" | "generated";
+}
+
+export interface GatewayDeviceAuth {
+  token: string;
+  role: string;
+  scopes: string[];
+}
+
+export interface GatewayConnectResult {
+  version: string;
+  deviceAuth?: GatewayDeviceAuth;
+}
+
+export interface GatewayClientAuthLifecycle {
+  deviceAuth?: GatewayDeviceAuth | null;
+  onDeviceAuthUpdated?: (deviceAuth: GatewayDeviceAuth) => void | Promise<void>;
+  onDeviceAuthInvalid?: () => void | Promise<void>;
 }
 
 // ─── Crypto Helpers ─────────────────────────────────────────────────
@@ -447,14 +465,18 @@ function buildDeviceAuthPayloadV3(params: {
  */
 export function resolveDeviceIdentity(existingPrivateKeyPem?: string): DeviceIdentity {
   if (existingPrivateKeyPem) {
-    const privateKey = crypto.createPrivateKey(existingPrivateKeyPem);
+    const resolvedPrivateKeyPem = resolveRuntimeAuthTokenForUse(existingPrivateKeyPem);
+    if (!resolvedPrivateKeyPem) {
+      throw new Error("Stored gateway device identity is empty");
+    }
+    const privateKey = crypto.createPrivateKey(resolvedPrivateKeyPem);
     const publicKey = crypto.createPublicKey(privateKey);
     const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
     const raw = derivePublicKeyRaw(publicKeyPem);
     return {
       deviceId: crypto.createHash("sha256").update(raw).digest("hex"),
       publicKeyRawBase64Url: base64UrlEncode(raw),
-      privateKeyPem: existingPrivateKeyPem,
+      privateKeyPem: resolvedPrivateKeyPem,
       source: "configured",
     };
   }
@@ -487,6 +509,43 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout> | null;
 };
 
+type ConnectAuthPlan = {
+  auth?: {
+    token?: string;
+    deviceToken?: string;
+  };
+  scopes: string[];
+  signatureToken: string | null;
+  usesDeviceToken: boolean;
+};
+
+function gatewayErrorDetailCode(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const details = (err as { gatewayDetails?: Record<string, unknown> }).gatewayDetails;
+  return typeof details?.code === "string" ? details.code : null;
+}
+
+function canRetryWithDeviceToken(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const details = (err as { gatewayDetails?: Record<string, unknown> }).gatewayDetails;
+  return gatewayErrorDetailCode(err) === "AUTH_TOKEN_MISMATCH"
+    && (details?.canRetryWithDeviceToken === true
+      || details?.recommendedNextStep === "retry_with_device_token");
+}
+
+function isLoopbackGatewayUrl(rawUrl: string): boolean {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "::1" || hostname === "[::1]") return true;
+    const octets = hostname.split(".");
+    return octets.length === 4
+      && octets[0] === "127"
+      && octets.every((octet) => /^\d+$/.test(octet) && Number(octet) <= 255);
+  } catch {
+    return false;
+  }
+}
+
 // ─── Gateway Client ─────────────────────────────────────────────────
 
 export class GatewayClient {
@@ -499,6 +558,7 @@ export class GatewayClient {
   private challengeReject?: (err: Error) => void;
   private eventListeners = new Map<string, Set<(payload: unknown) => void>>();
   private authToken: string | null;
+  private deviceAuth: GatewayDeviceAuth | null;
 
   get isConnected(): boolean {
     return this.connected;
@@ -508,19 +568,117 @@ export class GatewayClient {
     private gatewayUrl: string,
     authToken: string | null,
     private device: DeviceIdentity,
-    private timeoutMs = 15000
+    private timeoutMs = 15000,
+    private authLifecycle: GatewayClientAuthLifecycle = {},
   ) {
     this.authToken = resolveRuntimeAuthTokenForUse(authToken);
+    this.deviceAuth = authLifecycle.deviceAuth ?? null;
   }
 
   /**
    * Connect to the gateway with device auth challenge-response.
    */
-  async connect(): Promise<{ version: string }> {
+  async connect(): Promise<GatewayConnectResult> {
+    const initialPlan = this.buildInitialAuthPlan();
+
+    try {
+      return await this.connectOnce(initialPlan);
+    } catch (err) {
+      if (initialPlan.usesDeviceToken && gatewayErrorDetailCode(err) === "AUTH_DEVICE_TOKEN_MISMATCH") {
+        await this.invalidateStoredDeviceAuth();
+      }
+
+      if (
+        !this.authToken
+        || !this.deviceAuth
+        || !isLoopbackGatewayUrl(this.gatewayUrl)
+        || !canRetryWithDeviceToken(err)
+      ) {
+        throw err;
+      }
+
+      publishAgentModeDiagnostic({
+        scope: "gateway-client",
+        event: "connect.retry-device-token",
+        detail: { url: this.gatewayUrl, deviceId: this.device.deviceId },
+      });
+      this.resetTransportForRetry();
+
+      try {
+        return await this.connectOnce({
+          auth: {
+            token: this.authToken,
+            deviceToken: this.deviceAuth.token,
+          },
+          scopes: [...this.deviceAuth.scopes],
+          signatureToken: this.authToken,
+          usesDeviceToken: true,
+        });
+      } catch (retryErr) {
+        if (gatewayErrorDetailCode(retryErr) === "AUTH_DEVICE_TOKEN_MISMATCH") {
+          await this.invalidateStoredDeviceAuth();
+        }
+        throw retryErr;
+      }
+    }
+  }
+
+  private buildInitialAuthPlan(): ConnectAuthPlan {
+    if (this.authToken) {
+      return {
+        auth: { token: this.authToken },
+        scopes: [...DEFAULT_SCOPES],
+        signatureToken: this.authToken,
+        usesDeviceToken: false,
+      };
+    }
+
+    if (this.deviceAuth) {
+      return {
+        auth: {
+          token: this.deviceAuth.token,
+          deviceToken: this.deviceAuth.token,
+        },
+        scopes: [...this.deviceAuth.scopes],
+        signatureToken: this.deviceAuth.token,
+        usesDeviceToken: true,
+      };
+    }
+
+    return {
+      scopes: [...DEFAULT_SCOPES],
+      signatureToken: null,
+      usesDeviceToken: false,
+    };
+  }
+
+  private async invalidateStoredDeviceAuth(): Promise<void> {
+    this.deviceAuth = null;
+    await this.authLifecycle.onDeviceAuthInvalid?.();
+  }
+
+  private resetTransportForRetry(): void {
+    const ws = this.ws;
+    this.ws = null;
+    this.connected = false;
+    this.challengeResolve = undefined;
+    this.challengeReject = undefined;
+    for (const [, pending] of this.pending) {
+      if (pending.timer) clearTimeout(pending.timer);
+    }
+    this.pending.clear();
+    try { ws?.close(); } catch { /* ignore */ }
+  }
+
+  private async connectOnce(authPlan: ConnectAuthPlan): Promise<GatewayConnectResult> {
     publishAgentModeDiagnostic({
       scope: "gateway-client",
       event: "connect.start",
-      detail: { url: this.gatewayUrl, timeoutMs: this.timeoutMs },
+      detail: {
+        url: this.gatewayUrl,
+        timeoutMs: this.timeoutMs,
+        usesDeviceToken: authPlan.usesDeviceToken,
+      },
     });
     const challengePromise = new Promise<string>((resolve, reject) => {
       this.challengeResolve = resolve;
@@ -536,23 +694,22 @@ export class GatewayClient {
           event: "connect.timeout",
           detail: { url: this.gatewayUrl, timeoutMs: this.timeoutMs },
         });
-        this.close();
+        this.resetTransportForRetry();
         reject(new Error("Connection timeout"));
       }, this.timeoutMs);
 
       try {
-        const headers: Record<string, string> = {};
-        if (this.authToken) {
-          headers.authorization = `Bearer ${this.authToken}`;
-        }
-        this.ws = new WebSocket(this.gatewayUrl, { headers });
+        this.ws = new WebSocket(this.gatewayUrl);
       } catch (err) {
         clearTimeout(timer);
         reject(new Error(`Failed to create WebSocket: ${err instanceof Error ? err.message : String(err)}`));
         return;
       }
 
-      this.ws.on("error", (err) => {
+      const ws = this.ws;
+
+      ws.on("error", (err) => {
+        if (this.ws !== ws) return;
         clearTimeout(timer);
         publishAgentModeDiagnostic({
           scope: "gateway-client",
@@ -563,7 +720,8 @@ export class GatewayClient {
         reject(new Error(`WebSocket error: ${err.message}`));
       });
 
-      this.ws.on("close", (code, reason) => {
+      ws.on("close", (code, reason) => {
+        if (this.ws !== ws) return;
         this.connected = false;
         const err = new Error(`Connection closed (${code}): ${reason?.toString() || ""}`);
         publishAgentModeDiagnostic({
@@ -584,21 +742,23 @@ export class GatewayClient {
         this.pending.clear();
       });
 
-      this.ws.on("message", (data) => {
+      ws.on("message", (data) => {
+        if (this.ws !== ws) return;
         this.handleMessage(data.toString());
       });
 
       // Wait for challenge, then send signed connect
-      this.ws.on("open", () => {
+      ws.on("open", () => {
+        if (this.ws !== ws) return;
         challengePromise
           .then((nonce) => {
             const signedAtMs = Date.now();
             const payloadStr = buildDeviceAuthPayloadV3({
               deviceId: this.device.deviceId,
               role: DEFAULT_ROLE,
-              scopes: DEFAULT_SCOPES,
+              scopes: authPlan.scopes,
               signedAtMs,
-              token: this.authToken,
+              token: authPlan.signatureToken,
               nonce,
             });
             const signature = signPayload(this.device.privateKeyPem, payloadStr);
@@ -611,13 +771,42 @@ export class GatewayClient {
                 this.connected = true;
                 const helloOk = value as Record<string, unknown>;
                 const server = helloOk?.server as { version?: string } | undefined;
+                const auth = helloOk?.auth as {
+                  deviceToken?: unknown;
+                  role?: unknown;
+                  scopes?: unknown;
+                } | undefined;
+                const nextDeviceAuth = typeof auth?.deviceToken === "string" && auth.deviceToken.trim()
+                  ? {
+                      token: auth.deviceToken.trim(),
+                      role: typeof auth.role === "string" && auth.role.trim() ? auth.role.trim() : DEFAULT_ROLE,
+                      scopes: Array.isArray(auth.scopes)
+                        ? auth.scopes.filter((scope): scope is string => typeof scope === "string" && !!scope.trim())
+                        : [...authPlan.scopes],
+                    }
+                  : undefined;
                 this.serverVersion = server?.version || "unknown";
-                publishAgentModeDiagnostic({
-                  scope: "gateway-client",
-                  event: "connect.complete",
-                  detail: { version: this.serverVersion },
+                Promise.resolve(
+                  nextDeviceAuth
+                    ? this.authLifecycle.onDeviceAuthUpdated?.(nextDeviceAuth)
+                    : undefined,
+                ).then(() => {
+                  if (nextDeviceAuth) this.deviceAuth = nextDeviceAuth;
+                  publishAgentModeDiagnostic({
+                    scope: "gateway-client",
+                    event: "connect.complete",
+                    detail: {
+                      version: this.serverVersion,
+                      receivedDeviceToken: !!nextDeviceAuth,
+                    },
+                  });
+                  resolve({ version: this.serverVersion!, deviceAuth: nextDeviceAuth });
+                }).catch((persistErr) => {
+                  this.resetTransportForRetry();
+                  reject(new Error(
+                    `Failed to persist gateway device credential: ${persistErr instanceof Error ? persistErr.message : String(persistErr)}`,
+                  ));
                 });
-                resolve({ version: this.serverVersion });
               },
               reject: (err) => {
                 clearTimeout(timer);
@@ -640,9 +829,9 @@ export class GatewayClient {
                   mode: CLIENT_MODE,
                 },
                 role: DEFAULT_ROLE,
-                scopes: DEFAULT_SCOPES,
+                scopes: authPlan.scopes,
                 caps: DEFAULT_CAPS,
-                auth: this.authToken ? { token: this.authToken } : undefined,
+                auth: authPlan.auth,
                 device: {
                   id: this.device.deviceId,
                   publicKey: this.device.publicKeyRawBase64Url,
@@ -653,7 +842,7 @@ export class GatewayClient {
               },
             };
 
-            this.ws!.send(JSON.stringify(connectFrame));
+            ws.send(JSON.stringify(connectFrame));
           })
           .catch((err) => {
             clearTimeout(timer);
@@ -1164,8 +1353,8 @@ export async function probeGateway(
   // First attempt
   const client = new GatewayClient(gatewayUrl, authToken, device);
   try {
-    const { version } = await client.connect();
-    return await discoverFromClient(client, version, device.privateKeyPem);
+    const { version, deviceAuth } = await client.connect();
+    return await discoverFromClient(client, version, device.privateKeyPem, deviceAuth);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const isPairingRequired = message.toLowerCase().includes("pairing required");
@@ -1206,7 +1395,8 @@ export async function probeGateway(
 async function discoverFromClient(
   client: GatewayClient,
   version: string,
-  devicePrivateKeyPem: string
+  devicePrivateKeyPem: string,
+  deviceAuth?: GatewayDeviceAuth,
 ): Promise<ProbeResult> {
   try {
     const [agentsResult, modelsResult, configSnapshot] = await Promise.all([
@@ -1274,6 +1464,7 @@ async function discoverFromClient(
         : undefined,
       defaultAgentId: agentsResult.defaultId,
       devicePrivateKeyPem,
+      deviceAuth,
     };
   } catch (err) {
     return {

@@ -16,10 +16,11 @@ export type RealtimeVoiceStatus = "idle" | "listening" | "processing" | "speakin
 const BARGE_IN_RMS_THRESHOLD = 0.03;
 const BARGE_IN_PEAK_THRESHOLD = 0.1;
 const BARGE_IN_FRAMES = 3;
-const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.055;
-const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.16;
-const MOBILE_BARGE_IN_FRAMES = 3;
-const MOBILE_BARGE_IN_GRACE_MS = 450;
+const MOBILE_BARGE_IN_RMS_THRESHOLD = 0.075;
+const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.22;
+const MOBILE_BARGE_IN_FRAMES = 5;
+const MOBILE_BARGE_IN_GRACE_MS = 650;
+const MOBILE_OUTPUT_TAIL_MS = 350;
 const REALTIME_VOICE_CONTEXT_LIMIT = 8;
 const REALTIME_RELAY_READY_TIMEOUT_MS = 15_000;
 
@@ -28,6 +29,7 @@ export interface RealtimeBargeInProfile {
   peakThreshold: number;
   frames: number;
   graceMs: number;
+  outputTailMs: number;
   suppressEchoInput: boolean;
 }
 
@@ -37,6 +39,7 @@ export interface RealtimeBargeInDetectionInput {
   cancelRequested: boolean;
   speechFrames: number;
   outputStartedAtMs: number | null;
+  outputEndedAtMs?: number | null;
   nowMs: number;
   profile: RealtimeBargeInProfile;
 }
@@ -46,6 +49,7 @@ export const DESKTOP_REALTIME_BARGE_IN_PROFILE: RealtimeBargeInProfile = {
   peakThreshold: BARGE_IN_PEAK_THRESHOLD,
   frames: BARGE_IN_FRAMES,
   graceMs: 0,
+  outputTailMs: 0,
   suppressEchoInput: false,
 };
 
@@ -54,6 +58,7 @@ export const MOBILE_REALTIME_BARGE_IN_PROFILE: RealtimeBargeInProfile = {
   peakThreshold: MOBILE_BARGE_IN_PEAK_THRESHOLD,
   frames: MOBILE_BARGE_IN_FRAMES,
   graceMs: MOBILE_BARGE_IN_GRACE_MS,
+  outputTailMs: MOBILE_OUTPUT_TAIL_MS,
   suppressEchoInput: true,
 };
 
@@ -107,6 +112,7 @@ export class RealtimeGatewayRelaySession {
   private cancelRequestedForPlayback = false;
   private speechFramesDuringPlayback = 0;
   private outputStartedAtMs: number | null = null;
+  private outputEndedAtMs: number | null = null;
   private pendingToolCalls = 0;
   private relayReady = false;
   private terminalError: Error | null = null;
@@ -249,6 +255,7 @@ export class RealtimeGatewayRelaySession {
   }
 
   stopOutput(): void {
+    const hadActiveOutput = this.sources.size > 0;
     for (const source of this.sources) {
       try {
         source.stop();
@@ -258,6 +265,9 @@ export class RealtimeGatewayRelaySession {
     this.playhead = this.outputContext?.currentTime ?? 0;
     this.speechFramesDuringPlayback = 0;
     this.outputStartedAtMs = null;
+    if (hadActiveOutput && !this.cancelRequestedForPlayback) {
+      this.outputEndedAtMs = performanceNow();
+    }
     this.callbacks.onSpeakingChange?.(false);
   }
 
@@ -359,6 +369,9 @@ export class RealtimeGatewayRelaySession {
       this.sources.delete(source);
       if (this.sources.size === 0) {
         this.outputStartedAtMs = null;
+        if (!this.cancelRequestedForPlayback) {
+          this.outputEndedAtMs = performanceNow();
+        }
         this.callbacks.onSpeakingChange?.(false);
       }
     });
@@ -366,6 +379,7 @@ export class RealtimeGatewayRelaySession {
     source.connect(this.outputContext.destination);
     const startAt = Math.max(this.outputContext.currentTime, this.playhead);
     source.start(startAt);
+    this.outputEndedAtMs = null;
     this.outputStartedAtMs ??= performanceNow();
     this.playhead = startAt + buffer.duration;
     this.callbacks.onSpeakingChange?.(true);
@@ -450,6 +464,7 @@ export class RealtimeGatewayRelaySession {
       cancelRequested: this.cancelRequestedForPlayback,
       speechFrames: this.speechFramesDuringPlayback,
       outputStartedAtMs: this.outputStartedAtMs,
+      outputEndedAtMs: this.outputEndedAtMs,
       nowMs: performanceNow(),
       profile: this.bargeInProfile,
     });
@@ -530,6 +545,7 @@ export function resolveRealtimeBargeInProfile(userAgent = readUserAgent(), hasCa
 }
 
 export function detectRealtimeBargeIn(input: RealtimeBargeInDetectionInput) {
+  const suppressOutputTail = isWithinOutputTail(input);
   if (
     !input.activeOutput ||
     input.cancelRequested ||
@@ -538,7 +554,9 @@ export function detectRealtimeBargeIn(input: RealtimeBargeInDetectionInput) {
     return {
       triggered: false,
       speechFrames: 0,
-      suppressInput: input.profile.suppressEchoInput && input.activeOutput && !input.cancelRequested,
+      suppressInput: input.profile.suppressEchoInput && (
+        (input.activeOutput && !input.cancelRequested) || suppressOutputTail
+      ),
     };
   }
 
@@ -551,14 +569,16 @@ export function detectRealtimeBargeIn(input: RealtimeBargeInDetectionInput) {
   }
 
   const rms = Math.sqrt(sum / input.input.length);
-  const speechFrames = rms >= input.profile.rmsThreshold && peak >= input.profile.peakThreshold
+  const withinGraceWindow = isWithinGraceWindow(input);
+  const speechFrames = !withinGraceWindow && rms >= input.profile.rmsThreshold && peak >= input.profile.peakThreshold
     ? input.speechFrames + 1
     : 0;
+  const triggered = speechFrames >= input.profile.frames;
 
   return {
-    triggered: !isWithinGraceWindow(input) && speechFrames >= input.profile.frames,
+    triggered,
     speechFrames,
-    suppressInput: input.profile.suppressEchoInput && input.activeOutput && speechFrames === 0,
+    suppressInput: input.profile.suppressEchoInput && !triggered,
   };
 }
 
@@ -567,6 +587,16 @@ function isWithinGraceWindow(input: RealtimeBargeInDetectionInput) {
     input.outputStartedAtMs !== null &&
     input.profile.graceMs > 0 &&
     input.nowMs - input.outputStartedAtMs < input.profile.graceMs,
+  );
+}
+
+function isWithinOutputTail(input: RealtimeBargeInDetectionInput) {
+  return Boolean(
+    !input.activeOutput &&
+    input.outputEndedAtMs !== null &&
+    input.outputEndedAtMs !== undefined &&
+    input.profile.outputTailMs > 0 &&
+    input.nowMs - input.outputEndedAtMs < input.profile.outputTailMs,
   );
 }
 

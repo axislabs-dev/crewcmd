@@ -6082,8 +6082,15 @@ export default function ChatPage() {
         title="Style"
         value={resolvedVoiceSettings}
         visualValue={resolvedVisualSettings}
+        realtimeRuntimeId={selectedAgent?.runtimeId ?? undefined}
         helperText="Applies to this chat only. Go to Team > Agent to change the agent default."
         onClose={() => setVoicePickerOpen(false)}
+        onRealtimeChange={(realtime) => {
+          setSessionVoiceOverride(normalizeAgentVoiceSettings({
+            ...resolvedVoiceSettings,
+            realtime,
+          }));
+        }}
         onSelect={(voiceSettings) => {
           setSessionVoiceOverride(voiceSettings);
           setVoicePickerOpen(false);

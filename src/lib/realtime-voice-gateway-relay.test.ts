@@ -195,7 +195,7 @@ describe("realtime gateway relay barge-in detection", () => {
       profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
     });
 
-    expect(result).toEqual({ triggered: false, speechFrames: 1, suppressInput: false });
+    expect(result).toEqual({ triggered: false, speechFrames: 0, suppressInput: true });
   });
 
   it("requires sustained stronger speech before mobile barge-in", () => {
@@ -228,7 +228,7 @@ describe("realtime gateway relay barge-in detection", () => {
     expect(result.suppressInput).toBe(false);
   });
 
-  it("keeps likely mobile speech audible while waiting to confirm barge-in", () => {
+  it("holds mobile audio while waiting to confirm barge-in", () => {
     let speechFrames = 0;
     for (let i = 0; i < MOBILE_REALTIME_BARGE_IN_PROFILE.frames - 2; i += 1) {
       const result = detectRealtimeBargeIn({
@@ -242,7 +242,7 @@ describe("realtime gateway relay barge-in detection", () => {
       });
       speechFrames = result.speechFrames;
       expect(result.triggered).toBe(false);
-      expect(result.suppressInput).toBe(false);
+      expect(result.suppressInput).toBe(true);
     }
   });
 
@@ -268,6 +268,32 @@ describe("realtime gateway relay barge-in detection", () => {
 
     expect(echo.suppressInput).toBe(true);
     expect(desktop.suppressInput).toBe(false);
+  });
+
+  it("suppresses the mobile speaker tail after playback ends", () => {
+    const duringTail = detectRealtimeBargeIn({
+      input: inputWithLevel(0.2),
+      activeOutput: false,
+      cancelRequested: false,
+      speechFrames: 0,
+      outputStartedAtMs: null,
+      outputEndedAtMs: 2_000,
+      nowMs: 2_200,
+      profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
+    });
+    const afterTail = detectRealtimeBargeIn({
+      input: inputWithLevel(0.2),
+      activeOutput: false,
+      cancelRequested: false,
+      speechFrames: 0,
+      outputStartedAtMs: null,
+      outputEndedAtMs: 2_000,
+      nowMs: 2_500,
+      profile: MOBILE_REALTIME_BARGE_IN_PROFILE,
+    });
+
+    expect(duringTail.suppressInput).toBe(true);
+    expect(afterTail.suppressInput).toBe(false);
   });
 
   it("uses the mobile profile for Capacitor and mobile user agents", () => {

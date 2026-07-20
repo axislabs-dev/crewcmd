@@ -1,7 +1,12 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { isValidVoiceUploadToken } from "@/lib/voice-upload-tokens";
-import { getGatewayClient, holdClient, releaseClient } from "@/lib/gateway-chat-pool";
+import {
+  getGatewayClient,
+  getGatewayClientForRuntime,
+  holdClient,
+  releaseClient,
+} from "@/lib/gateway-chat-pool";
 import { db, withRetry } from "@/db";
 import { agents, channelMembers, channels, chatMessages, chatRuns, chatSessions, chatThreads } from "@/db/schema";
 import { eq, desc, and, isNull, sql } from "drizzle-orm";
@@ -1065,8 +1070,9 @@ export async function POST(request: NextRequest) {
     }
     const persistenceScope: ChatPersistenceScope = { companyId, workspaceId, channelId };
     const currentUser = await resolveCurrentUser(request);
+    let primaryRuntimeId: string | null = null;
     try {
-      await assertPrimaryRuntimeInvocationAllowedForContext({
+      primaryRuntimeId = await assertPrimaryRuntimeInvocationAllowedForContext({
         companyId,
         workspaceId,
         userId: currentUser?.id ?? null,
@@ -1731,7 +1737,9 @@ export async function POST(request: NextRequest) {
     const startGatewayTurn = async () => {
       if (cancelled || done) return;
       try {
-        client = await getGatewayClient();
+        client = primaryRuntimeId
+          ? await getGatewayClientForRuntime(primaryRuntimeId)
+          : await getGatewayClient();
         if (cancelled || done) {
           releaseHeldClient();
           return;

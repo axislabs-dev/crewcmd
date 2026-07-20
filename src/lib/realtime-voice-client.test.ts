@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRealtimeRelayOutput,
   getRealtimeVoiceReadiness,
+  isRealtimeVoiceRequested,
   openRealtimeRelayEvents,
   resolveRealtimeVoiceSessionIdentity,
   resolveRealtimeVoiceSessionSettings,
@@ -242,6 +243,24 @@ describe("realtime voice client helpers", () => {
       voiceId: "cedar",
       speed: 1.2,
     })).toBe(cedar);
+    expect(resolveRealtimeVoiceSessionIdentity({
+      enabled: true,
+      realtime: false,
+      provider: "openai",
+      voiceId: "cedar",
+    })).not.toBe(cedar);
+  });
+
+  it("disables realtime session settings without disabling normal voice", () => {
+    const normalVoice = {
+      enabled: true,
+      realtime: false,
+      provider: "openai" as const,
+      voiceId: "cedar",
+    };
+
+    expect(isRealtimeVoiceRequested(normalVoice)).toBe(false);
+    expect(resolveRealtimeVoiceSessionSettings(normalVoice)).toEqual({});
   });
 
   it("maps Google voice selections to realtime session settings", () => {

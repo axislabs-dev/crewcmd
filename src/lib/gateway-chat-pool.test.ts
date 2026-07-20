@@ -4,7 +4,18 @@ import type { GatewayClient } from "./gateway-client";
 const { mockState } = vi.hoisted(() => ({
   mockState: {
     runtimes: new Map<string, unknown>(),
-    clients: [] as Array<{ url: string; isConnected: boolean; close: ReturnType<typeof vi.fn>; connect: ReturnType<typeof vi.fn> }>,
+    clients: [] as Array<{
+      url: string;
+      isConnected: boolean;
+      close: ReturnType<typeof vi.fn>;
+      connect: ReturnType<typeof vi.fn>;
+      authLifecycle?: {
+        deviceAuth?: unknown;
+        onDeviceAuthUpdated?: (deviceAuth: unknown) => void | Promise<void>;
+        onDeviceAuthInvalid?: () => void | Promise<void>;
+      };
+    }>,
+    issuedDeviceAuth: null as null | { token: string; role: string; scopes: string[] },
   },
 }));
 
@@ -27,6 +38,17 @@ vi.mock("@/db", () => ({
         }),
       },
     },
+    update: () => ({
+      set: (values: Record<string, unknown>) => ({
+        where: ({ right }: { right?: unknown }) => {
+          if (typeof right === "string") {
+            const runtime = mockState.runtimes.get(right);
+            if (runtime && typeof runtime === "object") Object.assign(runtime, values);
+          }
+          return Promise.resolve([]);
+        },
+      }),
+    }),
   },
   withRetry: (fn: () => Promise<unknown>) => fn(),
 }));
@@ -35,6 +57,8 @@ vi.mock("@/db/schema", () => ({
   companyRuntimes: {
     id: Symbol.for("companyRuntimes.id"),
     isPrimary: Symbol.for("companyRuntimes.isPrimary"),
+    metadata: Symbol.for("companyRuntimes.metadata"),
+    updatedAt: Symbol.for("companyRuntimes.updatedAt"),
   },
 }));
 
@@ -50,11 +74,26 @@ vi.mock("./gateway-client", () => {
       this.isConnected = false;
     });
     connect = vi.fn(async () => {
+      if (mockState.issuedDeviceAuth) {
+        await this.authLifecycle?.onDeviceAuthUpdated?.(mockState.issuedDeviceAuth);
+      }
       this.isConnected = true;
     });
+    authLifecycle?: {
+      deviceAuth?: unknown;
+      onDeviceAuthUpdated?: (deviceAuth: unknown) => void | Promise<void>;
+      onDeviceAuthInvalid?: () => void | Promise<void>;
+    };
 
-    constructor(url: string) {
+    constructor(
+      url: string,
+      _authToken: string | null,
+      _device: unknown,
+      _timeout: number,
+      authLifecycle?: MockGatewayClient["authLifecycle"],
+    ) {
       this.url = url;
+      this.authLifecycle = authLifecycle;
       mockState.clients.push(this);
     }
   }
@@ -94,10 +133,13 @@ describe("gateway-chat-pool active client holds", () => {
     vi.useRealTimers();
     mockState.runtimes.clear();
     mockState.clients.length = 0;
+    mockState.issuedDeviceAuth = null;
+    vi.stubEnv("AUTH_SECRET", "gateway-pool-device-auth-test-secret");
   });
 
   afterEach(() => {
     resetGatewayPoolForTests();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -144,10 +186,13 @@ describe("getGatewayClientForRuntime", () => {
     vi.useRealTimers();
     mockState.runtimes.clear();
     mockState.clients.length = 0;
+    mockState.issuedDeviceAuth = null;
+    vi.stubEnv("AUTH_SECRET", "gateway-pool-device-auth-test-secret");
   });
 
   afterEach(() => {
     resetGatewayPoolForTests();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -205,5 +250,67 @@ describe("getGatewayClientForRuntime", () => {
       activeHolds: 0,
       poolSize: 1,
     });
+  });
+
+  it("persists issued device credentials and restores them for a new client", async () => {
+    addRuntime("runtime-a", {
+      authToken: "shared-token",
+      metadata: {
+        label: "local",
+        devicePrivateKeyPem: "plaintext-private-key",
+      },
+    });
+    mockState.issuedDeviceAuth = {
+      token: "issued-device-token",
+      role: "operator",
+      scopes: ["operator.read", "operator.write"],
+    };
+
+    await getGatewayClientForRuntime("runtime-a");
+
+    const runtime = mockState.runtimes.get("runtime-a") as { metadata: Record<string, unknown> };
+    expect(runtime.metadata).toMatchObject({
+      label: "local",
+      openclawDeviceAuth: {
+        version: 1,
+        deviceId: "device-1",
+        role: "operator",
+        scopes: ["operator.read", "operator.write"],
+      },
+    });
+    expect(runtime.metadata.devicePrivateKeyPem).not.toBe("plaintext-private-key");
+    expect(JSON.stringify(runtime.metadata)).not.toContain("issued-device-token");
+
+    mockState.issuedDeviceAuth = null;
+    resetGatewayPoolForTests();
+    await getGatewayClientForRuntime("runtime-a");
+
+    expect(mockState.clients.at(-1)?.authLifecycle?.deviceAuth).toEqual({
+      token: "issued-device-token",
+      role: "operator",
+      scopes: ["operator.read", "operator.write"],
+    });
+  });
+
+  it("removes a rejected device credential while preserving other runtime metadata", async () => {
+    addRuntime("runtime-a", {
+      authToken: "shared-token",
+      metadata: {
+        label: "local",
+        devicePrivateKeyPem: "plaintext-private-key",
+      },
+    });
+    mockState.issuedDeviceAuth = {
+      token: "issued-device-token",
+      role: "operator",
+      scopes: ["operator.read"],
+    };
+    await getGatewayClientForRuntime("runtime-a");
+
+    await mockState.clients[0].authLifecycle?.onDeviceAuthInvalid?.();
+
+    const runtime = mockState.runtimes.get("runtime-a") as { metadata: Record<string, unknown> };
+    expect(runtime.metadata.label).toBe("local");
+    expect(runtime.metadata).not.toHaveProperty("openclawDeviceAuth");
   });
 });

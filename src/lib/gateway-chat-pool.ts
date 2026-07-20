@@ -8,11 +8,17 @@
 import { readFile } from "node:fs/promises";
 import { homedir, networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { GatewayClient, resolveDeviceIdentity } from "./gateway-client";
+import { GatewayClient, resolveDeviceIdentity, type GatewayDeviceAuth } from "./gateway-client";
 import { db, withRetry } from "@/db";
 import { companyRuntimes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { publishAgentModeDiagnostic } from "./agent-mode-diagnostics";
+import {
+  clearRuntimeDeviceAuth,
+  readRuntimeDeviceAuth,
+  sealRuntimeDevicePrivateKey,
+  storeRuntimeDeviceAuth,
+} from "./runtime-device-auth";
 
 interface PoolEntry {
   client: GatewayClient;
@@ -424,13 +430,50 @@ async function repairRuntimeUrl(params: {
   );
 }
 
+async function updateRuntimeAuthMetadata(params: {
+  runtimeId: string;
+  update: (metadata: unknown) => Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  return withRetry(async () => {
+    const runtime = await db!.query.companyRuntimes.findFirst({
+      where: eq(companyRuntimes.id, params.runtimeId),
+    });
+    if (!runtime) throw new Error(`Runtime not found: ${params.runtimeId}`);
+    const metadata = params.update(runtime.metadata);
+    await db!.update(companyRuntimes)
+      .set({ metadata, updatedAt: new Date() })
+      .where(eq(companyRuntimes.id, params.runtimeId));
+    return metadata;
+  });
+}
+
 async function connectWithFallback(params: {
   runtimeId: string;
   storedGatewayUrl: string;
   authToken: string | null;
   deviceKeyPem?: string;
+  runtimeMetadata: unknown;
 }): Promise<{ client: GatewayClient; connectedUrl: string }> {
-  const device = resolveDeviceIdentity(params.deviceKeyPem);
+  let runtimeMetadata = params.runtimeMetadata;
+  let storedDeviceKey = params.deviceKeyPem;
+  if (storedDeviceKey) {
+    const sealedDeviceKey = sealRuntimeDevicePrivateKey(storedDeviceKey);
+    if (sealedDeviceKey !== storedDeviceKey) {
+      runtimeMetadata = await updateRuntimeAuthMetadata({
+        runtimeId: params.runtimeId,
+        update: (metadata) => ({
+          ...(metadata && typeof metadata === "object" && !Array.isArray(metadata)
+            ? metadata as Record<string, unknown>
+            : {}),
+          devicePrivateKeyPem: sealedDeviceKey,
+        }),
+      });
+      storedDeviceKey = sealedDeviceKey;
+    }
+  }
+
+  const device = resolveDeviceIdentity(storedDeviceKey);
+  let deviceAuth = readRuntimeDeviceAuth(runtimeMetadata, device.deviceId);
   console.log("[gateway-pool] Device source:", device.source, "hasStoredKey:", !!params.deviceKeyPem);
 
   const candidates = await buildGatewayCandidates(params.storedGatewayUrl);
@@ -441,7 +484,28 @@ async function connectWithFallback(params: {
       url,
       params.authToken,
       device,
-      30000 // 30s timeout for chat
+      30000, // 30s timeout for chat
+      {
+        deviceAuth,
+        onDeviceAuthUpdated: async (nextDeviceAuth: GatewayDeviceAuth) => {
+          runtimeMetadata = await updateRuntimeAuthMetadata({
+            runtimeId: params.runtimeId,
+            update: (metadata) => storeRuntimeDeviceAuth(
+              metadata,
+              device.deviceId,
+              nextDeviceAuth,
+            ),
+          });
+          deviceAuth = nextDeviceAuth;
+        },
+        onDeviceAuthInvalid: async () => {
+          runtimeMetadata = await updateRuntimeAuthMetadata({
+            runtimeId: params.runtimeId,
+            update: clearRuntimeDeviceAuth,
+          });
+          deviceAuth = null;
+        },
+      },
     );
 
     try {
@@ -467,6 +531,10 @@ async function connectWithFallback(params: {
         url,
         err instanceof Error ? err.message : err,
       );
+      const classification = classifyGatewayFailure(err);
+      if (classification === "authentication" || classification === "pairing_required") {
+        throw err;
+      }
     }
   }
 
@@ -541,6 +609,7 @@ async function getClientForRuntime(runtime: GatewayRuntimeConnection | null | un
     storedGatewayUrl: runtime.gatewayUrl,
     authToken: runtime.authToken || null,
     deviceKeyPem,
+    runtimeMetadata: meta,
   });
 
   console.log("[gateway-pool] Connected successfully via:", connectedUrl);

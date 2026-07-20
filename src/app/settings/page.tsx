@@ -6,6 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { useWorkspace } from "@/components/company-context";
 import { RuntimeDiscoverySummary } from "@/components/runtime-discovery-summary";
 import { RuntimeHealthIndicator } from "@/components/runtime-health-indicator";
+import { RuntimeReconciliationDialog } from "@/components/runtime-reconciliation-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserPresenceBadge } from "@/components/user-presence";
 import { labelRuntimeType, summarizeRuntimeCapabilities } from "@/lib/runtime-capability-summary";
@@ -59,6 +60,7 @@ export default function SettingsPage() {
   const [runtimes, setRuntimes] = useState<RuntimeRecord[]>([]);
   const [loadingRuntimes, setLoadingRuntimes] = useState(true);
   const [deletingRuntimeId, setDeletingRuntimeId] = useState<string | null>(null);
+  const [reconcilingRuntime, setReconcilingRuntime] = useState<RuntimeRecord | null>(null);
   const [heartbeatSecret, setHeartbeatSecret] = useState<string | null>(null);
   const [heartbeatSecretLoading, setHeartbeatSecretLoading] = useState(false);
   const [heartbeatSecretRevealed, setHeartbeatSecretRevealed] = useState(false);
@@ -593,14 +595,23 @@ export default function SettingsPage() {
                                 className="mt-2 text-[11px] text-[var(--text-tertiary)]"
                               />
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteRuntime(runtime.id)}
-                              disabled={deletingRuntimeId === runtime.id}
-                              className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
-                            >
-                              {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
-                            </button>
+                            <div className="flex shrink-0 flex-col gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setReconcilingRuntime(runtime)}
+                                className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-3 py-2 text-sm font-medium text-[var(--accent)] transition hover:border-[var(--accent)]"
+                              >
+                                Reconcile
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteRuntime(runtime.id)}
+                                disabled={deletingRuntimeId === runtime.id}
+                                className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300 transition hover:border-red-500/50 disabled:opacity-50"
+                              >
+                                {deletingRuntimeId === runtime.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -620,6 +631,20 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
+      {reconcilingRuntime ? (
+        <RuntimeReconciliationDialog
+          runtimeId={reconcilingRuntime.id}
+          runtimeName={reconcilingRuntime.name}
+          onClose={() => setReconcilingRuntime(null)}
+          onComplete={(result) => {
+            setReconcilingRuntime(null);
+            setMessage({
+              type: "success",
+              text: `Runtime reconciled. ${result.archivedAgents} agent${result.archivedAgents === 1 ? "" : "s"} removed from the active roster, ${result.archivedDms} DM${result.archivedDms === 1 ? "" : "s"} archived, and no messages deleted.`,
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

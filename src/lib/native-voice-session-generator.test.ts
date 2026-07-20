@@ -60,10 +60,23 @@ describe("iOS native voice-session generator", () => {
   it("uses native VAD timing that tolerates natural pauses and adaptive noise", () => {
     expect(source).toContain("private let baseSilenceThreshold = 0.006");
     expect(source).toContain("private let speechStartMs = 250.0");
-    expect(source).toContain("private let silenceEndMs = 1800.0");
+    expect(source).toContain("private let silenceEndMs = 3000.0");
     expect(source).toContain("private let minRecordingMs = 600.0");
     expect(source).toContain("private func currentSilenceThreshold()");
     expect(source).toContain("noiseFloorRms * 3.0");
+  });
+
+  it("keeps recording long-form speech until the speaker pauses", () => {
+    const bufferHandler = source.slice(
+      source.indexOf("private func handleAudioBuffer"),
+      source.indexOf("private func finishRecording")
+    );
+
+    expect(source).not.toContain("maxRecordingMs");
+    expect(bufferHandler).toContain("recordingMs >= longRecordingDiagnosticMs");
+    expect(bufferHandler).toContain('notifyDiagnostic("native.recording.long-form"');
+    expect(bufferHandler).toContain("recordingMs >= minRecordingMs && silenceMs >= silenceEndMs");
+    expect(bufferHandler).not.toContain("recordingMs >= maxRecordingMs");
   });
 
   it("does not hard-restart the native engine for every route configuration change", () => {

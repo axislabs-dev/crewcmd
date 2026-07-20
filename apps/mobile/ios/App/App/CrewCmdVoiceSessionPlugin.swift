@@ -70,6 +70,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
     private var playbackSuppressionUntil: TimeInterval = 0
     private var noiseFloorRms: Double = 0
     private var lastRouteRecoveryAt: TimeInterval = 0
+    private var reportedLongRecording = false
     private var uiState = "idle"
     private var uiActor: CrewCmdVoiceUiActor = .system
     private var uiLevel: Double = 0
@@ -78,9 +79,9 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
 
     private let baseSilenceThreshold = 0.006
     private let speechStartMs = 250.0
-    private let silenceEndMs = 1800.0
+    private let silenceEndMs = 3000.0
     private let minRecordingMs = 600.0
-    private let maxRecordingMs = 20000.0
+    private let longRecordingDiagnosticMs = 20000.0
 
     public override func load() {
         super.load()
@@ -641,7 +642,14 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
             recordingSamples.append(contentsOf: intSamples)
             let recordingMs = now - (recordingStartedAt ?? now)
             let silenceMs = silenceStartedAt.map { now - $0 } ?? 0
-            if (recordingMs >= minRecordingMs && silenceMs >= silenceEndMs) || recordingMs >= maxRecordingMs {
+            if !reportedLongRecording && recordingMs >= longRecordingDiagnosticMs {
+                reportedLongRecording = true
+                notifyDiagnostic("native.recording.long-form", detail: [
+                    "durationMs": recordingMs,
+                    "samples": recordingSamples.count
+                ])
+            }
+            if recordingMs >= minRecordingMs && silenceMs >= silenceEndMs {
                 finishRecording(recordingMs: recordingMs)
             }
         }
@@ -685,6 +693,7 @@ public class CrewCmdVoiceSessionPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioPlay
         speechStartedAt = nil
         silenceStartedAt = nil
         recordingStartedAt = nil
+        reportedLongRecording = false
     }
 
     private func uploadWav(samples: [Int16], sampleRate: Double) {

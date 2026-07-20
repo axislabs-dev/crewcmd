@@ -1,15 +1,164 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const realtimeClientMocks = vi.hoisted(() => ({
+  cancelRealtimeRelayOutput: vi.fn(),
+  openRealtimeRelayEvents: vi.fn(),
+  sendRealtimeRelayAudio: vi.fn(),
+  sendRealtimeRelayMark: vi.fn(),
+  sendRealtimeRelayToolCall: vi.fn(),
+  sendRealtimeRelayToolResult: vi.fn(),
+  stopRealtimeRelay: vi.fn(),
+}));
+
+vi.mock("./realtime-voice-client", () => realtimeClientMocks);
+
 import {
   buildRealtimeVoiceContext,
   clearRealtimeVoiceContextForTest,
   DESKTOP_REALTIME_BARGE_IN_PROFILE,
   MOBILE_REALTIME_BARGE_IN_PROFILE,
+  RealtimeGatewayRelaySession,
   detectRealtimeBargeIn,
   recordRealtimeVoiceContext,
   resolveRealtimeBargeInProfile,
   withRealtimeScreenContext,
 } from "./realtime-voice-gateway-relay";
 import { usePageContextStore } from "./page-context-store";
+
+class FakeRelayEventSource {
+  private listeners = new Map<string, (event: { data: string }) => void>();
+  onerror: (() => void) | null = null;
+  close = vi.fn();
+
+  addEventListener(type: string, listener: (event: { data: string }) => void) {
+    this.listeners.set(type, listener);
+  }
+
+  emit(type: string, payload: unknown) {
+    this.listeners.get(type)?.({ data: JSON.stringify(payload) });
+  }
+}
+
+function createMediaStream() {
+  const track = { enabled: true, stop: vi.fn() };
+  const stream = {
+    getTracks: () => [track],
+    getAudioTracks: () => [track],
+  } as unknown as MediaStream;
+  return { stream, track };
+}
+
+function installAudioContext() {
+  let processor: {
+    onaudioprocess: ((event: { inputBuffer: { getChannelData: () => Float32Array } }) => void) | null;
+    connect: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+  } | null = null;
+
+  class FakeAudioContext {
+    currentTime = 0;
+    destination = {};
+    close = vi.fn();
+
+    createMediaStreamSource() {
+      return { connect: vi.fn(), disconnect: vi.fn() };
+    }
+
+    createScriptProcessor() {
+      processor = { onaudioprocess: null, connect: vi.fn(), disconnect: vi.fn() };
+      return processor;
+    }
+  }
+
+  vi.stubGlobal("AudioContext", FakeAudioContext);
+  return () => processor;
+}
+
+describe("realtime gateway relay lifecycle", () => {
+  beforeEach(() => {
+    for (const mock of Object.values(realtimeClientMocks)) mock.mockReset();
+    realtimeClientMocks.sendRealtimeRelayAudio.mockResolvedValue(undefined);
+    realtimeClientMocks.stopRealtimeRelay.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves provider failures that arrive before microphone access resolves", async () => {
+    const eventSource = new FakeRelayEventSource();
+    realtimeClientMocks.openRealtimeRelayEvents.mockReturnValue(eventSource as unknown as EventSource);
+    const { stream, track } = createMediaStream();
+    let resolveMedia!: (media: MediaStream) => void;
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((resolve) => {
+      resolveMedia = resolve;
+    }));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia }, userAgent: "desktop" });
+    const onStatus = vi.fn();
+    const onError = vi.fn();
+    const relay = new RealtimeGatewayRelaySession(
+      "rt_1",
+      { relaySessionId: "relay_1", transport: "gateway-relay" },
+      { onStatus, onError },
+    );
+
+    const starting = relay.start();
+    eventSource.emit("realtime_relay", {
+      relaySessionId: "relay_1",
+      type: "error",
+      message: "Unexpected server response: 500",
+    });
+
+    await expect(starting).rejects.toThrow("Unexpected server response: 500");
+    resolveMedia(stream);
+    await vi.waitFor(() => expect(track.stop).toHaveBeenCalledOnce());
+
+    expect(onError).toHaveBeenCalledWith("Unexpected server response: 500");
+    expect(onStatus).toHaveBeenLastCalledWith("error", "Unexpected server response: 500");
+    expect(onStatus).not.toHaveBeenCalledWith("listening");
+    expect(realtimeClientMocks.sendRealtimeRelayAudio).not.toHaveBeenCalled();
+    expect(realtimeClientMocks.stopRealtimeRelay).toHaveBeenCalledWith("rt_1", "relay_1");
+    expect(eventSource.close).toHaveBeenCalledOnce();
+  });
+
+  it("stops the microphone pump after the first audio relay failure", async () => {
+    const eventSource = new FakeRelayEventSource();
+    realtimeClientMocks.openRealtimeRelayEvents.mockReturnValue(eventSource as unknown as EventSource);
+    realtimeClientMocks.sendRealtimeRelayAudio.mockRejectedValueOnce(new Error("Unknown Talk session"));
+    const { stream, track } = createMediaStream();
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+      userAgent: "desktop",
+    });
+    const readProcessor = installAudioContext();
+    const onStatus = vi.fn();
+    const onError = vi.fn();
+    const relay = new RealtimeGatewayRelaySession(
+      "rt_1",
+      { relaySessionId: "relay_1", transport: "gateway-relay" },
+      { onStatus, onError },
+    );
+
+    const starting = relay.start();
+    eventSource.emit("realtime_relay", { relaySessionId: "relay_1", type: "ready" });
+    await starting;
+    const processor = readProcessor();
+    expect(processor?.onaudioprocess).toBeTypeOf("function");
+
+    const audioEvent = {
+      inputBuffer: { getChannelData: () => new Float32Array([0.1, -0.1]) },
+    };
+    processor?.onaudioprocess?.(audioEvent);
+    await vi.waitFor(() => expect(onStatus).toHaveBeenLastCalledWith("error", "Unknown Talk session"));
+    processor?.onaudioprocess?.(audioEvent);
+
+    expect(realtimeClientMocks.sendRealtimeRelayAudio).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith("Unknown Talk session");
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(realtimeClientMocks.stopRealtimeRelay).toHaveBeenCalledWith("rt_1", "relay_1");
+    expect(eventSource.close).toHaveBeenCalledOnce();
+  });
+});
 
 function inputWithLevel(level: number) {
   return new Float32Array([level, -level, level, -level]);

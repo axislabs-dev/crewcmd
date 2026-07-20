@@ -262,4 +262,35 @@ describe("POST /api/runtimes primary scoping", () => {
     expect(mockRuntimeRows[0].authToken).not.toBe("secret");
     expect(isEncryptedRuntimeAuthToken(mockRuntimeRows[0].authToken!)).toBe(true);
   });
+
+  it("persists sealed OpenClaw device authentication metadata", async () => {
+    await createRuntime("user_a", {
+      authToken: "shared-gateway-token",
+      metadata: {
+        devicePrivateKeyPem: "sealed-private-key",
+        openclawDeviceAuth: {
+          version: 1,
+          deviceId: "device-1",
+          role: "operator",
+          scopes: ["operator.read", "operator.write"],
+          tokenCiphertext: "sealed-device-token",
+          updatedAt: "2026-07-20T00:00:00.000Z",
+        },
+      },
+    });
+
+    expect(mockRuntimeRows[0].metadata).toMatchObject({
+      devicePrivateKeyPem: "sealed-private-key",
+      openclawDeviceAuth: {
+        version: 1,
+        deviceId: "device-1",
+        role: "operator",
+        scopes: ["operator.read", "operator.write"],
+        tokenCiphertext: "sealed-device-token",
+      },
+      callbackBaseUrl: "http://localhost:3000",
+      workspaceId: "ws_co_1",
+    });
+    expect(mockRuntimeRows[0].authToken).not.toBe("shared-gateway-token");
+  });
 });

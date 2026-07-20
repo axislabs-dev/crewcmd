@@ -56,6 +56,7 @@ export default function OnboardingPage() {
     capabilities?: Record<string, unknown>;
     defaultAgentId?: string;
     devicePrivateKeyPem?: string;
+    runtimeAuthMetadata?: Record<string, unknown>;
   } | null>(null);
   const [probing, setProbing] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
@@ -304,7 +305,9 @@ export default function OnboardingPage() {
           gatewayUrl: isHermes ? hermesRootUrl : openClawGatewayUrl,
           httpUrl: isHermes ? hermesRootUrl : openClawHttpUrl,
           authToken: authToken.trim() || null,
-          metadata: isHermes ? { provider: "hermes", apiBaseUrl: `${hermesRootUrl}/v1` } : undefined,
+          metadata: isHermes
+            ? { provider: "hermes", apiBaseUrl: `${hermesRootUrl}/v1` }
+            : probeResult.runtimeAuthMetadata,
           capabilitySnapshot: probeResult.capabilities,
           workspaceId,
           companyId,

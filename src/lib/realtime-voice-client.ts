@@ -159,6 +159,13 @@ export function resolveRealtimeVoiceSessionSettings(
   };
 }
 
+export function resolveRealtimeVoiceSessionIdentity(
+  voiceSettings?: AgentVoiceSettings | null,
+): string {
+  const { provider, model, voice } = resolveRealtimeVoiceSessionSettings(voiceSettings);
+  return JSON.stringify([provider ?? null, model ?? null, voice ?? null]);
+}
+
 export async function sendRealtimeRelayAudio(runtimeId: string, chunk: RealtimeRelayAudioChunk): Promise<void> {
   await postRealtimeRelay(runtimeId, {
     action: "audio",

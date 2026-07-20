@@ -1279,21 +1279,31 @@ function VoiceAgentSession({
   const thinkingActive = isActive && state === "processing";
   const showCompactStatus = !immersive;
   const displayState: AgentState = isMicMuted && !isPlayingAudio && !isLoading ? "muted" : state;
-  const readinessTone = realtimeReadiness?.status === "ready"
-    ? "var(--success)"
-    : realtimeReadiness?.status === "microphone-denied"
-      ? "var(--danger)"
-      : "var(--warning)";
-  const readinessMessage = realtimeReadiness?.status === "ready"
+  const readinessTone = realtimeReadiness?.status === "microphone-denied"
+    ? "var(--danger)"
+    : "var(--warning)";
+  const readinessMessage = realtimeReadiness?.status === "microphone-denied"
     ? realtimeReadiness.message
-    : realtimeReadiness?.status === "microphone-denied"
-      ? realtimeReadiness.message
-      : realtimeReadiness
-        ? `Realtime unavailable; classic STT/TTS fallback will be used. ${realtimeReadiness.message}`
-        : null;
+    : realtimeReadiness && realtimeReadiness.status !== "ready"
+      ? `Realtime unavailable; classic STT/TTS fallback will be used. ${realtimeReadiness.message}`
+      : null;
 
   return (
-    <div className={`flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : compact ? "gap-1.5 py-0" : "gap-2 py-1"}`}>
+    <div className={`relative flex w-full flex-col items-center ${immersive ? "gap-8 py-0" : compact ? "gap-1.5 py-0" : "gap-2 py-1"}`}>
+      {realtimeRelayActive ? (
+        <span
+          className="pointer-events-none absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-medium tracking-[0.16em]"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--success) 9%, var(--bg-surface))",
+            borderColor: "color-mix(in srgb, var(--success) 28%, transparent)",
+            color: "var(--success)",
+          }}
+          data-realtime-mode="active"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+          REALTIME
+        </span>
+      ) : null}
       {readinessMessage && (
         <div
           className="w-full max-w-sm rounded-2xl border px-4 py-2 text-center text-[11px]"

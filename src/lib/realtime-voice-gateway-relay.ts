@@ -21,6 +21,7 @@ const MOBILE_BARGE_IN_PEAK_THRESHOLD = 0.16;
 const MOBILE_BARGE_IN_FRAMES = 3;
 const MOBILE_BARGE_IN_GRACE_MS = 450;
 const REALTIME_VOICE_CONTEXT_LIMIT = 8;
+const REALTIME_RELAY_READY_TIMEOUT_MS = 15_000;
 
 export interface RealtimeBargeInProfile {
   rmsThreshold: number;
@@ -107,6 +108,11 @@ export class RealtimeGatewayRelaySession {
   private speechFramesDuringPlayback = 0;
   private outputStartedAtMs: number | null = null;
   private pendingToolCalls = 0;
+  private relayReady = false;
+  private terminalError: Error | null = null;
+  private startupReadyResolve: (() => void) | null = null;
+  private startupReadyReject: ((error: Error) => void) | null = null;
+  private startupReadyTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly bargeInProfile = resolveRealtimeBargeInProfile();
 
   constructor(
@@ -126,31 +132,76 @@ export class RealtimeGatewayRelaySession {
     const inputSampleRate = this.session.audio?.inputSampleRateHz ?? 24000;
     const outputSampleRate = this.session.audio?.outputSampleRateHz ?? 24000;
     this.closed = false;
+    this.relayReady = false;
+    this.terminalError = null;
+    const relayReady = new Promise<void>((resolve, reject) => {
+      this.startupReadyResolve = resolve;
+      this.startupReadyReject = reject;
+      this.startupReadyTimer = setTimeout(() => {
+        this.fail("Realtime provider did not become ready in time");
+      }, REALTIME_RELAY_READY_TIMEOUT_MS);
+    });
     this.eventSource = openRealtimeRelayEvents(this.runtimeId, this.session.relaySessionId);
     this.eventSource.addEventListener("realtime_relay", (event) => {
       this.handleRelayEvent(JSON.parse(event.data) as GatewayRelayEvent);
     });
     this.eventSource.onerror = () => {
       if (!this.closed) {
-        this.callbacks.onStatus?.("error", "Realtime relay event stream failed");
+        this.fail("Realtime relay event stream failed");
       }
     };
 
-    this.media = await navigator.mediaDevices.getUserMedia({
+    const mediaPromise = navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       },
+    }).then((media) => {
+      if (this.closed || this.terminalError) {
+        media.getTracks().forEach((track) => track.stop());
+        throw this.terminalError ?? new Error("Realtime relay closed during startup");
+      }
+      return media;
     });
-    this.inputContext = new AudioContext({ sampleRate: inputSampleRate });
-    this.outputContext = new AudioContext({ sampleRate: outputSampleRate });
-    this.startMicrophonePump();
-    this.callbacks.onStatus?.("listening");
+
+    try {
+      const [media] = await Promise.all([mediaPromise, relayReady]);
+      if (this.closed || this.terminalError || !this.relayReady) {
+        media.getTracks().forEach((track) => track.stop());
+        throw this.terminalError ?? new Error("Realtime relay closed during startup");
+      }
+
+      this.media = media;
+      this.inputContext = new AudioContext({ sampleRate: inputSampleRate });
+      this.outputContext = new AudioContext({ sampleRate: outputSampleRate });
+      this.startMicrophonePump();
+      this.callbacks.onStatus?.("listening");
+    } catch (error) {
+      const failure = this.terminalError ?? toError(error, "Realtime relay failed to start");
+      if (!this.closed) {
+        this.cleanupLocal();
+        this.closeRemoteSession();
+      }
+      throw failure;
+    } finally {
+      this.clearStartupReadiness();
+    }
   }
 
   stop(): void {
+    const shouldCloseRemote = !this.closed;
+    this.startupReadyReject?.(new Error("Realtime voice stopped"));
+    this.cleanupLocal();
+    if (shouldCloseRemote) this.closeRemoteSession();
+    this.callbacks.onStatus?.("idle");
+  }
+
+  private cleanupLocal(): void {
+    if (this.closed) return;
     this.closed = true;
+    if (this.startupReadyTimer) clearTimeout(this.startupReadyTimer);
+    this.startupReadyTimer = null;
     this.inputProcessor?.disconnect();
     this.inputProcessor = null;
     this.inputSource?.disconnect();
@@ -164,11 +215,30 @@ export class RealtimeGatewayRelaySession {
     this.inputContext = null;
     void this.outputContext?.close();
     this.outputContext = null;
-    if (this.session.relaySessionId) {
-      void stopRealtimeRelay(this.runtimeId, this.session.relaySessionId).catch(() => {});
-    }
     this.callbacks.onSpeakingChange?.(false);
-    this.callbacks.onStatus?.("idle");
+  }
+
+  private fail(message: string): void {
+    if (this.closed) return;
+    const error = new Error(message);
+    this.terminalError = error;
+    this.startupReadyReject?.(error);
+    this.cleanupLocal();
+    this.closeRemoteSession();
+    this.callbacks.onError?.(message);
+    this.callbacks.onStatus?.("error", message);
+  }
+
+  private closeRemoteSession(): void {
+    if (!this.session.relaySessionId) return;
+    void stopRealtimeRelay(this.runtimeId, this.session.relaySessionId).catch(() => {});
+  }
+
+  private clearStartupReadiness(): void {
+    if (this.startupReadyTimer) clearTimeout(this.startupReadyTimer);
+    this.startupReadyTimer = null;
+    this.startupReadyResolve = null;
+    this.startupReadyReject = null;
   }
 
   setMicMuted(muted: boolean): void {
@@ -211,7 +281,7 @@ export class RealtimeGatewayRelaySession {
         timestamp: Math.round((this.inputContext?.currentTime ?? 0) * 1000),
       }).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        this.callbacks.onError?.(message);
+        this.fail(message);
       });
     };
     this.inputSource.connect(this.inputProcessor);
@@ -223,7 +293,9 @@ export class RealtimeGatewayRelaySession {
 
     switch (event.type) {
       case "ready":
-        this.callbacks.onStatus?.("listening");
+        this.relayReady = true;
+        this.startupReadyResolve?.();
+        if (this.media) this.callbacks.onStatus?.("listening");
         return;
       case "audio":
         if (event.audioBase64) {
@@ -253,10 +325,20 @@ export class RealtimeGatewayRelaySession {
         this.handleToolCall(event);
         return;
       case "error":
-        this.callbacks.onStatus?.("error", event.message ?? "Realtime relay failed");
+        this.fail(event.message ?? "Realtime relay failed");
         return;
       case "close":
-        this.callbacks.onStatus?.(event.reason === "error" ? "error" : "idle");
+        if (event.reason === "error" || !this.relayReady) {
+          this.fail(
+            this.terminalError?.message
+              ?? (event.reason === "error"
+                ? "Realtime relay closed with an error"
+                : "Realtime relay closed before it became ready"),
+          );
+          return;
+        }
+        this.cleanupLocal();
+        this.callbacks.onStatus?.("idle");
         return;
       default:
         return;
@@ -498,4 +580,8 @@ function readHasCapacitor() {
 
 function performanceNow() {
   return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+function toError(error: unknown, fallback: string) {
+  return error instanceof Error ? error : new Error(error ? String(error) : fallback);
 }

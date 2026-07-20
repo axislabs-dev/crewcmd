@@ -138,7 +138,7 @@ export function resolveRealtimeVoiceSessionSettings(
   voiceSettings?: AgentVoiceSettings | null,
 ): Pick<RealtimeVoiceSessionRequest, "provider" | "model" | "voice"> {
   const voice = normalizeAgentVoiceSettings(voiceSettings);
-  if (voice.enabled === false) return {};
+  if (!isRealtimeVoiceRequested(voice)) return {};
 
   const rawVoiceId = voice.voiceId?.trim();
   const voiceId = rawVoiceId?.toLowerCase();
@@ -159,11 +159,23 @@ export function resolveRealtimeVoiceSessionSettings(
   };
 }
 
+export function isRealtimeVoiceRequested(
+  voiceSettings?: AgentVoiceSettings | null,
+): boolean {
+  const voice = normalizeAgentVoiceSettings(voiceSettings);
+  return voice.enabled !== false && voice.realtime !== false;
+}
+
 export function resolveRealtimeVoiceSessionIdentity(
   voiceSettings?: AgentVoiceSettings | null,
 ): string {
   const { provider, model, voice } = resolveRealtimeVoiceSessionSettings(voiceSettings);
-  return JSON.stringify([provider ?? null, model ?? null, voice ?? null]);
+  return JSON.stringify([
+    isRealtimeVoiceRequested(voiceSettings),
+    provider ?? null,
+    model ?? null,
+    voice ?? null,
+  ]);
 }
 
 export async function sendRealtimeRelayAudio(runtimeId: string, chunk: RealtimeRelayAudioChunk): Promise<void> {

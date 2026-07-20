@@ -11,6 +11,7 @@ export interface TtsVoiceOption {
 
 export interface AgentVoiceSettings {
   enabled?: boolean;
+  realtime?: boolean;
   provider?: TtsProviderId | "auto" | "";
   voiceId?: string;
   voiceName?: string;
@@ -67,6 +68,7 @@ export const GOOGLE_REALTIME_VOICE_IDS = new Set(
 
 export const DEFAULT_AGENT_VOICE_SETTINGS: AgentVoiceSettings = {
   enabled: true,
+  realtime: true,
   provider: "auto",
   voiceId: "",
   voiceName: "",
@@ -91,6 +93,7 @@ export function normalizeAgentVoiceSettings(value: unknown): AgentVoiceSettings 
   if (isLegacyAutoOpenAIDefault(record)) return { ...DEFAULT_AGENT_VOICE_SETTINGS };
   return {
     enabled: typeof record.enabled === "boolean" ? record.enabled : DEFAULT_AGENT_VOICE_SETTINGS.enabled,
+    realtime: typeof record.realtime === "boolean" ? record.realtime : DEFAULT_AGENT_VOICE_SETTINGS.realtime,
     provider: typeof record.provider === "string" ? (record.provider as AgentVoiceSettings["provider"]) : DEFAULT_AGENT_VOICE_SETTINGS.provider,
     voiceId: typeof record.voiceId === "string" ? record.voiceId : "",
     voiceName: typeof record.voiceName === "string" ? record.voiceName : "",

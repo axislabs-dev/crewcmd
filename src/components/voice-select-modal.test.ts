@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { filterRealtimeVoiceOptions } from "./voice-select-modal";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { VoiceSelectModal, filterRealtimeVoiceOptions } from "./voice-select-modal";
 import type { TtsVoiceOption } from "@/lib/tts-voices";
 
 const voices: TtsVoiceOption[] = [
@@ -21,5 +23,18 @@ describe("filterRealtimeVoiceOptions", () => {
 
   it("shows no realtime choices when the runtime has no ready provider", () => {
     expect(filterRealtimeVoiceOptions(voices, [])).toEqual([]);
+  });
+});
+
+describe("VoiceSelectModal", () => {
+  it("does not autofocus voice search when the picker opens", () => {
+    const markup = renderToStaticMarkup(createElement(VoiceSelectModal, {
+      open: true,
+      onClose: () => {},
+      onSelect: () => {},
+    }));
+
+    expect(markup).toContain('placeholder="Search voices"');
+    expect(markup).not.toContain("autofocus");
   });
 });

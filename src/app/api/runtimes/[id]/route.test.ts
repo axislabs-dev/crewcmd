@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   listManagedResources: vi.fn(),
   deletedTables: [] as string[],
   updatedTables: [] as string[],
+  updatedValues: [] as Record<string, unknown>[],
   runtime: {
     id: "runtime-1",
     companyId: null,
@@ -59,9 +60,10 @@ vi.mock("@/db", () => ({
       }),
     }),
     update: (table: { table: string }) => ({
-      set: () => ({
+      set: (values: Record<string, unknown>) => ({
         where: async () => {
           mocks.updatedTables.push(table.table);
+          mocks.updatedValues.push(values);
         },
       }),
     }),
@@ -109,6 +111,7 @@ describe("DELETE /api/runtimes/[id]", () => {
     vi.clearAllMocks();
     mocks.deletedTables.length = 0;
     mocks.updatedTables.length = 0;
+    mocks.updatedValues.length = 0;
     mocks.access.mockResolvedValue({ userId: "user-1" });
     mocks.listManagedResources.mockResolvedValue([
       { resourceType: "agent-skill", externalId: null },
@@ -133,7 +136,7 @@ describe("DELETE /api/runtimes/[id]", () => {
     expect(mocks.deletedTables).toEqual([]);
   });
 
-  it("forgets the runtime locally when cleanup is explicitly skipped", async () => {
+  it("forgets locally while preserving runtime agent identity", async () => {
     const response = await DELETE(makeRequest("skip"), context());
 
     expect(response.status).toBe(200);
@@ -145,6 +148,7 @@ describe("DELETE /api/runtimes/[id]", () => {
     expect(mocks.cleanup).not.toHaveBeenCalled();
     expect(mocks.deleteManagedResources).toHaveBeenCalledWith("runtime-1");
     expect(mocks.updatedTables).toEqual(["agents"]);
+    expect(mocks.updatedValues).toEqual([{ runtimeId: null, status: "offline" }]);
     expect(mocks.deletedTables).toEqual(["companyRuntimes"]);
   });
 

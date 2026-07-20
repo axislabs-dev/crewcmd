@@ -149,7 +149,6 @@ export async function DELETE(
           .update(agents)
           .set({
             runtimeId: null,
-            runtimeRef: null,
             status: "offline",
           })
           .where(eq(agents.runtimeId, id))

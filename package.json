@@ -57,6 +57,7 @@
   ],
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:tailscale": "node scripts/dev-tailscale.mjs",
     "dev:https": "node scripts/dev-https.mjs",
     "build": "next build",
     "start": "next start",

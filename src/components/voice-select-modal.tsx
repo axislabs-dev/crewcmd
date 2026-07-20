@@ -10,6 +10,7 @@ import {
   type TtsProviderId,
   type TtsVoiceOption,
 } from "@/lib/tts-voices";
+import { getRealtimeVoiceReadiness } from "@/lib/realtime-voice-client";
 import {
   AGENT_VISUAL_STYLE_OPTIONS,
   DEFAULT_AGENT_VISUAL_SETTINGS,
@@ -20,8 +21,9 @@ import {
 } from "@/lib/agent-visual-settings";
 
 const FAVORITES_KEY = "crewcmd.tts.favorite-voices";
+const REALTIME_PROVIDER_IDS = ["openai", "google"] as const satisfies readonly TtsProviderId[];
 
-type ProviderFilter = TtsProviderId | "all" | "favorites" | "realtime";
+type ProviderFilter = TtsProviderId | "all" | "favorites";
 
 type VoiceSelectModalProps = {
   open: boolean;
@@ -30,7 +32,9 @@ type VoiceSelectModalProps = {
   visualValue?: AgentVisualSettings | null;
   onClose: () => void;
   onSelect: (settings: AgentVoiceSettings) => void;
+  onRealtimeChange?: (enabled: boolean) => void;
   onVisualSelect?: (settings: AgentVisualSettings) => void;
+  realtimeRuntimeId?: string;
   initialTab?: "voice" | "visual";
   visualOnly?: boolean;
   helperText?: string;
@@ -48,6 +52,16 @@ function uniqueVoices(voices: TtsVoiceOption[]) {
     seen.add(key);
     return true;
   });
+}
+
+export function filterRealtimeVoiceOptions(
+  voices: TtsVoiceOption[],
+  availableProviders: TtsProviderId[],
+) {
+  const providerSet = new Set<TtsProviderId>(availableProviders);
+  return voices.filter((voice) =>
+    providerSet.has(voice.provider) && isRealtimeVoiceOption(voice)
+  );
 }
 
 function readFavorites() {
@@ -91,7 +105,9 @@ export function VoiceSelectModal({
   visualValue,
   onClose,
   onSelect,
+  onRealtimeChange,
   onVisualSelect,
+  realtimeRuntimeId,
   initialTab = "voice",
   visualOnly = false,
   helperText,
@@ -108,6 +124,8 @@ export function VoiceSelectModal({
   const [favorites, setFavorites] = useState<string[]>([]);
   const [speed, setSpeed] = useState(current.speed ?? 1);
   const [preferNative, setPreferNative] = useState(current.preferNative ?? false);
+  const [realtimeMode, setRealtimeMode] = useState(current.realtime !== false);
+  const [realtimeProviders, setRealtimeProviders] = useState<TtsProviderId[]>([]);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [previewState, setPreviewState] = useState<{ key: string; status: "loading" | "playing" } | null>(null);
 
@@ -117,12 +135,47 @@ export function VoiceSelectModal({
     setFavorites(readFavorites());
     setSpeed(current.speed ?? 1);
     setPreferNative(current.preferNative ?? false);
-  }, [open, current.speed, current.preferNative, initialTab, visualOnly]);
+    setRealtimeMode(current.realtime !== false);
+  }, [open, current.preferNative, current.realtime, current.speed, initialTab, visualOnly]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE !== "1" ||
+      !realtimeRuntimeId
+    ) {
+      setRealtimeProviders([]);
+      return;
+    }
+
+    let cancelled = false;
+    setRealtimeProviders([]);
+    void Promise.all(
+      REALTIME_PROVIDER_IDS.map(async (providerId) => ({
+        providerId,
+        readiness: await getRealtimeVoiceReadiness({
+          runtimeId: realtimeRuntimeId,
+          provider: providerId,
+        }),
+      })),
+    ).then((results) => {
+      if (cancelled) return;
+      setRealtimeProviders(results.flatMap(({ providerId, readiness }) =>
+        readiness.status === "ready" || readiness.status === "microphone-denied"
+          ? [providerId]
+          : []
+      ));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, realtimeRuntimeId]);
 
   useEffect(() => {
     if (!open) return;
     const params = new URLSearchParams();
-    if (provider !== "favorites") params.set("provider", provider === "all" || provider === "realtime" ? "all" : provider);
+    if (provider !== "favorites") params.set("provider", provider === "all" ? "all" : provider);
     if (query.trim()) params.set("q", query.trim());
     setLoading(true);
     setError(null);
@@ -135,7 +188,7 @@ export function VoiceSelectModal({
           : [];
         const nextVoices = uniqueVoices([...serverVoices, ...browserVoices]);
         setVoices(nextVoices);
-        if (provider === "all" || provider === "realtime" || provider === "favorites") {
+        if (provider === "all" || provider === "favorites") {
           setProviderCounts(mergeProviderCounts(readProviderCounts(data.providers), summarizeProviders(browserVoices)));
         }
       })
@@ -147,12 +200,23 @@ export function VoiceSelectModal({
       .finally(() => setLoading(false));
   }, [open, provider, query]);
 
+  const realtimeAvailable = realtimeProviders.length > 0;
+  const realtimeModeActive = realtimeMode && realtimeAvailable;
+  const selectedRealtimeMode = realtimeAvailable ? realtimeMode : current.realtime !== false;
   const filteredVoices = useMemo(() => {
-    if (provider === "realtime") return voices.filter(isRealtimeVoiceOption);
+    if (realtimeModeActive) {
+      return filterRealtimeVoiceOptions(voices, realtimeProviders);
+    }
     if (provider !== "favorites") return voices;
     const favoriteSet = new Set(favorites);
     return voices.filter((voice) => favoriteSet.has(voiceKey(voice)));
-  }, [favorites, provider, voices]);
+  }, [favorites, provider, realtimeModeActive, realtimeProviders, voices]);
+
+  const setRealtimeModeEnabled = (enabled: boolean) => {
+    setRealtimeMode(enabled);
+    if (enabled) setProvider("all");
+    onRealtimeChange?.(enabled);
+  };
 
   const toggleFavorite = (voice: TtsVoiceOption) => {
     const key = voiceKey(voice);
@@ -268,7 +332,28 @@ export function VoiceSelectModal({
           ) : null}
           {tab === "voice" && !visualOnly ? (
           <>
-          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+          {realtimeAvailable ? (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={realtimeMode}
+                data-realtime-voice-toggle
+                onClick={() => setRealtimeModeEnabled(!realtimeMode)}
+                className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                  realtimeMode
+                    ? "border-[#00f0ff]/45 bg-[#00f0ff]/12 text-[#00f0ff]"
+                    : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-medium)]"
+                }`}
+              >
+                Realtime
+                <span className={`relative h-4 w-7 rounded-full transition ${realtimeMode ? "bg-[#00f0ff]/35" : "bg-[var(--bg-tertiary)]"}`}>
+                  <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-current transition-transform ${realtimeMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                </span>
+              </button>
+            </div>
+          ) : null}
+          <div className={`grid gap-3 ${realtimeAvailable ? "mt-3" : "mt-4"} ${realtimeModeActive ? "" : "md:grid-cols-[1fr_auto]"}`}>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -276,8 +361,8 @@ export function VoiceSelectModal({
               className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[#00f0ff]/50"
               autoFocus
             />
-            <div className="flex flex-wrap gap-2">
-              {[{ value: "all", label: "All" }, { value: "realtime", label: "Realtime" }, { value: "favorites", label: "Favorites" }, ...TTS_PROVIDER_OPTIONS.filter((item) => item.value !== "auto")].map((item) => (
+            {!realtimeModeActive ? <div className="flex flex-wrap gap-2">
+              {[{ value: "all", label: "All" }, { value: "favorites", label: "Favorites" }, ...TTS_PROVIDER_OPTIONS.filter((item) => item.value !== "auto")].map((item) => (
                 shouldShowProviderFilter(item.value, providerCounts) ? (
                   <button
                     key={item.value}
@@ -293,7 +378,7 @@ export function VoiceSelectModal({
                   </button>
                 ) : null
               ))}
-            </div>
+            </div> : null}
           </div>
           <div className="mt-3 grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-3 md:grid-cols-2">
             <label className="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]">
@@ -334,11 +419,11 @@ export function VoiceSelectModal({
                   key={key}
                   role="button"
                   tabIndex={0}
-                  onClick={() => onSelect({ enabled: true, provider: voice.provider, voiceId: voice.id, voiceName: voice.name, model: current.model || "", speed, preferNative })}
+                  onClick={() => onSelect({ enabled: true, realtime: selectedRealtimeMode, provider: voice.provider, voiceId: voice.id, voiceName: voice.name, model: current.model || "", speed, preferNative })}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      onSelect({ enabled: true, provider: voice.provider, voiceId: voice.id, voiceName: voice.name, model: current.model || "", speed, preferNative });
+                      onSelect({ enabled: true, realtime: selectedRealtimeMode, provider: voice.provider, voiceId: voice.id, voiceName: voice.name, model: current.model || "", speed, preferNative });
                     }
                   }}
                   className={`group cursor-pointer rounded-xl border p-3 text-left transition-colors ${
@@ -360,7 +445,7 @@ export function VoiceSelectModal({
                           ? "border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff]"
                           : "border-[var(--border-subtle)] text-[var(--text-tertiary)]"
                       }`}>
-                        {realtimeCapable ? "Realtime" : "TTS"}
+                        {realtimeModeActive && realtimeCapable ? "Realtime" : "TTS"}
                       </span>
                       <button
                         type="button"
@@ -506,7 +591,7 @@ function mergeProviderCounts(...items: Array<Record<string, number>>) {
 }
 
 function shouldShowProviderFilter(value: string, counts: Record<string, number>) {
-  if (value === "all" || value === "realtime" || value === "favorites") return true;
+  if (value === "all" || value === "favorites") return true;
   return (counts[value] || 0) > 0;
 }
 
@@ -515,7 +600,7 @@ export function VoiceSummary({ value }: { value?: AgentVoiceSettings | null }) {
   if (settings.enabled === false) return <span>Voice disabled</span>;
   const provider = TTS_PROVIDER_OPTIONS.find((item) => item.value === settings.provider)?.label ?? settings.provider ?? "Auto";
   const name = settings.voiceName || settings.voiceId || (settings.preferNative ? "Device default" : "Auto voice");
-  const realtime = settings.provider && settings.voiceId
+  const realtime = settings.realtime !== false && settings.provider && settings.voiceId
     ? isRealtimeVoiceOption({ provider: settings.provider as TtsProviderId, id: settings.voiceId })
     : false;
   return <span>{name} · {provider}{realtime ? " · realtime" : ""}{settings.preferNative ? " · native preferred" : ""}</span>;

@@ -25,6 +25,7 @@ import {
 } from "@/lib/native-voice-session";
 import {
   getRealtimeVoiceReadiness,
+  isRealtimeVoiceRequested,
   resolveRealtimeVoiceSessionIdentity,
   resolveRealtimeVoiceSessionSettings,
   startRealtimeVoiceSession,
@@ -143,7 +144,10 @@ function VoiceAgentSession({
   visualSettings,
 }: VoiceAgentProps) {
   const realtimeEnabled = process.env.NEXT_PUBLIC_CREWCMD_REALTIME_VOICE === "1";
-  const realtimeVoiceProvider = resolveRealtimeVoiceSessionSettings(voiceSettings).provider;
+  const realtimeRequested = isRealtimeVoiceRequested(voiceSettings);
+  const realtimeVoiceProvider = realtimeRequested
+    ? resolveRealtimeVoiceSessionSettings(voiceSettings).provider
+    : undefined;
   const [state, setState] = useState<AgentState>("idle");
   const [isActive, setIsActive] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
@@ -184,6 +188,10 @@ function VoiceAgentSession({
       setRealtimeReadiness(deriveRealtimeVoiceReadiness({ enabled: false }));
       return;
     }
+    if (!realtimeRequested) {
+      setRealtimeReadiness(null);
+      return;
+    }
     if (!realtimeRuntimeId) {
       setRealtimeReadiness(null);
       return;
@@ -199,7 +207,7 @@ function VoiceAgentSession({
     return () => {
       cancelled = true;
     };
-  }, [realtimeEnabled, realtimeRuntimeId, realtimeVoiceProvider]);
+  }, [realtimeEnabled, realtimeRequested, realtimeRuntimeId, realtimeVoiceProvider]);
 
   useEffect(() => {
     onVoiceLevel?.(volumeLevel);
@@ -513,7 +521,7 @@ function VoiceAgentSession({
   }, []);
 
   const startRealtimeRelay = useCallback(async (sessionId: string) => {
-    if (!realtimeEnabled || !realtimeRuntimeId) return false;
+    if (!realtimeEnabled || !realtimeRequested || !realtimeRuntimeId) return false;
 
     try {
       const realtimeVoiceSettings = resolveRealtimeVoiceSessionSettings(voiceSettings);
@@ -610,7 +618,7 @@ function VoiceAgentSession({
       });
       return false;
     }
-  }, [agent, channelId, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey, voiceSettings]);
+  }, [agent, channelId, gatewayAgent, onRealtimeTranscript, realtimeEnabled, realtimeRequested, realtimeRuntimeId, recordVoiceBreadcrumb, requestWakeLock, sessionKey, voiceSettings]);
 
   const activate = useCallback(async () => {
     onMicMutedChange?.(false);

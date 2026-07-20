@@ -1,8 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { probeGateway } from "@/lib/gateway-client";
+import { probeGateway, resolveDeviceIdentity, type ProbeResult } from "@/lib/gateway-client";
 import { parseOpenClawConfig } from "@/lib/openclaw-config-parser";
 import { requireAuth } from "@/lib/require-auth";
 import { getRuntimeProvider } from "@/lib/runtimes/providers";
+import {
+  sealRuntimeDevicePrivateKey,
+  storeRuntimeDeviceAuth,
+} from "@/lib/runtime-device-auth";
+
+type SealedGatewayProbeResult = Omit<ProbeResult, "deviceAuth"> & {
+  runtimeAuthMetadata?: Record<string, unknown>;
+};
+
+function sealGatewayProbeResult(result: ProbeResult): SealedGatewayProbeResult {
+  const { deviceAuth, devicePrivateKeyPem, ...safeResult } = result;
+  if (!devicePrivateKeyPem) return safeResult;
+
+  const device = resolveDeviceIdentity(devicePrivateKeyPem);
+  const sealedDevicePrivateKey = sealRuntimeDevicePrivateKey(devicePrivateKeyPem);
+  let runtimeAuthMetadata: Record<string, unknown> = {
+    devicePrivateKeyPem: sealedDevicePrivateKey,
+  };
+  if (deviceAuth) {
+    runtimeAuthMetadata = storeRuntimeDeviceAuth(
+      runtimeAuthMetadata,
+      device.deviceId,
+      deviceAuth,
+    );
+  }
+
+  return {
+    ...safeResult,
+    // This opaque ciphertext is returned only so pairing retries can retain
+    // the same identity. The browser never receives the private key itself.
+    devicePrivateKeyPem: sealedDevicePrivateKey,
+    runtimeAuthMetadata,
+  };
+}
 
 /**
  * POST /api/runtimes/probe
@@ -95,11 +129,12 @@ export async function POST(request: NextRequest) {
       if (!result.ok) {
         // Special case: pairing required — return 200 with status so UI can show approval instructions
         if (result.error === "pairing_required") {
+          const sealedResult = sealGatewayProbeResult(result);
           return NextResponse.json({
             ok: false,
             pairingRequired: true,
             pairingInstructions: result.pairingInstructions,
-            devicePrivateKeyPem: result.devicePrivateKeyPem,
+            devicePrivateKeyPem: sealedResult.devicePrivateKeyPem,
           });
         }
 
@@ -109,7 +144,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return NextResponse.json(result);
+      return NextResponse.json(sealGatewayProbeResult(result));
     }
 
     // ── Local config file mode (same-machine fallback) ──

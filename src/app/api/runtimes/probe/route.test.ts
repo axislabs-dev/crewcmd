@@ -11,6 +11,12 @@ vi.mock("@/lib/require-auth", () => ({
 
 vi.mock("@/lib/gateway-client", () => ({
   probeGateway: (...args: unknown[]) => mockProbeGateway(...args),
+  resolveDeviceIdentity: vi.fn(() => ({
+    deviceId: "device-1",
+    publicKeyRawBase64Url: "public-key",
+    privateKeyPem: "private-key",
+    source: "configured",
+  })),
 }));
 
 vi.mock("@/lib/openclaw-config-parser", () => ({
@@ -30,6 +36,7 @@ describe("POST /api/runtimes/probe", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    vi.stubEnv("AUTH_SECRET", "runtime-probe-device-auth-test-secret");
   });
 
   it("probes Hermes runtimes through the HTTP API", async () => {
@@ -102,5 +109,69 @@ describe("POST /api/runtimes/probe", () => {
 
     expect(response.status).toBe(200);
     expect(mockProbeGateway).toHaveBeenCalledWith("ws://localhost:18789", "openclaw-token", undefined);
+  });
+
+  it("seals issued device credentials before returning probe data to the browser", async () => {
+    mockProbeGateway.mockResolvedValue({
+      ok: true,
+      version: "2026.7.1",
+      agents: [],
+      models: [],
+      devicePrivateKeyPem: "plaintext-private-key",
+      deviceAuth: {
+        token: "plaintext-device-token",
+        role: "operator",
+        scopes: ["operator.read", "operator.write"],
+      },
+    });
+
+    const response = await POST(makeRequest({
+      mode: "gateway",
+      url: "localhost:18789",
+      token: "openclaw-token",
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).not.toHaveProperty("deviceAuth");
+    expect(payload.devicePrivateKeyPem).toMatch(/^crewcmd:runtime-token:v1:/);
+    expect(payload.runtimeAuthMetadata).toMatchObject({
+      devicePrivateKeyPem: payload.devicePrivateKeyPem,
+      openclawDeviceAuth: {
+        version: 1,
+        deviceId: "device-1",
+        role: "operator",
+        scopes: ["operator.read", "operator.write"],
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain("plaintext-private-key");
+    expect(JSON.stringify(payload)).not.toContain("plaintext-device-token");
+  });
+
+  it("seals a pending pairing identity so retries use the same device safely", async () => {
+    mockProbeGateway.mockResolvedValue({
+      ok: false,
+      error: "pairing_required",
+      pairingInstructions: "Approve this device",
+      agents: [],
+      models: [],
+      devicePrivateKeyPem: "plaintext-private-key",
+    });
+
+    const response = await POST(makeRequest({
+      mode: "gateway",
+      url: "localhost:18789",
+      token: "openclaw-token",
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: false,
+      pairingRequired: true,
+      pairingInstructions: "Approve this device",
+    });
+    expect(payload.devicePrivateKeyPem).toMatch(/^crewcmd:runtime-token:v1:/);
+    expect(JSON.stringify(payload)).not.toContain("plaintext-private-key");
   });
 });

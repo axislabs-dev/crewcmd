@@ -25,6 +25,11 @@ interface FlashMessage {
   text: string;
 }
 
+interface RuntimeReauthFeedback {
+  type: "error" | "pairing";
+  text: string;
+}
+
 interface RuntimeRecord {
   id: string;
   runtimeType: string;
@@ -61,6 +66,11 @@ export default function SettingsPage() {
   const [loadingRuntimes, setLoadingRuntimes] = useState(true);
   const [deletingRuntimeId, setDeletingRuntimeId] = useState<string | null>(null);
   const [reconcilingRuntime, setReconcilingRuntime] = useState<RuntimeRecord | null>(null);
+  const [reauthRuntimeId, setReauthRuntimeId] = useState<string | null>(null);
+  const [reauthToken, setReauthToken] = useState("");
+  const [reauthDeviceKey, setReauthDeviceKey] = useState<string | null>(null);
+  const [reauthFeedback, setReauthFeedback] = useState<RuntimeReauthFeedback | null>(null);
+  const [reauthenticatingRuntimeId, setReauthenticatingRuntimeId] = useState<string | null>(null);
   const [heartbeatSecret, setHeartbeatSecret] = useState<string | null>(null);
   const [heartbeatSecretLoading, setHeartbeatSecretLoading] = useState(false);
   const [heartbeatSecretRevealed, setHeartbeatSecretRevealed] = useState(false);
@@ -160,6 +170,70 @@ export default function SettingsPage() {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to delete runtime" });
     } finally {
       setDeletingRuntimeId(null);
+    }
+  }
+
+  function openRuntimeReauthentication(runtimeId: string) {
+    setReauthRuntimeId(runtimeId);
+    setReauthToken("");
+    setReauthDeviceKey(null);
+    setReauthFeedback(null);
+    setMessage(null);
+  }
+
+  function closeRuntimeReauthentication() {
+    setReauthRuntimeId(null);
+    setReauthToken("");
+    setReauthDeviceKey(null);
+    setReauthFeedback(null);
+  }
+
+  async function handleReauthenticateRuntime(runtimeId: string) {
+    const token = reauthToken.trim();
+    if (!token || reauthenticatingRuntimeId !== null) return;
+
+    setReauthenticatingRuntimeId(runtimeId);
+    setReauthFeedback(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/runtimes/${encodeURIComponent(runtimeId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reauthenticate",
+          authToken: token,
+          ...(reauthDeviceKey ? { deviceKeyPem: reauthDeviceKey } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data.code === "PAIRING_REQUIRED" && data.deviceKeyPem) {
+        setReauthDeviceKey(data.deviceKeyPem);
+        setReauthFeedback({
+          type: "pairing",
+          text: "Approve the pending CrewCMD device in OpenClaw, then retry without closing this form.",
+        });
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to re-authenticate runtime");
+      }
+
+      closeRuntimeReauthentication();
+      setMessage({
+        type: "success",
+        text: data.authenticationMode === "paired-device"
+          ? "OpenClaw runtime re-authenticated with its paired device identity."
+          : "Local OpenClaw gateway token verified and updated. No device approval was required.",
+      });
+      await loadRuntimes();
+    } catch (error) {
+      setReauthFeedback({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to re-authenticate runtime",
+      });
+    } finally {
+      setReauthenticatingRuntimeId(null);
     }
   }
 
@@ -596,6 +670,16 @@ export default function SettingsPage() {
                               />
                             </div>
                             <div className="flex shrink-0 flex-col gap-2">
+                              {runtime.runtimeType === "openclaw" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openRuntimeReauthentication(runtime.id)}
+                                  disabled={reauthenticatingRuntimeId !== null}
+                                  className="rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                                >
+                                  Re-authenticate
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => setReconcilingRuntime(runtime)}
@@ -613,6 +697,66 @@ export default function SettingsPage() {
                               </button>
                             </div>
                           </div>
+                          {reauthRuntimeId === runtime.id ? (
+                            <div className="mt-4 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-[var(--text-primary)]">Replace gateway credential</p>
+                                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                                    CrewCMD verifies this token with the existing gateway before replacing the encrypted credential.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={closeRuntimeReauthentication}
+                                  disabled={reauthenticatingRuntimeId === runtime.id}
+                                  className="text-xs text-[var(--text-tertiary)] transition hover:text-[var(--text-primary)] disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <input
+                                  type="password"
+                                  value={reauthToken}
+                                  onChange={(event) => setReauthToken(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") void handleReauthenticateRuntime(runtime.id);
+                                  }}
+                                  placeholder="OpenClaw gateway auth token"
+                                  autoComplete="new-password"
+                                  className={`${inputClassName} font-mono`}
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void handleReauthenticateRuntime(runtime.id)}
+                                  disabled={!reauthToken.trim() || reauthenticatingRuntimeId === runtime.id}
+                                  className="shrink-0 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {reauthenticatingRuntimeId === runtime.id
+                                    ? "Verifying..."
+                                    : reauthDeviceKey
+                                      ? "Retry verification"
+                                      : "Verify and replace"}
+                                </button>
+                              </div>
+                              {reauthFeedback ? (
+                                <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                                  reauthFeedback.type === "pairing"
+                                    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                    : "border-red-500/30 bg-red-500/10 text-red-300"
+                                }`}>
+                                  <p>{reauthFeedback.text}</p>
+                                  {reauthFeedback.type === "pairing" ? (
+                                    <code className="mt-2 block rounded bg-black/20 px-2 py-1.5 font-mono text-[11px]">
+                                      openclaw devices approve --latest
+                                    </code>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })

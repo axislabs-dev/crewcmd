@@ -7,11 +7,13 @@ vi.mock("@/lib/require-auth", () => ({
 }));
 
 const mockGetGatewayClient = vi.fn();
+const mockGetGatewayClientForRuntime = vi.fn();
 const mockHoldClient = vi.fn();
 const mockReleaseClient = vi.fn();
 const mockAssertPrimaryRuntimeInvocationAllowedForContext = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/gateway-chat-pool", () => ({
   getGatewayClient: (...args: unknown[]) => mockGetGatewayClient(...args),
+  getGatewayClientForRuntime: (...args: unknown[]) => mockGetGatewayClientForRuntime(...args),
   holdClient: (...args: unknown[]) => mockHoldClient(...args),
   releaseClient: (...args: unknown[]) => mockReleaseClient(...args),
 }));
@@ -306,6 +308,39 @@ describe("POST /api/chat", () => {
 
     await reader.cancel();
     expect(chatAbort).not.toHaveBeenCalled();
+  });
+
+  it("acquires the primary runtime resolved for the workspace", async () => {
+    const chatSend = vi.fn(() => new Promise(() => {}));
+    mockAssertPrimaryRuntimeInvocationAllowedForContext.mockResolvedValueOnce("runtime-personal");
+    mockGetGatewayClientForRuntime.mockResolvedValueOnce({
+      on: vi.fn(),
+      off: vi.fn(),
+      chatSend,
+      chatAbort: vi.fn(() => Promise.resolve()),
+      chatHistory: vi.fn(),
+      rpc: vi.fn(),
+    });
+
+    const response = await POST(makeRequest({
+      messages: [{ role: "user", content: "hello" }],
+      agent: "main",
+      workspaceId: "workspace-1",
+    }));
+    const reader = response.body!.getReader();
+
+    await reader.read();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockGetGatewayClientForRuntime).toHaveBeenCalledWith("runtime-personal");
+    expect(mockGetGatewayClient).not.toHaveBeenCalled();
+    expect(chatSend).toHaveBeenCalledWith({
+      message: "hello",
+      sessionKey: "main",
+    });
+
+    await reader.cancel();
   });
 
   it("passes low thinking only for scoped agent mode sends", async () => {

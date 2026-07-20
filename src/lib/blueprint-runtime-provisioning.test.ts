@@ -30,6 +30,26 @@ function agent(overrides: Partial<BlueprintAgentTemplate> = {}): BlueprintAgentT
 }
 
 describe("buildBlueprintRuntimeConfigPatch", () => {
+  it("uses OpenClaw's default agent directory when no agent list exists yet", () => {
+    const patch = buildBlueprintRuntimeConfigPatch({
+      config: {
+        agents: {
+          defaults: { workspace: "/workspace" },
+        },
+      },
+      agentTemplates: [agent({ callsign: "Cipher" })],
+      runtimeCapabilities: null,
+    });
+
+    expect(patch.agents.list).toEqual([
+      expect.objectContaining({
+        id: "cipher",
+        workspace: "/workspace/agents/cipher",
+      }),
+    ]);
+    expect(patch.agents.list[0]).not.toHaveProperty("agentDir");
+  });
+
   it("adds provisioned blueprint agents to the OpenClaw agent list and ACP allowlist", () => {
     const patch = buildBlueprintRuntimeConfigPatch({
       config: {

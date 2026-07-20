@@ -100,8 +100,8 @@ export function buildBlueprintRuntimeConfigPatch(params: {
   const agentRoot = inferAgentRoot(existingAgents);
   const directReports = buildDirectReportRuntimeRefs(params.agentTemplates);
 
-  if (!workspaceRoot || !agentRoot) {
-    throw new Error("Primary runtime config does not expose agent workspace roots");
+  if (!workspaceRoot) {
+    throw new Error("Primary runtime config does not expose an agent workspace root");
   }
 
   const blueprintEntries = params.agentTemplates.map((tmpl) => {
@@ -112,13 +112,15 @@ export function buildBlueprintRuntimeConfigPatch(params: {
       params.runtimeCapabilities
     );
     const workspacePath = pathPosix.join(workspaceRoot, "agents", runtimeRef);
-    const agentDir = pathPosix.join(agentRoot, runtimeRef, "agent");
+    const agentDir = agentRoot
+      ? pathPosix.join(agentRoot, runtimeRef, "agent")
+      : null;
 
     return {
       id: runtimeRef,
       name: runtimeRef,
       workspace: workspacePath,
-      agentDir,
+      ...(agentRoot ? { agentDir } : {}),
       model: resolvedModel.primaryModel
         ? {
             primary: resolvedModel.primaryModel,

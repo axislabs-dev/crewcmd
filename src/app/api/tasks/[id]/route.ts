@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { requireAuth, requireUserOrRuntimeAuth } from "@/lib/require-auth";
+import { isHeartbeatBearerRequest, resolveAccessibleWorkspace } from "@/lib/workspace";
 import { createHumanAttentionInbox, type HumanAttentionType } from "@/lib/human-attention";
 import { isDeveloperWorkflowRole, type CrewCmdRolePack } from "@/lib/operating-layer";
 import {
@@ -102,7 +103,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteParams
 ) {
-  const authError = await requireAuth(request);
+  const authError = await requireUserOrRuntimeAuth(request);
   if (authError) return authError;
 
   if (!db) {
@@ -136,6 +137,19 @@ export async function PATCH(
     const [oldTask] = await db.select().from(schema.tasks).where(whereClause);
     if (!oldTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    if (await isHeartbeatBearerRequest(request)) {
+      const workspace = oldTask.workspaceId
+        ? await resolveAccessibleWorkspace({
+            request,
+            explicitWorkspaceId: oldTask.workspaceId,
+            requireExplicitForBearer: true,
+          })
+        : null;
+      if (!workspace) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     const nextAssignedAgentId = body.assignedAgentId ?? oldTask.assignedAgentId ?? null;

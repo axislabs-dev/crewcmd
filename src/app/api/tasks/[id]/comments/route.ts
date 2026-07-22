@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { requireAuth, requireUserOrRuntimeAuth } from "@/lib/require-auth";
+import { requireUserOrRuntimeAuth } from "@/lib/require-auth";
+import { isHeartbeatBearerRequest, resolveAccessibleWorkspace } from "@/lib/workspace";
 import { createHumanAttentionInbox, type HumanAttentionType } from "@/lib/human-attention";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const authError = await requireAuth(request);
+  const authError = await requireUserOrRuntimeAuth(request);
   if (authError) return authError;
 
   if (!db) {
@@ -66,6 +67,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const resolvedTaskId = await resolveTaskId(id);
     if (!resolvedTaskId) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+    if (await isHeartbeatBearerRequest(request)) {
+      const [task] = await db
+        .select({ workspaceId: schema.tasks.workspaceId })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, resolvedTaskId))
+        .limit(1);
+      const workspace = task?.workspaceId
+        ? await resolveAccessibleWorkspace({
+            request,
+            explicitWorkspaceId: task.workspaceId,
+            requireExplicitForBearer: true,
+          })
+        : null;
+      if (!workspace) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
     const body = await request.json();
 

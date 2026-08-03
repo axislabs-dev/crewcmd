@@ -645,7 +645,7 @@ function ChatComposer({
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[var(--border-medium)] disabled:hover:text-[var(--text-secondary)]"
               >
                 <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0-2.485 2.015-4.5 4.5-4.5h1.372c.516 0 .966.351 1.091.852l1.106 4.423c.11.44-.054.902-.417 1.175l-2.293 1.72a11.09 11.09 0 0 0 6.665 6.665l1.72-2.293a1.125 1.125 0 0 1 1.175-.417l4.423 1.106c.5.125.852.575.852 1.091v1.372a4.5 4.5 0 0 1-4.5 4.5h-1.5C8.334 21.75 2.25 15.666 2.25 8.25v-1.5Z" />
                 </svg>
               </button>
             ) : null}
